@@ -326,7 +326,7 @@ async function ensureUserFoundation(userId, profile) {
         owner_user_id: userId,
         subject_person_id: person.id,
         project_type: "koebook",
-        title: `${displayName}さんのKoeBOOK`,
+        title: `${displayName}さんのtateyoko BOOK`,
         status: "active"
       })
       .select()
