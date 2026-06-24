@@ -5,35 +5,35 @@
 @tailwind utilities;
 
 body {
-      font-family: 'Noto Serif JP', serif;
-      margin: 0;
-      padding: 0;
-      background-color: #0f172a;
-      color: #f8fafc;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      overscroll-behavior: none;
-      -webkit-font-smoothing: antialiased;
-      transition: background-color 2s ease;
-    }
-    body.is-recording { background-color: #15203b; }
-    #root { height: 100%; width: 100%; overflow: hidden; }
-    .app-container {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      max-width: 600px;
-      margin: 0 auto;
-      position: relative;
-      box-sizing: border-box;
-      padding-top: calc(env(safe-area-inset-top) + 2rem);
-      padding-bottom: calc(env(safe-area-inset-bottom) + 2rem);
-      padding-left: 24px;
-      padding-right: 24px;
-    }
+  font-family: 'Noto Serif JP', serif;
+  margin: 0;
+  padding: 0;
+  background-color: #0f172a;
+  color: #f8fafc;
+  min-height: 100dvh;
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 2s ease;
+}
+
+#root {
+  min-height: 100dvh;
+  width: 100%;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  max-width: 600px;
+  margin: 0 auto;
+  position: relative;
+  box-sizing: border-box;
+  padding-top: calc(env(safe-area-inset-top) + 2rem);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 6rem);
+  padding-left: 24px;
+  padding-right: 24px;
+}
     .fade-enter { animation: fadeIn 1.2s ease-out forwards; }
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(10px); }
@@ -144,4 +144,20 @@ body {
 
 .is-recording .voice-wave-bar {
   opacity: 0.72;
+}
+
+input.quiet-input,
+textarea {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input.quiet-input:-webkit-autofill,
+input.quiet-input:-webkit-autofill:hover,
+input.quiet-input:-webkit-autofill:focus,
+input.quiet-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #0f172a inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff;
+  transition: background-color 9999s ease-in-out 0s;
 }
