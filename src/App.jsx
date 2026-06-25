@@ -676,6 +676,7 @@ function getInitialQuestionIndex(questionSet, profile) {
   return currentIndex;
 }
 
+
 async function markUserQuestionAnswered(userQuestionId) {
   if (!userQuestionId) return;
 
@@ -691,6 +692,32 @@ async function markUserQuestionAnswered(userQuestionId) {
     console.warn("answered_at update error", error);
   }
 }
+
+const MIN_RECORDING_SECONDS = 15;
+const MIN_TRANSCRIPT_CHARS = 20;
+
+function isRecordingTooShort(duration, transcript) {
+  const seconds = Number(duration || 0);
+  const chars = String(transcript || "").trim().length;
+
+  return seconds < MIN_RECORDING_SECONDS || chars < MIN_TRANSCRIPT_CHARS;
+}
+
+async function markUserQuestionSkipped(userQuestionId) {
+  if (!userQuestionId) return;
+
+  const { error } = await supabaseClient
+    .from("user_questions")
+    .update({
+      status: "skipped"
+    })
+    .eq("id", userQuestionId);
+
+  if (error) {
+    console.warn("question skip update error", error);
+  }
+}
+
 
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
@@ -796,6 +823,54 @@ function App() {
     appendMode: false,
     addMoreCount: 0
   });
+};
+
+const goToNextQuestion = async () => {
+  const currentQ = questionsDB[progress.currentIndex];
+  const currentSeq = currentQ?.sequence_order || 1;
+
+  const nextIndex = progress.currentIndex + 1;
+  const nextSeq = questionsDB[nextIndex]?.sequence_order || (currentSeq + 1);
+
+  if (user?.id) {
+    await supabaseClient
+      .from("profiles")
+      .update({ current_sequence: nextSeq })
+      .eq("id", user.id);
+  }
+
+  resetVoiceData();
+
+  if (nextIndex >= questionsDB.length) {
+    setProgress(p => ({
+      ...p,
+      currentIndex: Math.max(questionsDB.length - 1, 0)
+    }));
+    setScene(6);
+    return;
+  }
+
+  setProgress(p => ({
+    ...p,
+    currentIndex: nextIndex
+  }));
+
+  setScene(1);
+};
+
+const handleSkipQuestion = async () => {
+  setIsInitializing(true);
+
+  try {
+    const currentQ = questionsDB[progress.currentIndex];
+    await markUserQuestionSkipped(currentQ?.user_question_id);
+    await goToNextQuestion();
+  } catch (e) {
+    console.error("skip question error", e);
+    alert("次の問いへ進めませんでした。");
+  } finally {
+    setIsInitializing(false);
+  }
 };
 
   const handleRecordComplete = (txt, dur, url, blob) => {
@@ -1331,6 +1406,7 @@ function App() {
             resetVoiceData();
             setScene(2);
           }}
+　　　　　　onSkip={handleSkipQuestion}
         />
       )}
 
@@ -1342,13 +1418,32 @@ function App() {
       )}
 
       {scene === 3 && (
-        <Scene_Recording
-          question={currentQ}
-          onComplete={(t, d, u, b) => {
-            handleRecordComplete(t, d, u, b);
-            setScene(3.5);
-          }}
-        />
+<Scene_Recording
+  question={currentQ}
+  onComplete={(t, d, u, b) => {
+    const previousTranscript = voiceData.appendMode
+      ? String(voiceData.transcript || "").trim()
+      : "";
+
+    const newTranscript = String(t || "").trim();
+
+    const mergedTranscript = voiceData.appendMode
+      ? formatTranscriptForReading([previousTranscript, newTranscript].filter(Boolean).join("\n\n"))
+      : newTranscript;
+
+    const mergedDuration = voiceData.appendMode
+      ? (voiceData.duration || 0) + (d || 0)
+      : (d || 0);
+
+    handleRecordComplete(t, d, u, b);
+
+    if (isRecordingTooShort(mergedDuration, mergedTranscript)) {
+      setScene("short_recording");
+    } else {
+      setScene(3.5);
+    }
+  }}
+/>
       )}
 
       {scene === 3.5 && (
@@ -1370,6 +1465,24 @@ function App() {
           onProceed={handleVoiceProceed}
         />
       )}
+
+{scene === "short_recording" && (
+  <Scene_ShortRecording
+    onAddMore={() => {
+      setVoiceData(prev => ({
+        ...prev,
+        appendMode: true,
+        addMoreCount: (prev.addMoreCount || 0) + 1
+      }));
+      setScene(3);
+    }}
+    onRetry={() => {
+      resetVoiceData();
+      setScene(3);
+    }}
+    onSkip={handleSkipQuestion}
+  />
+)}
 
       {scene === "processing" && (
         <Scene_Processing />
@@ -1926,7 +2039,7 @@ function Scene0_Door({ onNext }) {
   );
 }
 
-function Scene1_MyPage({ progress, question, userName, onNext }) {
+function Scene1_MyPage({ progress, question, userName, onNext, onSkip }) {
   return (
     <div className="h-full flex flex-col fade-enter">
       <header className="mb-8 pt-2">
@@ -1996,6 +2109,14 @@ function Scene1_MyPage({ progress, question, userName, onNext }) {
         >
           今回の問いに答える
         </button>
+
+        <button
+          onClick={onSkip}
+          className="w-full py-3 text-white/40 text-sm underline underline-offset-4"
+        >
+          別の問いへ
+        </button>
+
       </div>
     </div>
   );
@@ -2342,6 +2463,47 @@ function Scene_Recording({ question, onComplete }) {
   );
 }
 
+
+function Scene_ShortRecording({ onAddMore, onRetry, onSkip }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
+      <div className="glass-card p-7 w-full max-w-[330px] mb-8">
+        <p className="text-white/85 text-[1.05rem] text-narrative mb-5">
+          もう少しだけ、聞かせてください
+        </p>
+
+        <p className="text-white/55 text-sm leading-loose">
+          今の録音は少し短かったようです。<br />
+          この問いを本のページにするために、<br />
+          あと少しだけ話してみましょう。
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-4 w-full max-w-[280px]">
+        <button
+          onClick={onAddMore}
+          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+        >
+          少し話し足す
+        </button>
+
+        <button
+          onClick={onRetry}
+          className="btn-quiet w-full py-4 rounded-full text-white"
+        >
+          最初から話し直す
+        </button>
+
+        <button
+          onClick={onSkip}
+          className="w-full py-3 text-white/40 text-sm underline underline-offset-4"
+        >
+          別の問いへ
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function Scene3_5_VoiceCheck({ data, question, onAddMore, onRetry, onProceed }) {
   const transcriptLength = String(data.transcript || "").trim().length;
