@@ -694,7 +694,7 @@ async function markUserQuestionAnswered(userQuestionId) {
 }
 
 const MIN_RECORDING_SECONDS = 15;
-const MIN_TRANSCRIPT_CHARS = 20;
+
 
 function isRecordingTooShort(duration) {
   const seconds = Number(duration || 0);
@@ -1441,7 +1441,7 @@ const handleSkipQuestion = async () => {
             resetVoiceData();
             setScene(2);
           }}
-　　　　　　onSkip={handleSkipQuestion}
+          onSkip={handleSkipQuestion}
         />
       )}
 
@@ -1540,15 +1540,15 @@ const handleSkipQuestion = async () => {
       )}
 
       {scene === 6 && (
-  　　　　<Scene6_Completion
-    　　　　 onTalkMore={() => {
-     　　　　 resetVoiceData();
-     　　　　 setScene(2);
-   　　　　 }}
-   　　　　 onOpenStoryPages={() => setScene("story_pages")}
-   　　　　 onEndToday={() => setScene("end_today")}
-  　　　 />
-  　　)}
+        <Scene6_Completion
+          onTalkMore={() => {
+            resetVoiceData();
+            setScene(2);
+          }}
+          onOpenStoryPages={() => setScene("story_pages")}
+          onEndToday={() => setScene("end_today")}
+        />
+      )}
 
       {scene === "end_today" && (
         <Scene_EndToday
@@ -2101,14 +2101,12 @@ function Scene1_MyPage({ progress, question, userName, onNext, onSkip }) {
               style={{
                 width: `${(progress.currentIndex / Math.max(progress.total, 1)) * 100}%`
               }}
-            ></div>
+            />
           </div>
 
-          <div className="flex justify-between items-end mt-2">
-            <p className="text-white/80 text-sm tracking-widest">
-              {progress.currentIndex + 1} / {progress.total} ページ
-            </p>
-          </div>
+          <p className="text-white/80 text-sm tracking-widest mt-2">
+            {progress.currentIndex + 1} / {progress.total} ページ
+          </p>
         </div>
       </header>
 
@@ -2121,27 +2119,6 @@ function Scene1_MyPage({ progress, question, userName, onNext, onSkip }) {
           <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
             {question.content}
           </p>
-
-          {(question.prompt_hint || question.reassurance_text) && (
-            <div className="pt-5 border-t border-white/10 text-left space-y-4">
-              {question.prompt_hint && (
-                <div>
-                  <p className="text-white/45 text-sm tracking-widest mb-2">
-                    考えるヒント
-                  </p>
-                  <p className="text-white/55 text-sm leading-loose whitespace-pre-wrap">
-                    {question.prompt_hint}
-                  </p>
-                </div>
-              )}
-
-              {question.reassurance_text && (
-                <p className="text-white/45 text-sm leading-loose text-center whitespace-pre-wrap">
-                  {question.reassurance_text}
-                </p>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
@@ -2159,7 +2136,6 @@ function Scene1_MyPage({ progress, question, userName, onNext, onSkip }) {
         >
           別の問いへ
         </button>
-
       </div>
     </div>
   );
@@ -2210,6 +2186,8 @@ function VoiceWave({ level = 0 }) {
 function Scene_Recording({ question, onComplete }) {
   const [step, setStep] = useState(0);
   const [time, setTime] = useState(0);
+  const [countdown, setCountdown] = useState(3);
+  const hasStartedRecordingRef = useRef(false);
   const timeRef = useRef(0);
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [waveTick, setWaveTick] = useState(0);
@@ -2250,6 +2228,34 @@ function Scene_Recording({ question, onComplete }) {
       document.body.classList.remove("is-recording");
     };
   }, [step]);
+
+useEffect(() => {
+  if (step !== "countdown") return;
+
+  setCountdown(3);
+  hasStartedRecordingRef.current = false;
+
+  const timer = setInterval(() => {
+    setCountdown(current => {
+      const next = current - 1;
+
+      if (next === 1 && !hasStartedRecordingRef.current) {
+        hasStartedRecordingRef.current = true;
+        startActualRecording();
+      }
+
+      if (next <= 0) {
+        clearInterval(timer);
+        setStep(1);
+        return 1;
+      }
+
+      return next;
+    });
+  }, 1000);
+
+  return () => clearInterval(timer);
+}, [step]);
 
   const startWaveMonitor = (stream) => {
     try {
@@ -2314,8 +2320,13 @@ function Scene_Recording({ question, onComplete }) {
     return types.find(type => MediaRecorder.isTypeSupported(type)) || "";
   };
 
-  const start = async () => {
-    setStep(1);
+  const start = () => {
+    setCountdown(3);
+    hasStartedRecordingRef.current = false;
+    setStep("countdown");
+  };
+
+  const startActualRecording = async () => {
     setTime(0);
     timeRef.current = 0;
     setVoiceLevel(0);
@@ -2452,22 +2463,6 @@ function Scene_Recording({ question, onComplete }) {
         <p className="text-white/65 text-[1.05rem] text-narrative mb-8 whitespace-pre-wrap">
           {question.content}
         </p>
-
-        {(question.prompt_hint || question.reassurance_text) && (
-          <div className="glass-card px-5 py-4 text-left space-y-3">
-            {question.prompt_hint && (
-              <p className="text-white/45 text-sm leading-loose whitespace-pre-wrap">
-                {question.prompt_hint}
-              </p>
-            )}
-
-            {question.reassurance_text && (
-              <p className="text-white/35 text-sm leading-loose text-center">
-                {question.reassurance_text}
-              </p>
-            )}
-          </div>
-        )}
       </div>
 
       {step === 0 && (
@@ -2477,6 +2472,14 @@ function Scene_Recording({ question, onComplete }) {
         >
           録音をはじめる
         </button>
+      )}
+
+      {step === "countdown" && (
+        <div className="pb-16 text-center fade-enter">
+          <p className="text-white/90 text-[4.5rem] leading-none font-light">
+            {countdown}
+          </p>
+        </div>
       )}
 
       {step === 1 && (
@@ -2490,11 +2493,6 @@ function Scene_Recording({ question, onComplete }) {
 
             <p className="text-white/45 text-sm tracking-widest mt-3">
               {Math.floor(time / 60)}:{String(time % 60).padStart(2, "0")}
-            </p>
-
-            <p className="text-white/35 text-xs leading-loose mt-4">
-              うまく話そうとしなくて大丈夫です。<br />
-              思い出したことから、そのまま話してください。
             </p>
           </div>
 
