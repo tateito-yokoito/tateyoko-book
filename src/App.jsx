@@ -696,11 +696,9 @@ async function markUserQuestionAnswered(userQuestionId) {
 const MIN_RECORDING_SECONDS = 15;
 const MIN_TRANSCRIPT_CHARS = 20;
 
-function isRecordingTooShort(duration, transcript) {
+function isRecordingTooShort(duration) {
   const seconds = Number(duration || 0);
-  const chars = String(transcript || "").trim().length;
-
-  return seconds < MIN_RECORDING_SECONDS || chars < MIN_TRANSCRIPT_CHARS;
+  return seconds < MIN_RECORDING_SECONDS;
 }
 
 async function markUserQuestionSkipped(userQuestionId) {
@@ -718,6 +716,43 @@ async function markUserQuestionSkipped(userQuestionId) {
   }
 }
 
+function getNextDeliveryText(notificationPref) {
+  if (
+    !notificationPref ||
+    notificationPref.weekday === undefined ||
+    notificationPref.hour === undefined
+  ) {
+    return "次の問いが届いたら、また続きを開いてください。";
+  }
+
+  const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+  const now = new Date();
+
+  const target = new Date(now);
+  target.setHours(notificationPref.hour || 0);
+  target.setMinutes(notificationPref.minute || 0);
+  target.setSeconds(0);
+  target.setMilliseconds(0);
+
+  const currentWeekday = now.getDay();
+  const targetWeekday = Number(notificationPref.weekday);
+
+  let daysUntil = (targetWeekday - currentWeekday + 7) % 7;
+
+  if (daysUntil === 0 && target <= now) {
+    daysUntil = 7;
+  }
+
+  target.setDate(now.getDate() + daysUntil);
+
+  const month = target.getMonth() + 1;
+  const date = target.getDate();
+  const weekday = weekdays[target.getDay()];
+  const hour = String(target.getHours()).padStart(2, "0");
+  const minute = String(target.getMinutes()).padStart(2, "0");
+
+  return `次の問いは、${month}月${date}日（${weekday}）${hour}:${minute}ごろに届きます。`;
+}
 
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
@@ -1505,11 +1540,19 @@ const handleSkipQuestion = async () => {
       )}
 
       {scene === 6 && (
-        <Scene6_Completion
-          onTalkMore={() => {
-            resetVoiceData();
-            setScene(2);
-          }}
+  　　　　<Scene6_Completion
+    　　　　 onTalkMore={() => {
+     　　　　 resetVoiceData();
+     　　　　 setScene(2);
+   　　　　 }}
+   　　　　 onOpenStoryPages={() => setScene("story_pages")}
+   　　　　 onEndToday={() => setScene("end_today")}
+  　　　 />
+  　　)}
+
+      {scene === "end_today" && (
+        <Scene_EndToday
+          notificationPref={notificationPref}
           onOpenStoryPages={() => setScene("story_pages")}
         />
       )}
@@ -2167,6 +2210,7 @@ function VoiceWave({ level = 0 }) {
 function Scene_Recording({ question, onComplete }) {
   const [step, setStep] = useState(0);
   const [time, setTime] = useState(0);
+  const timeRef = useRef(0);
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [waveTick, setWaveTick] = useState(0);
 
@@ -2186,10 +2230,18 @@ function Scene_Recording({ question, onComplete }) {
   useEffect(() => {
     let timer;
 
+
     if (step === 1) {
-      timer = setInterval(() => setTime(t => t + 1), 1000);
+      timer = setInterval(() => {
+        setTime(t => {
+          const next = t + 1;
+          timeRef.current = next;
+          return next;   
+        });
+      }, 1000);
+
       document.body.classList.add("is-recording");
-    } else {
+    }else {
       document.body.classList.remove("is-recording");
     }
 
@@ -2265,6 +2317,7 @@ function Scene_Recording({ question, onComplete }) {
   const start = async () => {
     setStep(1);
     setTime(0);
+    timeRef.current = 0;
     setVoiceLevel(0);
 
     transcriptRef.current = "";
@@ -2310,7 +2363,7 @@ function Scene_Recording({ question, onComplete }) {
           interimRef.current
         ].filter(Boolean).join(" "));
 
-        onComplete(finalTranscript, time, url, blob);
+        onComplete(finalTranscript, timeRef.current, url, blob);
 
         stopWaveMonitor();
 
@@ -2381,7 +2434,7 @@ function Scene_Recording({ question, onComplete }) {
           interimRef.current
         ].filter(Boolean).join(" "));
 
-        onComplete(finalTranscript, time, null, null);
+        onComplete(finalTranscript, timeRef.current, null, null);
 
         stopWaveMonitor();
 
@@ -2799,7 +2852,7 @@ function Scene5_Meaning({ onNext }) {
   );
 }
 
-function Scene6_Completion({ onTalkMore, onOpenStoryPages }) {
+function Scene6_Completion({ onTalkMore, onOpenStoryPages, onEndToday }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter text-center">
       <p className="text-white/90 text-[1.05rem] mb-12">
@@ -2820,6 +2873,55 @@ function Scene6_Completion({ onTalkMore, onOpenStoryPages }) {
         >
           これまでの語りを見る
         </button>
+
+        <button
+          onClick={onEndToday}
+          className="w-full py-3 text-white/40 text-sm underline underline-offset-4"
+        >
+          今日はここまで
+        </button>
+
+      </div>
+    </div>
+  );
+}
+
+function Scene_EndToday({ notificationPref, onOpenStoryPages }) {
+  const nextDeliveryText = getNextDeliveryText(notificationPref);
+
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
+      <div className="space-y-7 mb-12 text-narrative">
+        <p className="text-white/90 text-[1.08rem]">
+          今日はここまでにしましょう
+        </p>
+
+        <p className="text-white/65 text-[0.98rem] leading-loose">
+          今日の語りは、<br />
+          ちゃんと残っています。
+        </p>
+
+        <p className="text-white/55 text-[0.95rem] leading-loose">
+          {nextDeliveryText}
+        </p>
+
+        <p className="text-white/45 text-[0.92rem] leading-loose">
+          以前届いたメッセージから開いても、<br />
+          続きから再開できます。
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-4 w-full max-w-[280px]">
+        <button
+          onClick={onOpenStoryPages}
+          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+        >
+          これまでの語りを見る
+        </button>
+
+        <p className="text-white/35 text-xs leading-loose">
+          この画面は、そのまま閉じて大丈夫です。
+        </p>
       </div>
     </div>
   );
