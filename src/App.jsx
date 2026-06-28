@@ -2320,10 +2320,23 @@ useEffect(() => {
     return types.find(type => MediaRecorder.isTypeSupported(type)) || "";
   };
 
-  const start = () => {
-    setCountdown(3);
-    hasStartedRecordingRef.current = false;
-    setStep("countdown");
+  const start = async () => {
+    setStep("checking_mic");
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true
+      });
+
+      streamRef.current = stream;
+
+      setCountdown(3);
+      hasStartedRecordingRef.current = false;
+      setStep("countdown");
+    } catch (e) {
+      console.error(e);
+      setStep("mic_error");
+    }
   };
 
   const startActualRecording = async () => {
@@ -2336,12 +2349,17 @@ useEffect(() => {
     chunksRef.current = [];
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+    let stream = streamRef.current;
+
+    if (!stream) {
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: true
       });
 
       streamRef.current = stream;
-      startWaveMonitor(stream);
+    }
+
+    startWaveMonitor(stream);
 
       const mimeType = getSupportedMimeType();
       mimeTypeRef.current = mimeType;
@@ -2472,6 +2490,35 @@ useEffect(() => {
         >
           録音をはじめる
         </button>
+      )}
+
+      {step === "checking_mic" && (
+        <div className="pb-16 text-center fade-enter">
+          <p className="text-white/70 text-[1.05rem] text-narrative">
+            マイクを確認しています
+          </p>
+        </div>
+      )}
+
+      {step === "mic_error" && (
+        <div className="pb-12 text-center fade-enter">
+          <div className="glass-card p-6 mb-8">
+            <p className="text-white/85 text-[1.05rem] text-narrative mb-4">
+              マイクが使えませんでした
+            </p>
+
+            <p className="text-white/55 text-sm leading-loose">
+              ブラウザの設定で、マイクの使用を許可してください。
+            </p>
+          </div>
+
+          <button
+            onClick={start}
+            className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+          >
+            もう一度試す
+          </button>
+        </div>
       )}
 
       {step === "countdown" && (
