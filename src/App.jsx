@@ -753,7 +753,6 @@ function getNextDeliveryText(notificationPref) {
 
   return `次の問いは、${month}月${date}日（${weekday}）${hour}:${minute}ごろに届きます。`;
 }
-
 function getTodayKey() {
   const now = new Date();
   const y = now.getFullYear();
@@ -769,8 +768,6 @@ function hasDoneDailyMicCheck() {
 function markDailyMicCheckDone() {
   localStorage.setItem("tateyoko_daily_mic_check", getTodayKey());
 }
-
-
 
 
 function App() {
@@ -2193,24 +2190,24 @@ function Scene2_PreVoice({ onNext, duration }) {
 }
 
 function VoiceWave({ level = 0 }) {
-  const bars = [0.18, 0.34, 0.52, 0.78, 0.58, 0.42, 0.26, 0.48, 0.72, 0.54, 0.32, 0.22];
+  const bars = [0.24, 0.38, 0.56, 0.78, 0.62, 0.44, 0.3, 0.5, 0.72, 0.54, 0.34, 0.26];
+  const activeLevel = level > 0.035 ? Math.min(1, (level - 0.035) * 2.8) : 0;
 
   return (
     <div className="voice-wave" aria-hidden="true">
       {bars.map((base, index) => {
-        const motion =
-          0.35 +
-          Math.abs(Math.sin(Date.now() / 240 + index * 0.85)) * 0.25 +
-          level * 0.9;
-
-        const height = Math.max(8, Math.min(48, 8 + base * 26 + motion * 20));
+        const height = Math.max(
+          8,
+          Math.min(52, 8 + base * 12 + activeLevel * base * 42)
+        );
 
         return (
           <div
             key={index}
             className="voice-wave-bar"
             style={{
-              height: `${height}px`
+              height: `${height}px`,
+              opacity: activeLevel > 0 ? 0.75 : 0.28
             }}
           />
         );
@@ -2219,16 +2216,14 @@ function VoiceWave({ level = 0 }) {
   );
 }
 
+
 function Scene_DailyMicCheck({ onComplete }) {
-  const [step, setStep] = useState("checking");
   const [voiceLevel, setVoiceLevel] = useState(0);
-  const [waveTick, setWaveTick] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
 
   const streamRef = useRef(null);
   const audioContextRef = useRef(null);
-  const analyserRef = useRef(null);
   const waveTimerRef = useRef(null);
-  const maxLevelRef = useRef(0);
 
   useEffect(() => {
     startCheck();
@@ -2237,59 +2232,6 @@ function Scene_DailyMicCheck({ onComplete }) {
       stopCheck();
     };
   }, []);
-
-  const startCheck = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true
-      });
-
-      streamRef.current = stream;
-
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) {
-        setStep("ready");
-        return;
-      }
-
-      const ctx = new AudioContext();
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-
-      analyser.fftSize = 256;
-      source.connect(analyser);
-
-      audioContextRef.current = ctx;
-      analyserRef.current = analyser;
-
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-      waveTimerRef.current = setInterval(() => {
-        analyser.getByteTimeDomainData(dataArray);
-
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          const value = (dataArray[i] - 128) / 128;
-          sum += value * value;
-        }
-
-        const rms = Math.sqrt(sum / dataArray.length);
-        const level = Math.min(1, rms * 6);
-
-        maxLevelRef.current = Math.max(maxLevelRef.current, level);
-
-        setVoiceLevel(level);
-        setWaveTick(t => t + 1);
-
-        if (maxLevelRef.current > 0.04) {
-          setStep("ready");
-        }
-      }, 120);
-    } catch (e) {
-      console.error(e);
-      setStep("error");
-    }
-  };
 
   const stopCheck = () => {
     if (waveTimerRef.current) {
@@ -2306,9 +2248,52 @@ function Scene_DailyMicCheck({ onComplete }) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
+  };
 
-    analyserRef.current = null;
+  const startCheck = async () => {
+    setShowHelp(false);
     setVoiceLevel(0);
+    stopCheck();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true
+      });
+
+      streamRef.current = stream;
+
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      audioContextRef.current = ctx;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      waveTimerRef.current = setInterval(() => {
+        analyser.getByteTimeDomainData(dataArray);
+
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const value = (dataArray[i] - 128) / 128;
+          sum += value * value;
+        }
+
+        const rms = Math.sqrt(sum / dataArray.length);
+        const level = Math.min(1, rms * 6);
+
+        setVoiceLevel(level);
+      }, 120);
+    } catch (e) {
+      console.error(e);
+      setShowHelp(true);
+    }
   };
 
   const proceed = () => {
@@ -2320,41 +2305,59 @@ function Scene_DailyMicCheck({ onComplete }) {
     <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
       <div className="space-y-6 mb-10 text-narrative">
         <p className="text-white/90 text-[1.08rem]">
-          声を確認します
+          マイクをテストしてみましょう
         </p>
 
         <p className="text-white/60 text-[0.98rem] leading-loose">
-          少し声を出してみてください。
+          いつもより少しゆっくり話してください。
         </p>
       </div>
 
-      <div className="glass-card py-8 px-5 w-full max-w-[320px] mb-10">
-        <VoiceWave level={voiceLevel + waveTick * 0} />
-
-        <p className="text-white/45 text-sm leading-loose mt-5">
-          {step === "ready"
-            ? "声が届いています。"
-            : step === "error"
-              ? "マイクが使えませんでした。"
-              : "波形が動くか確認してください。"}
+      <div className="glass-card py-8 px-5 w-full max-w-[320px] mb-8">
+        <p className="text-white/45 text-sm leading-loose mb-6">
+          波形は声に合わせて動きます。
         </p>
+
+        <VoiceWave level={voiceLevel} />
       </div>
 
-      {step === "error" ? (
+      {showHelp && (
+        <div className="glass-card p-5 w-full max-w-[320px] mb-8">
+          <p className="text-white/75 text-sm leading-loose mb-3">
+            マイクを確認できませんでした。
+          </p>
+
+          <p className="text-white/48 text-sm leading-loose">
+            ブラウザのマイク許可や、端末の音量設定を確認してください。
+          </p>
+
+          <button
+            type="button"
+            onClick={startCheck}
+            className="mt-5 btn-quiet bg-white/10 w-full py-3 rounded-full text-white"
+          >
+            もう一度試す
+          </button>
+        </div>
+      )}
+
+      {!showHelp && (
         <button
-          onClick={startCheck}
-          className="btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white"
+          type="button"
+          onClick={() => setShowHelp(true)}
+          className="mb-8 text-white/40 text-sm underline underline-offset-4 leading-loose"
         >
-          もう一度試す
-        </button>
-      ) : (
-        <button
-          onClick={proceed}
-          className="btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white"
-        >
-          問いに進む
+          波形が動かない場合は、こちらをクリック
         </button>
       )}
+
+      <button
+        type="button"
+        onClick={proceed}
+        className="btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white"
+      >
+        問いに進む
+      </button>
     </div>
   );
 }
