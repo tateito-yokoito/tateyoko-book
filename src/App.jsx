@@ -754,6 +754,25 @@ function getNextDeliveryText(notificationPref) {
   return `次の問いは、${month}月${date}日（${weekday}）${hour}:${minute}ごろに届きます。`;
 }
 
+function getTodayKey() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function hasDoneDailyMicCheck() {
+  return localStorage.getItem("tateyoko_daily_mic_check") === getTodayKey();
+}
+
+function markDailyMicCheckDone() {
+  localStorage.setItem("tateyoko_daily_mic_check", getTodayKey());
+}
+
+
+
+
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [scene, setScene] = useState(-1);
@@ -1429,7 +1448,24 @@ const handleSkipQuestion = async () => {
       )}
 
       {scene === 0 && (
-        <Scene0_Door onNext={() => setScene(1)} />
+        <Scene0_Door
+          onNext={() => {
+            if (hasDoneDailyMicCheck()) {
+              setScene(1);
+            } else {
+              setScene("daily_mic_check");
+            }
+          }}
+        />
+      )}
+
+      {scene === "daily_mic_check" && (
+        <Scene_DailyMicCheck
+          onComplete={() => {
+            markDailyMicCheckDone();
+            setScene(1);
+          }}
+        />
       )}
 
       {scene === 1 && (
@@ -2179,6 +2215,146 @@ function VoiceWave({ level = 0 }) {
           />
         );
       })}
+    </div>
+  );
+}
+
+function Scene_DailyMicCheck({ onComplete }) {
+  const [step, setStep] = useState("checking");
+  const [voiceLevel, setVoiceLevel] = useState(0);
+  const [waveTick, setWaveTick] = useState(0);
+
+  const streamRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const waveTimerRef = useRef(null);
+  const maxLevelRef = useRef(0);
+
+  useEffect(() => {
+    startCheck();
+
+    return () => {
+      stopCheck();
+    };
+  }, []);
+
+  const startCheck = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true
+      });
+
+      streamRef.current = stream;
+
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) {
+        setStep("ready");
+        return;
+      }
+
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      audioContextRef.current = ctx;
+      analyserRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      waveTimerRef.current = setInterval(() => {
+        analyser.getByteTimeDomainData(dataArray);
+
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const value = (dataArray[i] - 128) / 128;
+          sum += value * value;
+        }
+
+        const rms = Math.sqrt(sum / dataArray.length);
+        const level = Math.min(1, rms * 6);
+
+        maxLevelRef.current = Math.max(maxLevelRef.current, level);
+
+        setVoiceLevel(level);
+        setWaveTick(t => t + 1);
+
+        if (maxLevelRef.current > 0.04) {
+          setStep("ready");
+        }
+      }, 120);
+    } catch (e) {
+      console.error(e);
+      setStep("error");
+    }
+  };
+
+  const stopCheck = () => {
+    if (waveTimerRef.current) {
+      clearInterval(waveTimerRef.current);
+      waveTimerRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      try { audioContextRef.current.close(); } catch (e) {}
+      audioContextRef.current = null;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+
+    analyserRef.current = null;
+    setVoiceLevel(0);
+  };
+
+  const proceed = () => {
+    stopCheck();
+    onComplete();
+  };
+
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
+      <div className="space-y-6 mb-10 text-narrative">
+        <p className="text-white/90 text-[1.08rem]">
+          声を確認します
+        </p>
+
+        <p className="text-white/60 text-[0.98rem] leading-loose">
+          少し声を出してみてください。
+        </p>
+      </div>
+
+      <div className="glass-card py-8 px-5 w-full max-w-[320px] mb-10">
+        <VoiceWave level={voiceLevel + waveTick * 0} />
+
+        <p className="text-white/45 text-sm leading-loose mt-5">
+          {step === "ready"
+            ? "声が届いています。"
+            : step === "error"
+              ? "マイクが使えませんでした。"
+              : "波形が動くか確認してください。"}
+        </p>
+      </div>
+
+      {step === "error" ? (
+        <button
+          onClick={startCheck}
+          className="btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white"
+        >
+          もう一度試す
+        </button>
+      ) : (
+        <button
+          onClick={proceed}
+          className="btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white"
+        >
+          問いに進む
+        </button>
+      )}
     </div>
   );
 }
