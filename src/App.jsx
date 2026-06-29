@@ -2191,14 +2191,18 @@ function Scene2_PreVoice({ onNext, duration }) {
 
 function VoiceWave({ level = 0 }) {
   const bars = [0.24, 0.38, 0.56, 0.78, 0.62, 0.44, 0.3, 0.5, 0.72, 0.54, 0.34, 0.26];
-  const activeLevel = level > 0.035 ? Math.min(1, (level - 0.035) * 2.8) : 0;
+
+  const noiseFloor = 0.08;
+  const activeLevel = level > noiseFloor
+    ? Math.min(1, (level - noiseFloor) * 2.2)
+    : 0;
 
   return (
     <div className="voice-wave" aria-hidden="true">
       {bars.map((base, index) => {
         const height = Math.max(
           8,
-          Math.min(52, 8 + base * 12 + activeLevel * base * 42)
+          Math.min(52, 8 + base * 10 + activeLevel * base * 46)
         );
 
         return (
@@ -2207,7 +2211,7 @@ function VoiceWave({ level = 0 }) {
             className="voice-wave-bar"
             style={{
               height: `${height}px`,
-              opacity: activeLevel > 0 ? 0.75 : 0.28
+              opacity: 0.5
             }}
           />
         );
@@ -2286,9 +2290,9 @@ function Scene_DailyMicCheck({ onComplete }) {
         }
 
         const rms = Math.sqrt(sum / dataArray.length);
-        const level = Math.min(1, rms * 6);
+        const level = Math.min(1, rms * 5);
 
-        setVoiceLevel(level);
+        setVoiceLevel(level > 0.08 ? level : 0);
       }, 120);
     } catch (e) {
       console.error(e);
@@ -2463,7 +2467,8 @@ useEffect(() => {
         }
 
         const rms = Math.sqrt(sum / dataArray.length);
-        setVoiceLevel(Math.min(1, rms * 6));
+        const level = Math.min(1, rms * 5);
+        setVoiceLevel(level > 0.08 ? level : 0);
         setWaveTick(t => t + 1);
       }, 120);
     } catch (e) {
