@@ -1001,11 +1001,16 @@ const handleRecordComplete = (txt, dur, url, blob) => {
 
   const nextVoiceData = buildRecordedVoiceData(voiceData, txt, dur, url, blob);
 
-  setVoiceData(nextVoiceData);
+  setVoiceData({
+    ...nextVoiceData,
+    transcriptionStatus: "processing",
+    transcriptionError: ""
+  });
+
+  setScene(3.5);
 
   handleTranscribeForReview(nextVoiceData);
 };
-
   const handlePhotoSelect = (files) => {
     const selectedFiles = Array.from(files || [])
       .filter(file => file && file.type && file.type.startsWith("image/"));
@@ -1054,7 +1059,6 @@ const handleRecordComplete = (txt, dur, url, blob) => {
   };
 
 const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
-  setScene("processing");
 
   setVoiceData(prev => ({
     ...prev,
@@ -2872,6 +2876,8 @@ function Scene3_5_VoiceCheck({
     "";
 
   const hasTranscriptionError = data.transcriptionStatus === "error";
+  const isProcessing = data.transcriptionStatus === "processing";
+  const showAddMoreSuggestion = shouldSuggestAddMore && !isProcessing;
 
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-hidden">
@@ -2925,56 +2931,66 @@ function Scene3_5_VoiceCheck({
             TRANSCRIPT
           </p>
 
-          <div className="flex gap-2 mb-5">
-            <button
-              type="button"
-              onClick={() => onSelectStyle("clean")}
-              className={`flex-1 py-2 rounded-full text-xs border ${
-                data.selectedStyle === "clean"
-                  ? "bg-white/15 border-white/25 text-white"
-                  : "border-white/10 text-white/45"
-              }`}
-            >
-              そのまま
-            </button>
+        <div className="flex gap-2 mb-5">
+          <button
+            type="button"
+            disabled={isProcessing || !displayText}
+            onClick={() => onSelectStyle("clean")}
+            className={`flex-1 py-2 rounded-full text-xs border ${
+              data.selectedStyle === "clean"
+                ? "bg-white/15 border-white/25 text-white"
+                : "border-white/10 text-white/45"
+            } ${isProcessing || !displayText ? "opacity-40" : ""}`}
+          >
+            そのまま
+          </button>
 
-            <button
-              type="button"
-              onClick={() => onSelectStyle("readable")}
-              className={`flex-1 py-2 rounded-full text-xs border ${
-                data.selectedStyle === "readable"
-                  ? "bg-white/15 border-white/25 text-white"
-                  : "border-white/10 text-white/45"
-              }`}
-            >
-              読みやすく
-            </button>
+          <button
+            type="button"
+            disabled={isProcessing || !displayText}
+            onClick={() => onSelectStyle("readable")}
+            className={`flex-1 py-2 rounded-full text-xs border ${
+              data.selectedStyle === "readable"
+                ? "bg-white/15 border-white/25 text-white"
+                : "border-white/10 text-white/45"
+            } ${isProcessing || !displayText ? "opacity-40" : ""}`}
+          >
+            読みやすく
+          </button>
 
-            <button
-              type="button"
-              onClick={() => onSelectStyle("essay")}
-              className={`flex-1 py-2 rounded-full text-xs border ${
-                data.selectedStyle === "essay"
-                  ? "bg-white/15 border-white/25 text-white"
-                  : "border-white/10 text-white/45"
-              }`}
-            >
-              余韻
-            </button>
-          </div>
-
-          {displayText ? (
-            <p className="text-white/78 text-[1rem] leading-[2.05] whitespace-pre-wrap text-narrative">
-              {displayText}
-            </p>
-          ) : (
-            <p className="text-white/45 text-sm leading-loose">
-              文字起こしを取得できませんでした。
-            </p>
-          )}
+          <button
+            type="button"
+            disabled={isProcessing || !displayText}
+            onClick={() => onSelectStyle("essay")}
+            className={`flex-1 py-2 rounded-full text-xs border ${
+              data.selectedStyle === "essay"
+               ? "bg-white/15 border-white/25 text-white"
+                : "border-white/10 text-white/45"
+            } ${isProcessing || !displayText ? "opacity-40" : ""}`}
+          >
+            余韻
+          </button>
         </div>
 
-        {shouldSuggestAddMore && (
+         {isProcessing ? (
+          <p className="text-white/45 text-sm leading-loose">
+            文字起こし中です。<br />
+          </p>
+        ) : displayText ? (
+          <p className="text-white/78 text-[1rem] leading-[2.05] whitespace-pre-wrap text-narrative">
+            {displayText}
+          </p>
+        ) : (
+          <p className="text-white/45 text-sm leading-loose">
+            文字起こしを取得できませんでした。
+          </p>
+        )}
+
+
+
+        </div>
+
+        {showAddMoreSuggestion && (
           <div className="glass-card p-5 mb-6">
             <p className="text-white/70 text-sm leading-loose mb-3">
               もう少し話し足すこともできます。
@@ -2988,25 +3004,32 @@ function Scene3_5_VoiceCheck({
       </div>
 
       <div className="pt-5 border-t border-white/10 space-y-4">
-        {shouldSuggestAddMore && (
-          <button
-            onClick={onAddMore}
-            className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
-          >
-            少し話し足す
-          </button>
-        )}
+       {showAddMoreSuggestion && (
+　        <button
+           onClick={onAddMore}
+           className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+         >
+           少し話し足す
+         </button>
+
+       )}
 
         <button
           onClick={onProceed}
-          className="btn-quiet w-full py-4 rounded-full text-white"
+          disabled={isProcessing || !displayText}
+          className={`btn-quiet w-full py-4 rounded-full text-white ${
+            isProcessing || !displayText ? "opacity-40" : ""
+          }`}
         >
           この内容で進む
         </button>
 
         <button
           onClick={onRetry}
-          className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
+          disabled={isProcessing}
+          className={`w-full py-3 text-white/45 text-sm underline underline-offset-4 ${
+            isProcessing ? "opacity-40" : ""
+          }`}
         >
           もう一度話す
         </button>
