@@ -790,6 +790,8 @@ function App() {
     editedText: "",
     aiMirror: "",
     extractedSnippet: "",
+    transcriptionStatus: "idle",
+    transcriptionError: "",
     transcriptClean: "",
     transcriptReadable: "",
     transcriptEssay: "",
@@ -872,6 +874,8 @@ function App() {
     editedText: "",
     aiMirror: "",
     extractedSnippet: "",
+    transcriptionStatus: "idle",
+    transcriptionError: "",    
     transcriptClean: "",
     transcriptReadable: "",
     transcriptEssay: "",
@@ -932,55 +936,75 @@ const handleSkipQuestion = async () => {
   }
 };
 
-  const handleRecordComplete = (txt, dur, url, blob) => {
-    console.log("recorded blob", {
-      type: blob?.type,
-      size: blob?.size,
-      duration: dur,
-      transcript: txt
-    });
+const pickTranscriptByStyle = (data, style) => {
+  if (style === "clean") {
+    return data.transcriptClean || data.transcriptReadable || data.editedText || data.transcript || "";
+  }
 
-    setVoiceData(prev => {
-      const previousTranscript = String(prev.transcript || "").trim();
-      const newTranscript = String(txt || "").trim();
+  if (style === "essay") {
+    return data.transcriptEssay || data.transcriptReadable || data.editedText || data.transcript || "";
+  }
 
-      const mergedTranscript = prev.appendMode
-        ? formatTranscriptForReading([previousTranscript, newTranscript].filter(Boolean).join("\n\n"))
-        : newTranscript;
+  return data.transcriptReadable || data.transcriptClean || data.editedText || data.transcript || "";
+};
 
-      const mergedDuration = prev.appendMode
-        ? (prev.duration || 0) + (dur || 0)
-        : dur;
+const buildRecordedVoiceData = (prev, txt, dur, url, blob) => {
+  const previousTranscript = String(prev.transcript || "").trim();
+  const newTranscript = String(txt || "").trim();
 
-      const newSegment = blob && blob.size > 0
-        ? {
-            url,
-            blob,
-            duration: dur || 0,
-            transcript: newTranscript,
-            createdAt: Date.now()
-          }
-        : null;
+  const mergedTranscript = prev.appendMode
+    ? formatTranscriptForReading([previousTranscript, newTranscript].filter(Boolean).join("\n\n"))
+    : newTranscript;
 
-      const mergedSegments = prev.appendMode
-        ? [
-            ...(prev.audioSegments || []),
-            ...(newSegment ? [newSegment] : [])
-          ]
-        : (newSegment ? [newSegment] : []);
+  const mergedDuration = prev.appendMode
+    ? (prev.duration || 0) + (dur || 0)
+    : dur;
 
-      return {
-        ...prev,
-        transcript: mergedTranscript,
-        duration: mergedDuration,
-        audioUrl: newSegment?.url || prev.audioUrl,
-        audioBlob: newSegment?.blob || prev.audioBlob,
-        audioSegments: mergedSegments,
-        hasAudio: mergedSegments.length > 0 || prev.hasAudio,
-        appendMode: false
-      };
-    });
+  const newSegment = blob && blob.size > 0
+    ? {
+        url,
+        blob,
+        duration: dur || 0,
+        transcript: newTranscript,
+        createdAt: Date.now()
+      }
+    : null;
+
+  const mergedSegments = prev.appendMode
+    ? [
+        ...(prev.audioSegments || []),
+        ...(newSegment ? [newSegment] : [])
+      ]
+    : (newSegment ? [newSegment] : []);
+
+  return {
+    ...prev,
+    transcript: mergedTranscript,
+    duration: mergedDuration,
+    audioUrl: newSegment?.url || prev.audioUrl,
+    audioBlob: newSegment?.blob || prev.audioBlob,
+    audioSegments: mergedSegments,
+    hasAudio: mergedSegments.length > 0 || prev.hasAudio,
+    appendMode: false,
+    transcriptionStatus: "idle",
+    transcriptionError: ""
   };
+};
+
+const handleRecordComplete = (txt, dur, url, blob) => {
+  console.log("recorded blob", {
+    type: blob?.type,
+    size: blob?.size,
+    duration: dur,
+    transcript: txt
+  });
+
+  const nextVoiceData = buildRecordedVoiceData(voiceData, txt, dur, url, blob);
+
+  setVoiceData(nextVoiceData);
+
+  handleTranscribeForReview(nextVoiceData);
+};
 
   const handlePhotoSelect = (files) => {
     const selectedFiles = Array.from(files || [])
@@ -1029,149 +1053,156 @@ const handleSkipQuestion = async () => {
     }));
   };
 
+const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
+  setScene("processing");
 
-  const handleVoiceProceed = async () => {
-    setScene("processing");
+  setVoiceData(prev => ({
+    ...prev,
+    transcriptionStatus: "processing",
+    transcriptionError: ""
+  }));
 
-    try {
-      const currentQ = questionsDB[progress.currentIndex];
-      const currentSeq = currentQ?.sequence_order;
+  try {
+    const currentQ = questionsDB[progress.currentIndex];
+    const currentSeq = currentQ?.sequence_order;
 
-      let targetAnswerId = crypto.randomUUID();
+    let targetAnswerId = sourceVoiceData.answerId || crypto.randomUUID();
 
-      const { data: existingAnswer } = await supabaseClient
-        .from("answers")
-        .select("id")
-        .match({
-          user_id: user.id,
-          sequence_order: currentSeq
-        })
-        .maybeSingle();
+    const { data: existingAnswer } = await supabaseClient
+      .from("answers")
+      .select("id")
+      .match({
+        user_id: user.id,
+        sequence_order: currentSeq
+      })
+      .maybeSingle();
 
-      if (existingAnswer) targetAnswerId = existingAnswer.id;
+    if (existingAnswer) targetAnswerId = existingAnswer.id;
 
-      let paths = [];
+    let paths = [];
 
-      const audioSegments = (voiceData.audioSegments && voiceData.audioSegments.length > 0)
-        ? voiceData.audioSegments
+    const audioSegments =
+      sourceVoiceData.audioSegments && sourceVoiceData.audioSegments.length > 0
+        ? sourceVoiceData.audioSegments
         : (
-            voiceData.hasAudio && voiceData.audioBlob
+            sourceVoiceData.hasAudio && sourceVoiceData.audioBlob
               ? [{
-                  blob: voiceData.audioBlob,
-                  url: voiceData.audioUrl,
-                  duration: voiceData.duration || 0,
-                  transcript: voiceData.transcript || "",
+                  blob: sourceVoiceData.audioBlob,
+                  url: sourceVoiceData.audioUrl,
+                  duration: sourceVoiceData.duration || 0,
+                  transcript: sourceVoiceData.transcript || "",
                   createdAt: Date.now()
                 }]
               : []
           );
 
-      for (let i = 0; i < audioSegments.length; i++) {
-        const segment = audioSegments[i];
-        const blob = segment?.blob;
+    for (let i = 0; i < audioSegments.length; i++) {
+      const segment = audioSegments[i];
+      const blob = segment?.blob;
 
-        if (!blob || !blob.size) continue;
+      if (!blob || !blob.size) continue;
 
-        const contentType = blob.type || "audio/mp4";
-        const ext = contentType.includes("mp4")
-          ? "mp4"
-          : contentType.includes("aac")
-            ? "aac"
-            : "webm";
+      const contentType = blob.type || "audio/mp4";
+      const ext = contentType.includes("mp4")
+        ? "mp4"
+        : contentType.includes("aac")
+          ? "aac"
+          : "webm";
 
-        const segmentNo = String(i + 1).padStart(2, "0");
-        const path = `${user.id}/${targetAnswerId}/part-${segmentNo}.${ext}`;
+      const segmentNo = String(i + 1).padStart(2, "0");
+      const path = `${user.id}/${targetAnswerId}/part-${segmentNo}.${ext}`;
 
-        const { error: uploadError } = await supabaseClient.storage
-          .from("audio")
-          .upload(path, blob, {
-            contentType,
-            upsert: true
-          });
-
-        if (uploadError) {
-          console.error("storage upload error", uploadError);
-          throw new Error("音声の退避に失敗しました");
-        }
-
-        paths.push(path);
-      }
-
-      setVoiceData(prev => ({
-        ...prev,
-        answerId: targetAnswerId,
-        storagePath: paths[paths.length - 1] || null,
-        storagePaths: paths
-      }));
-
-      let aiResult;
-
-      try {
-        aiResult = await transcribeAudioOnServer({
-          answerId: targetAnswerId,
-          audioPaths: paths,
-          fallbackTranscript: voiceData.transcript
+      const { error: uploadError } = await supabaseClient.storage
+        .from("audio")
+        .upload(path, blob, {
+          contentType,
+          upsert: true
         });
-      } catch (e) {
-        console.error("server transcription error", e);
 
-        const raw = String(voiceData.transcript || "").trim();
-
-        aiResult = {
-          transcript_raw: raw,
-          transcript_edited: raw || "（音声が認識されませんでした）",
-          ai_mirror_text: "ひとつの時間が、形になっています",
-          extracted_snippet: raw
-            ? `「${raw.slice(0, 45)}${raw.length > 45 ? "…" : ""}」`
-            : "「静かな時間が流れていました」",
-          used_fallback: true
-        };
+      if (uploadError) {
+        console.error("storage upload error", uploadError);
+        throw new Error("音声の保存に失敗しました");
       }
 
-      const transcriptRaw =
-        aiResult.transcript_raw ||
-        aiResult.transcript ||
-        voiceData.transcript ||
-        "";
-
-      const transcriptClean =
-        aiResult.transcript_clean ||
-        aiResult.transcript_edited ||
-        transcriptRaw;
-
-      const transcriptReadable =
-        aiResult.transcript_readable ||
-        aiResult.transcript_edited ||
-        transcriptClean ||
-        transcriptRaw;
-
-      const transcriptEssay =
-        aiResult.transcript_essay ||
-        "";
-
-      setVoiceData(prev => ({
-        ...prev,
-        transcript: transcriptRaw,
-        transcriptClean,
-        transcriptReadable,
-        transcriptEssay,
-        selectedStyle: "readable",
-        editedText: transcriptReadable,
-        aiMirror: aiResult.ai_mirror_text || "ひとつの時間が、形になっています",
-        extractedSnippet:
-          aiResult.extracted_snippet ||
-          (transcriptRaw
-            ? `「${transcriptRaw.slice(0, 45)}${transcriptRaw.length > 45 ? "…" : ""}」`
-            : "「静かな時間が流れていました」")
-      }));
-
-      setScene(4);
-    } catch (error) {
-      console.error(error);
-      alert("通信エラーが発生しました。");
-      setScene(3.5);
+      paths.push(path);
     }
-  };
+
+    setVoiceData(prev => ({
+      ...prev,
+      answerId: targetAnswerId,
+      storagePath: paths[paths.length - 1] || prev.storagePath || null,
+      storagePaths: paths.length > 0 ? paths : prev.storagePaths
+    }));
+
+    const aiResult = await transcribeAudioOnServer({
+      answerId: targetAnswerId,
+      audioPaths: paths,
+      fallbackTranscript: sourceVoiceData.transcript
+    });
+
+    const transcriptRaw =
+      aiResult.transcript_raw ||
+      aiResult.transcript ||
+      sourceVoiceData.transcript ||
+      "";
+
+    const transcriptClean =
+      aiResult.transcript_clean ||
+      aiResult.transcript_edited ||
+      transcriptRaw;
+
+    const transcriptReadable =
+      aiResult.transcript_readable ||
+      aiResult.transcript_edited ||
+      transcriptClean ||
+      transcriptRaw;
+
+    const transcriptEssay =
+      aiResult.transcript_essay ||
+      "";
+
+    const nextData = {
+      ...sourceVoiceData,
+      answerId: targetAnswerId,
+      storagePath: paths[paths.length - 1] || sourceVoiceData.storagePath || null,
+      storagePaths: paths.length > 0 ? paths : sourceVoiceData.storagePaths,
+      transcript: transcriptRaw,
+      transcriptClean,
+      transcriptReadable,
+      transcriptEssay,
+      selectedStyle: "readable",
+      editedText: transcriptReadable,
+      aiMirror: aiResult.ai_mirror_text || "ひとつの時間が、形になっています",
+      extractedSnippet:
+        aiResult.extracted_snippet ||
+        (transcriptRaw
+          ? `「${transcriptRaw.slice(0, 45)}${transcriptRaw.length > 45 ? "…" : ""}」`
+          : "「静かな時間が流れていました」"),
+      transcriptionStatus: "done",
+      transcriptionError: ""
+    };
+
+    setVoiceData(nextData);
+    setScene(3.5);
+  } catch (error) {
+    console.error(error);
+
+    setVoiceData(prev => ({
+      ...prev,
+      transcriptionStatus: "error",
+      transcriptionError: "文字起こしに失敗しました。音声は保存されている可能性があります。",
+      editedText:
+        prev.editedText ||
+        prev.transcriptReadable ||
+        prev.transcriptClean ||
+        prev.transcript ||
+        ""
+    }));
+
+    setScene(3.5);
+  }
+};
+
 
   const handleSaveAnswer = async (tag) => {
     setIsInitializing(true);
@@ -1523,50 +1554,48 @@ const handleSkipQuestion = async () => {
       {scene === 3 && (
 <Scene_Recording
   question={currentQ}
-  onComplete={(t, d, u, b) => {
-    const previousTranscript = voiceData.appendMode
-      ? String(voiceData.transcript || "").trim()
-      : "";
-
-    const newTranscript = String(t || "").trim();
-
-    const mergedTranscript = voiceData.appendMode
-      ? formatTranscriptForReading([previousTranscript, newTranscript].filter(Boolean).join("\n\n"))
-      : newTranscript;
-
-    const mergedDuration = voiceData.appendMode
-      ? (voiceData.duration || 0) + (d || 0)
-      : (d || 0);
-
-    handleRecordComplete(t, d, u, b);
-
-    if (isRecordingTooShort(mergedDuration, mergedTranscript)) {
-      setScene("short_recording");
-    } else {
-      setScene(3.5);
-    }
-  }}
+onComplete={(t, d, u, b) => {
+  handleRecordComplete(t, d, u, b);
+}}
 />
       )}
 
       {scene === 3.5 && (
-        <Scene3_5_VoiceCheck
-          data={voiceData}
-          question={currentQ}
-          onAddMore={() => {
-            setVoiceData(prev => ({
-              ...prev,
-              appendMode: true,
-              addMoreCount: (prev.addMoreCount || 0) + 1
-            }));
-            setScene(3);
-          }}
-          onRetry={() => {
-            resetVoiceData();
-            setScene(3);
-          }}
-          onProceed={handleVoiceProceed}
-        />
+
+<Scene3_5_VoiceCheck
+  data={voiceData}
+  question={currentQ}
+  onAddMore={() => {
+    setVoiceData(prev => ({
+      ...prev,
+      appendMode: true,
+      addMoreCount: (prev.addMoreCount || 0) + 1
+    }));
+    setScene(3);
+  }}
+  onRetry={() => {
+    resetVoiceData();
+    setScene(3);
+  }}
+  onRetryTranscription={() => {
+    handleTranscribeForReview(voiceData);
+  }}
+  onSelectStyle={(style) => {
+    setVoiceData(prev => {
+      const next = {
+        ...prev,
+        selectedStyle: style
+      };
+
+      return {
+        ...next,
+        editedText: pickTranscriptByStyle(next, style)
+      };
+    });
+  }}
+  onProceed={() => setScene(4)}
+/>
+
       )}
 
 {scene === "short_recording" && (
@@ -2822,68 +2851,143 @@ function Scene_ShortRecording({ onAddMore, onRetry, onSkip }) {
   );
 }
 
-function Scene3_5_VoiceCheck({ data, question, onAddMore, onRetry, onProceed }) {
-  const transcriptLength = String(data.transcript || "").trim().length;
-
-  const minDuration = question?.min_duration_seconds || 25;
-  const minChars = question?.min_transcript_chars || 80;
-
-  const isShortAnswer =
-    (data.duration > 0 && data.duration < minDuration) ||
-    transcriptLength < minChars;
-
+function Scene3_5_VoiceCheck({
+  data,
+  question,
+  onAddMore,
+  onRetry,
+  onRetryTranscription,
+  onSelectStyle,
+  onProceed
+}) {
+  const isShortAnswer = isRecordingTooShort(data.duration);
   const hasAlreadyAddedMore = (data.addMoreCount || 0) > 0;
   const shouldSuggestAddMore = isShortAnswer && !hasAlreadyAddedMore;
 
-  const isFactTimeline = question?.prompt_style === "fact_timeline";
+  const displayText =
+    data.editedText ||
+    data.transcriptReadable ||
+    data.transcriptClean ||
+    data.transcript ||
+    "";
 
-  const followupText =
-    question?.followup_hint ||
-    (isFactTimeline
-      ? "いつ頃、どこで、誰と、どんな流れだったかを少し足すと、人生の歩みがより分かりやすくなります。"
-      : "誰と一緒だったか、どんな場所だったか、その時どんな気持ちだったかを少し足すと、よりあたたかいページになります。");
+  const hasTranscriptionError = data.transcriptionStatus === "error";
 
   return (
-    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
-      <div className="glass-card p-8 w-full max-w-[320px] mb-8">
-        <p className="text-white/40 text-sm mb-4">
-          RECORDED AUDIO
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-hidden">
+      <div className="text-center mb-6">
+        <p className="text-white/90 text-[1.05rem] text-narrative mb-3">
+          語りを確認します
         </p>
 
-        {data.audioUrl ? (
-          <audio controls src={data.audioUrl} />
-        ) : (
-          <p className="text-white/40 text-sm">
-            音声プレビューを作成できませんでした
+        <p className="ui-small">
+          音声と文字起こしを確認できます。
+        </p>
+      </div>
+
+      <div className="flex-1 overflow-y-auto pb-6">
+        <div className="glass-card p-5 mb-6">
+          <p className="text-white/35 text-xs tracking-[0.18em] mb-4">
+            ORIGINAL VOICE
           </p>
+
+          {data.audioUrl ? (
+            <audio controls src={data.audioUrl} className="w-full" />
+          ) : (
+            <p className="text-white/40 text-sm">
+              音声プレビューを作成できませんでした
+            </p>
+          )}
+        </div>
+
+        {hasTranscriptionError && (
+          <div className="glass-card p-5 mb-6">
+            <p className="text-white/75 text-sm leading-loose mb-3">
+              文字起こしに時間がかかっています。
+            </p>
+
+            <p className="text-white/48 text-sm leading-loose mb-5">
+              音声は保存されています。通信が安定してから、もう一度試せます。
+            </p>
+
+            <button
+              type="button"
+              onClick={onRetryTranscription}
+              className="btn-quiet bg-white/10 w-full py-3 rounded-full text-white"
+            >
+              文字起こしをもう一度試す
+            </button>
+          </div>
         )}
 
-        {data.transcript && (
-          <p className="text-white/35 text-sm leading-loose mt-5 line-clamp-3">
-            {data.transcript}
+        <div className="glass-card p-5 mb-6">
+          <p className="text-white/35 text-xs tracking-[0.18em] mb-4">
+            TRANSCRIPT
           </p>
+
+          <div className="flex gap-2 mb-5">
+            <button
+              type="button"
+              onClick={() => onSelectStyle("clean")}
+              className={`flex-1 py-2 rounded-full text-xs border ${
+                data.selectedStyle === "clean"
+                  ? "bg-white/15 border-white/25 text-white"
+                  : "border-white/10 text-white/45"
+              }`}
+            >
+              そのまま
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStyle("readable")}
+              className={`flex-1 py-2 rounded-full text-xs border ${
+                data.selectedStyle === "readable"
+                  ? "bg-white/15 border-white/25 text-white"
+                  : "border-white/10 text-white/45"
+              }`}
+            >
+              読みやすく
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectStyle("essay")}
+              className={`flex-1 py-2 rounded-full text-xs border ${
+                data.selectedStyle === "essay"
+                  ? "bg-white/15 border-white/25 text-white"
+                  : "border-white/10 text-white/45"
+              }`}
+            >
+              余韻
+            </button>
+          </div>
+
+          {displayText ? (
+            <p className="text-white/78 text-[1rem] leading-[2.05] whitespace-pre-wrap text-narrative">
+              {displayText}
+            </p>
+          ) : (
+            <p className="text-white/45 text-sm leading-loose">
+              文字起こしを取得できませんでした。
+            </p>
+          )}
+        </div>
+
+        {shouldSuggestAddMore && (
+          <div className="glass-card p-5 mb-6">
+            <p className="text-white/70 text-sm leading-loose mb-3">
+              もう少し話し足すこともできます。
+            </p>
+
+            <p className="text-white/48 text-sm leading-loose">
+              このまま進んでも大丈夫です。
+            </p>
+          </div>
         )}
       </div>
 
-      {shouldSuggestAddMore && (
-        <div className="glass-card p-5 w-full max-w-[320px] mb-8 text-left">
-          <p className="text-white/70 text-sm leading-loose mb-3">
-            ありがとうございます。
-          </p>
-
-          <p className="text-white/55 text-sm leading-loose whitespace-pre-wrap">
-            もしよければ、もう少しだけ話し足してみませんか？
-            <br />
-            {followupText}
-          </p>
-
-          <p className="text-white/38 text-sm leading-loose mt-4 text-center">
-            もちろん、このまま進んでも大丈夫です。
-          </p>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-4 w-full max-w-[280px]">
+      <div className="pt-5 border-t border-white/10 space-y-4">
         {shouldSuggestAddMore && (
           <button
             onClick={onAddMore}
@@ -2910,6 +3014,7 @@ function Scene3_5_VoiceCheck({ data, question, onAddMore, onRetry, onProceed }) 
     </div>
   );
 }
+
 
 function Scene_Processing() {
   return (
