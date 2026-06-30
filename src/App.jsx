@@ -790,6 +790,10 @@ function App() {
     editedText: "",
     aiMirror: "",
     extractedSnippet: "",
+    transcriptClean: "",
+    transcriptReadable: "",
+    transcriptEssay: "",
+    selectedStyle: "readable",
     answerId: null,
     storagePath: null,
     storagePaths: [],
@@ -868,6 +872,10 @@ function App() {
     editedText: "",
     aiMirror: "",
     extractedSnippet: "",
+    transcriptClean: "",
+    transcriptReadable: "",
+    transcriptEssay: "",
+    selectedStyle: "readable",
     answerId: null,
     storagePath: null,
     storagePaths: [],
@@ -1126,10 +1134,29 @@ const handleSkipQuestion = async () => {
         voiceData.transcript ||
         "";
 
+      const transcriptClean =
+        aiResult.transcript_clean ||
+        aiResult.transcript_edited ||
+        transcriptRaw;
+
+      const transcriptReadable =
+        aiResult.transcript_readable ||
+        aiResult.transcript_edited ||
+        transcriptClean ||
+        transcriptRaw;
+
+      const transcriptEssay =
+        aiResult.transcript_essay ||
+        "";
+
       setVoiceData(prev => ({
         ...prev,
         transcript: transcriptRaw,
-        editedText: aiResult.transcript_edited || transcriptRaw,
+        transcriptClean,
+        transcriptReadable,
+        transcriptEssay,
+        selectedStyle: "readable",
+        editedText: transcriptReadable,
         aiMirror: aiResult.ai_mirror_text || "ひとつの時間が、形になっています",
         extractedSnippet:
           aiResult.extracted_snippet ||
@@ -1166,8 +1193,16 @@ const handleSkipQuestion = async () => {
           question_id: currentQ?.question_id || currentQ?.id,
           sequence_order: currentSeq,
           transcript_raw: voiceData.transcript,
+          transcript_clean: voiceData.transcriptClean || voiceData.editedText || voiceData.transcript,
+          transcript_readable: voiceData.transcriptReadable || voiceData.editedText || voiceData.transcript,
+          transcript_essay: voiceData.transcriptEssay || null,
           transcript_edited: voiceData.editedText,
+
+          selected_style: voiceData.selectedStyle || "readable",
+
           ai_mirror: voiceData.aiMirror,
+
+
           snippet: voiceData.extractedSnippet,
           meta_json: {
             meaning_tag: tag,
