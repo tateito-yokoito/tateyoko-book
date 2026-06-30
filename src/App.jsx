@@ -52,12 +52,10 @@ async function transcribeAudioOnServer({ answerId, audioPaths, fallbackTranscrip
   return data;
 }
 
-
 function isDevMode() {
   const params = new URLSearchParams(window.location.search);
   return params.get("dev") === "1";
 }
-
 
 function formatTranscriptForReading(input) {
   let text = String(input || "").replace(/\s+/g, " ").trim();
@@ -82,7 +80,6 @@ commaWords.forEach(word => {
   if (!/[。！？]$/.test(text)) text += "。";
   return text;
 }
-
 
 const DEV_LOGIN_EMAIL = "bird9bird9bird9+koedev@gmail.com";
 const DEV_LOGIN_PASSWORD = "bird9bird9";
@@ -676,7 +673,6 @@ function getInitialQuestionIndex(questionSet, profile) {
   return currentIndex;
 }
 
-
 async function markUserQuestionAnswered(userQuestionId) {
   if (!userQuestionId) return;
 
@@ -694,7 +690,6 @@ async function markUserQuestionAnswered(userQuestionId) {
 }
 
 const MIN_RECORDING_SECONDS = 15;
-
 
 function isRecordingTooShort(duration) {
   const seconds = Number(duration || 0);
@@ -768,7 +763,6 @@ function hasDoneDailyMicCheck() {
 function markDailyMicCheckDone() {
   localStorage.setItem("tateyoko_daily_mic_check", getTodayKey());
 }
-
 
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
@@ -947,6 +941,10 @@ const pickTranscriptByStyle = (data, style) => {
 
   return data.transcriptReadable || data.transcriptClean || data.editedText || data.transcript || "";
 };
+
+
+
+
 
 const buildRecordedVoiceData = (prev, txt, dur, url, blob) => {
   const previousTranscript = String(prev.transcript || "").trim();
@@ -1207,7 +1205,6 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
   }
 };
 
-
   const handleSaveAnswer = async (tag) => {
     setIsInitializing(true);
 
@@ -1236,7 +1233,6 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
           selected_style: voiceData.selectedStyle || "readable",
 
           ai_mirror: voiceData.aiMirror,
-
 
           snippet: voiceData.extractedSnippet,
           meta_json: {
@@ -2163,7 +2159,6 @@ function Scene_SupporterInvite({ user, foundation, onComplete }) {
   );
 }
 
-
 function Scene0_Door({ onNext }) {
   return (
     <div className="h-full flex flex-col items-center justify-center text-center fade-enter px-4">
@@ -2287,7 +2282,6 @@ function VoiceWave({ level = 0 }) {
     </div>
   );
 }
-
 
 function Scene_DailyMicCheck({ onComplete }) {
   const [voiceLevel, setVoiceLevel] = useState(0);
@@ -2458,7 +2452,6 @@ function Scene_Recording({ question, onComplete }) {
 
   useEffect(() => {
     let timer;
-
 
     if (step === 1) {
       timer = setInterval(() => {
@@ -2813,7 +2806,6 @@ useEffect(() => {
   );
 }
 
-
 function Scene_ShortRecording({ onAddMore, onRetry, onSkip }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
@@ -2886,16 +2878,10 @@ function Scene3_5_VoiceCheck({
           語りを確認します
         </p>
 
-        <p className="ui-small">
-          音声と文字起こしを確認できます。
-        </p>
       </div>
 
       <div className="flex-1 overflow-y-auto pb-6">
         <div className="glass-card p-5 mb-6">
-          <p className="text-white/35 text-xs tracking-[0.18em] mb-4">
-            ORIGINAL VOICE
-          </p>
 
           {data.audioUrl ? (
             <audio controls src={data.audioUrl} className="w-full" />
@@ -2927,9 +2913,6 @@ function Scene3_5_VoiceCheck({
         )}
 
         <div className="glass-card p-5 mb-6">
-          <p className="text-white/35 text-xs tracking-[0.18em] mb-4">
-            TRANSCRIPT
-          </p>
 
         <div className="flex gap-2 mb-5">
           <button
@@ -2973,10 +2956,13 @@ function Scene3_5_VoiceCheck({
         </div>
 
          {isProcessing ? (
-          <p className="text-white/45 text-sm leading-loose">
-            文字起こし中です。<br />
-          </p>
-        ) : displayText ? (
+           <div className="flex items-center gap-3 text-white/45 text-sm leading-loose">
+             <div className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/70 animate-spin shrink-0"></div>
+             <p>文字起こし中です</p>
+           </div>
+         ) : displayText ? (
+
+
           <p className="text-white/78 text-[1rem] leading-[2.05] whitespace-pre-wrap text-narrative">
             {displayText}
           </p>
@@ -2985,8 +2971,6 @@ function Scene3_5_VoiceCheck({
             文字起こしを取得できませんでした。
           </p>
         )}
-
-
 
         </div>
 
@@ -3005,7 +2989,7 @@ function Scene3_5_VoiceCheck({
 
       <div className="pt-5 border-t border-white/10 space-y-4">
        {showAddMoreSuggestion && (
-　        <button
+         <button
            onClick={onAddMore}
            className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
          >
@@ -3037,7 +3021,6 @@ function Scene3_5_VoiceCheck({
     </div>
   );
 }
-
 
 function Scene_Processing() {
   return (
@@ -3076,9 +3059,6 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
 
         {isEditingText ? (
           <div className="glass-card p-5">
-            <p className="text-white/35 text-xs tracking-[0.18em] mb-4">
-              TRANSCRIPT
-            </p>
 
             <textarea
               value={draftText}
@@ -3176,9 +3156,6 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
 
         {data.audioSegments && data.audioSegments.length > 0 && (
           <div className="glass-card p-5 mt-10">
-            <p className="text-white/35 text-xs tracking-[0.18em] mb-4">
-              ORIGINAL VOICE
-            </p>
 
             <div className="space-y-4">
               {data.audioSegments.map((segment, index) => (
@@ -3528,7 +3505,6 @@ function Scene_StoryPages({ user, onTalkMore, onBack }) {
     </div>
   );
 }
-
 
 function Scene_NotificationSetup({ user, onComplete }) {
   const presets = [
