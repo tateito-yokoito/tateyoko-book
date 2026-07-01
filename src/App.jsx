@@ -3050,7 +3050,7 @@ function Scene3_5_VoiceCheck({
   const showAddMoreSuggestion = shouldSuggestAddMore && !isProcessing;
 
   return (
-    <div className="h-full flex flex-col fade-enter px-4 pt-2 pb-5 overflow-hidden">
+    <div className="h-full flex flex-col fade-enter px-4 pt-0 pb-4 -mt-8 overflow-hidden">
       <div className="text-center mb-6">
         <p className="text-white/90 text-[1.05rem] text-narrative mb-3">
           語りを確認します
@@ -3730,7 +3730,7 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
   const visibleAnswers = selectedChapter?.answers || [];
 
   return (
-    <div className="h-full flex flex-col fade-enter px-4 pt-2 pb-5 overflow-hidden">
+    <div className="h-full flex flex-col fade-enter px-4 pt-0 pb-4 -mt-8 overflow-hidden">
 <div className="text-center mb-2">
   <p className="text-white/85 text-[0.95rem] text-narrative">
     これまでの語り
@@ -3808,26 +3808,34 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
                   </div>
                 )}
 
-                {photos.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3 mb-5">
-                    {photos.map((photo, photoIndex) => (
-                      <div
-                        key={photo.storage_path || photoIndex}
-                        className="relative rounded-2xl overflow-hidden border border-white/10 bg-white/5"
+            <div className="mb-5">
+              {photos.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {photos.map((photo, photoIndex) => (
+                    <div
+                      key={photo.storage_path || photoIndex}
+                      className="relative rounded-2xl overflow-hidden border border-white/10 bg-white/5"
+                    >
+                      <img src={photo.url} alt={`写真 ${photoIndex + 1}`} className="w-full aspect-square object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => deletePhoto(photo)}
+                        disabled={deletingPhotoPath === photo.storage_path}
+                        className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/55 text-white/85 text-sm"
                       >
-                        <img src={photo.url} alt={`写真 ${photoIndex + 1}`} className="w-full aspect-square object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => deletePhoto(photo)}
-                          disabled={deletingPhotoPath === photo.storage_path}
-                          className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/55 text-white/85 text-sm"
-                        >
-                          {deletingPhotoPath === photo.storage_path ? "…" : "×"}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                        {deletingPhotoPath === photo.storage_path ? "…" : "×"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] aspect-[4/3] flex items-center justify-center">
+                  <p className="text-white/28 text-sm tracking-widest">
+                    写真を挿入
+                  </p>
+                </div>
+              )}
+            </div>
 
                 <p className="text-white/75 text-[0.98rem] leading-[2.15] whitespace-pre-wrap text-narrative">{body}</p>
 
@@ -3839,9 +3847,6 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
                   </div>
                 )}
 
-                <p className="mt-5 text-white/30 text-xs tracking-widest">
-                  PAGE {String(index + 1).padStart(2, "0")}
-                </p>
               </article>
             );
           })
