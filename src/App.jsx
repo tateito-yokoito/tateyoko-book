@@ -3050,7 +3050,7 @@ function Scene3_5_VoiceCheck({
   const showAddMoreSuggestion = shouldSuggestAddMore && !isProcessing;
 
   return (
-    <div className="h-full flex flex-col fade-enter px-4 py-5 overflow-hidden">
+    <div className="h-full flex flex-col fade-enter px-4 pt-2 pb-5 overflow-hidden">
       <div className="text-center mb-6">
         <p className="text-white/90 text-[1.05rem] text-narrative mb-3">
           語りを確認します
@@ -3730,16 +3730,16 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
   const visibleAnswers = selectedChapter?.answers || [];
 
   return (
-    <div className="h-full flex flex-col fade-enter px-4 py-5 overflow-hidden">
-<div className="text-center mb-3">
-  <p className="text-white/85 text-[0.98rem] text-narrative">
+    <div className="h-full flex flex-col fade-enter px-4 pt-2 pb-5 overflow-hidden">
+<div className="text-center mb-2">
+  <p className="text-white/85 text-[0.95rem] text-narrative">
     これまでの語り
   </p>
 </div>
 
 {chapterSections.length > 0 && (
-  <div className="mb-4">
-    <div className="flex gap-2 overflow-x-auto pb-2">
+  <div className="mb-3">
+    <div className="flex gap-2 overflow-x-auto pb-1">
     {chapterSections.map((section, index) => {
       const hasAnswers = section.answers.length > 0;
       const isSelected = index === safeChapterIndex;
