@@ -1013,7 +1013,9 @@ const buildRecordedVoiceData = (prev, txt, dur, url, blob) => {
     hasAudio: mergedSegments.length > 0 || prev.hasAudio,
     appendMode: false,
     transcriptionStatus: "idle",
-    transcriptionError: ""
+    transcriptionError: "",
+    polishStatus: "idle",
+    polishError: ""
   };
 };
 
@@ -1211,9 +1213,9 @@ try {
     transcriptRaw,
     questionText: currentQ?.content || ""
   });
-
-  setVoiceData(prev => {
-    const next = {
+    setVoiceData(prev => {
+     if (prev.answerId !== targetAnswerId) return prev;
+      const next = {
       ...prev,
       transcriptClean:
         polishResult.transcript_clean ||
@@ -1252,28 +1254,31 @@ try {
 } catch (polishError) {
   console.error("polish transcript error", polishError);
 
-  setVoiceData(prev => ({
-    ...prev,
-    polishStatus: "error",
-    polishError: "文章の整形に失敗しました。文字起こし本文は利用できます。"
-  }));
+  setVoiceData(prev => {
+    if (prev.answerId !== targetAnswerId) return prev;
+    return {
+      ...prev,
+      polishStatus: "error",
+      polishError: "文章の整形に失敗しました。文字起こし本文は利用できます。"
+    };
+  });
 }
 
 
   } catch (error) {
     console.error(error);
 
-    setVoiceData(prev => ({
-      ...prev,
-      transcriptionStatus: "error",
-      transcriptionError: "文字起こしに失敗しました。音声は保存されている可能性があります。",
-      editedText:
-        prev.editedText ||
-        prev.transcriptReadable ||
-        prev.transcriptClean ||
-        prev.transcript ||
-        ""
-    }));
+  setVoiceData(prev => ({
+    ...prev,
+    transcriptionStatus: "error",
+    transcriptionError: "文字起こしに失敗しました。音声は保存されている可能性があります。",
+    editedText:
+      prev.editedText ||
+      prev.transcriptReadable ||
+      prev.transcriptClean ||
+      prev.transcript ||
+      ""
+  }));
 
     setScene(3.5);
   }
@@ -3014,7 +3019,7 @@ function Scene3_5_VoiceCheck({
                 : "border-white/10 text-white/45"
             } ${!canUseStyles ? "opacity-40" : ""}`}
           >
-            読みやすく
+            語り調
           </button>
 
           <button
@@ -3027,7 +3032,7 @@ function Scene3_5_VoiceCheck({
                 : "border-white/10 text-white/45"
             } ${!canUseStyles ? "opacity-40" : ""}`}
           >
-            余韻
+            作品調
           </button>
         </div>
 
@@ -3092,9 +3097,9 @@ function Scene3_5_VoiceCheck({
 
         <button
           onClick={onRetry}
-          disabled={isProcessing}
+          disabled={isProcessing || isPolishing}
           className={`w-full py-3 text-white/45 text-sm underline underline-offset-4 ${
-            isProcessing ? "opacity-40" : ""
+            isProcessing || isPolishing ? "opacity-40" : ""
           }`}
         >
           もう一度話す
