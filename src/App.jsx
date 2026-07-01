@@ -2511,6 +2511,7 @@ function Scene_Recording({ question, onComplete }) {
   const [step, setStep] = useState(0);
   const [time, setTime] = useState(0);
   const [countdown, setCountdown] = useState(3);
+  const [isPaused, setIsPaused] = useState(false);
   const hasStartedRecordingRef = useRef(false);
   const timeRef = useRef(0);
   const [voiceLevel, setVoiceLevel] = useState(0);
@@ -2532,20 +2533,19 @@ function Scene_Recording({ question, onComplete }) {
   useEffect(() => {
     let timer;
 
-    if (step === 1) {
-      timer = setInterval(() => {
-        setTime(t => {
-          const next = t + 1;
-          timeRef.current = next;
-          return next;   
-        });
-      }, 1000);
+  if (step === 1 && !isPaused) {
+    timer = setInterval(() => {
+      setTime(t => {
+        const next = t + 1;
+        timeRef.current = next;
+        return next;
+      });
+    }, 1000);
 
-      document.body.classList.add("is-recording");
-    }else {
-      document.body.classList.remove("is-recording");
-    }
-
+    document.body.classList.add("is-recording");
+  } else {
+    document.body.classList.remove("is-recording");
+  }
     return () => {
       clearInterval(timer);
       document.body.classList.remove("is-recording");
@@ -2578,7 +2578,7 @@ useEffect(() => {
   }, 1000);
 
   return () => clearInterval(timer);
-}, [step]);
+}, [step, isPaused]);
 
   const startWaveMonitor = (stream) => {
     try {
@@ -2666,6 +2666,7 @@ useEffect(() => {
   const startActualRecording = async () => {
     setTime(0);
     timeRef.current = 0;
+    setIsPaused(false);
     setVoiceLevel(0);
 
     transcriptRef.current = "";
@@ -2771,7 +2772,50 @@ useEffect(() => {
     }
   };
 
+  const pauseRecording = () => {
+    setIsPaused(true);
+
+    if (mediaRef.current && mediaRef.current.state === "recording") {
+      try {
+        mediaRef.current.pause();
+      } catch (e) {
+        console.warn("media recorder pause failed", e);
+      }
+    }
+
+    if (speechRef.current) {
+      try { speechRef.current.stop(); } catch (e) {}
+    }
+
+    stopWaveMonitor();
+  };
+
+  const resumeRecording = () => {
+    setIsPaused(false);
+
+    if (mediaRef.current && mediaRef.current.state === "paused") {
+      try {
+        mediaRef.current.resume();
+      } catch (e) {
+        console.warn("media recorder resume failed", e);
+      }
+    }
+
+    if (streamRef.current) {
+      startWaveMonitor(streamRef.current);
+    }
+
+    if (speechRef.current) {
+      try {
+        speechRef.current.start();
+      } catch (e) {
+        console.warn("speech recognition resume failed", e);
+      }
+    }
+  };
+
   const stop = () => {
+    setIsPaused(false);
     setStep(2);
 
     if (speechRef.current) {
@@ -2857,7 +2901,7 @@ useEffect(() => {
         <div className="space-y-7 pb-4">
           <div className="glass-card py-5 px-4">
             <p className="text-white/35 text-xs tracking-[0.18em] mb-3">
-              録音中
+              {isPaused ? "一時停止中" : "録音中"}
             </p>
 
             <VoiceWave level={voiceLevel + waveTick * 0} />
@@ -2867,12 +2911,25 @@ useEffect(() => {
             </p>
           </div>
 
-          <button
-            onClick={stop}
-            className="w-24 h-24 rounded-full bg-white text-slate-900 shadow-xl"
-          >
-            終了
-          </button>
+          <div className="flex items-center justify-center gap-5">
+            <button
+              type="button"
+              onClick={isPaused ? resumeRecording : pauseRecording}
+              className="w-24 h-24 rounded-full border border-white/15 bg-white/10 text-white shadow-xl"
+            >
+              {isPaused ? "再開" : "一時停止"}
+            </button>
+
+            <button
+              type="button"
+              onClick={stop}
+              className="w-24 h-24 rounded-full bg-white text-slate-900 shadow-xl"
+            >
+              終了
+            </button>
+          </div>
+
+
         </div>
       )}
 
@@ -3121,10 +3178,18 @@ function Scene_Processing() {
   );
 }
 
+
 function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto, onNext }) {
   const photoInputRef = useRef(null);
   const [isEditingText, setIsEditingText] = useState(false);
   const [draftText, setDraftText] = useState(data.editedText || "");
+
+  const styleLabel =
+    data.selectedStyle === "clean"
+      ? "そのまま"
+      : data.selectedStyle === "essay"
+        ? "作品調"
+        : "語り調";
 
   useEffect(() => {
     setDraftText(data.editedText || "");
@@ -3139,10 +3204,15 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
     <div className="h-full flex flex-col fade-enter">
       <div className="flex-1 overflow-y-auto pb-10">
         <div className="mb-8 p-4 bg-white/5 border-l-2 border-amber-600/50 rounded-r-lg">
-          <p className="text-amber-50/90 text-[0.95rem] tracking-widest">
+          <p className="text-white/35 text-xs tracking-[0.18em] mb-3">
+            選択中の文体：{styleLabel}
+          </p>
+
+          <p className="text-amber-50/90 text-[0.95rem] tracking-widest leading-loose">
             {data.aiMirror}
           </p>
         </div>
+
 
         {isEditingText ? (
           <div className="glass-card p-5">
@@ -3169,7 +3239,7 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
                 onClick={saveDraftText}
                 className="flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm"
               >
-                修正を反映する
+                修正を保存する
               </button>
             </div>
           </div>
@@ -3184,7 +3254,7 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
               onClick={() => setIsEditingText(true)}
               className="mt-6 text-white/45 text-sm underline underline-offset-4"
             >
-              文字を修正する
+              本文を修正する
             </button>
           </>
         )}
@@ -3384,6 +3454,41 @@ function Scene_EndToday({ notificationPref, onOpenStoryPages }) {
 }
 
 function Scene_StoryPages({ user, onTalkMore, onBack }) {
+  const getStoryBody = (answer) => {
+    const selectedStyle = answer?.selected_style || "";
+
+    if (selectedStyle === "clean" || selectedStyle === "transcript_clean") {
+      return (
+        answer.transcript_clean ||
+        answer.transcript_edited ||
+        answer.transcript_raw ||
+        answer.snippet ||
+        "（本文を読み込めませんでした）"
+      );
+    }
+
+    if (selectedStyle === "essay" || selectedStyle === "transcript_essay") {
+      return (
+        answer.transcript_essay ||
+        answer.transcript_edited ||
+        answer.transcript_readable ||
+        answer.transcript_clean ||
+        answer.transcript_raw ||
+        answer.snippet ||
+        "（本文を読み込めませんでした）"
+      );
+    }
+
+    return (
+      answer.transcript_readable ||
+      answer.transcript_edited ||
+      answer.transcript_clean ||
+      answer.transcript_raw ||
+      answer.snippet ||
+      "（本文を読み込めませんでした）"
+    );
+  };
+
   const [answers, setAnswers] = useState([]);
   const [mediaByAnswerId, setMediaByAnswerId] = useState({});
   const [loading, setLoading] = useState(true);
@@ -3402,7 +3507,19 @@ function Scene_StoryPages({ user, onTalkMore, onBack }) {
 
       const { data, error } = await supabaseClient
         .from("answers")
-        .select("id, sequence_order, transcript_raw, transcript_edited, ai_mirror, snippet, created_at")
+        .select(`
+          id,
+          sequence_order,
+          transcript_raw,
+          transcript_clean,
+          transcript_readable,
+          transcript_essay,
+          transcript_edited,
+          selected_style,
+          ai_mirror,
+          snippet,
+          created_at
+        `)
         .eq("user_id", user.id)
         .order("sequence_order", { ascending: true });
 
@@ -3528,7 +3645,7 @@ function Scene_StoryPages({ user, onTalkMore, onBack }) {
           </div>
         ) : (
           answers.map((answer, index) => {
-            const body = answer.transcript_edited || answer.transcript_raw || answer.snippet || "（本文を読み込めませんでした）";
+            const body = getStoryBody(answer);
             const title = answer.ai_mirror || answer.snippet || `ページ ${index + 1}`;
             const media = mediaByAnswerId[answer.id] || [];
             const photos = media.filter(m => m.asset_type === "photo" && m.url);
