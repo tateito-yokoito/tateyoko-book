@@ -1736,6 +1736,7 @@ onComplete={(t, d, u, b) => {
       {scene === "story_pages" && (
         <Scene_StoryPages
           user={user}
+          questionSet={questionsDB}
           onTalkMore={() => {
             resetVoiceData();
             setScene(2);
@@ -3492,7 +3493,7 @@ function Scene_EndToday({ notificationPref, onOpenStoryPages }) {
   );
 }
 
-function Scene_StoryPages({ user, onTalkMore, onBack }) {
+function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
 
   const getStoryBody = (answer) => {
     const selectedStyle = answer?.selected_style || "";
@@ -3530,11 +3531,55 @@ function Scene_StoryPages({ user, onTalkMore, onBack }) {
     );
   };
 
+  const getQuestionForAnswer = (answer) => {
+    return (questionSet || []).find(q =>
+      Number(q.sequence_order) === Number(answer.sequence_order)
+    ) || null;
+  };
+
+  const getChapterTitleForAnswer = (answer) => {
+    const question = getQuestionForAnswer(answer);
+
+    return (
+      question?.chapter_label ||
+      question?.chapter_description ||
+      question?.chapter ||
+      "その他"
+    );
+  };
+
+  const getQuestionTextForAnswer = (answer) => {
+    const question = getQuestionForAnswer(answer);
+    return question?.content || "";
+  };
+
+  const buildChapterSections = (answerRows) => {
+    const sections = [];
+
+    for (const answer of answerRows || []) {
+      const chapterTitle = getChapterTitleForAnswer(answer);
+      let section = sections.find(s => s.chapterTitle === chapterTitle);
+
+      if (!section) {
+        section = {
+          chapterTitle,
+          answers: []
+        };
+        sections.push(section);
+      }
+
+      section.answers.push(answer);
+    }
+
+    return sections;
+  };
+
 
   const [answers, setAnswers] = useState([]);
   const [mediaByAnswerId, setMediaByAnswerId] = useState({});
   const [loading, setLoading] = useState(true);
   const [deletingPhotoPath, setDeletingPhotoPath] = useState(null);
+  const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
 
   const loadAnswers = async () => {
     if (!user?.id) {
@@ -3661,24 +3706,56 @@ function Scene_StoryPages({ user, onTalkMore, onBack }) {
     }
   };
 
+  const chapterSections = buildChapterSections(answers);
+  const safeChapterIndex = Math.min(
+    selectedChapterIndex,
+    Math.max(chapterSections.length - 1, 0)
+  );
+  const selectedChapter = chapterSections[safeChapterIndex] || null;
+  const visibleAnswers = selectedChapter?.answers || [];
+
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-hidden">
-      <div className="text-center mb-8">
-        <p className="text-white/90 text-[1.05rem] text-narrative mb-3">
-          これまでの語り
-        </p>
-        <p className="ui-small">
-          あなたの声から生まれたページが<br />
-          ここに重なっていきます。
-        </p>
+    <div className="text-center mb-6">
+      <p className="text-white/90 text-[1.05rem] text-narrative">
+        これまでの語り
+      </p>
+    </div>
+
+    {chapterSections.length > 0 && (
+      <div className="mb-6">
+        <div className="flex gap-3 overflow-x-auto pb-3">
+          {chapterSections.map((section, index) => (
+            <button
+              key={section.chapterTitle}
+              type="button"
+              onClick={() => setSelectedChapterIndex(index)}
+              className={`w-11 h-11 rounded-full shrink-0 border text-sm transition ${
+                index === safeChapterIndex
+                  ? "bg-white text-slate-900 border-white"
+                  : "bg-white/5 text-white/45 border-white/10"
+              }`}
+              aria-label={`章 ${index + 1}`}
+            >
+              {index + 1}
+            </button>
+          ))}
+        </div>
+
+        {selectedChapter && (
+          <p className="text-center text-white/55 text-sm text-narrative">
+            {selectedChapter.chapterTitle}
+          </p>
+        )}
       </div>
+    )}
 
       <div className="flex-1 overflow-y-auto space-y-5 pb-6">
         {loading ? (
           <div className="h-full flex items-center justify-center">
             <p className="text-white/35 text-sm tracking-widest animate-pulse">読み込んでいます...</p>
           </div>
-        ) : answers.length === 0 ? (
+        ) : visibleAnswers.length === 0 ? (
           <div className="h-full flex items-center justify-center text-center">
             <p className="text-white/45 text-sm leading-loose">
               まだ語りはありません。<br />
@@ -3686,9 +3763,11 @@ function Scene_StoryPages({ user, onTalkMore, onBack }) {
             </p>
           </div>
         ) : (
-          answers.map((answer, index) => {
+          visibleAnswers.map((answer, index) => {
             const body = getStoryBody(answer);
+            const questionText = getQuestionTextForAnswer(answer);
             const title = answer.ai_mirror || answer.snippet || `ページ ${index + 1}`;
+
             const media = mediaByAnswerId[answer.id] || [];
             const photos = media.filter(m => m.asset_type === "photo" && m.url);
             const audios = media.filter(m => m.asset_type === "audio" && m.url);
@@ -3696,6 +3775,12 @@ function Scene_StoryPages({ user, onTalkMore, onBack }) {
             return (
               <article key={answer.id} className="glass-card p-5 text-left">
                 <div className="border-l-2 border-amber-400/70 pl-4 mb-5">
+                  {questionText && (
+                    <p className="text-white/35 text-xs leading-loose mb-2">
+                      {questionText}
+                    </p>
+                  )}
+
                   <p className="text-white/80 text-sm leading-loose">{title}</p>
                 </div>
 
