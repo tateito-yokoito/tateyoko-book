@@ -3050,7 +3050,8 @@ function Scene3_5_VoiceCheck({
   const showAddMoreSuggestion = shouldSuggestAddMore && !isProcessing;
 
   return (
-    <div className="h-full flex flex-col fade-enter px-4 pt-0 pb-4 -mt-8 overflow-hidden">
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-hidden">
+
       <div className="text-center mb-6">
         <p className="text-white/90 text-[1.05rem] text-narrative mb-3">
           語りを確認します
@@ -3595,6 +3596,8 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
   const [loading, setLoading] = useState(true);
   const [deletingPhotoPath, setDeletingPhotoPath] = useState(null);
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
+  const storyPhotoInputRef = useRef(null);
+  const pendingPhotoAnswerIdRef = useRef(null);
 
   const loadAnswers = async () => {
     if (!user?.id) {
@@ -3611,6 +3614,7 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
         .from("answers")
         .select(`
           id,
+          book_project_id,
           sequence_order,
           transcript_raw,
           transcript_clean,
@@ -3721,6 +3725,94 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
     }
   };
 
+  const openPhotoPickerForAnswer = (answerId) => {
+    pendingPhotoAnswerIdRef.current = answerId;
+    storyPhotoInputRef.current?.click();
+  };
+
+  const handleStoryPhotoSelect = async (files) => {
+    const answerId = pendingPhotoAnswerIdRef.current;
+    const selectedFiles = Array.from(files || [])
+      .filter(file => file && file.type && file.type.startsWith("image/"));
+
+    if (!answerId || selectedFiles.length === 0 || !user?.id) return;
+
+    try {
+      setLoading(true);
+
+      const targetAnswer = answers.find(a => a.id === answerId);
+      const existingMedia = mediaByAnswerId[answerId] || [];
+      const existingPhotoCount = existingMedia.filter(m => m.asset_type === "photo").length;
+
+      const photoRows = [];
+
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        const contentType = file.type || "image/jpeg";
+        const ext = contentType.includes("png")
+          ? "png"
+          : contentType.includes("webp")
+            ? "webp"
+            : "jpg";
+
+        const photoNo = String(existingPhotoCount + i + 1).padStart(2, "0");
+        const photoPath = `${user.id}/${answerId}/photo-${photoNo}.${ext}`;
+
+        const { error: uploadError } = await supabaseClient.storage
+          .from("photos")
+          .upload(photoPath, file, {
+            contentType,
+            upsert: true
+          });
+
+        if (uploadError) {
+          console.error("story photo upload error", uploadError);
+          throw new Error("写真の保存に失敗しました");
+        }
+
+        photoRows.push({
+          answer_id: answerId,
+          user_id: user.id,
+          family_id: null,
+          book_project_id: targetAnswer?.book_project_id || null,
+          person_id: null,
+          asset_type: "photo",
+          storage_path: photoPath,
+          meta_json: {
+            part: existingPhotoCount + i + 1,
+            total_parts: existingPhotoCount + selectedFiles.length,
+            file_name: file.name || null,
+            content_type: contentType
+          }
+        });
+      }
+
+      if (photoRows.length > 0) {
+        const { error: assetError } = await supabaseClient
+          .from("media_assets")
+          .upsert(photoRows, { onConflict: "answer_id, asset_type, storage_path" });
+
+        if (assetError) {
+          console.error("story photo media asset error", assetError);
+          throw new Error("写真情報の保存に失敗しました");
+        }
+      }
+
+      await loadAnswers();
+    } catch (e) {
+      console.error(e);
+      alert(e.message || "写真の追加に失敗しました。");
+    } finally {
+      pendingPhotoAnswerIdRef.current = null;
+      if (storyPhotoInputRef.current) {
+        storyPhotoInputRef.current.value = "";
+      }
+      setLoading(false);
+    }
+  };
+
+
+
   const chapterSections = buildChapterSections(answers);
   const safeChapterIndex = Math.min(
     selectedChapterIndex,
@@ -3729,9 +3821,19 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
   const selectedChapter = chapterSections[safeChapterIndex] || null;
   const visibleAnswers = selectedChapter?.answers || [];
 
-  return (
-    <div className="h-full flex flex-col fade-enter px-4 pt-0 pb-4 -mt-8 overflow-hidden">
-<div className="text-center mb-2">
+return (
+  <div className="h-full flex flex-col fade-enter px-4 pt-0 pb-4 -mt-8 overflow-hidden">
+    <input
+      ref={storyPhotoInputRef}
+      type="file"
+      accept="image/*"
+      multiple
+      className="hidden"
+      onChange={(e) => handleStoryPhotoSelect(e.target.files)}
+    />
+
+    <div className="text-center mb-2">
+
   <p className="text-white/85 text-[0.95rem] text-narrative">
     これまでの語り
   </p>
@@ -3808,34 +3910,48 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
                   </div>
                 )}
 
-            <div className="mb-5">
-              {photos.length > 0 ? (
-                <div className="grid grid-cols-2 gap-3">
-                  {photos.map((photo, photoIndex) => (
-                    <div
-                      key={photo.storage_path || photoIndex}
-                      className="relative rounded-2xl overflow-hidden border border-white/10 bg-white/5"
-                    >
-                      <img src={photo.url} alt={`写真 ${photoIndex + 1}`} className="w-full aspect-square object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => deletePhoto(photo)}
-                        disabled={deletingPhotoPath === photo.storage_path}
-                        className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/55 text-white/85 text-sm"
-                      >
-                        {deletingPhotoPath === photo.storage_path ? "…" : "×"}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] aspect-[4/3] flex items-center justify-center">
-                  <p className="text-white/28 text-sm tracking-widest">
-                    写真を挿入
-                  </p>
-                </div>
-              )}
-            </div>
+<div className="mb-5">
+  {photos.length > 0 ? (
+    <div className="grid grid-cols-2 gap-3">
+      {photos.map((photo, photoIndex) => (
+        <div
+          key={photo.storage_path || photoIndex}
+          className="relative rounded-2xl overflow-hidden border border-white/10 bg-white/5"
+        >
+          <img src={photo.url} alt={`写真 ${photoIndex + 1}`} className="w-full aspect-square object-cover" />
+          <button
+            type="button"
+            onClick={() => deletePhoto(photo)}
+            disabled={deletingPhotoPath === photo.storage_path}
+            className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/55 text-white/85 text-sm"
+          >
+            {deletingPhotoPath === photo.storage_path ? "…" : "×"}
+          </button>
+        </div>
+      ))}
+
+      <button
+        type="button"
+        onClick={() => openPhotoPickerForAnswer(answer.id)}
+        className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] aspect-square flex items-center justify-center"
+      >
+        <span className="text-white/28 text-xs tracking-widest">
+          写真を挿入
+        </span>
+      </button>
+    </div>
+  ) : (
+    <button
+      type="button"
+      onClick={() => openPhotoPickerForAnswer(answer.id)}
+      className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-24 flex items-center justify-center"
+    >
+      <span className="text-white/28 text-sm tracking-widest">
+        写真を挿入
+      </span>
+    </button>
+  )}
+</div>
 
                 <p className="text-white/75 text-[0.98rem] leading-[2.15] whitespace-pre-wrap text-narrative">{body}</p>
 
