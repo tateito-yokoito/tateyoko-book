@@ -52,6 +52,30 @@ async function transcribeAudioOnServer({ answerId, audioPaths, fallbackTranscrip
   return data;
 }
 
+async function polishTranscriptOnServer({ answerId, transcriptRaw, questionText }) {
+  const { data, error } = await supabaseClient.functions.invoke("polish-transcript", {
+    body: {
+      answerId,
+      transcriptRaw,
+      questionText
+    }
+  });
+
+  if (error) {
+    console.error("polish-transcript invoke error", error);
+    throw error;
+  }
+
+  if (!data || data.success === false) {
+    console.error("polish-transcript returned error", data);
+    throw new Error(data?.error || "文章整形に失敗しました");
+  }
+
+  return data;
+}
+
+
+
 function isDevMode() {
   const params = new URLSearchParams(window.location.search);
   return params.get("dev") === "1";
@@ -786,6 +810,8 @@ function App() {
     extractedSnippet: "",
     transcriptionStatus: "idle",
     transcriptionError: "",
+    polishStatus: "idle",
+    polishError: "",
     transcriptClean: "",
     transcriptReadable: "",
     transcriptEssay: "",
@@ -870,6 +896,8 @@ function App() {
     extractedSnippet: "",
     transcriptionStatus: "idle",
     transcriptionError: "",    
+    polishStatus: "idle",
+    polishError: "",
     transcriptClean: "",
     transcriptReadable: "",
     transcriptEssay: "",
@@ -1142,50 +1170,96 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
       fallbackTranscript: sourceVoiceData.transcript
     });
 
-    const transcriptRaw =
-      aiResult.transcript_raw ||
-      aiResult.transcript ||
-      sourceVoiceData.transcript ||
-      "";
+const transcriptRaw =
+  aiResult.transcript_raw ||
+  aiResult.transcript ||
+  sourceVoiceData.transcript ||
+  "";
 
-    const transcriptClean =
-      aiResult.transcript_clean ||
-      aiResult.transcript_edited ||
-      transcriptRaw;
+const firstData = {
+  ...sourceVoiceData,
+  answerId: targetAnswerId,
+  storagePath: paths[paths.length - 1] || sourceVoiceData.storagePath || null,
+  storagePaths: paths.length > 0 ? paths : sourceVoiceData.storagePaths,
 
-    const transcriptReadable =
-      aiResult.transcript_readable ||
-      aiResult.transcript_edited ||
-      transcriptClean ||
-      transcriptRaw;
+  transcript: transcriptRaw,
+  transcriptClean: transcriptRaw,
+  transcriptReadable: transcriptRaw,
+  transcriptEssay: "",
 
-    const transcriptEssay =
-      aiResult.transcript_essay ||
-      "";
+  selectedStyle: "readable",
+  editedText: transcriptRaw,
 
-    const nextData = {
-      ...sourceVoiceData,
-      answerId: targetAnswerId,
-      storagePath: paths[paths.length - 1] || sourceVoiceData.storagePath || null,
-      storagePaths: paths.length > 0 ? paths : sourceVoiceData.storagePaths,
-      transcript: transcriptRaw,
-      transcriptClean,
-      transcriptReadable,
-      transcriptEssay,
-      selectedStyle: "readable",
-      editedText: transcriptReadable,
-      aiMirror: aiResult.ai_mirror_text || "ひとつの時間が、形になっています",
+  aiMirror: "ひとつの時間が、形になっています",
+  extractedSnippet:
+    transcriptRaw
+      ? `「${transcriptRaw.slice(0, 45)}${transcriptRaw.length > 45 ? "…" : ""}」`
+      : "「静かな時間が流れていました」",
+
+  transcriptionStatus: "done",
+  transcriptionError: "",
+  polishStatus: "processing",
+  polishError: ""
+};
+
+setVoiceData(firstData);
+setScene(3.5);
+
+try {
+  const polishResult = await polishTranscriptOnServer({
+    answerId: targetAnswerId,
+    transcriptRaw,
+    questionText: currentQ?.content || ""
+  });
+
+  setVoiceData(prev => {
+    const next = {
+      ...prev,
+      transcriptClean:
+        polishResult.transcript_clean ||
+        prev.transcriptClean ||
+        transcriptRaw,
+
+      transcriptReadable:
+        polishResult.transcript_readable ||
+        polishResult.transcript_clean ||
+        prev.transcriptReadable ||
+        transcriptRaw,
+
+      transcriptEssay:
+        polishResult.transcript_essay ||
+        prev.transcriptEssay ||
+        "",
+
+      aiMirror:
+        polishResult.ai_mirror_text ||
+        prev.aiMirror ||
+        "ひとつの時間が、形になっています",
+
       extractedSnippet:
-        aiResult.extracted_snippet ||
-        (transcriptRaw
-          ? `「${transcriptRaw.slice(0, 45)}${transcriptRaw.length > 45 ? "…" : ""}」`
-          : "「静かな時間が流れていました」"),
-      transcriptionStatus: "done",
-      transcriptionError: ""
+        polishResult.extracted_snippet ||
+        prev.extractedSnippet,
+
+      polishStatus: "done",
+      polishError: ""
     };
 
-    setVoiceData(nextData);
-    setScene(3.5);
+    return {
+      ...next,
+      editedText: pickTranscriptByStyle(next, next.selectedStyle || "readable")
+    };
+  });
+} catch (polishError) {
+  console.error("polish transcript error", polishError);
+
+  setVoiceData(prev => ({
+    ...prev,
+    polishStatus: "error",
+    polishError: "文章の整形に失敗しました。文字起こし本文は利用できます。"
+  }));
+}
+
+
   } catch (error) {
     console.error(error);
 
@@ -2869,6 +2943,8 @@ function Scene3_5_VoiceCheck({
 
   const hasTranscriptionError = data.transcriptionStatus === "error";
   const isProcessing = data.transcriptionStatus === "processing";
+  const isPolishing = data.polishStatus === "processing";
+  const canUseStyles = !isProcessing && !isPolishing && !!displayText;
   const showAddMoreSuggestion = shouldSuggestAddMore && !isProcessing;
 
   return (
@@ -2917,39 +2993,39 @@ function Scene3_5_VoiceCheck({
         <div className="flex gap-2 mb-5">
           <button
             type="button"
-            disabled={isProcessing || !displayText}
+            disabled={!canUseStyles}
             onClick={() => onSelectStyle("clean")}
             className={`flex-1 py-2 rounded-full text-xs border ${
               data.selectedStyle === "clean"
                 ? "bg-white/15 border-white/25 text-white"
                 : "border-white/10 text-white/45"
-            } ${isProcessing || !displayText ? "opacity-40" : ""}`}
+            } ${!canUseStyles ? "opacity-40" : ""}`}
           >
             そのまま
           </button>
 
           <button
             type="button"
-            disabled={isProcessing || !displayText}
+            disabled={!canUseStyles}
             onClick={() => onSelectStyle("readable")}
             className={`flex-1 py-2 rounded-full text-xs border ${
               data.selectedStyle === "readable"
                 ? "bg-white/15 border-white/25 text-white"
                 : "border-white/10 text-white/45"
-            } ${isProcessing || !displayText ? "opacity-40" : ""}`}
+            } ${!canUseStyles ? "opacity-40" : ""}`}
           >
             読みやすく
           </button>
 
           <button
             type="button"
-            disabled={isProcessing || !displayText}
+            disabled={!canUseStyles}
             onClick={() => onSelectStyle("essay")}
             className={`flex-1 py-2 rounded-full text-xs border ${
               data.selectedStyle === "essay"
                ? "bg-white/15 border-white/25 text-white"
                 : "border-white/10 text-white/45"
-            } ${isProcessing || !displayText ? "opacity-40" : ""}`}
+            } ${!canUseStyles ? "opacity-40" : ""}`}
           >
             余韻
           </button>
@@ -2970,6 +3046,12 @@ function Scene3_5_VoiceCheck({
           <p className="text-white/45 text-sm leading-loose">
             文字起こしを取得できませんでした。
           </p>
+        )}
+        {isPolishing && !isProcessing && (
+          <div className="mt-4 flex items-center gap-3 text-white/35 text-xs leading-loose">
+            <div className="w-3 h-3 rounded-full border-2 border-white/15 border-t-white/50 animate-spin shrink-0"></div>
+            <p>文章を整えています</p>
+          </div>
         )}
 
         </div>
