@@ -2362,9 +2362,11 @@ function VoiceWave({ level = 0 }) {
   );
 }
 
+
 function Scene_DailyMicCheck({ onComplete }) {
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
+  const [micStatus, setMicStatus] = useState("checking");
 
   const streamRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -2398,14 +2400,16 @@ function Scene_DailyMicCheck({ onComplete }) {
   const startCheck = async () => {
     setShowHelp(false);
     setVoiceLevel(0);
+    setMicStatus("checking");
     stopCheck();
-
+ 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true
       });
 
       streamRef.current = stream;
+      setMicStatus("ready");
 
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       if (!AudioContext) return;
@@ -2437,6 +2441,7 @@ function Scene_DailyMicCheck({ onComplete }) {
       }, 120);
     } catch (e) {
       console.error(e);
+      setMicStatus("error");
       setShowHelp(true);
     }
   };
@@ -2459,9 +2464,13 @@ function Scene_DailyMicCheck({ onComplete }) {
       </div>
 
       <div className="glass-card py-8 px-5 w-full max-w-[320px] mb-8">
-        <p className="text-white/45 text-sm leading-loose mb-6">
-          波形は声に合わせて動きます。
-        </p>
+      <p className="text-white/45 text-sm leading-loose mb-6">
+        {micStatus === "checking"
+          ? "マイクを確認しています。"
+          : micStatus === "ready"
+            ? "声を出すと、波形が少し動きます。"
+            : "マイクを確認できませんでした。"}
+      </p>
 
         <VoiceWave level={voiceLevel} />
       </div>
@@ -2469,11 +2478,15 @@ function Scene_DailyMicCheck({ onComplete }) {
       {showHelp && (
         <div className="glass-card p-5 w-full max-w-[320px] mb-8">
           <p className="text-white/75 text-sm leading-loose mb-3">
-            マイクを確認できませんでした。
+            {micStatus === "error"
+              ? "マイクを確認できませんでした。"
+              : "波形が動かない場合"}
           </p>
 
           <p className="text-white/48 text-sm leading-loose">
-            ブラウザのマイク許可や、端末の音量設定を確認してください。
+            {micStatus === "error"
+              ? "ブラウザのマイク許可を確認して、もう一度試してください。"
+              : "少し大きめの声で話してみてください。端末のマイク部分を手でふさいでいないかも確認してください。"}
           </p>
 
           <button
@@ -2485,6 +2498,8 @@ function Scene_DailyMicCheck({ onComplete }) {
           </button>
         </div>
       )}
+
+
 
       {!showHelp && (
         <button
@@ -2499,9 +2514,12 @@ function Scene_DailyMicCheck({ onComplete }) {
       <button
         type="button"
         onClick={proceed}
-        className="btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white"
+        disabled={micStatus === "checking"}
+        className={`btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white ${
+          micStatus === "checking" ? "opacity-40" : ""
+        }`}
       >
-        問いに進む
+        {micStatus === "checking" ? "確認中..." : "問いに進む"}
       </button>
     </div>
   );
