@@ -3050,7 +3050,7 @@ function Scene3_5_VoiceCheck({
   const showAddMoreSuggestion = shouldSuggestAddMore && !isProcessing;
 
   return (
-    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-hidden">
+    <div className="h-full flex flex-col fade-enter px-4 py-5 overflow-hidden">
       <div className="text-center mb-6">
         <p className="text-white/90 text-[1.05rem] text-narrative mb-3">
           語りを確認します
@@ -3556,6 +3556,21 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
   const buildChapterSections = (answerRows) => {
     const sections = [];
 
+    for (const question of questionSet || []) {
+      const chapterTitle =
+        question.chapter_label ||
+        question.chapter_description ||
+        question.chapter ||
+        "その他";
+
+      if (!sections.find(s => s.chapterTitle === chapterTitle)) {
+        sections.push({
+          chapterTitle,
+          answers: []
+        });
+      }
+    }
+
     for (const answer of answerRows || []) {
       const chapterTitle = getChapterTitleForAnswer(answer);
       let section = sections.find(s => s.chapterTitle === chapterTitle);
@@ -3715,40 +3730,53 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
   const visibleAnswers = selectedChapter?.answers || [];
 
   return (
-    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-hidden">
-    <div className="text-center mb-6">
-      <p className="text-white/90 text-[1.05rem] text-narrative">
-        これまでの語り
-      </p>
+    <div className="h-full flex flex-col fade-enter px-4 py-5 overflow-hidden">
+<div className="text-center mb-3">
+  <p className="text-white/85 text-[0.98rem] text-narrative">
+    これまでの語り
+  </p>
+</div>
+
+{chapterSections.length > 0 && (
+  <div className="mb-4">
+    <div className="flex gap-2 overflow-x-auto pb-2">
+    {chapterSections.map((section, index) => {
+      const hasAnswers = section.answers.length > 0;
+      const isSelected = index === safeChapterIndex;
+
+      return (
+        <button
+          key={section.chapterTitle}
+          type="button"
+          disabled={!hasAnswers}
+          onClick={() => {
+            if (!hasAnswers) return;
+            setSelectedChapterIndex(index);
+          }}
+          className={`w-9 h-9 rounded-full shrink-0 border text-xs transition ${
+            isSelected
+              ? "bg-white text-slate-900 border-white"
+              : hasAnswers
+                ? "bg-white/7 text-white/55 border-white/12"
+                : "bg-transparent text-white/18 border-white/6 opacity-45"
+          }`}
+          aria-label={`章 ${index + 1}${hasAnswers ? "" : " 未回答"}`}
+        >
+          {index + 1}
+        </button>
+      );
+    })}
+
+
     </div>
 
-    {chapterSections.length > 0 && (
-      <div className="mb-6">
-        <div className="flex gap-3 overflow-x-auto pb-3">
-          {chapterSections.map((section, index) => (
-            <button
-              key={section.chapterTitle}
-              type="button"
-              onClick={() => setSelectedChapterIndex(index)}
-              className={`w-11 h-11 rounded-full shrink-0 border text-sm transition ${
-                index === safeChapterIndex
-                  ? "bg-white text-slate-900 border-white"
-                  : "bg-white/5 text-white/45 border-white/10"
-              }`}
-              aria-label={`章 ${index + 1}`}
-            >
-              {index + 1}
-            </button>
-          ))}
-        </div>
-
-        {selectedChapter && (
-          <p className="text-center text-white/55 text-sm text-narrative">
-            {selectedChapter.chapterTitle}
-          </p>
-        )}
-      </div>
+    {selectedChapter && (
+      <p className="text-center text-white/48 text-xs text-narrative">
+        {selectedChapter.chapterTitle}
+      </p>
     )}
+  </div>
+)}
 
       <div className="flex-1 overflow-y-auto space-y-5 pb-6">
         {loading ? (
@@ -3757,16 +3785,14 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
           </div>
         ) : visibleAnswers.length === 0 ? (
           <div className="h-full flex items-center justify-center text-center">
-            <p className="text-white/45 text-sm leading-loose">
-              まだ語りはありません。<br />
-              最初の問いから始めてみましょう。
-            </p>
+          <p className="text-white/35 text-sm leading-loose">
+            まだ語られていません
+          </p>
           </div>
         ) : (
           visibleAnswers.map((answer, index) => {
             const body = getStoryBody(answer);
             const questionText = getQuestionTextForAnswer(answer);
-            const title = answer.ai_mirror || answer.snippet || `ページ ${index + 1}`;
 
             const media = mediaByAnswerId[answer.id] || [];
             const photos = media.filter(m => m.asset_type === "photo" && m.url);
@@ -3774,15 +3800,13 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
 
             return (
               <article key={answer.id} className="glass-card p-5 text-left">
-                <div className="border-l-2 border-amber-400/70 pl-4 mb-5">
-                  {questionText && (
-                    <p className="text-white/35 text-xs leading-loose mb-2">
+                {questionText && (
+                  <div className="border-l-2 border-amber-400/70 pl-4 mb-5">
+                    <p className="text-white/35 text-xs leading-loose">
                       {questionText}
                     </p>
-                  )}
-
-                  <p className="text-white/80 text-sm leading-loose">{title}</p>
-                </div>
+                  </div>
+                )}
 
                 {photos.length > 0 && (
                   <div className="grid grid-cols-2 gap-3 mb-5">
@@ -3809,7 +3833,6 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
 
                 {audios.length > 0 && (
                   <div className="mt-5 space-y-3">
-                    <p className="text-white/30 text-xs tracking-[0.18em]">ORIGINAL VOICE</p>
                     {audios.map((audio, audioIndex) => (
                       <audio key={audio.storage_path || audioIndex} src={audio.url} controls className="w-full" />
                     ))}
