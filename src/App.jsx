@@ -2522,6 +2522,7 @@ function Scene_Recording({ question, onComplete }) {
   const speechRef = useRef(null);
   const mimeTypeRef = useRef("");
   const streamRef = useRef(null);
+  const recordingTimerRef = useRef(null);
 
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
@@ -2530,11 +2531,14 @@ function Scene_Recording({ question, onComplete }) {
   const transcriptRef = useRef("");
   const interimRef = useRef("");
 
-  useEffect(() => {
-    let timer;
+useEffect(() => {
+  if (recordingTimerRef.current) {
+    clearInterval(recordingTimerRef.current);
+    recordingTimerRef.current = null;
+  }
 
   if (step === 1 && !isPaused) {
-    timer = setInterval(() => {
+    recordingTimerRef.current = setInterval(() => {
       setTime(t => {
         const next = t + 1;
         timeRef.current = next;
@@ -2546,11 +2550,16 @@ function Scene_Recording({ question, onComplete }) {
   } else {
     document.body.classList.remove("is-recording");
   }
-    return () => {
-      clearInterval(timer);
-      document.body.classList.remove("is-recording");
-    };
-  }, [step]);
+
+  return () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    document.body.classList.remove("is-recording");
+  };
+}, [step, isPaused]);
 
 useEffect(() => {
   if (step !== "countdown") return;
@@ -2772,8 +2781,14 @@ useEffect(() => {
     }
   };
 
-  const pauseRecording = () => {
-    setIsPaused(true);
+const pauseRecording = () => {
+  setIsPaused(true);
+
+  if (recordingTimerRef.current) {
+    clearInterval(recordingTimerRef.current);
+    recordingTimerRef.current = null;
+  }
+
 
     if (mediaRef.current && mediaRef.current.state === "recording") {
       try {
@@ -2814,9 +2829,15 @@ useEffect(() => {
     }
   };
 
-  const stop = () => {
-    setIsPaused(false);
-    setStep(2);
+const stop = () => {
+  setIsPaused(false);
+
+  if (recordingTimerRef.current) {
+    clearInterval(recordingTimerRef.current);
+    recordingTimerRef.current = null;
+  }
+
+  setStep(2);
 
     if (speechRef.current) {
       try { speechRef.current.stop(); } catch (e) {}
@@ -3454,13 +3475,17 @@ function Scene_EndToday({ notificationPref, onOpenStoryPages }) {
 }
 
 function Scene_StoryPages({ user, onTalkMore, onBack }) {
+
   const getStoryBody = (answer) => {
     const selectedStyle = answer?.selected_style || "";
+
+    if (answer.transcript_edited) {
+      return answer.transcript_edited;
+    }
 
     if (selectedStyle === "clean" || selectedStyle === "transcript_clean") {
       return (
         answer.transcript_clean ||
-        answer.transcript_edited ||
         answer.transcript_raw ||
         answer.snippet ||
         "（本文を読み込めませんでした）"
@@ -3470,7 +3495,6 @@ function Scene_StoryPages({ user, onTalkMore, onBack }) {
     if (selectedStyle === "essay" || selectedStyle === "transcript_essay") {
       return (
         answer.transcript_essay ||
-        answer.transcript_edited ||
         answer.transcript_readable ||
         answer.transcript_clean ||
         answer.transcript_raw ||
@@ -3481,13 +3505,13 @@ function Scene_StoryPages({ user, onTalkMore, onBack }) {
 
     return (
       answer.transcript_readable ||
-      answer.transcript_edited ||
       answer.transcript_clean ||
       answer.transcript_raw ||
       answer.snippet ||
       "（本文を読み込めませんでした）"
     );
   };
+
 
   const [answers, setAnswers] = useState([]);
   const [mediaByAnswerId, setMediaByAnswerId] = useState({});
