@@ -2460,9 +2460,9 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
   };
 
   return (
-    <div className="h-full flex flex-col fade-enter px-4 pt-3 pb-4 overflow-hidden">
-      <div className="shrink-0 pb-4">
-        <div className="text-center mb-5">
+    <div className="h-full min-h-0 flex flex-col fade-enter px-4 pt-0 pb-4 -mt-6 overflow-hidden">
+      <div className="shrink-0 pb-3">
+        <div className="text-center mb-3">
           <p className="text-white/90 text-[1.02rem] text-narrative">
             本に仕上げる
           </p>
@@ -2498,7 +2498,7 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto pb-6">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-6">
         {stepIndex === 0 && (
           <div className="space-y-5">
             <div className="glass-card p-5">
@@ -2709,7 +2709,7 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
                           }}
                           className={`flex-1 py-3 rounded-full border text-sm flex items-center justify-center gap-2 ${
                             included
-                              ? "border-white/18 bg-white/12 text-white"
+                              ? "border-white/[0.18] bg-white/[0.12] text-white"
                               : "border-white/10 text-white/40"
                           }`}
                         >
