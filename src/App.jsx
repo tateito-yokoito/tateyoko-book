@@ -4119,6 +4119,8 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
   const storyPhotoInputRef = useRef(null);
   const pendingPhotoAnswerIdRef = useRef(null);
+  const storyScanInputRef = useRef(null);
+  const pendingScanAnswerIdRef = useRef(null);
 
   const loadAnswers = async () => {
     if (!user?.id) {
@@ -4251,6 +4253,22 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
     storyPhotoInputRef.current?.click();
   };
 
+const openScannerForAnswer = (answerId) => {
+  pendingScanAnswerIdRef.current = answerId;
+  storyScanInputRef.current?.click();
+};
+
+const handleStoryScanSelect = async (files) => {
+  const answerId = pendingScanAnswerIdRef.current;
+
+  if (!answerId) return;
+
+  pendingPhotoAnswerIdRef.current = answerId;
+  await handleStoryPhotoSelect(files);
+
+  pendingScanAnswerIdRef.current = null;
+};
+
   const handleStoryPhotoSelect = async (files) => {
     const answerId = pendingPhotoAnswerIdRef.current;
     const selectedFiles = Array.from(files || [])
@@ -4349,6 +4367,17 @@ return (
       multiple
       className="hidden"
       onChange={(e) => handleStoryPhotoSelect(e.target.files)}
+    />
+    <input
+      ref={storyScanInputRef}
+      type="file"
+      accept="image/*"
+      capture="environment"
+      className="hidden"
+      onChange={(e) => {
+        handleStoryScanSelect(e.target.files);
+        e.target.value = "";
+      }}
     />
 
     <div className="text-center mb-2">
@@ -4457,17 +4486,41 @@ return (
           写真を挿入
         </span>
       </button>
+
+      <button
+        type="button"
+        onClick={() => openScannerForAnswer(answer.id)}
+        className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] aspect-square flex items-center justify-center"
+      >
+        <span className="text-white/28 text-xs tracking-widest">
+          写真をスキャンする
+        </span>
+      </button>
+
+
     </div>
   ) : (
-    <button
-      type="button"
-      onClick={() => openPhotoPickerForAnswer(answer.id)}
-      className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-24 flex items-center justify-center"
-    >
-      <span className="text-white/28 text-sm tracking-widest">
-        写真を挿入
-      </span>
-    </button>
+    <div className="space-y-3">
+      <button
+        type="button"
+        onClick={() => openPhotoPickerForAnswer(answer.id)}
+        className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-20 flex items-center justify-center"
+      >
+        <span className="text-white/28 text-sm tracking-widest">
+          写真を挿入
+        </span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => openScannerForAnswer(answer.id)}
+        className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-20 flex items-center justify-center"
+      >
+        <span className="text-white/28 text-sm tracking-widest">
+          写真をスキャンする
+        </span>
+      </button>
+    </div>
   )}
 </div>
 
