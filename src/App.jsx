@@ -2498,7 +2498,7 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pb-6">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pb-[calc(96px+env(safe-area-inset-bottom))]">
         {stepIndex === 0 && (
           <div className="space-y-5">
             <div className="glass-card p-5">
@@ -2749,28 +2749,30 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
             </p>
           </div>
         )}
+
+        <div className="pt-5 border-t border-white/10 flex gap-3">
+          <button
+            type="button"
+            onClick={stepIndex === 0 ? onBack : () => setStepIndex(prev => Math.max(prev - 1, 0))}
+            className="flex-1 py-3 rounded-full border border-white/10 text-white/45 text-sm"
+          >
+            戻る
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setStepIndex(prev => Math.min(prev + 1, steps.length - 1))}
+            disabled={stepIndex >= steps.length - 1}
+            className={`flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm ${
+              stepIndex >= steps.length - 1 ? "opacity-40" : ""
+            }`}
+          >
+            次へ
+        </button>
       </div>
 
-      <div className="pt-5 border-t border-white/10 flex gap-3">
-        <button
-          type="button"
-          onClick={stepIndex === 0 ? onBack : () => setStepIndex(prev => Math.max(prev - 1, 0))}
-          className="flex-1 py-3 rounded-full border border-white/10 text-white/45 text-sm"
-        >
-          戻る
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setStepIndex(prev => Math.min(prev + 1, steps.length - 1))}
-          disabled={stepIndex >= steps.length - 1}
-          className={`flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm ${
-            stepIndex >= steps.length - 1 ? "opacity-40" : ""
-          }`}
-        >
-          次へ
-        </button>
       </div>
+
     </div>
   );
 }
