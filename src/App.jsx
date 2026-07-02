@@ -2460,7 +2460,7 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
   };
 
   return (
-    <div className="h-full min-h-0 flex flex-col fade-enter px-4 pt-0 pb-4 -mt-6 overflow-hidden">
+    <div className="h-[100dvh] min-h-0 flex flex-col fade-enter px-4 pt-0 pb-4 -mt-6 overflow-hidden">
       <div className="shrink-0 pb-3">
         <div className="text-center mb-3">
           <p className="text-white/90 text-[1.02rem] text-narrative">
@@ -2469,13 +2469,13 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
         </div>
 
         <div>
-          <div className="flex gap-2 overflow-x-auto pb-2">
+          <div className="grid grid-cols-5 gap-2 pb-2">
             {steps.map((step, index) => (
               <button
                 key={step}
                 type="button"
                 onClick={() => setStepIndex(index)}
-                className="min-w-[74px] shrink-0"
+                className="min-w-0"
               >
                 <p className={`text-center text-xs tracking-widest mb-2 ${
                   index === stepIndex ? "text-white/78" : "text-white/28"
@@ -2498,7 +2498,7 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-6">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-24">
         {stepIndex === 0 && (
           <div className="space-y-5">
             <div className="glass-card p-5">
