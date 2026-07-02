@@ -1601,6 +1601,9 @@ try {
 
       {scene === "book_builder" && (
         <Scene_BookBuilder
+          user={user}
+          userName={user?.name || "あなた"}
+          questionSet={questionsDB}
           onBack={() => setScene("home")}
         />
       )}
@@ -2313,77 +2316,446 @@ function Scene_Home({ userName, onStartTalking, onOpenStoryPages, onOpenBookBuil
   );
 }
 
-function Scene_BookBuilder({ onBack }) {
-  const steps = ["語り", "表紙", "紙面", "注文", "完了"];
+function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
+  const steps = ["表紙", "語り", "紙面", "注文", "完了"];
+  const [stepIndex, setStepIndex] = useState(0);
+  const [coverPhoto, setCoverPhoto] = useState(null);
+  const [coverColor, setCoverColor] = useState("#d9cdbd");
+  const [bookTitle, setBookTitle] = useState(`${userName}さんの物語`);
+  const [bookSubtitle, setBookSubtitle] = useState("家族に愛を込めて");
+  const coverInputRef = useRef(null);
+
+  const [bookStories, setBookStories] = useState([]);
+  const [bookMediaByAnswerId, setBookMediaByAnswerId] = useState({});
+  const [storiesLoading, setStoriesLoading] = useState(false);
+  const [includedStoryIds, setIncludedStoryIds] = useState([]);
+
+  const getQuestionForAnswer = (answer) => {
+    return (questionSet || []).find(q =>
+      Number(q.sequence_order) === Number(answer.sequence_order)
+    ) || null;
+  };
+
+  const getStoryBody = (answer) => {
+    if (answer.transcript_edited) return answer.transcript_edited;
+
+    if (answer.selected_style === "clean") {
+      return answer.transcript_clean || answer.transcript_raw || "";
+    }
+
+    if (answer.selected_style === "essay") {
+      return answer.transcript_essay || answer.transcript_readable || answer.transcript_clean || answer.transcript_raw || "";
+    }
+
+    return answer.transcript_readable || answer.transcript_clean || answer.transcript_raw || "";
+  };
+
+  useEffect(() => {
+    const loadBookStories = async () => {
+      if (!user?.id) return;
+
+      try {
+        setStoriesLoading(true);
+
+        const { data: answerRows, error: answerError } = await supabaseClient
+          .from("answers")
+          .select(`
+            id,
+            book_project_id,
+            sequence_order,
+            transcript_raw,
+            transcript_clean,
+            transcript_readable,
+            transcript_essay,
+            transcript_edited,
+            selected_style,
+            ai_mirror,
+            snippet,
+            created_at
+          `)
+          .eq("user_id", user.id)
+          .order("sequence_order", { ascending: true });
+
+        if (answerError) throw answerError;
+
+        const rows = answerRows || [];
+        setBookStories(rows);
+        setIncludedStoryIds(rows.map(row => row.id));
+
+        const answerIds = rows.map(row => row.id);
+
+        if (answerIds.length === 0) {
+          setBookMediaByAnswerId({});
+          return;
+        }
+
+        const { data: mediaRows, error: mediaError } = await supabaseClient
+          .from("media_assets")
+          .select("id, answer_id, asset_type, storage_path, meta_json, created_at")
+          .in("answer_id", answerIds)
+          .order("created_at", { ascending: true });
+
+        if (mediaError) throw mediaError;
+
+        const grouped = {};
+
+        for (const media of mediaRows || []) {
+          if (!grouped[media.answer_id]) grouped[media.answer_id] = [];
+
+          let url = null;
+
+          if (media.asset_type === "photo") {
+            const { data: signed } = await supabaseClient.storage
+              .from("photos")
+              .createSignedUrl(media.storage_path, 60 * 60);
+            url = signed?.signedUrl || null;
+          }
+
+          grouped[media.answer_id].push({ ...media, url });
+        }
+
+        setBookMediaByAnswerId(grouped);
+      } catch (e) {
+        console.error("book stories load error", e);
+        alert("語りの読み込みに失敗しました。");
+      } finally {
+        setStoriesLoading(false);
+      }
+    };
+
+    loadBookStories();
+  }, [user?.id]);
+
+  const colors = [
+    { label: "深緑", value: "#1f3a36" },
+    { label: "紺", value: "#0f2747" },
+    { label: "水色", value: "#c6d7e9" },
+    { label: "薄桃", value: "#e7d3dc" },
+    { label: "生成", value: "#d9cdbd" }
+  ];
+
+  const handleCoverPhotoSelect = (files) => {
+    const file = Array.from(files || []).find(item =>
+      item && item.type && item.type.startsWith("image/")
+    );
+
+    if (!file) return;
+
+    if (coverPhoto?.url) {
+      try { URL.revokeObjectURL(coverPhoto.url); } catch (e) {}
+    }
+
+    setCoverPhoto({
+      file,
+      url: URL.createObjectURL(file),
+      name: file.name || "cover-photo"
+    });
+  };
 
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-hidden">
-      <div className="text-center mb-7">
+      <div className="text-center mb-6">
         <p className="text-white/90 text-[1.05rem] text-narrative">
           本に仕上げる
         </p>
       </div>
 
-      <div className="mb-8">
+      <div className="mb-7">
         <div className="flex gap-2 overflow-x-auto pb-3">
           {steps.map((step, index) => (
-            <div key={step} className="min-w-[74px] shrink-0">
+            <button
+              key={step}
+              type="button"
+              onClick={() => setStepIndex(index)}
+              className="min-w-[74px] shrink-0"
+            >
               <p className={`text-center text-xs tracking-widest mb-2 ${
-                index === 0 ? "text-white/78" : "text-white/28"
+                index === stepIndex ? "text-white/78" : "text-white/28"
               }`}>
                 {index + 1}
               </p>
 
               <div className={`h-1.5 rounded-full ${
-                index === 0 ? "bg-white/55" : "bg-white/12"
+                index === stepIndex ? "bg-white/55" : "bg-white/12"
               }`} />
 
               <p className={`text-center text-xs mt-2 ${
-                index === 0 ? "text-white/78" : "text-white/28"
+                index === stepIndex ? "text-white/78" : "text-white/28"
               }`}>
                 {step}
               </p>
-            </div>
+            </button>
           ))}
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="glass-card p-6 text-center">
-          <p className="text-white/82 text-[1.05rem] text-narrative mb-5">
-            語り
-          </p>
-
-          <p className="text-white/45 text-sm leading-loose">
-            保存した語りを、本に入れる準備をします。
-          </p>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          {steps.slice(1).map(step => (
-            <div
-              key={step}
-              className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-5 text-center opacity-55"
-            >
-              <p className="text-white/35 text-sm">
-                {step}
+      <div className="flex-1 overflow-y-auto pb-6">
+        {stepIndex === 0 && (
+          <div className="space-y-6">
+            <div className="glass-card p-5">
+              <p className="text-white/82 text-[1.05rem] text-narrative mb-5">
+                表紙デザイン
               </p>
+
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  handleCoverPhotoSelect(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                className="btn-quiet w-full py-4 rounded-full text-white/80 mb-6"
+              >
+                写真を挿入する
+              </button>
+
+              <div className="mb-6">
+                <p className="text-white/40 text-xs tracking-widest mb-3">
+                  冊子の色
+                </p>
+
+                <div className="flex gap-3">
+                  {colors.map(color => (
+                    <button
+                      key={color.value}
+                      type="button"
+                      onClick={() => setCoverColor(color.value)}
+                      className={`w-10 h-10 rounded-full border transition ${
+                        coverColor === color.value
+                          ? "border-white scale-105"
+                          : "border-white/15"
+                      }`}
+                      style={{ backgroundColor: color.value }}
+                      aria-label={color.label}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="mb-5">
+                <p className="text-white/40 text-xs tracking-widest mb-2">
+                  タイトル
+                </p>
+
+                <textarea
+                  value={bookTitle}
+                  onChange={e => setBookTitle(e.target.value)}
+                  className="quiet-input min-h-[92px] resize-none text-left"
+                />
+              </div>
+
+              <div>
+                <p className="text-white/40 text-xs tracking-widest mb-2">
+                  副題
+                </p>
+
+                <input
+                  type="text"
+                  value={bookSubtitle}
+                  onChange={e => setBookSubtitle(e.target.value)}
+                  className="quiet-input"
+                />
+              </div>
             </div>
-          ))}
-        </div>
+
+            <div className="glass-card p-5">
+              <p className="text-white/40 text-xs tracking-widest mb-5">
+                PREVIEW
+              </p>
+
+              <div className="flex justify-center">
+                <div className="relative w-[210px] h-[300px] shadow-2xl" style={{ backgroundColor: coverColor }}>
+                  <div className="absolute left-3 top-0 h-full w-px bg-black/18" />
+
+                  <div className="h-full flex flex-col items-center justify-center px-8 text-center">
+                    <div className="w-12 h-px bg-slate-900/55 mb-4" />
+
+                    <p className="text-slate-900/85 text-[0.95rem] leading-relaxed text-narrative whitespace-pre-wrap">
+                      {bookTitle || "タイトル"}
+                    </p>
+
+                    {coverPhoto?.url && (
+                      <img
+                        src={coverPhoto.url}
+                        alt="表紙写真"
+                        className="w-24 h-24 object-cover mt-6 mb-6"
+                      />
+                    )}
+
+                    <p className="text-slate-900/65 text-[0.65rem] leading-relaxed">
+                      {bookSubtitle || "副題"}
+                    </p>
+                  </div>
+
+                  <div className="absolute -right-8 top-0 w-5 h-full bg-white/50 shadow-lg" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+{stepIndex === 1 && (
+  <div className="space-y-4">
+    <div className="glass-card p-5">
+      <p className="text-white/82 text-[1.05rem] text-narrative mb-2">
+        語りの確認
+      </p>
+
+      <p className="text-white/40 text-xs tracking-widest">
+        {includedStoryIds.length} / {bookStories.length} ページ
+      </p>
+    </div>
+
+    {storiesLoading ? (
+      <div className="glass-card p-6 text-center">
+        <p className="text-white/35 text-sm tracking-widest animate-pulse">
+          読み込んでいます...
+        </p>
+      </div>
+    ) : bookStories.length === 0 ? (
+      <div className="glass-card p-6 text-center">
+        <p className="text-white/40 text-sm">
+          まだ語りがありません
+        </p>
+      </div>
+    ) : (
+      [...bookStories]
+        .sort((a, b) => {
+          const aIncluded = includedStoryIds.includes(a.id);
+          const bIncluded = includedStoryIds.includes(b.id);
+
+          if (aIncluded !== bIncluded) return aIncluded ? -1 : 1;
+          return Number(a.sequence_order || 0) - Number(b.sequence_order || 0);
+        })
+        .map((answer, index) => {
+          const included = includedStoryIds.includes(answer.id);
+          const question = getQuestionForAnswer(answer);
+          const body = getStoryBody(answer);
+          const media = bookMediaByAnswerId[answer.id] || [];
+          const photo = media.find(item => item.asset_type === "photo" && item.url);
+          const isShort = String(body || "").trim().length < 80;
+
+          return (
+            <div
+              key={answer.id}
+              className={`glass-card p-4 transition ${
+                included ? "" : "opacity-45 grayscale"
+              }`}
+            >
+              <div className="flex gap-4">
+                <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 overflow-hidden shrink-0 flex items-center justify-center">
+                  {photo ? (
+                    <img src={photo.url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <Files size={22} className="text-white/25" strokeWidth={1.7} />
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-white/75 text-sm leading-relaxed text-narrative line-clamp-2">
+                    {question?.content || answer.ai_mirror || answer.snippet || `語り ${index + 1}`}
+                  </p>
+
+                  <div className="mt-2 space-y-1">
+                    {!included && (
+                      <p className="text-white/35 text-xs">
+                        本には入りません
+                      </p>
+                    )}
+
+                    {isShort && included && (
+                      <p className="text-amber-300/75 text-xs">
+                        本文が短い可能性があります
+                      </p>
+                    )}
+
+                    {!photo && included && (
+                      <p className="text-amber-300/55 text-xs">
+                        写真がありません
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIncludedStoryIds(prev =>
+                      prev.includes(answer.id)
+                        ? prev.filter(id => id !== answer.id)
+                        : [...prev, answer.id]
+                    );
+                  }}
+                  className={`flex-1 py-3 rounded-full border text-sm ${
+                    included
+                      ? "border-white/15 bg-white/10 text-white"
+                      : "border-white/10 text-white/40"
+                  }`}
+                >
+                  {included ? "本に入れる" : "本に戻す"}
+                </button>
+
+                <button
+                  type="button"
+                  className="px-5 py-3 rounded-full border border-white/10 text-white/45 text-sm"
+                >
+                  編集
+                </button>
+              </div>
+            </div>
+          );
+        })
+    )}
+  </div>
+)}
+
+        {stepIndex >= 2 && (
+          <div className="glass-card p-6 text-center opacity-60">
+            <p className="text-white/82 text-[1.05rem] text-narrative mb-5">
+              {steps[stepIndex]}
+            </p>
+
+            <p className="text-white/40 text-sm leading-loose">
+              準備中
+            </p>
+          </div>
+        )}
       </div>
 
-      <div className="pt-5 border-t border-white/10">
+      <div className="pt-5 border-t border-white/10 flex gap-3">
         <button
-          onClick={onBack}
-          className="w-full py-3 text-white/40 text-sm underline underline-offset-4"
+          type="button"
+          onClick={stepIndex === 0 ? onBack : () => setStepIndex(prev => Math.max(prev - 1, 0))}
+          className="flex-1 py-3 rounded-full border border-white/10 text-white/45 text-sm"
         >
           戻る
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStepIndex(prev => Math.min(prev + 1, steps.length - 1))}
+          disabled={stepIndex >= steps.length - 1}
+          className={`flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm ${
+            stepIndex >= steps.length - 1 ? "opacity-40" : ""
+          }`}
+        >
+          次へ
         </button>
       </div>
     </div>
   );
 }
+
+
 function Scene0_Door({ onNext }) {
   return (
     <div className="h-full flex flex-col items-center justify-center text-center fade-enter px-4">
@@ -4004,7 +4376,7 @@ return (
             isSelected
               ? "bg-white text-slate-900 border-white"
               : hasAnswers
-                ? "bg-white/[0.07] text-white/55 bborder-white/[0.12]"
+                ? "bg-white/[0.07] text-white/55 border-white/[0.12]"
                 : "bg-transparent text-white/18 border-white/[0.06] opacity-45"
           }`}
           aria-label={`章 ${index + 1}${hasAnswers ? "" : " 未回答"}`}
