@@ -4457,15 +4457,20 @@ return (
                   </div>
                 )}
 
-<div className="mb-5">
-  {photos.length > 0 ? (
-    <div className="grid grid-cols-2 gap-3">
+<div className="mb-5 space-y-3">
+  {photos.length > 0 && (
+    <div className="space-y-3">
       {photos.map((photo, photoIndex) => (
         <div
           key={photo.storage_path || photoIndex}
-          className="relative rounded-2xl overflow-hidden border border-white/10 bg-white/5"
+          className="relative w-full rounded-2xl overflow-hidden border border-white/10 bg-white/5"
         >
-          <img src={photo.url} alt={`写真 ${photoIndex + 1}`} className="w-full aspect-square object-cover" />
+          <img
+            src={photo.url}
+            alt={`写真 ${photoIndex + 1}`}
+            className="w-full max-h-[260px] object-cover"
+          />
+
           <button
             type="button"
             onClick={() => deletePhoto(photo)}
@@ -4476,52 +4481,30 @@ return (
           </button>
         </div>
       ))}
-
-        <button
-          type="button"
-          onClick={() => openPhotoPickerForAnswer(answer.id)}
-          className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-14 flex items-center justify-center"
-        >
-        <span className="text-white/28 text-xs tracking-widest">
-          写真を挿入
-        </span>
-      </button>
-
-      <button
-        type="button"
-        onClick={() => openScannerForAnswer(answer.id)}
-        className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] aspect-square flex items-center justify-center"
-      >
-        <span className="text-white/28 text-xs tracking-widest">
-          写真をスキャンする
-        </span>
-      </button>
-
-
-    </div>
-  ) : (
-    <div className="space-y-3">
-      <button
-        type="button"
-        onClick={() => openPhotoPickerForAnswer(answer.id)}
-        className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-20 flex items-center justify-center"
-      >
-        <span className="text-white/28 text-sm tracking-widest">
-          写真を挿入
-        </span>
-      </button>
-
-      <button
-        type="button"
-        onClick={() => openScannerForAnswer(answer.id)}
-        className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-20 flex items-center justify-center"
-      >
-        <span className="text-white/28 text-sm tracking-widest">
-          写真をスキャンする
-        </span>
-      </button>
     </div>
   )}
+  <button
+    type="button"
+    onClick={() => openPhotoPickerForAnswer(answer.id)}
+    className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-14 flex items-center justify-center"
+  >
+    <span className="text-white/35 text-sm tracking-widest">
+      写真を挿入
+    </span>
+  </button>
+
+  <button
+    type="button"
+    onClick={() => openScannerForAnswer(answer.id)}
+    className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-14 flex items-center justify-center"
+  >
+    <span className="text-white/35 text-sm tracking-widest">
+      写真をスキャンする
+    </span>
+  </button>
+
+
+
 </div>
 
                 <p className="text-white/75 text-[0.98rem] leading-[2.15] whitespace-pre-wrap text-narrative">{body}</p>
