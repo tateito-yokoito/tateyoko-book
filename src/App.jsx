@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { BookOpen, ChevronRight, Files, Mic } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumossjxehdop.supabase.co";
@@ -866,11 +867,12 @@ function App() {
           total: questionSet.length
         });
 
-        if (!notificationData) {
-          setScene("setup_intro");
-        } else {
-          setScene(0);
-        }
+
+      if (!notificationData) {
+        setScene("setup_intro");
+      } else {
+        setScene("home");
+      }
       } catch (e) {
         console.error("init error", e);
         setScene(-1);
@@ -1520,7 +1522,7 @@ try {
               if (!notificationData) {
                 setScene("setup_intro");
               } else {
-                setScene(0);
+                setScene("home");
               }
             } finally {
               setIsInitializing(false);
@@ -1581,14 +1583,27 @@ try {
                 currentIndex: 0,
                 total: questionSet.length
               });
-              setScene(0);
+              setScene("home");
             } finally {
               setIsInitializing(false);
             }
           }}
         />
       )}
+      {scene === "home" && (
+        <Scene_Home
+          userName={user?.name || "あなた"}
+          onStartTalking={() => setScene(0)}
+          onOpenStoryPages={() => setScene("story_pages")}
+          onOpenBookBuilder={() => setScene("book_builder")}
+        />
+      )}
 
+      {scene === "book_builder" && (
+        <Scene_BookBuilder
+          onBack={() => setScene("home")}
+        />
+      )}
       {scene === 0 && (
         <Scene0_Door
           onNext={() => {
@@ -1741,7 +1756,7 @@ onComplete={(t, d, u, b) => {
             resetVoiceData();
             setScene(2);
           }}
-          onBack={() => setScene(6)}
+          onBack={() => setScene("home")}
         />
       )}
     </div>
@@ -2239,6 +2254,136 @@ function Scene_SupporterInvite({ user, foundation, onComplete }) {
   );
 }
 
+
+function HomeMenuButton({ icon: Icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="glass-card w-full px-5 py-5 flex items-center gap-4 text-left"
+    >
+      <div className="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+        <Icon size={22} className="text-white/78" strokeWidth={1.8} />
+      </div>
+
+      <p className="flex-1 text-white/88 text-[1.05rem] text-narrative">
+        {label}
+      </p>
+
+      <ChevronRight size={20} className="text-white/35 shrink-0" strokeWidth={1.8} />
+    </button>
+  );
+}
+
+function Scene_Home({ userName, onStartTalking, onOpenStoryPages, onOpenBookBuilder }) {
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8">
+      <div className="flex-1 flex flex-col justify-center">
+        <div className="text-center mb-12">
+          <p className="text-white/35 text-xs tracking-[0.22em] mb-3">
+            tateyoko BOOK
+          </p>
+
+          <p className="text-white/82 text-[1.05rem] text-narrative">
+            {userName}さんの物語
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <HomeMenuButton
+            icon={Mic}
+            label="問いに語る"
+            onClick={onStartTalking}
+          />
+
+          <HomeMenuButton
+            icon={Files}
+            label="語りを見る"
+            onClick={onOpenStoryPages}
+          />
+
+          <HomeMenuButton
+            icon={BookOpen}
+            label="本に仕上げる"
+            onClick={onOpenBookBuilder}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Scene_BookBuilder({ onBack }) {
+  const steps = ["語り", "表紙", "紙面", "注文", "完了"];
+
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-hidden">
+      <div className="text-center mb-7">
+        <p className="text-white/90 text-[1.05rem] text-narrative">
+          本に仕上げる
+        </p>
+      </div>
+
+      <div className="mb-8">
+        <div className="flex gap-2 overflow-x-auto pb-3">
+          {steps.map((step, index) => (
+            <div key={step} className="min-w-[74px] shrink-0">
+              <p className={`text-center text-xs tracking-widest mb-2 ${
+                index === 0 ? "text-white/78" : "text-white/28"
+              }`}>
+                {index + 1}
+              </p>
+
+              <div className={`h-1.5 rounded-full ${
+                index === 0 ? "bg-white/55" : "bg-white/12"
+              }`} />
+
+              <p className={`text-center text-xs mt-2 ${
+                index === 0 ? "text-white/78" : "text-white/28"
+              }`}>
+                {step}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="glass-card p-6 text-center">
+          <p className="text-white/82 text-[1.05rem] text-narrative mb-5">
+            語り
+          </p>
+
+          <p className="text-white/45 text-sm leading-loose">
+            保存した語りを、本に入れる準備をします。
+          </p>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          {steps.slice(1).map(step => (
+            <div
+              key={step}
+              className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-5 text-center opacity-55"
+            >
+              <p className="text-white/35 text-sm">
+                {step}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="pt-5 border-t border-white/10">
+        <button
+          onClick={onBack}
+          className="w-full py-3 text-white/40 text-sm underline underline-offset-4"
+        >
+          戻る
+        </button>
+      </div>
+    </div>
+  );
+}
 function Scene0_Door({ onNext }) {
   return (
     <div className="h-full flex flex-col items-center justify-center text-center fade-enter px-4">
@@ -3859,8 +4004,8 @@ return (
             isSelected
               ? "bg-white text-slate-900 border-white"
               : hasAnswers
-                ? "bg-white/7 text-white/55 border-white/12"
-                : "bg-transparent text-white/18 border-white/6 opacity-45"
+                ? "bg-white/[0.07] text-white/55 bborder-white/[0.12]"
+                : "bg-transparent text-white/18 border-white/[0.06] opacity-45"
           }`}
           aria-label={`章 ${index + 1}${hasAnswers ? "" : " 未回答"}`}
         >
