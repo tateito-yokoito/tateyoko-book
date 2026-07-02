@@ -2581,10 +2581,11 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
                   タイトル
                 </p>
 
-                <textarea
+                <input
+                  type="text"
                   value={bookTitle}
                   onChange={e => setBookTitle(e.target.value)}
-                  className="quiet-input min-h-[92px] resize-none text-left"
+                  className="quiet-input"
                 />
               </div>
 
