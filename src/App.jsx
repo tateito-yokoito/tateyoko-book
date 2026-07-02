@@ -4477,11 +4477,11 @@ return (
         </div>
       ))}
 
-      <button
-        type="button"
-        onClick={() => openPhotoPickerForAnswer(answer.id)}
-        className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] aspect-square flex items-center justify-center"
-      >
+        <button
+          type="button"
+          onClick={() => openPhotoPickerForAnswer(answer.id)}
+          className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-14 flex items-center justify-center"
+        >
         <span className="text-white/28 text-xs tracking-widest">
           写真を挿入
         </span>
