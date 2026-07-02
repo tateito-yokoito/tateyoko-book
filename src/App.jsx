@@ -2460,7 +2460,7 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
   };
 
   return (
-    <div className="h-[100dvh] min-h-0 flex flex-col fade-enter px-4 pt-0 pb-4 -mt-6 overflow-hidden">
+    <div className="fixed inset-0 min-h-0 flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
       <div className="shrink-0 pb-3">
         <div className="text-center mb-3">
           <p className="text-white/90 text-[1.02rem] text-narrative">
@@ -2498,7 +2498,7 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-24">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pb-6">
         {stepIndex === 0 && (
           <div className="space-y-5">
             <div className="glass-card p-5">
@@ -2533,7 +2533,7 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
                     </p>
                   </div>
 
-                  <div className="absolute -right-8 top-0 w-5 h-full bg-white/50 shadow-lg" />
+                  <div className="absolute right-0 top-0 w-5 h-full bg-white/50 shadow-lg" />
                 </div>
               </div>
             </div>
