@@ -786,6 +786,83 @@ function hasDoneDailyMicCheck() {
 function markDailyMicCheckDone() {
   localStorage.setItem("tateyoko_daily_mic_check", getTodayKey());
 }
+async function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("画像の読み込みに失敗しました"));
+    };
+
+    img.src = url;
+  });
+}
+
+function canvasToBlob(canvas, type = "image/jpeg", quality = 0.92) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("画像の変換に失敗しました"));
+          return;
+        }
+
+        resolve(blob);
+      },
+      type,
+      quality
+    );
+  });
+}
+
+async function processScannedPhotoFile(file, options = {}) {
+  const {
+    brightness = 8,
+    contrast = 1.08,
+    maxWidth = 2200
+  } = options;
+
+  const img = await loadImageFromFile(file);
+
+  const scale = Math.min(1, maxWidth / img.width);
+  const width = Math.round(img.width * scale);
+  const height = Math.round(img.height * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("画像処理を開始できませんでした");
+
+  ctx.drawImage(img, 0, 0, width, height);
+
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = Math.max(0, Math.min(255, (data[i] - 128) * contrast + 128 + brightness));
+    data[i + 1] = Math.max(0, Math.min(255, (data[i + 1] - 128) * contrast + 128 + brightness));
+    data[i + 2] = Math.max(0, Math.min(255, (data[i + 2] - 128) * contrast + 128 + brightness));
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+
+  const blob = await canvasToBlob(canvas, "image/jpeg", 0.92);
+
+  return new File(
+    [blob],
+    file.name ? file.name.replace(/\.[^.]+$/, ".jpg") : "scanned-photo.jpg",
+    { type: "image/jpeg" }
+  );
+}
 
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
@@ -4263,18 +4340,36 @@ const handleStoryScanSelect = async (files) => {
 
   if (!answerId) return;
 
-  pendingPhotoAnswerIdRef.current = answerId;
-  await handleStoryPhotoSelect(files);
+  try {
+    pendingPhotoAnswerIdRef.current = answerId;
 
-  pendingScanAnswerIdRef.current = null;
+    await handleStoryPhotoSelect(files, {
+      shouldProcess: true
+    });
+  } finally {
+    pendingScanAnswerIdRef.current = null;
+
+    if (storyScanInputRef.current) {
+      storyScanInputRef.current.value = "";
+    }
+  }
 };
 
-  const handleStoryPhotoSelect = async (files) => {
+const handleStoryPhotoSelect = async (files, options = {}) => {
+  const { shouldProcess = false } = options;
     const answerId = pendingPhotoAnswerIdRef.current;
     const selectedFiles = Array.from(files || [])
       .filter(file => file && file.type && file.type.startsWith("image/"));
 
-    if (!answerId || selectedFiles.length === 0 || !user?.id) return;
+    if (!answerId || selectedFiles.length === 0 || !user?.id) {
+      pendingPhotoAnswerIdRef.current = null;
+
+      if (storyPhotoInputRef.current) {
+        storyPhotoInputRef.current.value = "";
+      }
+
+      return;
+    }
 
     try {
       setLoading(true);
@@ -4286,13 +4381,25 @@ const handleStoryScanSelect = async (files) => {
       const photoRows = [];
 
       for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i];
+        const originalFile = selectedFiles[i];
+
+        const file = shouldProcess
+          ? await processScannedPhotoFile(originalFile, {
+              brightness: 8,
+              contrast: 1.08,
+              maxWidth: 2200
+            })
+          : originalFile;
+
         const contentType = file.type || "image/jpeg";
-        const ext = contentType.includes("png")
-          ? "png"
-          : contentType.includes("webp")
-            ? "webp"
-            : "jpg";
+
+        const ext = shouldProcess
+          ? "jpg"
+          : contentType.includes("png")
+            ? "png"
+            : contentType.includes("webp")
+              ? "webp"
+              : "jpg";
 
         const photoNo = String(existingPhotoCount + i + 1).padStart(2, "0");
         const photoPath = `${user.id}/${answerId}/photo-${photoNo}.${ext}`;
@@ -4366,7 +4473,12 @@ return (
       accept="image/*"
       multiple
       className="hidden"
-      onChange={(e) => handleStoryPhotoSelect(e.target.files)}
+      onChange={(e) => {
+        handleStoryPhotoSelect(e.target.files, {
+          shouldProcess: false
+        });
+        e.target.value = "";
+      }}
     />
     <input
       ref={storyScanInputRef}
@@ -4376,7 +4488,6 @@ return (
       className="hidden"
       onChange={(e) => {
         handleStoryScanSelect(e.target.files);
-        e.target.value = "";
       }}
     />
 
