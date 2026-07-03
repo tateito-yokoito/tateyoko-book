@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronRight, Files, Mic } from "lucide-react";
+import { BookOpen, ChevronRight, Files, Mic, RotateCw, ScanLine } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumossjxehdop.supabase.co";
@@ -4192,6 +4192,15 @@ function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
     bottom: 1
   };
 
+const perspectiveEnabled = !!scanPreview.perspectiveEnabled;
+
+const perspectivePoints = scanPreview.perspectivePoints || {
+  topLeft: { x: rect.left, y: rect.top },
+  topRight: { x: rect.right, y: rect.top },
+  bottomRight: { x: rect.right, y: rect.bottom },
+  bottomLeft: { x: rect.left, y: rect.bottom }
+};
+
   const clampCropRect = (nextRect) => {
     const minSize = 0.05;
 
@@ -4239,6 +4248,29 @@ function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
     return safeRect;
   };
 
+const updateLocalPerspectivePoint = (handle, point) => {
+  const safePoint = {
+    x: Math.max(0, Math.min(1, point.x)),
+    y: Math.max(0, Math.min(1, point.y))
+  };
+
+  const nextPoints = {
+    ...perspectivePoints,
+    [handle]: safePoint
+  };
+
+  setScanPreview(prev =>
+    prev
+      ? {
+          ...prev,
+          perspectivePoints: nextPoints
+        }
+      : prev
+  );
+
+  return nextPoints;
+};
+
   const getPointInImage = (event) => {
     const box = imageRef.current?.getBoundingClientRect();
     if (!box) return null;
@@ -4249,49 +4281,64 @@ function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
     return { x, y };
   };
 
-  const startDrag = (handle, event) => {
-    event.preventDefault();
-    event.stopPropagation();
+const startDrag = (handle, event) => {
+  event.preventDefault();
+  event.stopPropagation();
 
-    dragRef.current = {
-      handle,
-      lastRect: rect
-    };
-
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+  dragRef.current = {
+    handle,
+    mode: perspectiveEnabled ? "perspective" : "rect",
+    lastRect: rect,
+    lastPoints: perspectivePoints
   };
 
-  const moveDrag = (event) => {
-    if (!dragRef.current) return;
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+};
 
-    event.preventDefault();
+const moveDrag = (event) => {
+  if (!dragRef.current) return;
 
-    const point = getPointInImage(event);
-    if (!point) return;
+  event.preventDefault();
 
-    const handle = dragRef.current.handle;
-    const nextRect = {
-      ...(dragRef.current.lastRect || rect)
-    };
+  const point = getPointInImage(event);
+  if (!point) return;
 
-    if (handle.includes("left")) nextRect.left = point.x;
-    if (handle.includes("right")) nextRect.right = point.x;
-    if (handle.includes("top")) nextRect.top = point.y;
-    if (handle.includes("bottom")) nextRect.bottom = point.y;
+  const handle = dragRef.current.handle;
 
-    dragRef.current.lastRect = updateLocalCropRect(nextRect);
+  if (dragRef.current.mode === "perspective") {
+    dragRef.current.lastPoints = updateLocalPerspectivePoint(handle, point);
+    return;
+  }
+
+  const nextRect = {
+    ...(dragRef.current.lastRect || rect)
   };
 
-  const endDrag = () => {
-    if (!dragRef.current) return;
+  if (handle.includes("left")) nextRect.left = point.x;
+  if (handle.includes("right")) nextRect.right = point.x;
+  if (handle.includes("top")) nextRect.top = point.y;
+  if (handle.includes("bottom")) nextRect.bottom = point.y;
 
-    const finalRect = dragRef.current.lastRect;
-    dragRef.current = null;
+  dragRef.current.lastRect = updateLocalCropRect(nextRect);
+};
 
+const endDrag = () => {
+  if (!dragRef.current) return;
+
+  const currentDrag = dragRef.current;
+  dragRef.current = null;
+
+  if (currentDrag.mode === "perspective") {
     updateScanPreview({
-      cropRect: finalRect
+      perspectivePoints: currentDrag.lastPoints
     });
-  };
+    return;
+  }
+
+  updateScanPreview({
+    cropRect: currentDrag.lastRect
+  });
+};
 
   const cropStyle = {
     left: `${rect.left * 100}%`,
@@ -4309,6 +4356,13 @@ function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
     { key: "bottom", className: "-bottom-2 left-1/2 -translate-x-1/2 cursor-ns-resize" },
     { key: "left", className: "top-1/2 -left-2 -translate-y-1/2 cursor-ew-resize" },
     { key: "right", className: "top-1/2 -right-2 -translate-y-1/2 cursor-ew-resize" }
+  ];
+
+  const perspectiveHandles = [
+    { key: "topLeft", className: "-top-2 -left-2" },
+    { key: "topRight", className: "-top-2 -right-2" },
+    { key: "bottomRight", className: "-bottom-2 -right-2" },
+    { key: "bottomLeft", className: "-bottom-2 -left-2" }
   ];
 
   return (
@@ -4362,31 +4416,140 @@ function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
             />
           </div>
 
-          <div
-            className="absolute border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.5)] touch-none"
-            style={cropStyle}
-            onPointerMove={moveDrag}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-          >
+            <div
+              className={`absolute touch-none ${
+                perspectiveEnabled
+                  ? "inset-0"
+                  : "border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+              }`}
+             style={perspectiveEnabled ? undefined : cropStyle}
+              onPointerMove={moveDrag}
+              onPointerUp={endDrag}
+              onPointerCancel={endDrag}
+            >
+{perspectiveEnabled ? (
+  <>
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <polygon
+        points={`
+          ${perspectivePoints.topLeft.x * 100},${perspectivePoints.topLeft.y * 100}
+          ${perspectivePoints.topRight.x * 100},${perspectivePoints.topRight.y * 100}
+          ${perspectivePoints.bottomRight.x * 100},${perspectivePoints.bottomRight.y * 100}
+          ${perspectivePoints.bottomLeft.x * 100},${perspectivePoints.bottomLeft.y * 100}
+        `}
+        fill="rgba(255,255,255,0.04)"
+        stroke="rgba(255,255,255,0.9)"
+        strokeWidth="0.6"
+      />
+    </svg>
+
+    {perspectiveHandles.map(handle => {
+      const point = perspectivePoints[handle.key];
+
+      return (
+                    <button
+                      key={handle.key}
+                      type="button"
+                      aria-label={`台形補正 ${handle.key}`}
+                      disabled={scanPreview.processing}
+                      onPointerDown={(event) => startDrag(handle.key, event)}
+                      onPointerMove={moveDrag}
+                      onPointerUp={endDrag}
+                      onPointerCancel={endDrag}
+                      className="absolute w-6 h-6 bg-white border-2 border-slate-950 rounded-sm touch-none -translate-x-1/2 -translate-y-1/2"
+                      style={{
+                        left: `${point.x * 100}%`,
+                        top: `${point.y * 100}%`
+                      }}
+                    />
+                  );
+                })}
+              </>
+            ) : (
+              handles.map(handle => (
+                <button
+                  key={handle.key}
+                  type="button"
+                  aria-label={`切り抜き ${handle.key}`}
+                  disabled={scanPreview.processing}
+                  onPointerDown={(event) => startDrag(handle.key, event)}
+                  onPointerMove={moveDrag}
+                  onPointerUp={endDrag}
+                 onPointerCancel={endDrag}
+                  className={`absolute w-5 h-5 bg-white border-2 border-slate-950 rounded-sm touch-none ${handle.className}`}
+                />
+              ))
+            )}
             <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/55" />
             <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/55" />
             <div className="absolute top-1/3 left-0 right-0 h-px bg-white/55" />
             <div className="absolute top-2/3 left-0 right-0 h-px bg-white/55" />
 
-            {handles.map(handle => (
-              <button
-                key={handle.key}
-                type="button"
-                aria-label={`切り抜き ${handle.key}`}
-                disabled={scanPreview.processing}
-                onPointerDown={(event) => startDrag(handle.key, event)}
-                onPointerMove={moveDrag}
-                onPointerUp={endDrag}
-                onPointerCancel={endDrag}
-                className={`absolute w-5 h-5 bg-white border-2 border-slate-950 rounded-sm touch-none ${handle.className}`}
-              />
-            ))}
+{perspectiveEnabled ? (
+  <>
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <polygon
+        points={`
+          ${perspectivePoints.topLeft.x * 100},${perspectivePoints.topLeft.y * 100}
+          ${perspectivePoints.topRight.x * 100},${perspectivePoints.topRight.y * 100}
+          ${perspectivePoints.bottomRight.x * 100},${perspectivePoints.bottomRight.y * 100}
+          ${perspectivePoints.bottomLeft.x * 100},${perspectivePoints.bottomLeft.y * 100}
+        `}
+        fill="rgba(255,255,255,0.04)"
+        stroke="rgba(255,255,255,0.9)"
+        strokeWidth="0.6"
+      />
+    </svg>
+
+    {perspectiveHandles.map(handle => {
+      const point = perspectivePoints[handle.key];
+
+      return (
+        <button
+          key={handle.key}
+          type="button"
+          aria-label={`台形補正 ${handle.key}`}
+          disabled={scanPreview.processing}
+          onPointerDown={(event) => startDrag(handle.key, event)}
+          onPointerMove={moveDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          className="absolute w-6 h-6 bg-white border-2 border-slate-950 rounded-sm touch-none -translate-x-1/2 -translate-y-1/2"
+          style={{
+            left: `${point.x * 100}%`,
+            top: `${point.y * 100}%`
+          }}
+        />
+      );
+    })}
+  </>
+) : (
+  handles.map(handle => (
+    <button
+      key={handle.key}
+      type="button"
+      aria-label={`切り抜き ${handle.key}`}
+      disabled={scanPreview.processing}
+      onPointerDown={(event) => startDrag(handle.key, event)}
+      onPointerMove={moveDrag}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      className={`absolute w-5 h-5 bg-white border-2 border-slate-950 rounded-sm touch-none ${handle.className}`}
+    />
+  ))
+)}
+
+
           </div>
         </div>
       </div>
@@ -4716,6 +4879,13 @@ const handleStoryScanSelect = async (files) => {
           top: 0,
           right: 1,
           bottom: 1
+        },
+        perspectiveEnabled: false,
+        perspectivePoints: {
+          topLeft: { x: 0, y: 0 },
+          topRight: { x: 1, y: 0 },
+          bottomRight: { x: 1, y: 1 },
+          bottomLeft: { x: 0, y: 1 }
         },
         rotationDegrees,
         step: "crop",
@@ -5086,25 +5256,52 @@ return (
           </p>
         )}
 
-        <div className="mt-5 flex gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={closeScanPreview}
-            disabled={scanPreview.processing}
-            className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-sm"
-          >
-            撮り直す
-          </button>
+<div className="mt-5 flex items-center gap-3 shrink-0">
+  <button
+    type="button"
+    onClick={closeScanPreview}
+    disabled={scanPreview.processing}
+    className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-sm"
+  >
+    撮り直す
+  </button>
 
-          <button
-            type="button"
-            onClick={rotateScanPreview}
-            disabled={scanPreview.processing}
-            className="flex-1 py-3 rounded-full border border-white/10 text-white/75 text-sm"
-          >
-            右に回転
-          </button>
-        </div>
+  <button
+    type="button"
+    onClick={rotateScanPreview}
+    disabled={scanPreview.processing}
+    aria-label="右に回転"
+    title="右に回転"
+    className="w-12 h-12 rounded-full border border-white/10 text-white/70 flex items-center justify-center"
+  >
+    <RotateCw size={20} strokeWidth={1.8} />
+  </button>
+
+  <button
+    type="button"
+    onClick={() => {
+      setScanPreview(prev =>
+        prev
+          ? {
+              ...prev,
+              perspectiveEnabled: !prev.perspectiveEnabled
+            }
+          : prev
+      );
+    }}
+    disabled={scanPreview.processing}
+    aria-label="台形補正"
+    title="台形補正"
+    aria-pressed={!!scanPreview.perspectiveEnabled}
+    className={`w-12 h-12 rounded-full border flex items-center justify-center ${
+      scanPreview.perspectiveEnabled
+        ? "bg-white/15 border-white/30 text-white"
+        : "border-white/10 text-white/45"
+    }`}
+  >
+    <ScanLine size={20} strokeWidth={1.8} />
+  </button>
+</div>
 
         <button
           type="button"
