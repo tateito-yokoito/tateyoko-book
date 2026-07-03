@@ -4493,6 +4493,7 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
   const [mediaByAnswerId, setMediaByAnswerId] = useState({});
   const [loading, setLoading] = useState(true);
   const [deletingPhotoPath, setDeletingPhotoPath] = useState(null);
+  const [uploadingPhotoAnswerId, setUploadingPhotoAnswerId] = useState(null);
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
   const storyPhotoInputRef = useRef(null);
   const pendingPhotoAnswerIdRef = useRef(null);
@@ -4917,6 +4918,7 @@ const handleStoryPhotoSelect = async (files, options = {}) => {
     }
 
     try {
+      setUploadingPhotoAnswerId(answerId);
 
       const targetAnswer = answers.find(a => a.id === answerId);
       const existingMedia = mediaByAnswerId[answerId] || [];
@@ -4993,11 +4995,12 @@ const handleStoryPhotoSelect = async (files, options = {}) => {
       console.error(e);
       alert(e.message || "写真の追加に失敗しました。");
     } finally {
+      setUploadingPhotoAnswerId(null);
       pendingPhotoAnswerIdRef.current = null;
+
       if (storyPhotoInputRef.current) {
         storyPhotoInputRef.current.value = "";
       }
-
     }
   };
 
@@ -5035,8 +5038,18 @@ return (
       }}
     />
 
+{uploadingPhotoAnswerId && (
+  <div className="fixed left-4 right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-40 rounded-2xl border border-white/10 bg-slate-950/92 px-5 py-4 shadow-2xl flex items-center gap-3">
+    <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white/75 animate-spin shrink-0" />
+
+    <p className="text-white/70 text-sm tracking-widest">
+      写真を保存しています...
+    </p>
+  </div>
+)}
+
 {scanPreview && (
-  <div className="fixed inset-0 z-50 bg-slate-950 px-4 py-6 flex flex-col fade-enter overflow-y-auto">
+  <div className="fixed inset-0 z-50 h-[100dvh] bg-slate-950 px-4 pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden">
     <div className="text-center mb-4 shrink-0">
       <p className="text-white/85 text-[1rem] text-narrative">
         写真を整えます
@@ -5096,11 +5109,11 @@ return (
       </>
     ) : (
       <>
-        <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/25 mb-5 shrink-0">
+        <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/25 mb-4 shrink min-h-0 flex items-center justify-center">
           <img
             src={scanPreview.url}
             alt="補正後のプレビュー"
-            className="w-full h-auto object-contain"
+            className="w-full max-h-[38dvh] object-contain"
           />
         </div>
 
