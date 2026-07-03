@@ -4311,14 +4311,14 @@ function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
   ];
 
   return (
-    <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/25 mb-5 shrink-0">
-      <div className="relative mx-auto w-full max-h-[420px] flex items-center justify-center touch-none">
+    <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/25 mb-4 shrink min-h-0">
+      <div className="relative mx-auto w-full max-h-[52dvh] flex items-center justify-center touch-none overflow-hidden">
         <div className="relative inline-block">
           <img
             ref={imageRef}
             src={scanPreview.cropPreviewUrl || scanPreview.originalUrl || scanPreview.url}
             alt="スキャン写真のプレビュー"
-            className="block max-w-full max-h-[420px] object-contain select-none"
+            className="block max-w-full max-h-[52dvh] object-contain select-none"
             draggable="false"
           />
 
@@ -4501,6 +4501,21 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
   const pendingScanAnswerIdRef = useRef(null);
 
   const [scanPreview, setScanPreview] = useState(null);
+
+useEffect(() => {
+  if (!scanPreview) return;
+
+  const previousBodyOverflow = document.body.style.overflow;
+  const previousHtmlOverflow = document.documentElement.style.overflow;
+
+  document.body.style.overflow = "hidden";
+  document.documentElement.style.overflow = "hidden";
+
+  return () => {
+    document.body.style.overflow = previousBodyOverflow;
+    document.documentElement.style.overflow = previousHtmlOverflow;
+  };
+}, [scanPreview]);
 
 const loadAnswers = async (options = {}) => {
   const { showLoading = true } = options;
@@ -5049,16 +5064,10 @@ return (
 )}
 
 {scanPreview && (
-  <div className="fixed inset-0 z-50 h-[100dvh] bg-slate-950 px-4 pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden">
-    <div className="text-center mb-4 shrink-0">
+  <div className="fixed top-0 left-0 z-50 w-screen h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden touch-none overscroll-none">
+    <div className="text-center mb-2 shrink-0">
       <p className="text-white/85 text-[1rem] text-narrative">
         写真を整えます
-      </p>
-
-      <p className="text-white/40 text-xs leading-loose mt-2">
-        {scanPreview.step === "crop"
-          ? "切り抜きと向きを整えてください。"
-          : "明るさや濃さを調整してから保存できます。"}
       </p>
     </div>
 
