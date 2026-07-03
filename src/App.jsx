@@ -5064,7 +5064,7 @@ return (
 )}
 
 {scanPreview && (
-  <div className="fixed top-0 left-0 z-50 w-screen h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden touch-none overscroll-none">
+  <div className="fixed top-0 left-1/2 z-50 w-[100dvw] h-[100dvh] -translate-x-1/2 max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden overscroll-none">
     <div className="text-center mb-2 shrink-0">
       <p className="text-white/85 text-[1rem] text-narrative">
         写真を整えます
