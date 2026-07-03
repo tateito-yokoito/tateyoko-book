@@ -826,7 +826,7 @@ function canvasToBlob(canvas, type = "image/jpeg", quality = 0.92) {
 async function processScannedPhotoFile(file, options = {}) {
   const {
     brightness = 8,
-    contrast = 1.08,
+    contrast = 1.1,
     maxWidth = 2200,
     cropMode = "original",
     cropRect = null,
@@ -4673,7 +4673,7 @@ const handleStoryScanSelect = async (files) => {
 
   try {
     const brightness = 8;
-    const contrast = 1.08;
+    const contrast = 1.1;
     const rotationDegrees = 0;
     const cropMode = "original";
 
@@ -4948,7 +4948,7 @@ const handleStoryPhotoSelect = async (files, options = {}) => {
         const file = shouldProcess
           ? await processScannedPhotoFile(originalFile, {
               brightness: 8,
-              contrast: 1.08,
+              contrast: 1.1,
               maxWidth: 2200
             })
           : originalFile;
@@ -5127,65 +5127,77 @@ return (
           />
         </div>
 
-        <div className="glass-card p-5 space-y-5 shrink-0">
-          <div>
-            <div className="flex justify-between mb-2">
-              <p className="text-white/45 text-xs tracking-widest">
-                明るさ
-              </p>
-              <p className="text-white/35 text-xs">
-                {scanPreview.brightness}
-              </p>
-            </div>
+<div className="glass-card p-5 space-y-5 shrink-0">
+  <div>
+    <div className="flex justify-between mb-2">
+      <p className="text-white/45 text-xs tracking-widest">
+        明るさ
+      </p>
+      <p className="text-white/35 text-xs">
+        {scanPreview.brightness}
+      </p>
+    </div>
 
-            <input
-              type="range"
-              min="-30"
-              max="40"
-              step="1"
-              value={scanPreview.brightness}
-              disabled={scanPreview.processing}
-              onChange={(e) => {
-                updateScanPreview({
-                  brightness: Number(e.target.value)
-                });
-              }}
-              className="w-full"
-            />
-          </div>
+    <input
+      type="range"
+      min="-24"
+      max="32"
+      step="4"
+      value={scanPreview.brightness}
+      disabled={scanPreview.processing}
+      onChange={(e) => {
+        updateScanPreview({
+          brightness: Number(e.target.value)
+        });
+      }}
+      className="w-full"
+    />
 
-          <div>
-            <div className="flex justify-between mb-2">
-              <p className="text-white/45 text-xs tracking-widest">
-                コントラスト
-              </p>
-              <p className="text-white/35 text-xs">
-                {scanPreview.contrast.toFixed(2)}
-              </p>
-            </div>
+    <div className="mt-2 flex justify-between text-[10px] text-white/25">
+      <span>暗め</span>
+      <span>標準</span>
+      <span>明るめ</span>
+    </div>
+  </div>
 
-            <input
-              type="range"
-              min="0.85"
-              max="1.35"
-              step="0.01"
-              value={scanPreview.contrast}
-              disabled={scanPreview.processing}
-              onChange={(e) => {
-                updateScanPreview({
-                  contrast: Number(e.target.value)
-                });
-              }}
-              className="w-full"
-            />
-          </div>
+  <div>
+    <div className="flex justify-between mb-2">
+      <p className="text-white/45 text-xs tracking-widest">
+        コントラスト
+      </p>
+      <p className="text-white/35 text-xs">
+        {scanPreview.contrast.toFixed(1)}
+      </p>
+    </div>
 
-          {scanPreview.processing && (
-            <p className="text-white/35 text-xs text-center animate-pulse">
-              補正しています...
-            </p>
-          )}
-        </div>
+    <input
+      type="range"
+      min="0.9"
+      max="1.3"
+      step="0.05"
+      value={scanPreview.contrast}
+      disabled={scanPreview.processing}
+      onChange={(e) => {
+        updateScanPreview({
+          contrast: Number(e.target.value)
+        });
+      }}
+      className="w-full"
+    />
+
+    <div className="mt-2 flex justify-between text-[10px] text-white/25">
+      <span>淡め</span>
+      <span>標準</span>
+      <span>濃いめ</span>
+    </div>
+  </div>
+
+  {scanPreview.processing && (
+    <p className="text-white/35 text-xs text-center animate-pulse">
+      補正しています...
+    </p>
+  )}
+</div>
 
         <div className="mt-5 flex gap-3 shrink-0">
           <button
