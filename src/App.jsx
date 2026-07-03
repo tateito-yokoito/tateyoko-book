@@ -4774,13 +4774,16 @@ const updateScanPreview = async (nextValues) => {
 const confirmScannedPhoto = async () => {
   if (!scanPreview?.answerId || !scanPreview?.file) return;
 
-  pendingPhotoAnswerIdRef.current = scanPreview.answerId;
-
-  await handleStoryPhotoSelect([scanPreview.file], {
-    shouldProcess: false
-  });
+  const answerId = scanPreview.answerId;
+  const file = scanPreview.file;
 
   closeScanPreview();
+
+  pendingPhotoAnswerIdRef.current = answerId;
+
+  await handleStoryPhotoSelect([file], {
+    shouldProcess: false
+  });
 };
 
 const handleStoryPhotoSelect = async (files, options = {}) => {
@@ -4938,118 +4941,6 @@ return (
     />
 
     <div className="glass-card p-5 space-y-5 shrink-0">
-      <div>
-        <p className="text-white/45 text-xs tracking-widest mb-3">
-          切り抜き
-        </p>
-
-        <div className="space-y-4">
-          <div>
-            <div className="flex justify-between mb-2">
-              <p className="text-white/40 text-xs">左</p>
-              <p className="text-white/30 text-xs">
-                {Math.round((scanPreview.cropRect?.left ?? 0) * 100)}%
-              </p>
-            </div>
-
-            <input
-              type="range"
-              min="0"
-              max={Math.max(0, (scanPreview.cropRect?.right ?? 1) - 0.05)}
-              step="0.01"
-              value={scanPreview.cropRect?.left ?? 0}
-              disabled={scanPreview.processing}
-              onChange={(e) => {
-                updateScanPreview({
-                  cropRect: {
-                    left: Number(e.target.value)
-                  }
-                });
-              }}
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <div className="flex justify-between mb-2">
-              <p className="text-white/40 text-xs">右</p>
-              <p className="text-white/30 text-xs">
-                {Math.round((1 - (scanPreview.cropRect?.right ?? 1)) * 100)}%
-              </p>
-            </div>
-
-            <input
-              type="range"
-              min={Math.min(0.95, (scanPreview.cropRect?.left ?? 0) + 0.05)}
-              max="1"
-              step="0.01"
-              value={scanPreview.cropRect?.right ?? 1}
-              disabled={scanPreview.processing}
-              onChange={(e) => {
-                updateScanPreview({
-                  cropRect: {
-                    right: Number(e.target.value)
-                  }
-                });
-              }}
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <div className="flex justify-between mb-2">
-              <p className="text-white/40 text-xs">上</p>
-              <p className="text-white/30 text-xs">
-                {Math.round((scanPreview.cropRect?.top ?? 0) * 100)}%
-              </p>
-            </div>
-
-            <input
-              type="range"
-              min="0"
-              max={Math.max(0, (scanPreview.cropRect?.bottom ?? 1) - 0.05)}
-              step="0.01"
-              value={scanPreview.cropRect?.top ?? 0}
-              disabled={scanPreview.processing}
-              onChange={(e) => {
-                updateScanPreview({
-                  cropRect: {
-                    top: Number(e.target.value)
-                  }
-                });
-              }}
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <div className="flex justify-between mb-2">
-              <p className="text-white/40 text-xs">下</p>
-              <p className="text-white/30 text-xs">
-                {Math.round((1 - (scanPreview.cropRect?.bottom ?? 1)) * 100)}%
-              </p>
-            </div>
-
-            <input
-              type="range"
-              min={Math.min(0.95, (scanPreview.cropRect?.top ?? 0) + 0.05)}
-              max="1"
-              step="0.01"
-              value={scanPreview.cropRect?.bottom ?? 1}
-              disabled={scanPreview.processing}
-              onChange={(e) => {
-                updateScanPreview({
-                  cropRect: {
-                    bottom: Number(e.target.value)
-                  }
-                });
-              }}
-              className="w-full"
-            />
-          </div>
-        </div>
-      </div>
-
       <div>
         <div className="flex justify-between mb-2">
           <p className="text-white/45 text-xs tracking-widest">
@@ -5224,7 +5115,7 @@ return (
           <img
             src={photo.url}
             alt={`写真 ${photoIndex + 1}`}
-            className="w-full max-h-[260px] object-cover"
+            className="w-full h-auto object-contain bg-black/20"
           />
 
           <button
