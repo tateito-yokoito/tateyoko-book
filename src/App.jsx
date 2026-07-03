@@ -4462,7 +4462,8 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
 
   const [scanPreview, setScanPreview] = useState(null);
 
-  const loadAnswers = async () => {
+const loadAnswers = async (options = {}) => {
+  const { showLoading = true } = options;
     if (!user?.id) {
       setAnswers([]);
       setMediaByAnswerId({});
@@ -4471,7 +4472,7 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
     }
 
     try {
-      setLoading(true);
+     if (showLoading) setLoading(true);
 
       const { data, error } = await supabaseClient
         .from("answers")
@@ -4540,7 +4541,7 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
       console.error("story pages load error", e);
       alert("これまでの語りの読み込みに失敗しました。");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -4579,7 +4580,7 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
         }
       }
 
-      await loadAnswers();
+      await loadAnswers({ showLoading: false });
     } catch (e) {
       console.error(e);
       alert(e.message || "写真の削除に失敗しました。");
@@ -4615,8 +4616,6 @@ const handleStoryScanSelect = async (files) => {
   }
 
   try {
-    setLoading(true);
-
     const brightness = 8;
     const contrast = 1.08;
 
@@ -4669,7 +4668,6 @@ const handleStoryScanSelect = async (files) => {
       storyScanInputRef.current.value = "";
     }
 
-    setLoading(false);
   }
 };
 
@@ -4803,7 +4801,6 @@ const handleStoryPhotoSelect = async (files, options = {}) => {
     }
 
     try {
-      setLoading(true);
 
       const targetAnswer = answers.find(a => a.id === answerId);
       const existingMedia = mediaByAnswerId[answerId] || [];
@@ -4875,7 +4872,7 @@ const handleStoryPhotoSelect = async (files, options = {}) => {
         }
       }
 
-      await loadAnswers();
+      await loadAnswers({ showLoading: false });
     } catch (e) {
       console.error(e);
       alert(e.message || "写真の追加に失敗しました。");
@@ -4884,7 +4881,7 @@ const handleStoryPhotoSelect = async (files, options = {}) => {
       if (storyPhotoInputRef.current) {
         storyPhotoInputRef.current.value = "";
       }
-      setLoading(false);
+
     }
   };
 
