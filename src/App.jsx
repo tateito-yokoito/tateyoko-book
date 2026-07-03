@@ -828,10 +828,50 @@ async function processScannedPhotoFile(file, options = {}) {
     contrast = 1.08,
     maxWidth = 2200,
     cropMode = "original",
-    cropRect = null
+    cropRect = null,
+    rotationDegrees = 0
   } = options;
 
-  const img = await loadImageFromFile(file);
+  const originalImg = await loadImageFromFile(file);
+  const normalizedRotation = ((Number(rotationDegrees) % 360) + 360) % 360;
+
+  const rotationCanvas = document.createElement("canvas");
+  const rotationCtx = rotationCanvas.getContext("2d");
+
+  if (!rotationCtx) throw new Error("画像処理を開始できませんでした");
+
+  if (normalizedRotation === 90 || normalizedRotation === 270) {
+    rotationCanvas.width = originalImg.height;
+    rotationCanvas.height = originalImg.width;
+  } else {
+    rotationCanvas.width = originalImg.width;
+    rotationCanvas.height = originalImg.height;
+  }
+
+  rotationCtx.save();
+
+  if (normalizedRotation === 90) {
+    rotationCtx.translate(rotationCanvas.width, 0);
+    rotationCtx.rotate(Math.PI / 2);
+  } else if (normalizedRotation === 180) {
+    rotationCtx.translate(rotationCanvas.width, rotationCanvas.height);
+    rotationCtx.rotate(Math.PI);
+  } else if (normalizedRotation === 270) {
+    rotationCtx.translate(0, rotationCanvas.height);
+    rotationCtx.rotate((Math.PI * 3) / 2);
+  }
+
+  rotationCtx.drawImage(originalImg, 0, 0);
+  rotationCtx.restore();
+
+  const img = await new Promise((resolve, reject) => {
+    const url = rotationCanvas.toDataURL("image/jpeg", 0.95);
+    const rotatedImg = new Image();
+
+    rotatedImg.onload = () => resolve(rotatedImg);
+    rotatedImg.onerror = () => reject(new Error("画像の回転に失敗しました"));
+    rotatedImg.src = url;
+  });
 
   let sourceX = 0;
   let sourceY = 0;
@@ -856,7 +896,6 @@ async function processScannedPhotoFile(file, options = {}) {
     sourceY = Math.round(img.height * top);
     sourceWidth = Math.round(img.width * (right - left));
     sourceHeight = Math.round(img.height * (bottom - top));
-
   } else if (targetRatio) {
     const currentRatio = img.width / img.height;
 
@@ -4277,7 +4316,7 @@ function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
         <div className="relative inline-block">
           <img
             ref={imageRef}
-            src={scanPreview.originalUrl || scanPreview.url}
+            src={scanPreview.cropPreviewUrl || scanPreview.originalUrl || scanPreview.url}
             alt="スキャン写真のプレビュー"
             className="block max-w-full max-h-[420px] object-contain select-none"
             draggable="false"
@@ -4618,16 +4657,26 @@ const handleStoryScanSelect = async (files) => {
   try {
     const brightness = 8;
     const contrast = 1.08;
-
+    const rotationDegrees = 0;
     const cropMode = "original";
+
+    const cropPreviewFile = await processScannedPhotoFile(originalFile, {
+      brightness: 0,
+      contrast: 1,
+      maxWidth: 2200,
+      cropMode,
+      rotationDegrees
+    });
 
     const processedFile = await processScannedPhotoFile(originalFile, {
       brightness,
       contrast,
       maxWidth: 2200,
-      cropMode
+      cropMode,
+      rotationDegrees
     });
 
+    const cropPreviewUrl = URL.createObjectURL(cropPreviewFile);
     const previewUrl = URL.createObjectURL(processedFile);
     const originalUrl = URL.createObjectURL(originalFile);
 
@@ -4640,12 +4689,17 @@ const handleStoryScanSelect = async (files) => {
         try { URL.revokeObjectURL(prev.originalUrl); } catch (e) {}
       }
 
+      if (prev?.cropPreviewUrl) {
+        try { URL.revokeObjectURL(prev.cropPreviewUrl); } catch (e) {}
+      }
+
       return {
         answerId,
         originalFile,
         file: processedFile,
         url: previewUrl,
         originalUrl,
+        cropPreviewUrl,
         brightness,
         contrast,
         cropMode: "original",
@@ -4655,6 +4709,8 @@ const handleStoryScanSelect = async (files) => {
           right: 1,
           bottom: 1
         },
+        rotationDegrees,
+        step: "crop",
         processing: false
       };
     });
@@ -4667,7 +4723,6 @@ const handleStoryScanSelect = async (files) => {
     if (storyScanInputRef.current) {
       storyScanInputRef.current.value = "";
     }
-
   }
 };
 
@@ -4680,14 +4735,18 @@ const closeScanPreview = () => {
     try { URL.revokeObjectURL(scanPreview.originalUrl); } catch (e) {}
   }
 
+  if (scanPreview?.cropPreviewUrl) {
+    try { URL.revokeObjectURL(scanPreview.cropPreviewUrl); } catch (e) {}
+  }
+
   setScanPreview(null);
 };
 
+
 const updateScanPreview = async (nextValues) => {
+
   const current = scanPreview;
-
   if (!current?.originalFile) return;
-
   const nextBrightness =
     nextValues.brightness !== undefined
       ? nextValues.brightness
@@ -4697,13 +4756,20 @@ const updateScanPreview = async (nextValues) => {
     nextValues.contrast !== undefined
       ? nextValues.contrast
       : current.contrast;
-
   const nextCropMode =
+
     nextValues.cropMode !== undefined
       ? nextValues.cropMode
       : current.cropMode || "original";
 
+  const nextRotationDegrees =
+
+    nextValues.rotationDegrees !== undefined
+      ? nextValues.rotationDegrees
+      : current.rotationDegrees || 0;
+
   const nextCropRect = {
+
     left: current.cropRect?.left ?? 0,
     top: current.cropRect?.top ?? 0,
     right: current.cropRect?.right ?? 1,
@@ -4714,60 +4780,105 @@ const updateScanPreview = async (nextValues) => {
   setScanPreview(prev =>
     prev
       ? {
+
           ...prev,
           brightness: nextBrightness,
           contrast: nextContrast,
           cropMode: nextCropMode,
           cropRect: nextCropRect,
+          rotationDegrees: nextRotationDegrees,
           processing: true
         }
       : prev
+
   );
 
   try {
+
+    const cropPreviewFile = await processScannedPhotoFile(current.originalFile, {
+      brightness: 0,
+      contrast: 1,
+      maxWidth: 2200,
+      cropMode: nextCropMode,
+      rotationDegrees: nextRotationDegrees
+    });
+
     const processedFile = await processScannedPhotoFile(current.originalFile, {
       brightness: nextBrightness,
       contrast: nextContrast,
       maxWidth: 2200,
       cropMode: nextCropMode,
-      cropRect: nextCropRect
+      cropRect: nextCropRect,
+      rotationDegrees: nextRotationDegrees
     });
 
+    const cropPreviewUrl = URL.createObjectURL(cropPreviewFile);
     const previewUrl = URL.createObjectURL(processedFile);
-
     setScanPreview(prev => {
+
       if (prev?.url) {
         try { URL.revokeObjectURL(prev.url); } catch (e) {}
       }
 
+      if (prev?.cropPreviewUrl) {
+        try { URL.revokeObjectURL(prev.cropPreviewUrl); } catch (e) {}
+      }
       return prev
         ? {
             ...prev,
             file: processedFile,
             url: previewUrl,
+            cropPreviewUrl,
             brightness: nextBrightness,
             contrast: nextContrast,
             cropMode: nextCropMode,
             cropRect: nextCropRect,
+            rotationDegrees: nextRotationDegrees,
             processing: false
           }
+
         : prev;
     });
+
   } catch (e) {
+
     console.error(e);
     alert(e.message || "補正に失敗しました。");
-
     setScanPreview(prev =>
       prev
         ? {
             ...prev,
             processing: false
+
           }
         : prev
     );
   }
 };
 
+const rotateScanPreview = async () => {
+  if (!scanPreview) return;
+  await updateScanPreview({
+    rotationDegrees: ((scanPreview.rotationDegrees || 0) + 90) % 360
+  });
+};
+
+const completeCropStep = async () => {
+  if (!scanPreview) return;
+  await updateScanPreview({
+    cropRect: scanPreview.cropRect,
+    rotationDegrees: scanPreview.rotationDegrees || 0
+  });
+
+  setScanPreview(prev =>
+    prev
+      ? {
+          ...prev,
+          step: "adjust"
+        }
+      : prev
+  );
+};
 
 const confirmScannedPhoto = async () => {
   if (!scanPreview?.answerId || !scanPreview?.file) return;
@@ -4920,112 +5031,161 @@ return (
     />
 
 {scanPreview && (
-  <div className="fixed inset-0 z-50 bg-slate-950/95 px-4 py-6 flex flex-col fade-enter overflow-y-auto">
+  <div className="fixed inset-0 z-50 bg-slate-950 px-4 py-6 flex flex-col fade-enter overflow-y-auto">
     <div className="text-center mb-4 shrink-0">
       <p className="text-white/85 text-[1rem] text-narrative">
         写真を整えます
       </p>
 
       <p className="text-white/40 text-xs leading-loose mt-2">
-        明るさや濃さを調整してから保存できます。
+        {scanPreview.step === "crop"
+          ? "切り抜きと向きを整えてください。"
+          : "明るさや濃さを調整してから保存できます。"}
       </p>
     </div>
 
-    <CropPreview
-      scanPreview={scanPreview}
-      setScanPreview={setScanPreview}
-      updateScanPreview={updateScanPreview}
-    />
+    {scanPreview.step === "crop" ? (
+      <>
+        <CropPreview
+          scanPreview={scanPreview}
+          setScanPreview={setScanPreview}
+          updateScanPreview={updateScanPreview}
+        />
 
-    <div className="glass-card p-5 space-y-5 shrink-0">
-      <div>
-        <div className="flex justify-between mb-2">
-          <p className="text-white/45 text-xs tracking-widest">
-            明るさ
+        {scanPreview.processing && (
+          <p className="text-white/35 text-xs text-center animate-pulse mb-4">
+            補正しています...
           </p>
-          <p className="text-white/35 text-xs">
-            {scanPreview.brightness}
-          </p>
+        )}
+
+        <div className="mt-5 flex gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={closeScanPreview}
+            disabled={scanPreview.processing}
+            className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-sm"
+          >
+            撮り直す
+          </button>
+
+          <button
+            type="button"
+            onClick={rotateScanPreview}
+            disabled={scanPreview.processing}
+            className="flex-1 py-3 rounded-full border border-white/10 text-white/75 text-sm"
+          >
+            右に回転
+          </button>
         </div>
 
-        <input
-          type="range"
-          min="-30"
-          max="40"
-          step="1"
-          value={scanPreview.brightness}
+        <button
+          type="button"
+          onClick={completeCropStep}
           disabled={scanPreview.processing}
-          onChange={(e) => {
-            updateScanPreview({
-              brightness: Number(e.target.value)
-            });
-          }}
-          className="w-full"
-        />
-      </div>
-
-
-      <div>
-        <div className="flex justify-between mb-2">
-          <p className="text-white/45 text-xs tracking-widest">
-            コントラスト
-          </p>
-          <p className="text-white/35 text-xs">
-            {scanPreview.contrast.toFixed(2)}
-          </p>
+          className={`mt-4 btn-quiet bg-white/10 w-full py-3 rounded-full text-white text-sm ${
+            scanPreview.processing ? "opacity-40" : ""
+          }`}
+        >
+          切り抜きを完了
+        </button>
+      </>
+    ) : (
+      <>
+        <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/25 mb-5 shrink-0">
+          <img
+            src={scanPreview.url}
+            alt="補正後のプレビュー"
+            className="w-full h-auto object-contain"
+          />
         </div>
 
-        <input
-          type="range"
-          min="0.85"
-          max="1.35"
-          step="0.01"
-          value={scanPreview.contrast}
-          disabled={scanPreview.processing}
-          onChange={(e) => {
-            updateScanPreview({
-              contrast: Number(e.target.value)
-            });
-          }}
-          className="w-full"
-        />
-      </div>
+        <div className="glass-card p-5 space-y-5 shrink-0">
+          <div>
+            <div className="flex justify-between mb-2">
+              <p className="text-white/45 text-xs tracking-widest">
+                明るさ
+              </p>
+              <p className="text-white/35 text-xs">
+                {scanPreview.brightness}
+              </p>
+            </div>
 
-      {scanPreview.processing && (
-        <p className="text-white/35 text-xs text-center animate-pulse">
-          補正しています...
-        </p>
-      )}
-    </div>
+            <input
+              type="range"
+              min="-30"
+              max="40"
+              step="1"
+              value={scanPreview.brightness}
+              disabled={scanPreview.processing}
+              onChange={(e) => {
+                updateScanPreview({
+                  brightness: Number(e.target.value)
+                });
+              }}
+              className="w-full"
+            />
+          </div>
 
-    <div className="mt-5 flex gap-3 shrink-0">
-      <button
-        type="button"
-        onClick={closeScanPreview}
-        disabled={scanPreview.processing}
-        className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-sm"
-      >
-        撮り直す
-      </button>
+          <div>
+            <div className="flex justify-between mb-2">
+              <p className="text-white/45 text-xs tracking-widest">
+                コントラスト
+              </p>
+              <p className="text-white/35 text-xs">
+                {scanPreview.contrast.toFixed(2)}
+              </p>
+            </div>
 
-      <button
-        type="button"
-        onClick={confirmScannedPhoto}
-        disabled={scanPreview.processing}
-        className={`flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm ${
-          scanPreview.processing ? "opacity-40" : ""
-        }`}
-      >
-        この写真を使う
-      </button>
-    </div>
+            <input
+              type="range"
+              min="0.85"
+              max="1.35"
+              step="0.01"
+              value={scanPreview.contrast}
+              disabled={scanPreview.processing}
+              onChange={(e) => {
+                updateScanPreview({
+                  contrast: Number(e.target.value)
+                });
+              }}
+              className="w-full"
+            />
+          </div>
+
+          {scanPreview.processing && (
+            <p className="text-white/35 text-xs text-center animate-pulse">
+              補正しています...
+            </p>
+          )}
+        </div>
+
+        <div className="mt-5 flex gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => setScanPreview(prev => prev ? { ...prev, step: "crop" } : prev)}
+            disabled={scanPreview.processing}
+            className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-sm"
+          >
+            切り抜きに戻る
+          </button>
+
+          <button
+            type="button"
+            onClick={confirmScannedPhoto}
+            disabled={scanPreview.processing}
+            className={`flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm ${
+              scanPreview.processing ? "opacity-40" : ""
+            }`}
+          >
+            この写真を使う
+          </button>
+        </div>
+      </>
+    )}
   </div>
 )}
 
-
-
-    <div className="text-center mb-2">
-
+<div className="text-center mb-2">
   <p className="text-white/85 text-[0.95rem] text-narrative">
     これまでの語り
   </p>
@@ -5034,33 +5194,32 @@ return (
 {chapterSections.length > 0 && (
   <div className="mb-3">
     <div className="flex gap-2 overflow-x-auto pb-1">
-    {chapterSections.map((section, index) => {
-      const hasAnswers = section.answers.length > 0;
-      const isSelected = index === safeChapterIndex;
+      {chapterSections.map((section, index) => {
+        const hasAnswers = section.answers.length > 0;
+        const isSelected = index === safeChapterIndex;
 
-      return (
-        <button
-          key={section.chapterTitle}
-          type="button"
-          disabled={!hasAnswers}
-          onClick={() => {
-            if (!hasAnswers) return;
-            setSelectedChapterIndex(index);
-          }}
-          className={`w-9 h-9 rounded-full shrink-0 border text-xs transition ${
-            isSelected
-              ? "bg-white text-slate-900 border-white"
-              : hasAnswers
-                ? "bg-white/[0.07] text-white/55 border-white/[0.12]"
-                : "bg-transparent text-white/18 border-white/[0.06] opacity-45"
-          }`}
-          aria-label={`章 ${index + 1}${hasAnswers ? "" : " 未回答"}`}
-        >
-          {index + 1}
-        </button>
-      );
-    })}
-
+        return (
+          <button
+            key={section.chapterTitle}
+            type="button"
+            disabled={!hasAnswers}
+            onClick={() => {
+              if (!hasAnswers) return;
+              setSelectedChapterIndex(index);
+            }}
+            className={`w-9 h-9 rounded-full shrink-0 border text-xs transition ${
+              isSelected
+                ? "bg-white text-slate-900 border-white"
+                : hasAnswers
+                  ? "bg-white/[0.07] text-white/55 border-white/[0.12]"
+                  : "bg-transparent text-white/18 border-white/[0.06] opacity-45"
+            }`}
+            aria-label={`章 ${index + 1}${hasAnswers ? "" : " 未回答"}`}
+          >
+            {index + 1}
+          </button>
+        );
+      })}
     </div>
 
     {selectedChapter && (
@@ -5070,6 +5229,7 @@ return (
     )}
   </div>
 )}
+
 
       <div className="flex-1 overflow-y-auto space-y-5 pb-6">
         {loading ? (
