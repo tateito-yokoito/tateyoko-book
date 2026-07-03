@@ -826,14 +826,40 @@ async function processScannedPhotoFile(file, options = {}) {
   const {
     brightness = 8,
     contrast = 1.08,
-    maxWidth = 2200
+    maxWidth = 2200,
+    cropMode = "original"
   } = options;
 
   const img = await loadImageFromFile(file);
 
-  const scale = Math.min(1, maxWidth / img.width);
-  const width = Math.round(img.width * scale);
-  const height = Math.round(img.height * scale);
+  let sourceX = 0;
+  let sourceY = 0;
+  let sourceWidth = img.width;
+  let sourceHeight = img.height;
+
+  const cropRatios = {
+    square: 1,
+    portrait: 4 / 5,
+    landscape: 5 / 4
+  };
+
+  const targetRatio = cropRatios[cropMode];
+
+  if (targetRatio) {
+    const currentRatio = img.width / img.height;
+
+    if (currentRatio > targetRatio) {
+      sourceWidth = Math.round(img.height * targetRatio);
+      sourceX = Math.round((img.width - sourceWidth) / 2);
+    } else {
+      sourceHeight = Math.round(img.width / targetRatio);
+      sourceY = Math.round((img.height - sourceHeight) / 2);
+    }
+  }
+
+  const scale = Math.min(1, maxWidth / sourceWidth);
+  const width = Math.round(sourceWidth * scale);
+  const height = Math.round(sourceHeight * scale);
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -842,7 +868,17 @@ async function processScannedPhotoFile(file, options = {}) {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("画像処理を開始できませんでした");
 
-  ctx.drawImage(img, 0, 0, width, height);
+  ctx.drawImage(
+    img,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    width,
+    height
+  );
 
   const imageData = ctx.getImageData(0, 0, width, height);
   const data = imageData.data;
@@ -4359,10 +4395,13 @@ const handleStoryScanSelect = async (files) => {
     const brightness = 8;
     const contrast = 1.08;
 
+    const cropMode = "original";
+
     const processedFile = await processScannedPhotoFile(originalFile, {
       brightness,
       contrast,
-      maxWidth: 2200
+      maxWidth: 2200,
+      cropMode
     });
 
     const previewUrl = URL.createObjectURL(processedFile);
@@ -4379,6 +4418,7 @@ const handleStoryScanSelect = async (files) => {
         url: previewUrl,
         brightness,
         contrast,
+        cropMode: "original",
         processing: false
       };
     });
@@ -4419,12 +4459,18 @@ const updateScanPreview = async (nextValues) => {
       ? nextValues.contrast
       : current.contrast;
 
+  const nextCropMode =
+    nextValues.cropMode !== undefined
+      ? nextValues.cropMode
+      : current.cropMode || "original";
+
   setScanPreview(prev =>
     prev
       ? {
           ...prev,
           brightness: nextBrightness,
           contrast: nextContrast,
+          cropMode: nextCropMode,
           processing: true
         }
       : prev
@@ -4434,7 +4480,8 @@ const updateScanPreview = async (nextValues) => {
     const processedFile = await processScannedPhotoFile(current.originalFile, {
       brightness: nextBrightness,
       contrast: nextContrast,
-      maxWidth: 2200
+      maxWidth: 2200,
+      cropMode: nextCropMode
     });
 
     const previewUrl = URL.createObjectURL(processedFile);
@@ -4451,6 +4498,7 @@ const updateScanPreview = async (nextValues) => {
             url: previewUrl,
             brightness: nextBrightness,
             contrast: nextContrast,
+            cropMode: nextCropMode,
             processing: false
           }
         : prev;
@@ -4469,6 +4517,7 @@ const updateScanPreview = async (nextValues) => {
     );
   }
 };
+
 
 const confirmScannedPhoto = async () => {
   if (!scanPreview?.answerId || !scanPreview?.file) return;
