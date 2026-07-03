@@ -4199,6 +4199,8 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
   const storyScanInputRef = useRef(null);
   const pendingScanAnswerIdRef = useRef(null);
 
+  const [scanPreview, setScanPreview] = useState(null);
+
   const loadAnswers = async () => {
     if (!user?.id) {
       setAnswers([]);
@@ -4337,22 +4339,147 @@ const openScannerForAnswer = (answerId) => {
 
 const handleStoryScanSelect = async (files) => {
   const answerId = pendingScanAnswerIdRef.current;
+  const originalFile = Array.from(files || []).find(file =>
+    file && file.type && file.type.startsWith("image/")
+  );
 
-  if (!answerId) return;
+  if (!answerId || !originalFile) {
+    pendingScanAnswerIdRef.current = null;
+
+    if (storyScanInputRef.current) {
+      storyScanInputRef.current.value = "";
+    }
+
+    return;
+  }
 
   try {
-    pendingPhotoAnswerIdRef.current = answerId;
+    setLoading(true);
 
-    await handleStoryPhotoSelect(files, {
-      shouldProcess: true
+    const brightness = 8;
+    const contrast = 1.08;
+
+    const processedFile = await processScannedPhotoFile(originalFile, {
+      brightness,
+      contrast,
+      maxWidth: 2200
     });
+
+    const previewUrl = URL.createObjectURL(processedFile);
+
+    setScanPreview(prev => {
+      if (prev?.url) {
+        try { URL.revokeObjectURL(prev.url); } catch (e) {}
+      }
+
+      return {
+        answerId,
+        originalFile,
+        file: processedFile,
+        url: previewUrl,
+        brightness,
+        contrast,
+        processing: false
+      };
+    });
+  } catch (e) {
+    console.error(e);
+    alert(e.message || "写真の読み込みに失敗しました。");
   } finally {
     pendingScanAnswerIdRef.current = null;
 
     if (storyScanInputRef.current) {
       storyScanInputRef.current.value = "";
     }
+
+    setLoading(false);
   }
+};
+
+const closeScanPreview = () => {
+  if (scanPreview?.url) {
+    try { URL.revokeObjectURL(scanPreview.url); } catch (e) {}
+  }
+
+  setScanPreview(null);
+};
+
+const updateScanPreview = async (nextValues) => {
+  const current = scanPreview;
+
+  if (!current?.originalFile) return;
+
+  const nextBrightness =
+    nextValues.brightness !== undefined
+      ? nextValues.brightness
+      : current.brightness;
+
+  const nextContrast =
+    nextValues.contrast !== undefined
+      ? nextValues.contrast
+      : current.contrast;
+
+  setScanPreview(prev =>
+    prev
+      ? {
+          ...prev,
+          brightness: nextBrightness,
+          contrast: nextContrast,
+          processing: true
+        }
+      : prev
+  );
+
+  try {
+    const processedFile = await processScannedPhotoFile(current.originalFile, {
+      brightness: nextBrightness,
+      contrast: nextContrast,
+      maxWidth: 2200
+    });
+
+    const previewUrl = URL.createObjectURL(processedFile);
+
+    setScanPreview(prev => {
+      if (prev?.url) {
+        try { URL.revokeObjectURL(prev.url); } catch (e) {}
+      }
+
+      return prev
+        ? {
+            ...prev,
+            file: processedFile,
+            url: previewUrl,
+            brightness: nextBrightness,
+            contrast: nextContrast,
+            processing: false
+          }
+        : prev;
+    });
+  } catch (e) {
+    console.error(e);
+    alert(e.message || "補正に失敗しました。");
+
+    setScanPreview(prev =>
+      prev
+        ? {
+            ...prev,
+            processing: false
+          }
+        : prev
+    );
+  }
+};
+
+const confirmScannedPhoto = async () => {
+  if (!scanPreview?.answerId || !scanPreview?.file) return;
+
+  pendingPhotoAnswerIdRef.current = scanPreview.answerId;
+
+  await handleStoryPhotoSelect([scanPreview.file], {
+    shouldProcess: false
+  });
+
+  closeScanPreview();
 };
 
 const handleStoryPhotoSelect = async (files, options = {}) => {
@@ -4490,6 +4617,112 @@ return (
         handleStoryScanSelect(e.target.files);
       }}
     />
+
+{scanPreview && (
+  <div className="fixed inset-0 z-50 bg-slate-950/95 px-4 py-6 flex flex-col fade-enter">
+    <div className="text-center mb-4">
+      <p className="text-white/85 text-[1rem] text-narrative">
+        写真を整えます
+      </p>
+
+      <p className="text-white/40 text-xs leading-loose mt-2">
+        明るさや濃さを調整してから保存できます。
+      </p>
+    </div>
+
+    <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="rounded-2xl overflow-hidden border border-white/10 bg-white/5 mb-5">
+        <img
+          src={scanPreview.url}
+          alt="スキャン写真のプレビュー"
+          className="w-full max-h-[420px] object-contain bg-black/20"
+        />
+      </div>
+
+      <div className="glass-card p-5 space-y-5">
+        <div>
+          <div className="flex justify-between mb-2">
+            <p className="text-white/45 text-xs tracking-widest">
+              明るさ
+            </p>
+            <p className="text-white/35 text-xs">
+              {scanPreview.brightness}
+            </p>
+          </div>
+
+          <input
+            type="range"
+            min="-30"
+            max="40"
+            step="1"
+            value={scanPreview.brightness}
+            disabled={scanPreview.processing}
+            onChange={(e) => {
+              updateScanPreview({
+                brightness: Number(e.target.value)
+              });
+            }}
+            className="w-full"
+          />
+        </div>
+
+        <div>
+          <div className="flex justify-between mb-2">
+            <p className="text-white/45 text-xs tracking-widest">
+              コントラスト
+            </p>
+            <p className="text-white/35 text-xs">
+              {scanPreview.contrast.toFixed(2)}
+            </p>
+          </div>
+
+          <input
+            type="range"
+            min="0.85"
+            max="1.35"
+            step="0.01"
+            value={scanPreview.contrast}
+            disabled={scanPreview.processing}
+            onChange={(e) => {
+              updateScanPreview({
+                contrast: Number(e.target.value)
+              });
+            }}
+            className="w-full"
+          />
+        </div>
+
+        {scanPreview.processing && (
+          <p className="text-white/35 text-xs text-center animate-pulse">
+            補正しています...
+          </p>
+        )}
+      </div>
+    </div>
+
+    <div className="pt-5 border-t border-white/10 flex gap-3">
+      <button
+        type="button"
+        onClick={closeScanPreview}
+        disabled={scanPreview.processing}
+        className="flex-1 py-3 rounded-full border border-white/10 text-white/45 text-sm"
+      >
+        撮り直す
+      </button>
+
+      <button
+        type="button"
+        onClick={confirmScannedPhoto}
+        disabled={scanPreview.processing}
+        className={`flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm ${
+          scanPreview.processing ? "opacity-40" : ""
+        }`}
+      >
+        この写真を使う
+      </button>
+    </div>
+  </div>
+)}
 
     <div className="text-center mb-2">
 
