@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { BookOpen, ChevronRight, Files, Mic } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -5063,8 +5064,8 @@ return (
   </div>
 )}
 
-{scanPreview && (
-  <div className="fixed top-0 left-1/2 z-50 w-[100dvw] h-[100dvh] -translate-x-1/2 max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden overscroll-none">
+{scanPreview && createPortal((
+  <div className="fixed inset-0 z-[9999] w-[100dvw] h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden overscroll-none">
     <div className="text-center mb-2 shrink-0">
       <p className="text-white/85 text-[1rem] text-narrative">
         写真を整えます
@@ -5210,7 +5211,7 @@ return (
       </>
     )}
   </div>
-)}
+), document.body)}
 
 <div className="text-center mb-2">
   <p className="text-white/85 text-[0.95rem] text-narrative">
