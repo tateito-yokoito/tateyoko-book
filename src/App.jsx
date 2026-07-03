@@ -5263,7 +5263,7 @@ return (
     disabled={scanPreview.processing}
     className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-sm"
   >
-    撮り直す
+    戻る
   </button>
 
   <button
