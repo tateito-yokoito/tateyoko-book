@@ -4689,6 +4689,35 @@ return (
 
     <div className="glass-card p-5 space-y-5 shrink-0">
       <div>
+        <p className="text-white/45 text-xs tracking-widest mb-3">
+          切り抜き
+        </p>
+
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { label: "そのまま", value: "original" },
+            { label: "正方形", value: "square" },
+            { label: "縦", value: "portrait" },
+            { label: "横", value: "landscape" }
+          ].map(option => (
+            <button
+              key={option.value}
+              type="button"
+              disabled={scanPreview.processing}
+              onClick={() => updateScanPreview({ cropMode: option.value })}
+              className={`py-2 rounded-full border text-xs ${
+                scanPreview.cropMode === option.value
+                  ? "bg-white/15 border-white/25 text-white"
+                  : "border-white/10 text-white/40"
+              } ${scanPreview.processing ? "opacity-40" : ""}`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
         <div className="flex justify-between mb-2">
           <p className="text-white/45 text-xs tracking-widest">
             明るさ
@@ -4713,6 +4742,7 @@ return (
           className="w-full"
         />
       </div>
+
 
       <div>
         <div className="flex justify-between mb-2">
