@@ -4619,8 +4619,8 @@ return (
     />
 
 {scanPreview && (
-  <div className="fixed inset-0 z-50 bg-slate-950/95 px-4 py-6 flex flex-col fade-enter">
-    <div className="text-center mb-4">
+  <div className="fixed inset-0 z-50 bg-slate-950/95 px-4 py-6 flex flex-col fade-enter overflow-y-auto">
+    <div className="text-center mb-4 shrink-0">
       <p className="text-white/85 text-[1rem] text-narrative">
         写真を整えます
       </p>
@@ -4630,82 +4630,80 @@ return (
       </p>
     </div>
 
-    <div className="flex-1 min-h-0 overflow-y-auto">
-      <div className="rounded-2xl overflow-hidden border border-white/10 bg-white/5 mb-5">
-        <img
-          src={scanPreview.url}
-          alt="スキャン写真のプレビュー"
-          className="w-full max-h-[420px] object-contain bg-black/20"
+    <div className="rounded-2xl overflow-hidden border border-white/10 bg-white/5 mb-5 shrink-0">
+      <img
+        src={scanPreview.url}
+        alt="スキャン写真のプレビュー"
+        className="w-full max-h-[420px] object-contain bg-black/20"
+      />
+    </div>
+
+    <div className="glass-card p-5 space-y-5 shrink-0">
+      <div>
+        <div className="flex justify-between mb-2">
+          <p className="text-white/45 text-xs tracking-widest">
+            明るさ
+          </p>
+          <p className="text-white/35 text-xs">
+            {scanPreview.brightness}
+          </p>
+        </div>
+
+        <input
+          type="range"
+          min="-30"
+          max="40"
+          step="1"
+          value={scanPreview.brightness}
+          disabled={scanPreview.processing}
+          onChange={(e) => {
+            updateScanPreview({
+              brightness: Number(e.target.value)
+            });
+          }}
+          className="w-full"
         />
       </div>
 
-      <div className="glass-card p-5 space-y-5">
-        <div>
-          <div className="flex justify-between mb-2">
-            <p className="text-white/45 text-xs tracking-widest">
-              明るさ
-            </p>
-            <p className="text-white/35 text-xs">
-              {scanPreview.brightness}
-            </p>
-          </div>
-
-          <input
-            type="range"
-            min="-30"
-            max="40"
-            step="1"
-            value={scanPreview.brightness}
-            disabled={scanPreview.processing}
-            onChange={(e) => {
-              updateScanPreview({
-                brightness: Number(e.target.value)
-              });
-            }}
-            className="w-full"
-          />
-        </div>
-
-        <div>
-          <div className="flex justify-between mb-2">
-            <p className="text-white/45 text-xs tracking-widest">
-              コントラスト
-            </p>
-            <p className="text-white/35 text-xs">
-              {scanPreview.contrast.toFixed(2)}
-            </p>
-          </div>
-
-          <input
-            type="range"
-            min="0.85"
-            max="1.35"
-            step="0.01"
-            value={scanPreview.contrast}
-            disabled={scanPreview.processing}
-            onChange={(e) => {
-              updateScanPreview({
-                contrast: Number(e.target.value)
-              });
-            }}
-            className="w-full"
-          />
-        </div>
-
-        {scanPreview.processing && (
-          <p className="text-white/35 text-xs text-center animate-pulse">
-            補正しています...
+      <div>
+        <div className="flex justify-between mb-2">
+          <p className="text-white/45 text-xs tracking-widest">
+            コントラスト
           </p>
-        )}
+          <p className="text-white/35 text-xs">
+            {scanPreview.contrast.toFixed(2)}
+          </p>
+        </div>
+
+        <input
+          type="range"
+          min="0.85"
+          max="1.35"
+          step="0.01"
+          value={scanPreview.contrast}
+          disabled={scanPreview.processing}
+          onChange={(e) => {
+            updateScanPreview({
+              contrast: Number(e.target.value)
+            });
+          }}
+          className="w-full"
+        />
       </div>
+
+      {scanPreview.processing && (
+        <p className="text-white/35 text-xs text-center animate-pulse">
+          補正しています...
+        </p>
+      )}
     </div>
 
-    <div className="pt-5 border-t border-white/10 flex gap-3">
+    <div className="mt-5 flex gap-3 shrink-0">
       <button
         type="button"
         onClick={closeScanPreview}
         disabled={scanPreview.processing}
-        className="flex-1 py-3 rounded-full border border-white/10 text-white/45 text-sm"
+        className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-sm"
       >
         撮り直す
       </button>
@@ -4723,6 +4721,8 @@ return (
     </div>
   </div>
 )}
+
+
 
     <div className="text-center mb-2">
 
