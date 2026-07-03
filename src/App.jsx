@@ -4141,6 +4141,219 @@ function Scene_EndToday({ notificationPref, onOpenStoryPages }) {
   );
 }
 
+function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
+  const imageRef = useRef(null);
+  const dragRef = useRef(null);
+
+  const rect = scanPreview.cropRect || {
+    left: 0,
+    top: 0,
+    right: 1,
+    bottom: 1
+  };
+
+  const clampCropRect = (nextRect) => {
+    const minSize = 0.05;
+
+    let left = Math.max(0, Math.min(0.95, Number(nextRect.left) || 0));
+    let top = Math.max(0, Math.min(0.95, Number(nextRect.top) || 0));
+    let right = Math.max(0.05, Math.min(1, Number(nextRect.right) || 1));
+    let bottom = Math.max(0.05, Math.min(1, Number(nextRect.bottom) || 1));
+
+    if (right - left < minSize) {
+      if (dragRef.current?.handle?.includes("left")) {
+        left = right - minSize;
+      } else {
+        right = left + minSize;
+      }
+    }
+
+    if (bottom - top < minSize) {
+      if (dragRef.current?.handle?.includes("top")) {
+        top = bottom - minSize;
+      } else {
+        bottom = top + minSize;
+      }
+    }
+
+    return {
+      left: Math.max(0, Math.min(0.95, left)),
+      top: Math.max(0, Math.min(0.95, top)),
+      right: Math.max(0.05, Math.min(1, right)),
+      bottom: Math.max(0.05, Math.min(1, bottom))
+    };
+  };
+
+  const updateLocalCropRect = (nextRect) => {
+    const safeRect = clampCropRect(nextRect);
+
+    setScanPreview(prev =>
+      prev
+        ? {
+            ...prev,
+            cropRect: safeRect
+          }
+        : prev
+    );
+
+    return safeRect;
+  };
+
+  const getPointInImage = (event) => {
+    const box = imageRef.current?.getBoundingClientRect();
+    if (!box) return null;
+
+    const x = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width));
+    const y = Math.max(0, Math.min(1, (event.clientY - box.top) / box.height));
+
+    return { x, y };
+  };
+
+  const startDrag = (handle, event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    dragRef.current = {
+      handle,
+      lastRect: rect
+    };
+
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const moveDrag = (event) => {
+    if (!dragRef.current) return;
+
+    event.preventDefault();
+
+    const point = getPointInImage(event);
+    if (!point) return;
+
+    const handle = dragRef.current.handle;
+    const nextRect = {
+      ...(dragRef.current.lastRect || rect)
+    };
+
+    if (handle.includes("left")) nextRect.left = point.x;
+    if (handle.includes("right")) nextRect.right = point.x;
+    if (handle.includes("top")) nextRect.top = point.y;
+    if (handle.includes("bottom")) nextRect.bottom = point.y;
+
+    dragRef.current.lastRect = updateLocalCropRect(nextRect);
+  };
+
+  const endDrag = () => {
+    if (!dragRef.current) return;
+
+    const finalRect = dragRef.current.lastRect;
+    dragRef.current = null;
+
+    updateScanPreview({
+      cropRect: finalRect
+    });
+  };
+
+  const cropStyle = {
+    left: `${rect.left * 100}%`,
+    top: `${rect.top * 100}%`,
+    width: `${(rect.right - rect.left) * 100}%`,
+    height: `${(rect.bottom - rect.top) * 100}%`
+  };
+
+  const handles = [
+    { key: "top-left", className: "-top-2 -left-2 cursor-nwse-resize" },
+    { key: "top-right", className: "-top-2 -right-2 cursor-nesw-resize" },
+    { key: "bottom-left", className: "-bottom-2 -left-2 cursor-nesw-resize" },
+    { key: "bottom-right", className: "-bottom-2 -right-2 cursor-nwse-resize" },
+    { key: "top", className: "-top-2 left-1/2 -translate-x-1/2 cursor-ns-resize" },
+    { key: "bottom", className: "-bottom-2 left-1/2 -translate-x-1/2 cursor-ns-resize" },
+    { key: "left", className: "top-1/2 -left-2 -translate-y-1/2 cursor-ew-resize" },
+    { key: "right", className: "top-1/2 -right-2 -translate-y-1/2 cursor-ew-resize" }
+  ];
+
+  return (
+    <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/25 mb-5 shrink-0">
+      <div className="relative mx-auto w-full max-h-[420px] flex items-center justify-center touch-none">
+        <div className="relative inline-block">
+          <img
+            ref={imageRef}
+            src={scanPreview.originalUrl || scanPreview.url}
+            alt="スキャン写真のプレビュー"
+            className="block max-w-full max-h-[420px] object-contain select-none"
+            draggable="false"
+          />
+
+          <div className="absolute inset-0 pointer-events-none">
+            <div
+              className="absolute bg-black/55"
+              style={{
+                left: 0,
+                top: 0,
+                right: 0,
+                height: `${rect.top * 100}%`
+              }}
+            />
+            <div
+              className="absolute bg-black/55"
+              style={{
+                left: 0,
+                top: `${rect.bottom * 100}%`,
+                right: 0,
+                bottom: 0
+              }}
+            />
+            <div
+              className="absolute bg-black/55"
+              style={{
+                left: 0,
+                top: `${rect.top * 100}%`,
+                width: `${rect.left * 100}%`,
+                height: `${(rect.bottom - rect.top) * 100}%`
+              }}
+            />
+            <div
+              className="absolute bg-black/55"
+              style={{
+                left: `${rect.right * 100}%`,
+                top: `${rect.top * 100}%`,
+                right: 0,
+                height: `${(rect.bottom - rect.top) * 100}%`
+              }}
+            />
+          </div>
+
+          <div
+            className="absolute border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.5)] touch-none"
+            style={cropStyle}
+            onPointerMove={moveDrag}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+          >
+            <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/55" />
+            <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/55" />
+            <div className="absolute top-1/3 left-0 right-0 h-px bg-white/55" />
+            <div className="absolute top-2/3 left-0 right-0 h-px bg-white/55" />
+
+            {handles.map(handle => (
+              <button
+                key={handle.key}
+                type="button"
+                aria-label={`切り抜き ${handle.key}`}
+                disabled={scanPreview.processing}
+                onPointerDown={(event) => startDrag(handle.key, event)}
+                onPointerMove={moveDrag}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                className={`absolute w-5 h-5 bg-white border-2 border-slate-950 rounded-sm touch-none ${handle.className}`}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
 
   const getStoryBody = (answer) => {
@@ -4417,10 +4630,15 @@ const handleStoryScanSelect = async (files) => {
     });
 
     const previewUrl = URL.createObjectURL(processedFile);
+    const originalUrl = URL.createObjectURL(originalFile);
 
     setScanPreview(prev => {
       if (prev?.url) {
         try { URL.revokeObjectURL(prev.url); } catch (e) {}
+      }
+
+      if (prev?.originalUrl) {
+        try { URL.revokeObjectURL(prev.originalUrl); } catch (e) {}
       }
 
       return {
@@ -4428,6 +4646,7 @@ const handleStoryScanSelect = async (files) => {
         originalFile,
         file: processedFile,
         url: previewUrl,
+        originalUrl,
         brightness,
         contrast,
         cropMode: "original",
@@ -4457,6 +4676,10 @@ const handleStoryScanSelect = async (files) => {
 const closeScanPreview = () => {
   if (scanPreview?.url) {
     try { URL.revokeObjectURL(scanPreview.url); } catch (e) {}
+  }
+
+  if (scanPreview?.originalUrl) {
+    try { URL.revokeObjectURL(scanPreview.originalUrl); } catch (e) {}
   }
 
   setScanPreview(null);
@@ -4708,13 +4931,11 @@ return (
       </p>
     </div>
 
-    <div className="rounded-2xl overflow-hidden border border-white/10 bg-white/5 mb-5 shrink-0">
-      <img
-        src={scanPreview.url}
-        alt="スキャン写真のプレビュー"
-        className="w-full max-h-[420px] object-contain bg-black/20"
-      />
-    </div>
+    <CropPreview
+      scanPreview={scanPreview}
+      setScanPreview={setScanPreview}
+      updateScanPreview={updateScanPreview}
+    />
 
     <div className="glass-card p-5 space-y-5 shrink-0">
       <div>
