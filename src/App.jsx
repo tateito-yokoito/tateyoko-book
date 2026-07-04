@@ -4455,15 +4455,17 @@ useEffect(() => {
     return nextPoints;
   };
 
-  const getPointInImage = (event) => {
-    const box = imageRef.current?.getBoundingClientRect();
-    if (!box) return null;
+const getPointInImage = (event, options = {}) => {
+  const box = imageRef.current?.getBoundingClientRect();
+  if (!box) return null;
 
-    return {
-      x: Math.max(0, Math.min(1, (event.clientX - box.left) / box.width)),
-      y: Math.max(0, Math.min(1, (event.clientY - box.top) / box.height))
-    };
+  const offsetY = options.offsetY || 0;
+
+  return {
+    x: Math.max(0, Math.min(1, (event.clientX - box.left) / box.width)),
+    y: Math.max(0, Math.min(1, (event.clientY - offsetY - box.top) / box.height))
   };
+};
 
 const startDrag = (handle, event) => {
   event.preventDefault();
@@ -4602,18 +4604,21 @@ return (
                   const point = perspectivePoints[key];
 
                   return (
-                    <button
-                      key={key}
-                      type="button"
-                      aria-label={`台形補正 ${key}`}
-                      disabled={scanPreview.processing}
-                      onPointerDown={(event) => startDrag(key, event)}
-                      className="absolute w-6 h-6 bg-white border-2 border-slate-950 rounded-sm touch-none -translate-x-1/2 -translate-y-1/2"
-                      style={{
-                        left: `${point.x * 100}%`,
-                        top: `${point.y * 100}%`
-                      }}
-                    />
+  
+                <button
+                  key={key}
+                  type="button"
+                  aria-label={`台形補正 ${key}`}
+                  disabled={scanPreview.processing}
+                  onPointerDown={(event) => startDrag(key, event)}
+                  className="absolute w-12 h-12 rounded-full bg-white/20 border border-white/70 touch-none -translate-x-1/2 -translate-y-1/2 shadow-lg flex items-center justify-center"
+                  style={{
+                    left: `${point.x * 100}%`,
+                    top: `${point.y * 100}%`
+                  }}
+                >
+                  <span className="w-3 h-3 rounded-full bg-white border border-slate-950 shadow" />
+                </button>
                   );
                 })}
               </>
