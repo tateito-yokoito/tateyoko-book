@@ -4361,6 +4361,46 @@ function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
     bottomLeft: { x: rect.left, y: rect.bottom }
   };
 
+const [coachSeen, setCoachSeen] = useState(() => ({
+  crop: localStorage.getItem("tateyoko_scan_crop_coach_seen") === "1",
+  perspective: localStorage.getItem("tateyoko_scan_perspective_coach_seen") === "1"
+}));
+
+const activeCoachKey = perspectiveEnabled ? "perspective" : "crop";
+const showCoachMark = !coachSeen[activeCoachKey];
+
+const dismissCoachMark = () => {
+  const storageKey = perspectiveEnabled
+    ? "tateyoko_scan_perspective_coach_seen"
+    : "tateyoko_scan_crop_coach_seen";
+
+  localStorage.setItem(storageKey, "1");
+
+  setCoachSeen(prev => ({
+    ...prev,
+    [activeCoachKey]: true
+  }));
+};
+
+useEffect(() => {
+  if (!showCoachMark) return;
+
+  const timer = setTimeout(() => {
+    const storageKey = activeCoachKey === "perspective"
+      ? "tateyoko_scan_perspective_coach_seen"
+      : "tateyoko_scan_crop_coach_seen";
+
+    localStorage.setItem(storageKey, "1");
+
+    setCoachSeen(prev => ({
+      ...prev,
+      [activeCoachKey]: true
+    }));
+  }, 5000);
+
+  return () => clearTimeout(timer);
+}, [showCoachMark, activeCoachKey]);
+
   const clampCropRect = (nextRect) => {
     const minSize = 0.05;
 
@@ -4425,11 +4465,13 @@ function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
     };
   };
 
-  const startDrag = (handle, event) => {
-    event.preventDefault();
-    event.stopPropagation();
+const startDrag = (handle, event) => {
+  event.preventDefault();
+  event.stopPropagation();
 
-    dragRef.current = {
+  dismissCoachMark();
+
+  dragRef.current = {
       handle,
       mode: perspectiveEnabled ? "perspective" : "rect",
       lastRect: rect,
@@ -4498,15 +4540,15 @@ function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
 
   const perspectiveHandles = ["topLeft", "topRight", "bottomRight", "bottomLeft"];
 
-  return (
-    <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/25 mb-4 shrink min-h-0">
-      <div className="relative mx-auto w-full max-h-[52dvh] flex items-center justify-center touch-none overflow-hidden">
+return (
+  <div className="rounded-2xl overflow-visible border border-white/10 bg-black/25 mb-4 shrink min-h-0">
+    <div className="relative mx-auto w-full max-h-[62dvh] flex items-center justify-center touch-none overflow-visible px-4 py-4">
         <div className="relative inline-block">
           <img
             ref={imageRef}
             src={scanPreview.cropPreviewUrl || scanPreview.originalUrl || scanPreview.url}
             alt="スキャン写真のプレビュー"
-            className="block max-w-full max-h-[52dvh] object-contain select-none"
+            className="block max-w-full max-h-[58dvh] object-contain select-none"
             draggable="false"
           />
 
@@ -4538,6 +4580,7 @@ function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
                 <div className="absolute top-2/3 left-0 right-0 h-px bg-white/55" />
               </>
             )}
+
 
             {perspectiveEnabled ? (
               <>
@@ -4587,11 +4630,22 @@ function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
               ))
             )}
           </div>
+
+          {showCoachMark && (
+            <div className="absolute left-1/2 bottom-5 z-20 -translate-x-1/2 rounded-full bg-black/60 border border-white/10 px-4 py-2 pointer-events-none">
+              <p className="text-white/70 text-xs whitespace-nowrap">
+                {perspectiveEnabled
+                  ? "四隅を写真の角に合わせると、傾きを補正できます"
+                  : "白い角を動かして、残したい範囲に合わせます"}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
 
 
 function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
@@ -5286,14 +5340,9 @@ return (
   </div>
 )}
 
+
 {scanPreview && createPortal((
   <div className="fixed inset-0 z-[9999] w-[100dvw] h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden overscroll-none">
-    <div className="text-center mb-2 shrink-0">
-      <p className="text-white/85 text-[1rem] text-narrative">
-        写真を整えます
-      </p>
-    </div>
-
     {scanPreview.step === "crop" ? (
       <>
         <CropPreview
@@ -5329,30 +5378,32 @@ return (
     <RotateCw size={20} strokeWidth={1.8} />
   </button>
 
-  <button
-    type="button"
-    onClick={() => {
-      setScanPreview(prev =>
-        prev
-          ? {
-              ...prev,
-              perspectiveEnabled: !prev.perspectiveEnabled
-            }
-          : prev
-      );
-    }}
-    disabled={scanPreview.processing}
-    aria-label="台形補正"
-    title="台形補正"
-    aria-pressed={!!scanPreview.perspectiveEnabled}
-    className={`w-12 h-12 rounded-full border flex items-center justify-center ${
-      scanPreview.perspectiveEnabled
-        ? "bg-white/15 border-white/30 text-white"
-        : "border-white/10 text-white/45"
-    }`}
-  >
-    <ScanLine size={20} strokeWidth={1.8} />
-  </button>
+<button
+  type="button"
+  onClick={() => {
+    setScanPreview(prev =>
+      prev
+        ? {
+            ...prev,
+            perspectiveEnabled: !prev.perspectiveEnabled
+          }
+        : prev
+    );
+  }}
+  disabled={scanPreview.processing}
+  aria-label="台形補正"
+  aria-pressed={!!scanPreview.perspectiveEnabled}
+  className={`h-12 px-4 rounded-full border flex items-center justify-center gap-2 shrink-0 ${
+    scanPreview.perspectiveEnabled
+      ? "bg-white/15 border-white/30 text-white"
+      : "border-white/10 text-white/55"
+  }`}
+>
+  <ScanLine size={18} strokeWidth={1.8} />
+  <span className="text-xs tracking-widest">台形補正</span>
+</button>
+
+
 </div>
 
         <button
@@ -5387,20 +5438,32 @@ return (
       </p>
     </div>
 
-    <input
-      type="range"
-      min="-24"
-      max="32"
-      step="4"
-      value={scanPreview.brightness}
-      disabled={scanPreview.processing}
-      onChange={(e) => {
-        updateScanPreview({
-          brightness: Number(e.target.value)
-        });
-      }}
-      className="w-full"
-    />
+<input
+  type="range"
+  min="-24"
+  max="32"
+  step="4"
+  value={scanPreview.brightness}
+  disabled={scanPreview.processing}
+  onChange={(e) => {
+    const brightness = Number(e.target.value);
+
+    setScanPreview(prev =>
+      prev
+        ? {
+            ...prev,
+            brightness
+          }
+        : prev
+    );
+  }}
+  onPointerUp={(e) => {
+    updateScanPreview({
+      brightness: Number(e.currentTarget.value)
+    });
+  }}
+  className="w-full"
+/>
 
     <div className="mt-2 flex justify-between text-[10px] text-white/25">
       <span>暗め</span>
@@ -5419,20 +5482,33 @@ return (
       </p>
     </div>
 
-    <input
-      type="range"
-      min="0.9"
-      max="1.3"
-      step="0.05"
-      value={scanPreview.contrast}
-      disabled={scanPreview.processing}
-      onChange={(e) => {
-        updateScanPreview({
-          contrast: Number(e.target.value)
-        });
-      }}
-      className="w-full"
-    />
+<input
+  type="range"
+  min="0.9"
+  max="1.3"
+  step="0.05"
+  value={scanPreview.contrast}
+  disabled={scanPreview.processing}
+  onChange={(e) => {
+    const contrast = Number(e.target.value);
+
+    setScanPreview(prev =>
+      prev
+        ? {
+            ...prev,
+            contrast
+          }
+        : prev
+    );
+  }}
+  onPointerUp={(e) => {
+    updateScanPreview({
+      contrast: Number(e.currentTarget.value)
+    });
+  }}
+  className="w-full"
+/>
+
 
     <div className="mt-2 flex justify-between text-[10px] text-white/25">
       <span>淡め</span>
