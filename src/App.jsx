@@ -4467,6 +4467,19 @@ const getPointInImage = (event, options = {}) => {
   };
 };
 
+const getRectHandlePoint = (handle) => ({
+  x: handle.includes("left")
+    ? rect.left
+    : handle.includes("right")
+      ? rect.right
+      : (rect.left + rect.right) / 2,
+  y: handle.includes("top")
+    ? rect.top
+    : handle.includes("bottom")
+      ? rect.bottom
+      : (rect.top + rect.bottom) / 2
+});
+
 
 const startDrag = (handle, event) => {
   event.preventDefault();
@@ -4474,21 +4487,24 @@ const startDrag = (handle, event) => {
 
   dismissCoachMark();
 
-  const touchPoint = getPointInImage(event);
-  const handlePoint = perspectiveEnabled ? perspectivePoints[handle] : null;
+const touchPoint = getPointInImage(event);
+const handlePoint = perspectiveEnabled
+  ? perspectivePoints[handle]
+  : getRectHandlePoint(handle);
 
   dragRef.current = {
     handle,
     mode: perspectiveEnabled ? "perspective" : "rect",
     lastRect: rect,
     lastPoints: perspectivePoints,
-    grabOffset:
-      perspectiveEnabled && touchPoint && handlePoint
-        ? {
-            x: handlePoint.x - touchPoint.x,
-            y: handlePoint.y - touchPoint.y
-          }
-        : { x: 0, y: 0 }
+grabOffset:
+  touchPoint && handlePoint
+    ? {
+        x: handlePoint.x - touchPoint.x,
+        y: handlePoint.y - touchPoint.y
+      }
+    : { x: 0, y: 0 }
+
   };
 
   event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -4515,14 +4531,21 @@ if (dragRef.current.mode === "perspective") {
   return;
 }
 
-    const nextRect = { ...(dragRef.current.lastRect || rect) };
+const grabOffset = dragRef.current.grabOffset || { x: 0, y: 0 };
+const adjustedPoint = {
+  x: point.x + grabOffset.x,
+  y: point.y + grabOffset.y
+};
 
-    if (handle.includes("left")) nextRect.left = point.x;
-    if (handle.includes("right")) nextRect.right = point.x;
-    if (handle.includes("top")) nextRect.top = point.y;
-    if (handle.includes("bottom")) nextRect.bottom = point.y;
+const nextRect = { ...(dragRef.current.lastRect || rect) };
 
-    dragRef.current.lastRect = updateLocalCropRect(nextRect);
+if (handle.includes("left")) nextRect.left = adjustedPoint.x;
+if (handle.includes("right")) nextRect.right = adjustedPoint.x;
+if (handle.includes("top")) nextRect.top = adjustedPoint.y;
+if (handle.includes("bottom")) nextRect.bottom = adjustedPoint.y;
+
+dragRef.current.lastRect = updateLocalCropRect(nextRect);
+
   };
 
   const endDrag = () => {
@@ -4560,16 +4583,25 @@ if (dragRef.current.mode === "perspective") {
   const perspectiveHandles = ["topLeft", "topRight", "bottomRight", "bottomLeft"];
 
 return (
-  <div className="rounded-2xl overflow-visible border border-white/10 bg-black/25 mb-4 shrink min-h-0">
+  <div
+    className="rounded-2xl overflow-visible border border-white/10 bg-black/25 mb-4 shrink min-h-0"
+    onContextMenu={(event) => event.preventDefault()}
+    style={{
+      userSelect: "none",
+      WebkitUserSelect: "none",
+      WebkitTouchCallout: "none"
+    }}
+  >
     <div className="relative mx-auto w-full max-h-[62dvh] flex items-center justify-center touch-none overflow-visible px-4 py-4">
         <div className="relative inline-block">
-          <img
-            ref={imageRef}
-            src={scanPreview.cropPreviewUrl || scanPreview.originalUrl || scanPreview.url}
-            alt="スキャン写真のプレビュー"
-            className="block max-w-full max-h-[58dvh] object-contain select-none"
-            draggable="false"
-          />
+<img
+  ref={imageRef}
+  src={scanPreview.cropPreviewUrl || scanPreview.originalUrl || scanPreview.url}
+  alt="スキャン写真のプレビュー"
+  className="block max-w-full max-h-[58dvh] object-contain select-none"
+  draggable="false"
+  onContextMenu={(event) => event.preventDefault()}
+/>
 
           {!perspectiveEnabled && (
             <div className="absolute inset-0 pointer-events-none">
@@ -4640,16 +4672,20 @@ return (
                 })}
               </>
             ) : (
-              handles.map(handle => (
-                <button
-                  key={handle.key}
-                  type="button"
-                  aria-label={`切り抜き ${handle.key}`}
-                  disabled={scanPreview.processing}
-                  onPointerDown={(event) => startDrag(handle.key, event)}
-                  className={`absolute w-5 h-5 bg-white border-2 border-slate-950 rounded-sm touch-none ${handle.className}`}
-                />
-              ))
+handles.map(handle => (
+  <button
+    key={handle.key}
+    type="button"
+    aria-label={`切り抜き ${handle.key}`}
+    disabled={scanPreview.processing}
+    onPointerDown={(event) => startDrag(handle.key, event)}
+    onContextMenu={(event) => event.preventDefault()}
+    className={`absolute w-12 h-12 rounded-full bg-white/12 border border-white/55 touch-none shadow-lg flex items-center justify-center ${handle.className}`}
+  >
+    <span className="w-3 h-3 rounded-full bg-white border border-slate-950 shadow" />
+  </button>
+))
+
             )}
           </div>
 
