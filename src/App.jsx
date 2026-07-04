@@ -4662,16 +4662,40 @@ dragRef.current.lastRect = updateLocalCropRect(nextRect);
     height: `${(rect.bottom - rect.top) * 100}%`
   };
 
-  const handles = [
-    { key: "top-left", className: "-top-2 -left-2 cursor-nwse-resize" },
-    { key: "top-right", className: "-top-2 -right-2 cursor-nesw-resize" },
-    { key: "bottom-left", className: "-bottom-2 -left-2 cursor-nesw-resize" },
-    { key: "bottom-right", className: "-bottom-2 -right-2 cursor-nwse-resize" },
-    { key: "top", className: "-top-2 left-1/2 -translate-x-1/2 cursor-ns-resize" },
-    { key: "bottom", className: "-bottom-2 left-1/2 -translate-x-1/2 cursor-ns-resize" },
-    { key: "left", className: "top-1/2 -left-2 -translate-y-1/2 cursor-ew-resize" },
-    { key: "right", className: "top-1/2 -right-2 -translate-y-1/2 cursor-ew-resize" }
-  ];
+const handles = [
+  {
+    key: "top-left",
+    className: "top-0 left-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize"
+  },
+  {
+    key: "top-right",
+    className: "top-0 right-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize"
+  },
+  {
+    key: "bottom-left",
+    className: "bottom-0 left-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize"
+  },
+  {
+    key: "bottom-right",
+    className: "bottom-0 right-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize"
+  },
+  {
+    key: "top",
+    className: "top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize"
+  },
+  {
+    key: "bottom",
+    className: "bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 cursor-ns-resize"
+  },
+  {
+    key: "left",
+    className: "top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize"
+  },
+  {
+    key: "right",
+    className: "top-1/2 right-0 translate-x-1/2 -translate-y-1/2 cursor-ew-resize"
+  }
+];
 
   const perspectiveHandles = ["topLeft", "topRight", "bottomRight", "bottomLeft"];
 
@@ -4911,6 +4935,12 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onEditRecord, on
   const [editSelectedStyle, setEditSelectedStyle] = useState("readable");
   const [editDraftText, setEditDraftText] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+
+  const isDesktopBrowser =
+    typeof window !== "undefined" &&
+    window.matchMedia &&
+    window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+
 
   useEffect(() => {
     if (!scanPreview && !editingAnswer) return;
@@ -5995,9 +6025,11 @@ return (
     onClick={() => openScannerForAnswer(answer.id)}
     className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-14 flex items-center justify-center"
   >
-    <span className="text-white/35 text-sm tracking-widest">
-      写真をスキャンする
-    </span>
+
+  <span className="text-white/35 text-sm tracking-widest">
+    {isDesktopBrowser ? "画像を選んで補正する" : "写真をスキャンする"}
+  </span>
+
   </button>
 
 
