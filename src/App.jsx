@@ -5346,21 +5346,23 @@ setScanPreview(prev => {
         try { URL.revokeObjectURL(prev.url); } catch (e) {}
       }
 
-      return prev
-        ? {
-            ...prev,
-            file: processedFile,
-            url: previewUrl,
-            cropPreviewUrl,
-            brightness: nextBrightness,
-            contrast: nextContrast,
-            cropMode: nextCropMode,
-            cropRect: nextCropRect,
-            perspectivePoints: nextPerspectivePoints,
-            rotationDegrees: nextRotationDegrees,
-            processing: false
-          }
-        : prev;
+return prev
+  ? {
+      ...prev,
+      file: processedFile,
+      url: previewUrl,
+      cropPreviewUrl,
+      brightness: nextBrightness,
+      contrast: nextContrast,
+      cropMode: nextCropMode,
+      cropRect: nextCropRect,
+      perspectivePoints: nextPerspectivePoints,
+      rotationDegrees: nextRotationDegrees,
+      processing: false,
+      step: nextValues.nextStep || prev.step
+    }
+  : prev;
+
     });
   } catch (e) {
     console.error(e);
@@ -5399,21 +5401,14 @@ const rotateScanPreview = async () => {
 
 const completeCropStep = async () => {
   if (!scanPreview) return;
-await updateScanPreview({
-  cropRect: scanPreview.cropRect,
-  perspectivePoints: scanPreview.perspectivePoints || null,
-  rotationDegrees: scanPreview.rotationDegrees || 0,
-  buildProcessedFile: true
-});
 
-  setScanPreview(prev =>
-    prev
-      ? {
-          ...prev,
-          step: "adjust"
-        }
-      : prev
-  );
+  await updateScanPreview({
+    cropRect: scanPreview.cropRect,
+    perspectivePoints: scanPreview.perspectivePoints || null,
+    rotationDegrees: scanPreview.rotationDegrees || 0,
+    buildProcessedFile: true,
+    nextStep: "adjust"
+  });
 };
 
 const confirmScannedPhoto = async () => {
