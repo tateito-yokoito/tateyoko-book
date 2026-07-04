@@ -823,6 +823,76 @@ function canvasToBlob(canvas, type = "image/jpeg", quality = 0.92) {
   });
 }
 
+function getPointDistance(a, b) {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function solveLinearSystem(matrix, values) {
+  const n = values.length;
+  const rows = matrix.map((row, index) => [...row, values[index]]);
+
+  for (let col = 0; col < n; col++) {
+    let pivotRow = col;
+
+    for (let row = col + 1; row < n; row++) {
+      if (Math.abs(rows[row][col]) > Math.abs(rows[pivotRow][col])) {
+        pivotRow = row;
+      }
+    }
+
+    [rows[col], rows[pivotRow]] = [rows[pivotRow], rows[col]];
+
+    const pivot = rows[col][col] || 1e-12;
+
+    for (let item = col; item <= n; item++) {
+      rows[col][item] /= pivot;
+    }
+
+    for (let row = 0; row < n; row++) {
+      if (row === col) continue;
+
+      const factor = rows[row][col];
+
+      for (let item = col; item <= n; item++) {
+        rows[row][item] -= factor * rows[col][item];
+      }
+    }
+  }
+
+  return rows.map(row => row[n]);
+}
+
+function getHomography(sourcePoints, targetPoints) {
+  const matrix = [];
+  const values = [];
+
+  for (let i = 0; i < 4; i++) {
+    const x = sourcePoints[i].x;
+    const y = sourcePoints[i].y;
+    const u = targetPoints[i].x;
+    const v = targetPoints[i].y;
+
+    matrix.push([x, y, 1, 0, 0, 0, -u * x, -u * y]);
+    values.push(u);
+
+    matrix.push([0, 0, 0, x, y, 1, -v * x, -v * y]);
+    values.push(v);
+  }
+
+  return solveLinearSystem(matrix, values);
+}
+
+function applyHomography(point, h) {
+  const denominator = h[6] * point.x + h[7] * point.y + 1;
+
+  return {
+    x: (h[0] * point.x + h[1] * point.y + h[2]) / denominator,
+    y: (h[3] * point.x + h[4] * point.y + h[5]) / denominator
+  };
+}
+
 async function processScannedPhotoFile(file, options = {}) {
   const {
     brightness = 8,
@@ -830,6 +900,7 @@ async function processScannedPhotoFile(file, options = {}) {
     maxWidth = 2200,
     cropMode = "original",
     cropRect = null,
+    perspectivePoints = null,
     rotationDegrees = 0
   } = options;
 
@@ -887,7 +958,28 @@ async function processScannedPhotoFile(file, options = {}) {
 
   const targetRatio = cropRatios[cropMode];
 
-  if (cropRect) {
+if (perspectivePoints) {
+  const sourcePoints = [
+    perspectivePoints.topLeft,
+    perspectivePoints.topRight,
+    perspectivePoints.bottomRight,
+    perspectivePoints.bottomLeft
+  ].map(point => ({
+    x: img.width * point.x,
+    y: img.height * point.y
+  }));
+
+  const topWidth = getPointDistance(sourcePoints[0], sourcePoints[1]);
+  const bottomWidth = getPointDistance(sourcePoints[3], sourcePoints[2]);
+  const leftHeight = getPointDistance(sourcePoints[0], sourcePoints[3]);
+  const rightHeight = getPointDistance(sourcePoints[1], sourcePoints[2]);
+
+  sourceWidth = Math.max(40, Math.round((topWidth + bottomWidth) / 2));
+  sourceHeight = Math.max(40, Math.round((leftHeight + rightHeight) / 2));
+
+  sourceX = 0;
+  sourceY = 0;
+} else if (cropRect) {
     const left = Math.max(0, Math.min(0.95, Number(cropRect.left) || 0));
     const top = Math.max(0, Math.min(0.95, Number(cropRect.top) || 0));
     const right = Math.max(left + 0.05, Math.min(1, Number(cropRect.right) || 1));
@@ -920,6 +1012,72 @@ async function processScannedPhotoFile(file, options = {}) {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("画像処理を開始できませんでした");
 
+
+if (perspectivePoints) {
+  const sourceCanvas = document.createElement("canvas");
+  sourceCanvas.width = img.width;
+  sourceCanvas.height = img.height;
+
+  const sourceCtx = sourceCanvas.getContext("2d");
+  if (!sourceCtx) throw new Error("画像処理を開始できませんでした");
+
+  sourceCtx.drawImage(img, 0, 0);
+
+  const sourceImageData = sourceCtx.getImageData(0, 0, img.width, img.height);
+  const sourceData = sourceImageData.data;
+
+  const outputImageData = ctx.createImageData(width, height);
+  const outputData = outputImageData.data;
+
+  const sourceQuad = [
+    { x: img.width * perspectivePoints.topLeft.x, y: img.height * perspectivePoints.topLeft.y },
+    { x: img.width * perspectivePoints.topRight.x, y: img.height * perspectivePoints.topRight.y },
+    { x: img.width * perspectivePoints.bottomRight.x, y: img.height * perspectivePoints.bottomRight.y },
+    { x: img.width * perspectivePoints.bottomLeft.x, y: img.height * perspectivePoints.bottomLeft.y }
+  ];
+
+  const targetQuad = [
+    { x: 0, y: 0 },
+    { x: width - 1, y: 0 },
+    { x: width - 1, y: height - 1 },
+    { x: 0, y: height - 1 }
+  ];
+
+  const homography = getHomography(targetQuad, sourceQuad);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const sourcePoint = applyHomography({ x, y }, homography);
+
+      const sx = Math.max(0, Math.min(img.width - 1, sourcePoint.x));
+      const sy = Math.max(0, Math.min(img.height - 1, sourcePoint.y));
+
+      const x0 = Math.floor(sx);
+      const y0 = Math.floor(sy);
+      const x1 = Math.min(img.width - 1, x0 + 1);
+      const y1 = Math.min(img.height - 1, y0 + 1);
+
+      const wx = sx - x0;
+      const wy = sy - y0;
+
+      const outputIndex = (y * width + x) * 4;
+
+      for (let channel = 0; channel < 4; channel++) {
+        const topLeft = sourceData[(y0 * img.width + x0) * 4 + channel];
+        const topRight = sourceData[(y0 * img.width + x1) * 4 + channel];
+        const bottomLeft = sourceData[(y1 * img.width + x0) * 4 + channel];
+        const bottomRight = sourceData[(y1 * img.width + x1) * 4 + channel];
+
+        const top = topLeft * (1 - wx) + topRight * wx;
+        const bottom = bottomLeft * (1 - wx) + bottomRight * wx;
+
+        outputData[outputIndex + channel] = top * (1 - wy) + bottom * wy;
+      }
+    }
+  }
+
+  ctx.putImageData(outputImageData, 0, 0);
+} else {
   ctx.drawImage(
     img,
     sourceX,
@@ -931,6 +1089,8 @@ async function processScannedPhotoFile(file, options = {}) {
     width,
     height
   );
+}
+
 
   const imageData = ctx.getImageData(0, 0, width, height);
   const data = imageData.data;
@@ -4192,14 +4352,14 @@ function CropPreview({ scanPreview, setScanPreview, updateScanPreview }) {
     bottom: 1
   };
 
-const perspectiveEnabled = !!scanPreview.perspectiveEnabled;
+  const perspectiveEnabled = !!scanPreview.perspectiveEnabled;
 
-const perspectivePoints = scanPreview.perspectivePoints || {
-  topLeft: { x: rect.left, y: rect.top },
-  topRight: { x: rect.right, y: rect.top },
-  bottomRight: { x: rect.right, y: rect.bottom },
-  bottomLeft: { x: rect.left, y: rect.bottom }
-};
+  const perspectivePoints = scanPreview.perspectivePoints || {
+    topLeft: { x: rect.left, y: rect.top },
+    topRight: { x: rect.right, y: rect.top },
+    bottomRight: { x: rect.right, y: rect.bottom },
+    bottomLeft: { x: rect.left, y: rect.bottom }
+  };
 
   const clampCropRect = (nextRect) => {
     const minSize = 0.05;
@@ -4210,19 +4370,13 @@ const perspectivePoints = scanPreview.perspectivePoints || {
     let bottom = Math.max(0.05, Math.min(1, Number(nextRect.bottom) || 1));
 
     if (right - left < minSize) {
-      if (dragRef.current?.handle?.includes("left")) {
-        left = right - minSize;
-      } else {
-        right = left + minSize;
-      }
+      if (dragRef.current?.handle?.includes("left")) left = right - minSize;
+      else right = left + minSize;
     }
 
     if (bottom - top < minSize) {
-      if (dragRef.current?.handle?.includes("top")) {
-        top = bottom - minSize;
-      } else {
-        bottom = top + minSize;
-      }
+      if (dragRef.current?.handle?.includes("top")) top = bottom - minSize;
+      else bottom = top + minSize;
     }
 
     return {
@@ -4237,108 +4391,92 @@ const perspectivePoints = scanPreview.perspectivePoints || {
     const safeRect = clampCropRect(nextRect);
 
     setScanPreview(prev =>
-      prev
-        ? {
-            ...prev,
-            cropRect: safeRect
-          }
-        : prev
+      prev ? { ...prev, cropRect: safeRect } : prev
     );
 
     return safeRect;
   };
 
-const updateLocalPerspectivePoint = (handle, point) => {
-  const safePoint = {
-    x: Math.max(0, Math.min(1, point.x)),
-    y: Math.max(0, Math.min(1, point.y))
+  const updateLocalPerspectivePoint = (handle, point) => {
+    const safePoint = {
+      x: Math.max(0, Math.min(1, point.x)),
+      y: Math.max(0, Math.min(1, point.y))
+    };
+
+    const nextPoints = {
+      ...perspectivePoints,
+      [handle]: safePoint
+    };
+
+    setScanPreview(prev =>
+      prev ? { ...prev, perspectivePoints: nextPoints } : prev
+    );
+
+    return nextPoints;
   };
-
-  const nextPoints = {
-    ...perspectivePoints,
-    [handle]: safePoint
-  };
-
-  setScanPreview(prev =>
-    prev
-      ? {
-          ...prev,
-          perspectivePoints: nextPoints
-        }
-      : prev
-  );
-
-  return nextPoints;
-};
 
   const getPointInImage = (event) => {
     const box = imageRef.current?.getBoundingClientRect();
     if (!box) return null;
 
-    const x = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width));
-    const y = Math.max(0, Math.min(1, (event.clientY - box.top) / box.height));
-
-    return { x, y };
+    return {
+      x: Math.max(0, Math.min(1, (event.clientX - box.left) / box.width)),
+      y: Math.max(0, Math.min(1, (event.clientY - box.top) / box.height))
+    };
   };
 
-const startDrag = (handle, event) => {
-  event.preventDefault();
-  event.stopPropagation();
+  const startDrag = (handle, event) => {
+    event.preventDefault();
+    event.stopPropagation();
 
-  dragRef.current = {
-    handle,
-    mode: perspectiveEnabled ? "perspective" : "rect",
-    lastRect: rect,
-    lastPoints: perspectivePoints
+    dragRef.current = {
+      handle,
+      mode: perspectiveEnabled ? "perspective" : "rect",
+      lastRect: rect,
+      lastPoints: perspectivePoints
+    };
+
+    event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
-  event.currentTarget.setPointerCapture?.(event.pointerId);
-};
+  const moveDrag = (event) => {
+    if (!dragRef.current) return;
 
-const moveDrag = (event) => {
-  if (!dragRef.current) return;
+    event.preventDefault();
 
-  event.preventDefault();
+    const point = getPointInImage(event);
+    if (!point) return;
 
-  const point = getPointInImage(event);
-  if (!point) return;
+    const handle = dragRef.current.handle;
 
-  const handle = dragRef.current.handle;
+    if (dragRef.current.mode === "perspective") {
+      dragRef.current.lastPoints = updateLocalPerspectivePoint(handle, point);
+      return;
+    }
 
-  if (dragRef.current.mode === "perspective") {
-    dragRef.current.lastPoints = updateLocalPerspectivePoint(handle, point);
-    return;
-  }
+    const nextRect = { ...(dragRef.current.lastRect || rect) };
 
-  const nextRect = {
-    ...(dragRef.current.lastRect || rect)
+    if (handle.includes("left")) nextRect.left = point.x;
+    if (handle.includes("right")) nextRect.right = point.x;
+    if (handle.includes("top")) nextRect.top = point.y;
+    if (handle.includes("bottom")) nextRect.bottom = point.y;
+
+    dragRef.current.lastRect = updateLocalCropRect(nextRect);
   };
 
-  if (handle.includes("left")) nextRect.left = point.x;
-  if (handle.includes("right")) nextRect.right = point.x;
-  if (handle.includes("top")) nextRect.top = point.y;
-  if (handle.includes("bottom")) nextRect.bottom = point.y;
+  const endDrag = () => {
+    if (!dragRef.current) return;
 
-  dragRef.current.lastRect = updateLocalCropRect(nextRect);
-};
+    const currentDrag = dragRef.current;
+    dragRef.current = null;
 
-const endDrag = () => {
-  if (!dragRef.current) return;
+    if (currentDrag.mode === "perspective") {
+      updateScanPreview({ perspectivePoints: currentDrag.lastPoints });
+      return;
+    }
 
-  const currentDrag = dragRef.current;
-  dragRef.current = null;
-
-  if (currentDrag.mode === "perspective") {
-    updateScanPreview({
-      perspectivePoints: currentDrag.lastPoints
-    });
-    return;
-  }
-
-  updateScanPreview({
-    cropRect: currentDrag.lastRect
-  });
-};
+    updateScanPreview({ cropRect: currentDrag.lastRect });
+  };
 
   const cropStyle = {
     left: `${rect.left * 100}%`,
@@ -4358,12 +4496,7 @@ const endDrag = () => {
     { key: "right", className: "top-1/2 -right-2 -translate-y-1/2 cursor-ew-resize" }
   ];
 
-  const perspectiveHandles = [
-    { key: "topLeft", className: "-top-2 -left-2" },
-    { key: "topRight", className: "-top-2 -right-2" },
-    { key: "bottomRight", className: "-bottom-2 -right-2" },
-    { key: "bottomLeft", className: "-bottom-2 -left-2" }
-  ];
+  const perspectiveHandles = ["topLeft", "topRight", "bottomRight", "bottomLeft"];
 
   return (
     <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/25 mb-4 shrink min-h-0">
@@ -4377,90 +4510,61 @@ const endDrag = () => {
             draggable="false"
           />
 
-          <div className="absolute inset-0 pointer-events-none">
-            <div
-              className="absolute bg-black/55"
-              style={{
-                left: 0,
-                top: 0,
-                right: 0,
-                height: `${rect.top * 100}%`
-              }}
-            />
-            <div
-              className="absolute bg-black/55"
-              style={{
-                left: 0,
-                top: `${rect.bottom * 100}%`,
-                right: 0,
-                bottom: 0
-              }}
-            />
-            <div
-              className="absolute bg-black/55"
-              style={{
-                left: 0,
-                top: `${rect.top * 100}%`,
-                width: `${rect.left * 100}%`,
-                height: `${(rect.bottom - rect.top) * 100}%`
-              }}
-            />
-            <div
-              className="absolute bg-black/55"
-              style={{
-                left: `${rect.right * 100}%`,
-                top: `${rect.top * 100}%`,
-                right: 0,
-                height: `${(rect.bottom - rect.top) * 100}%`
-              }}
-            />
-          </div>
+          {!perspectiveEnabled && (
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute bg-black/55" style={{ left: 0, top: 0, right: 0, height: `${rect.top * 100}%` }} />
+              <div className="absolute bg-black/55" style={{ left: 0, top: `${rect.bottom * 100}%`, right: 0, bottom: 0 }} />
+              <div className="absolute bg-black/55" style={{ left: 0, top: `${rect.top * 100}%`, width: `${rect.left * 100}%`, height: `${(rect.bottom - rect.top) * 100}%` }} />
+              <div className="absolute bg-black/55" style={{ left: `${rect.right * 100}%`, top: `${rect.top * 100}%`, right: 0, height: `${(rect.bottom - rect.top) * 100}%` }} />
+            </div>
+          )}
 
-            <div
-              className={`absolute touch-none ${
-                perspectiveEnabled
-                  ? "inset-0"
-                  : "border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
-              }`}
-             style={perspectiveEnabled ? undefined : cropStyle}
-              onPointerMove={moveDrag}
-              onPointerUp={endDrag}
-              onPointerCancel={endDrag}
-            >
-{perspectiveEnabled ? (
-  <>
-    <svg
-      className="absolute inset-0 w-full h-full pointer-events-none"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <polygon
-        points={`
-          ${perspectivePoints.topLeft.x * 100},${perspectivePoints.topLeft.y * 100}
-          ${perspectivePoints.topRight.x * 100},${perspectivePoints.topRight.y * 100}
-          ${perspectivePoints.bottomRight.x * 100},${perspectivePoints.bottomRight.y * 100}
-          ${perspectivePoints.bottomLeft.x * 100},${perspectivePoints.bottomLeft.y * 100}
-        `}
-        fill="rgba(255,255,255,0.04)"
-        stroke="rgba(255,255,255,0.9)"
-        strokeWidth="0.6"
-      />
-    </svg>
+          <div
+            className={`absolute touch-none ${
+              perspectiveEnabled
+                ? "inset-0"
+                : "border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+            }`}
+            style={perspectiveEnabled ? undefined : cropStyle}
+            onPointerMove={moveDrag}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+          >
+            {!perspectiveEnabled && (
+              <>
+                <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/55" />
+                <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/55" />
+                <div className="absolute top-1/3 left-0 right-0 h-px bg-white/55" />
+                <div className="absolute top-2/3 left-0 right-0 h-px bg-white/55" />
+              </>
+            )}
 
-    {perspectiveHandles.map(handle => {
-      const point = perspectivePoints[handle.key];
+            {perspectiveEnabled ? (
+              <>
+                <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                  <polygon
+                    points={`
+                      ${perspectivePoints.topLeft.x * 100},${perspectivePoints.topLeft.y * 100}
+                      ${perspectivePoints.topRight.x * 100},${perspectivePoints.topRight.y * 100}
+                      ${perspectivePoints.bottomRight.x * 100},${perspectivePoints.bottomRight.y * 100}
+                      ${perspectivePoints.bottomLeft.x * 100},${perspectivePoints.bottomLeft.y * 100}
+                    `}
+                    fill="rgba(255,255,255,0.04)"
+                    stroke="rgba(255,255,255,0.9)"
+                    strokeWidth="0.6"
+                  />
+                </svg>
 
-      return (
+                {perspectiveHandles.map(key => {
+                  const point = perspectivePoints[key];
+
+                  return (
                     <button
-                      key={handle.key}
+                      key={key}
                       type="button"
-                      aria-label={`台形補正 ${handle.key}`}
+                      aria-label={`台形補正 ${key}`}
                       disabled={scanPreview.processing}
-                      onPointerDown={(event) => startDrag(handle.key, event)}
-                      onPointerMove={moveDrag}
-                      onPointerUp={endDrag}
-                      onPointerCancel={endDrag}
+                      onPointerDown={(event) => startDrag(key, event)}
                       className="absolute w-6 h-6 bg-white border-2 border-slate-950 rounded-sm touch-none -translate-x-1/2 -translate-y-1/2"
                       style={{
                         left: `${point.x * 100}%`,
@@ -4478,84 +4582,17 @@ const endDrag = () => {
                   aria-label={`切り抜き ${handle.key}`}
                   disabled={scanPreview.processing}
                   onPointerDown={(event) => startDrag(handle.key, event)}
-                  onPointerMove={moveDrag}
-                  onPointerUp={endDrag}
-                 onPointerCancel={endDrag}
                   className={`absolute w-5 h-5 bg-white border-2 border-slate-950 rounded-sm touch-none ${handle.className}`}
                 />
               ))
             )}
-            <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/55" />
-            <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/55" />
-            <div className="absolute top-1/3 left-0 right-0 h-px bg-white/55" />
-            <div className="absolute top-2/3 left-0 right-0 h-px bg-white/55" />
-
-{perspectiveEnabled ? (
-  <>
-    <svg
-      className="absolute inset-0 w-full h-full pointer-events-none"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <polygon
-        points={`
-          ${perspectivePoints.topLeft.x * 100},${perspectivePoints.topLeft.y * 100}
-          ${perspectivePoints.topRight.x * 100},${perspectivePoints.topRight.y * 100}
-          ${perspectivePoints.bottomRight.x * 100},${perspectivePoints.bottomRight.y * 100}
-          ${perspectivePoints.bottomLeft.x * 100},${perspectivePoints.bottomLeft.y * 100}
-        `}
-        fill="rgba(255,255,255,0.04)"
-        stroke="rgba(255,255,255,0.9)"
-        strokeWidth="0.6"
-      />
-    </svg>
-
-    {perspectiveHandles.map(handle => {
-      const point = perspectivePoints[handle.key];
-
-      return (
-        <button
-          key={handle.key}
-          type="button"
-          aria-label={`台形補正 ${handle.key}`}
-          disabled={scanPreview.processing}
-          onPointerDown={(event) => startDrag(handle.key, event)}
-          onPointerMove={moveDrag}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          className="absolute w-6 h-6 bg-white border-2 border-slate-950 rounded-sm touch-none -translate-x-1/2 -translate-y-1/2"
-          style={{
-            left: `${point.x * 100}%`,
-            top: `${point.y * 100}%`
-          }}
-        />
-      );
-    })}
-  </>
-) : (
-  handles.map(handle => (
-    <button
-      key={handle.key}
-      type="button"
-      aria-label={`切り抜き ${handle.key}`}
-      disabled={scanPreview.processing}
-      onPointerDown={(event) => startDrag(handle.key, event)}
-      onPointerMove={moveDrag}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      className={`absolute w-5 h-5 bg-white border-2 border-slate-950 rounded-sm touch-none ${handle.className}`}
-    />
-  ))
-)}
-
-
           </div>
         </div>
       </div>
     </div>
   );
 }
+
 
 function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
 
@@ -4953,8 +4990,13 @@ const updateScanPreview = async (nextValues = {}) => {
     ...(nextValues.cropRect || {})
   };
 
-  const shouldBuildProcessedFile =
-    nextValues.buildProcessedFile === true || current.step === "adjust";
+  const nextPerspectivePoints =
+    nextValues.perspectivePoints !== undefined
+      ? nextValues.perspectivePoints
+      : current.perspectivePoints || null;
+
+    const shouldBuildProcessedFile =
+      nextValues.buildProcessedFile === true || current.step === "adjust";
 
   setScanPreview(prev =>
     prev
@@ -4965,7 +5007,8 @@ const updateScanPreview = async (nextValues = {}) => {
           cropMode: nextCropMode,
           cropRect: nextCropRect,
           rotationDegrees: nextRotationDegrees,
-          processing: true
+          processing: true,
+          perspectivePoints: nextPerspectivePoints
         }
       : prev
   );
@@ -4994,7 +5037,8 @@ if (!cropPreviewUrl || nextValues.rotationDegrees !== undefined) {
         contrast: nextContrast,
         maxWidth: 2200,
         cropMode: nextCropMode,
-        cropRect: nextCropRect,
+        cropRect: current.perspectiveEnabled ? null : nextCropRect,
+        perspectivePoints: current.perspectiveEnabled ? nextPerspectivePoints : null,
         rotationDegrees: nextRotationDegrees
       });
 
@@ -5020,6 +5064,7 @@ setScanPreview(prev => {
             contrast: nextContrast,
             cropMode: nextCropMode,
             cropRect: nextCropRect,
+            perspectivePoints: nextPerspectivePoints,
             rotationDegrees: nextRotationDegrees,
             processing: false
           }
@@ -5050,6 +5095,12 @@ const rotateScanPreview = async () => {
       top: 0,
       right: 1,
       bottom: 1
+    },
+    perspectivePoints: {
+      topLeft: { x: 0, y: 0 },
+      topRight: { x: 1, y: 0 },
+      bottomRight: { x: 1, y: 1 },
+      bottomLeft: { x: 0, y: 1 }
     }
   });
 };
@@ -5058,6 +5109,7 @@ const completeCropStep = async () => {
   if (!scanPreview) return;
 await updateScanPreview({
   cropRect: scanPreview.cropRect,
+  perspectivePoints: scanPreview.perspectivePoints || null,
   rotationDegrees: scanPreview.rotationDegrees || 0,
   buildProcessedFile: true
 });
