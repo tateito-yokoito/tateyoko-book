@@ -3571,7 +3571,9 @@ function Scene_Recording({ question, onComplete }) {
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [waveTick, setWaveTick] = useState(0);
 
+
   const mediaRef = useRef(null);
+  const suppressCompleteRef = useRef(false);
   const chunksRef = useRef([]);
   const speechRef = useRef(null);
   const mimeTypeRef = useRef("");
@@ -3614,6 +3616,37 @@ useEffect(() => {
     document.body.classList.remove("is-recording");
   };
 }, [step, isPaused]);
+
+useEffect(() => {
+  return () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    if (speechRef.current) {
+      try { speechRef.current.stop(); } catch (e) {}
+      speechRef.current = null;
+    }
+
+    if (mediaRef.current && mediaRef.current.state !== "inactive") {
+      suppressCompleteRef.current = true;
+      try { mediaRef.current.stop(); } catch (e) {}
+    }
+
+    stopWaveMonitor();
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        try { track.stop(); } catch (e) {}
+      });
+      streamRef.current = null;
+    }
+
+    document.body.classList.remove("is-recording");
+  };
+}, []);
+
 
 useEffect(() => {
   if (step !== "countdown") return;
@@ -3763,11 +3796,23 @@ useEffect(() => {
         }
       };
 
-      mediaRef.current.onstop = () => {
-        const finalMimeType =
-          mimeTypeRef.current ||
-          mediaRef.current?.mimeType ||
-          "audio/mp4";
+mediaRef.current.onstop = () => {
+  if (suppressCompleteRef.current) {
+    stopWaveMonitor();
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+
+    mediaRef.current = null;
+    return;
+  }
+
+  const finalMimeType =
+    mimeTypeRef.current ||
+    mediaRef.current?.mimeType ||
+    "audio/mp4";
 
         const blob = new Blob(chunksRef.current, {
           type: finalMimeType
@@ -3788,6 +3833,9 @@ useEffect(() => {
           streamRef.current.getTracks().forEach(t => t.stop());
           streamRef.current = null;
         }
+
+        mediaRef.current = null;
+
       };
 
       mediaRef.current.start(250);
