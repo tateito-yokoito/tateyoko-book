@@ -1120,6 +1120,7 @@ function App() {
   const [notificationPref, setNotificationPref] = useState(null);
   const [progress, setProgress] = useState({ currentIndex: 0, total: 0 });
   const [foundation, setFoundation] = useState(null);
+  const [editRecordingTarget, setEditRecordingTarget] = useState(null);
 
   const [voiceData, setVoiceData] = useState({
     duration: 0,
@@ -1144,7 +1145,12 @@ function App() {
     storagePath: null,
     storagePaths: [],
     appendMode: false,
-    addMoreCount: 0
+    addMoreCount: 0,
+    editRecordingMode: null,
+    targetAnswerId: null,
+    targetSequenceOrder: null,
+    editBaseText: "",
+    existingAudioPaths: []
   });
 
   useEffect(() => {
@@ -1230,7 +1236,12 @@ function App() {
     storagePath: null,
     storagePaths: [],
     appendMode: false,
-    addMoreCount: 0
+    addMoreCount: 0,
+    editRecordingMode: null,
+    targetAnswerId: null,
+    targetSequenceOrder: null,
+    editBaseText: "",
+    existingAudioPaths: []
   });
 };
 
@@ -1406,8 +1417,93 @@ const handleRecordComplete = (txt, dur, url, blob) => {
     }));
   };
 
-const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
+const getAnswerTextForEditRecording = (answer) => (
+  answer?.transcript_edited ||
+  answer?.transcript_readable ||
+  answer?.transcript_clean ||
+  answer?.transcript_raw ||
+  answer?.snippet ||
+  ""
+);
 
+const startEditRecording = (answer, mode, existingAudioPaths = []) => {
+  if (!answer?.id) return;
+
+  if (mode === "replace") {
+    const ok = window.confirm(
+      "語り直すと、今保存されている音声と文章は新しい内容に置き換わります。写真は残ります。よろしいですか？"
+    );
+    if (!ok) return;
+  }
+
+  if (mode === "append") {
+    if ((existingAudioPaths || []).length >= 3) {
+      alert("語り足しは上限に達しました。本文の編集はできます。");
+      return;
+    }
+
+    const ok = window.confirm(
+      "語り足すと、今の本文に追加の語りを加えて文章を再構成します。本文は上書きされます。よろしいですか？"
+    );
+    if (!ok) return;
+  }
+
+  const targetIndex = questionsDB.findIndex(q =>
+    Number(q.sequence_order) === Number(answer.sequence_order)
+  );
+
+  if (targetIndex >= 0) {
+    setProgress(prev => ({
+      ...prev,
+      currentIndex: targetIndex
+    }));
+  }
+
+  const target = {
+    mode,
+    answerId: answer.id,
+    sequenceOrder: answer.sequence_order,
+    existingAudioPaths: existingAudioPaths || [],
+    baseText: getAnswerTextForEditRecording(answer)
+  };
+
+  setEditRecordingTarget(target);
+
+  setVoiceData({
+    duration: 0,
+    transcript: "",
+    audioUrl: null,
+    hasAudio: false,
+    audioBlob: null,
+    audioSegments: [],
+    photoItems: [],
+    editedText: "",
+    aiMirror: "",
+    extractedSnippet: "",
+    transcriptionStatus: "idle",
+    transcriptionError: "",
+    polishStatus: "idle",
+    polishError: "",
+    transcriptClean: "",
+    transcriptReadable: "",
+    transcriptEssay: "",
+    selectedStyle: "readable",
+    answerId: answer.id,
+    storagePath: null,
+    storagePaths: [],
+    appendMode: false,
+    addMoreCount: 0,
+    editRecordingMode: mode,
+    targetAnswerId: answer.id,
+    targetSequenceOrder: answer.sequence_order,
+    editBaseText: target.baseText,
+    existingAudioPaths: target.existingAudioPaths
+  });
+
+  setScene(2);
+};
+
+const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
   setVoiceData(prev => ({
     ...prev,
     transcriptionStatus: "processing",
@@ -1416,39 +1512,53 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
 
   try {
     const currentQ = questionsDB[progress.currentIndex];
-    const currentSeq = currentQ?.sequence_order;
+    const currentSeq = sourceVoiceData.targetSequenceOrder || currentQ?.sequence_order;
 
-    let targetAnswerId = sourceVoiceData.answerId || crypto.randomUUID();
+const editMode = sourceVoiceData.editRecordingMode || null;
+const existingAudioPaths = sourceVoiceData.existingAudioPaths || [];
 
-    const { data: existingAnswer } = await supabaseClient
-      .from("answers")
-      .select("id")
-      .match({
-        user_id: user.id,
-        sequence_order: currentSeq
-      })
-      .maybeSingle();
+let targetAnswerId =
+  sourceVoiceData.targetAnswerId ||
+  sourceVoiceData.answerId ||
+  crypto.randomUUID();
 
-    if (existingAnswer) targetAnswerId = existingAnswer.id;
+if (!sourceVoiceData.targetAnswerId) {
+  const { data: existingAnswer } = await supabaseClient
+    .from("answers")
+    .select("id")
+    .match({
+      user_id: user.id,
+      sequence_order: currentSeq
+    })
+    .maybeSingle();
 
-    let paths = [];
+  if (existingAnswer) targetAnswerId = existingAnswer.id;
+}
 
-    const audioSegments =
-      sourceVoiceData.audioSegments && sourceVoiceData.audioSegments.length > 0
-        ? sourceVoiceData.audioSegments
-        : (
-            sourceVoiceData.hasAudio && sourceVoiceData.audioBlob
-              ? [{
-                  blob: sourceVoiceData.audioBlob,
-                  url: sourceVoiceData.audioUrl,
-                  duration: sourceVoiceData.duration || 0,
-                  transcript: sourceVoiceData.transcript || "",
-                  createdAt: Date.now()
-                }]
-              : []
-          );
+let paths = [];
 
-    for (let i = 0; i < audioSegments.length; i++) {
+
+const audioSegments =
+  sourceVoiceData.audioSegments && sourceVoiceData.audioSegments.length > 0
+    ? sourceVoiceData.audioSegments
+    : (
+        sourceVoiceData.hasAudio && sourceVoiceData.audioBlob
+          ? [{
+              blob: sourceVoiceData.audioBlob,
+              url: sourceVoiceData.audioUrl,
+              duration: sourceVoiceData.duration || 0,
+              transcript: sourceVoiceData.transcript || "",
+              createdAt: Date.now()
+            }]
+          : []
+      );
+
+const uploadStartIndex =
+  editMode === "append"
+    ? existingAudioPaths.length
+    : 0;
+
+for (let i = 0; i < audioSegments.length; i++) {
       const segment = audioSegments[i];
       const blob = segment?.blob;
 
@@ -1461,7 +1571,7 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
           ? "aac"
           : "webm";
 
-      const segmentNo = String(i + 1).padStart(2, "0");
+      const segmentNo = String(uploadStartIndex + i + 1).padStart(2, "0");
       const path = `${user.id}/${targetAnswerId}/part-${segmentNo}.${ext}`;
 
       const { error: uploadError } = await supabaseClient.storage
@@ -1479,12 +1589,17 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
       paths.push(path);
     }
 
-    setVoiceData(prev => ({
-      ...prev,
-      answerId: targetAnswerId,
-      storagePath: paths[paths.length - 1] || prev.storagePath || null,
-      storagePaths: paths.length > 0 ? paths : prev.storagePaths
-    }));
+const combinedStoragePaths =
+  editMode === "append"
+    ? [...existingAudioPaths, ...paths]
+    : paths;
+
+setVoiceData(prev => ({
+  ...prev,
+  answerId: targetAnswerId,
+  storagePath: combinedStoragePaths[combinedStoragePaths.length - 1] || prev.storagePath || null,
+  storagePaths: combinedStoragePaths.length > 0 ? combinedStoragePaths : prev.storagePaths
+}));
 
     const aiResult = await transcribeAudioOnServer({
       answerId: targetAnswerId,
@@ -1492,17 +1607,27 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
       fallbackTranscript: sourceVoiceData.transcript
     });
 
-const transcriptRaw =
+const newTranscriptRaw =
   aiResult.transcript_raw ||
   aiResult.transcript ||
   sourceVoiceData.transcript ||
   "";
 
+const transcriptRaw =
+  editMode === "append"
+    ? formatTranscriptForReading(
+        [
+          sourceVoiceData.editBaseText,
+          newTranscriptRaw
+        ].filter(Boolean).join("\n\n")
+      )
+    : newTranscriptRaw;
+
 const firstData = {
   ...sourceVoiceData,
   answerId: targetAnswerId,
-  storagePath: paths[paths.length - 1] || sourceVoiceData.storagePath || null,
-  storagePaths: paths.length > 0 ? paths : sourceVoiceData.storagePaths,
+  storagePath: combinedStoragePaths[combinedStoragePaths.length - 1] || sourceVoiceData.storagePath || null,
+  storagePaths: combinedStoragePaths.length > 0 ? combinedStoragePaths : sourceVoiceData.storagePaths,
 
   transcript: transcriptRaw,
   transcriptClean: transcriptRaw,
@@ -1603,13 +1728,16 @@ try {
   }
 };
 
-  const handleSaveAnswer = async (tag) => {
-    setIsInitializing(true);
+const handleSaveAnswer = async (tag) => {
+  setIsInitializing(true);
 
-    try {
-      const currentQ = questionsDB[progress.currentIndex];
-      const currentSeq = currentQ?.sequence_order;
-      const ansId = voiceData.answerId || crypto.randomUUID();
+  try {
+    const currentQ = questionsDB[progress.currentIndex];
+    const currentSeq = voiceData.targetSequenceOrder || currentQ?.sequence_order;
+
+      const editMode = voiceData.editRecordingMode || null;
+      const isEditRecording = editMode === "replace" || editMode === "append";
+      const ansId = voiceData.targetAnswerId || voiceData.answerId || crypto.randomUUID();
 
       const { data: savedAnswer, error: dbError } = await supabaseClient
         .from("answers")
@@ -1670,6 +1798,20 @@ try {
       }
 
       const finalAnswerId = savedAnswer?.id || ansId;
+
+if (editMode === "replace") {
+  const { error: deleteAudioRowsError } = await supabaseClient
+    .from("media_assets")
+    .delete()
+    .eq("answer_id", finalAnswerId)
+    .eq("user_id", user.id)
+    .eq("asset_type", "audio");
+
+  if (deleteAudioRowsError) {
+    console.warn("old audio media rows delete error", deleteAudioRowsError);
+  }
+}
+
 
       const storagePaths = voiceData.storagePaths && voiceData.storagePaths.length > 0
         ? voiceData.storagePaths
@@ -1763,6 +1905,13 @@ try {
       }
 
       await markUserQuestionAnswered(currentQ?.user_question_id);
+
+      if (isEditRecording) {
+        setEditRecordingTarget(null);
+        resetVoiceData();
+        setScene("story_pages");
+        return;
+      }
 
       const nextIndex = progress.currentIndex + 1;
       const nextSeq = questionsDB[nextIndex]?.sequence_order || (currentSeq + 1);
@@ -1987,10 +2136,38 @@ onComplete={(t, d, u, b) => {
     }));
     setScene(3);
   }}
-  onRetry={() => {
-    resetVoiceData();
+
+onRetry={() => {
+  if (voiceData.editRecordingMode) {
+    setVoiceData(prev => ({
+      ...prev,
+      duration: 0,
+      transcript: "",
+      audioUrl: null,
+      hasAudio: false,
+      audioBlob: null,
+      audioSegments: [],
+      editedText: "",
+      aiMirror: "",
+      extractedSnippet: "",
+      transcriptionStatus: "idle",
+      transcriptionError: "",
+      polishStatus: "idle",
+      polishError: "",
+      transcriptClean: "",
+      transcriptReadable: "",
+      transcriptEssay: "",
+      storagePath: null,
+      storagePaths: prev.editRecordingMode === "append" ? prev.existingAudioPaths : []
+    }));
     setScene(3);
-  }}
+    return;
+  }
+
+  resetVoiceData();
+  setScene(3);
+}}
+
   onRetryTranscription={() => {
     handleTranscribeForReview(voiceData);
   }}
@@ -2069,15 +2246,17 @@ onComplete={(t, d, u, b) => {
       )}
 
       {scene === "story_pages" && (
-        <Scene_StoryPages
-          user={user}
-          questionSet={questionsDB}
-          onTalkMore={() => {
-            resetVoiceData();
-            setScene(2);
-          }}
-          onBack={() => setScene("home")}
-        />
+<Scene_StoryPages
+  user={user}
+  questionSet={questionsDB}
+  onTalkMore={() => {
+    resetVoiceData();
+    setScene(2);
+  }}
+  onEditRecord={startEditRecording}
+  onBack={() => setScene("home")}
+/>
+
       )}
     </div>
   );
@@ -3897,7 +4076,11 @@ function Scene3_5_VoiceCheck({
   const isProcessing = data.transcriptionStatus === "processing";
   const isPolishing = data.polishStatus === "processing";
   const canUseStyles = !isProcessing && !isPolishing && !!displayText;
-  const showAddMoreSuggestion = shouldSuggestAddMore && !isProcessing;
+
+  const showAddMoreSuggestion =
+    shouldSuggestAddMore &&
+    !isProcessing &&
+    !data.editRecordingMode;
 
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-hidden">
@@ -4706,7 +4889,7 @@ handles.map(handle => (
 
 
 
-function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
+function Scene_StoryPages({ user, questionSet = [], onTalkMore, onEditRecord, onBack }) {
 
   const getStoryBody = (answer) => {
     const selectedStyle = answer?.selected_style || "";
@@ -4812,11 +4995,15 @@ function Scene_StoryPages({ user, questionSet = [], onTalkMore, onBack }) {
   const pendingPhotoAnswerIdRef = useRef(null);
   const storyScanInputRef = useRef(null);
   const pendingScanAnswerIdRef = useRef(null);
-
   const [scanPreview, setScanPreview] = useState(null);
+  const [editingAnswer, setEditingAnswer] = useState(null);
 
-useEffect(() => {
-  if (!scanPreview) return;
+  const [editSelectedStyle, setEditSelectedStyle] = useState("readable");
+  const [editDraftText, setEditDraftText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  useEffect(() => {
+    if (!scanPreview && !editingAnswer) return;
 
   const previousBodyOverflow = document.body.style.overflow;
   const previousHtmlOverflow = document.documentElement.style.overflow;
@@ -4828,7 +5015,7 @@ useEffect(() => {
     document.body.style.overflow = previousBodyOverflow;
     document.documentElement.style.overflow = previousHtmlOverflow;
   };
-}, [scanPreview]);
+}, [scanPreview, editingAnswer]);
 
 const loadAnswers = async (options = {}) => {
   const { showLoading = true } = options;
@@ -4916,6 +5103,85 @@ const loadAnswers = async (options = {}) => {
   useEffect(() => {
     loadAnswers();
   }, [user?.id]);
+
+
+const pickAnswerTextByStyle = (answer, style) => {
+  if (!answer) return "";
+
+  if (style === "clean") {
+    return answer.transcript_clean || answer.transcript_readable || answer.transcript_raw || answer.snippet || "";
+  }
+
+  if (style === "essay") {
+    return answer.transcript_essay || answer.transcript_readable || answer.transcript_clean || answer.transcript_raw || answer.snippet || "";
+  }
+
+  return answer.transcript_readable || answer.transcript_clean || answer.transcript_raw || answer.snippet || "";
+};
+
+const openAnswerEditor = (answer) => {
+  const style =
+    answer?.selected_style === "clean" || answer?.selected_style === "essay"
+      ? answer.selected_style
+      : "readable";
+
+  setEditingAnswer(answer);
+  setEditSelectedStyle(style);
+  setEditDraftText(answer?.transcript_edited || pickAnswerTextByStyle(answer, style));
+};
+
+const closeAnswerEditor = () => {
+  setEditingAnswer(null);
+  setEditDraftText("");
+  setEditSelectedStyle("readable");
+};
+
+const changeEditStyle = (style) => {
+  setEditSelectedStyle(style);
+  setEditDraftText(pickAnswerTextByStyle(editingAnswer, style));
+};
+
+const saveAnswerEdit = async () => {
+  if (!editingAnswer?.id || !user?.id) return;
+
+  try {
+    setSavingEdit(true);
+
+    const { error } = await supabaseClient
+      .from("answers")
+      .update({
+        selected_style: editSelectedStyle,
+        transcript_edited: editDraftText
+      })
+      .eq("id", editingAnswer.id)
+      .eq("user_id", user.id);
+
+    if (error) throw error;
+
+    await loadAnswers({ showLoading: false });
+    closeAnswerEditor();
+  } catch (e) {
+    console.error("answer edit save error", e);
+    alert("本文の保存に失敗しました。");
+  } finally {
+    setSavingEdit(false);
+  }
+};
+
+const getAudioPathsForAnswer = (answerId) => {
+  return (mediaByAnswerId[answerId] || [])
+    .filter(item => item.asset_type === "audio" && item.storage_path)
+    .map(item => item.storage_path);
+};
+
+const startEditRecordFromModal = (mode) => {
+  if (!editingAnswer || !onEditRecord) return;
+
+  const audioPaths = getAudioPathsForAnswer(editingAnswer.id);
+
+  closeAnswerEditor();
+  onEditRecord(editingAnswer, mode, audioPaths);
+};
 
   const deletePhoto = async (photo) => {
     if (!photo?.storage_path) return;
@@ -5415,6 +5681,8 @@ return (
           </p>
         )}
 
+
+
 <div className="mt-5 flex items-center gap-3 shrink-0">
   <button
     type="button"
@@ -5608,6 +5876,99 @@ return (
   </div>
 ), document.body)}
 
+{editingAnswer && createPortal((
+  <div className="fixed inset-0 z-[9999] w-[100dvw] h-[100dvh] bg-slate-950 px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden">
+    <div className="shrink-0 text-center mb-4">
+      <p className="text-white/82 text-[1rem] text-narrative">
+        本文を編集
+      </p>
+    </div>
+
+    <div className="flex gap-2 mb-4 shrink-0">
+      {[
+        { key: "clean", label: "そのまま" },
+        { key: "readable", label: "語り調" },
+        { key: "essay", label: "作品調" }
+      ].map(style => (
+        <button
+          key={style.key}
+          type="button"
+          onClick={() => changeEditStyle(style.key)}
+          className={`flex-1 py-2 rounded-full text-xs border ${
+            editSelectedStyle === style.key
+              ? "bg-white/15 border-white/25 text-white"
+              : "border-white/10 text-white/45"
+          }`}
+        >
+          {style.label}
+        </button>
+      ))}
+    </div>
+
+    <div className="flex-1 min-h-0 glass-card p-5 overflow-hidden">
+      <textarea
+        value={editDraftText}
+        onChange={(e) => setEditDraftText(e.target.value)}
+        className="w-full h-full bg-transparent text-white/82 text-[1rem] leading-[2.05] outline-none resize-none text-narrative"
+      />
+    </div>
+
+    <div className="mt-4 grid grid-cols-2 gap-3 shrink-0">
+      <button
+        type="button"
+        onClick={() => startEditRecordFromModal("replace")}
+        disabled={savingEdit}
+        className="py-3 rounded-full border border-white/10 text-white/45 text-sm"
+      >
+        語り直す
+      </button>
+
+      <button
+        type="button"
+        onClick={() => startEditRecordFromModal("append")}
+        disabled={savingEdit || getAudioPathsForAnswer(editingAnswer.id).length >= 3}
+        className={`py-3 rounded-full border border-white/10 text-sm ${
+          getAudioPathsForAnswer(editingAnswer.id).length >= 3
+            ? "text-white/20 opacity-50"
+            : "text-white/45"
+        }`}
+      >
+        語り足す
+      </button>
+    </div>
+
+    {getAudioPathsForAnswer(editingAnswer.id).length >= 3 && (
+      <p className="mt-2 text-center text-white/28 text-xs">
+        語り足しは上限に達しました
+      </p>
+    )}
+
+    <div className="mt-5 flex gap-3 shrink-0">
+      <button
+        type="button"
+        onClick={closeAnswerEditor}
+        disabled={savingEdit}
+        className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-sm"
+      >
+        戻る
+      </button>
+
+      <button
+        type="button"
+        onClick={saveAnswerEdit}
+        disabled={savingEdit}
+        className={`flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm ${
+          savingEdit ? "opacity-40" : ""
+        }`}
+      >
+        {savingEdit ? "保存中..." : "保存する"}
+      </button>
+    </div>
+  </div>
+), document.body)}
+
+
+
 <div className="text-center mb-2">
   <p className="text-white/85 text-[0.95rem] text-narrative">
     これまでの語り
@@ -5735,6 +6096,14 @@ return (
 </div>
 
                 <p className="text-white/75 text-[0.98rem] leading-[2.15] whitespace-pre-wrap text-narrative">{body}</p>
+
+<button
+  type="button"
+  onClick={() => openAnswerEditor(answer)}
+  className="mt-5 text-white/35 text-sm underline underline-offset-4"
+>
+  本文を編集する
+</button>
 
                 {audios.length > 0 && (
                   <div className="mt-5 space-y-3">
