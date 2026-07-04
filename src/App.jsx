@@ -3759,11 +3759,13 @@ useEffect(() => {
     }
   };
 
-  const startActualRecording = async () => {
-    setTime(0);
-    timeRef.current = 0;
-    setIsPaused(false);
-    setVoiceLevel(0);
+const startActualRecording = async () => {
+  suppressCompleteRef.current = false;
+
+  setTime(0);
+  timeRef.current = 0;
+  setIsPaused(false);
+  setVoiceLevel(0);
 
     transcriptRef.current = "";
     interimRef.current = "";
