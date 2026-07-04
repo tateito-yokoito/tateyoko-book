@@ -7,24 +7,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumoss
 
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
-const GAS_AI_URL = "https://script.google.com/macros/s/AKfycbwz5wfVtHfGPmxpK6l3rKiqVn235sqwhmdIuPYvKSex02B_k6a5ULc-m7l_K3ig_AE/exec";
-
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-const askAI = async (transcriptRaw) => {
-  const res = await fetch(GAS_AI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({
-      action: 'processAudio',
-      transcriptRaw
-    })
-  });
-
-  const json = await res.json();
-  if (!json.success) throw new Error(json.error);
-  return json.data;
-};
 
 function getSequenceFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -105,8 +88,8 @@ commaWords.forEach(word => {
   return text;
 }
 
-const DEV_LOGIN_EMAIL = "bird9bird9bird9+koedev@gmail.com";
-const DEV_LOGIN_PASSWORD = "bird9bird9";
+const DEV_LOGIN_EMAIL = import.meta.env.VITE_DEV_LOGIN_EMAIL || "";
+const DEV_LOGIN_PASSWORD = import.meta.env.VITE_DEV_LOGIN_PASSWORD || "";
 
 async function ensureProfileExists(sessionUser, registrationData = {}) {
   const userId = sessionUser.id;
@@ -1426,25 +1409,25 @@ const getAnswerTextForEditRecording = (answer) => (
 );
 
 const startEditRecording = (answer, mode, existingAudioPaths = []) => {
-  if (!answer?.id) return;
+  if (!answer?.id) return false;
 
   if (mode === "replace") {
     const ok = window.confirm(
       "語り直すと、今保存されている音声と文章は新しい内容に置き換わります。写真は残ります。よろしいですか？"
     );
-    if (!ok) return;
+    if (!ok) return false;
   }
 
   if (mode === "append") {
     if ((existingAudioPaths || []).length >= 3) {
       alert("語り足しは上限に達しました。本文の編集はできます。");
-      return;
+      return false;
     }
 
     const ok = window.confirm(
       "語り足すと、今の本文に追加の語りを加えて文章を再構成します。本文は上書きされます。よろしいですか？"
     );
-    if (!ok) return;
+    if (!ok) return false;
   }
 
   const targetIndex = questionsDB.findIndex(q =>
@@ -1498,7 +1481,9 @@ const startEditRecording = (answer, mode, existingAudioPaths = []) => {
   });
 
   setScene(2);
+  return true;
 };
+
 
 const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
   setVoiceData(prev => ({
@@ -2135,7 +2120,6 @@ onComplete={(t, d, u, b) => {
 
 <Scene3_5_VoiceCheck
   data={voiceData}
-  question={currentQ}
   onAddMore={() => {
     setVoiceData(prev => ({
       ...prev,
@@ -2197,27 +2181,6 @@ onRetry={() => {
 
       )}
 
-{scene === "short_recording" && (
-  <Scene_ShortRecording
-    onAddMore={() => {
-      setVoiceData(prev => ({
-        ...prev,
-        appendMode: true,
-        addMoreCount: (prev.addMoreCount || 0) + 1
-      }));
-      setScene(3);
-    }}
-    onRetry={() => {
-      resetVoiceData();
-      setScene(3);
-    }}
-    onSkip={handleSkipQuestion}
-  />
-)}
-
-      {scene === "processing" && (
-        <Scene_Processing />
-      )}
 
       {scene === 4 && (
         <Scene4_AIMirror
@@ -2312,13 +2275,10 @@ function Scene_Login({ onLogin }) {
   const handleDevLogin = async () => {
     if (!isDevMode()) return;
 
-    if (
-      DEV_LOGIN_EMAIL === "dev-koe@example.com" ||
-      DEV_LOGIN_PASSWORD === "CHANGE_ME_DEV_PASSWORD"
-    ) {
-      alert("開発用ログインのメールアドレスとパスワードを v1.html 内で設定してください。");
-      return;
-    }
+  if (!DEV_LOGIN_EMAIL || !DEV_LOGIN_PASSWORD) {
+    alert("開発用ログインのメールアドレスとパスワードを環境変数で設定してください。");
+    return;
+  }
 
     setLoading(true);
 
@@ -3227,13 +3187,6 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
 
                           <span>{included ? "本に入れる" : "本に入れない"}</span>
                         </button>
-
-                        <button
-                          type="button"
-                          className="px-5 py-3 rounded-full border border-white/10 text-white/45 text-sm"
-                        >
-                          編集
-                        </button>
                       </div>
                     </div>
                   );
@@ -4019,50 +3972,10 @@ const stop = () => {
   );
 }
 
-function Scene_ShortRecording({ onAddMore, onRetry, onSkip }) {
-  return (
-    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
-      <div className="glass-card p-7 w-full max-w-[330px] mb-8">
-        <p className="text-white/85 text-[1.05rem] text-narrative mb-5">
-          もう少しだけ、聞かせてください
-        </p>
 
-        <p className="text-white/55 text-sm leading-loose">
-          今の録音は少し短かったようです。<br />
-          この問いを本のページにするために、<br />
-          あと少しだけ話してみましょう。
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-4 w-full max-w-[280px]">
-        <button
-          onClick={onAddMore}
-          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
-        >
-          少し話し足す
-        </button>
-
-        <button
-          onClick={onRetry}
-          className="btn-quiet w-full py-4 rounded-full text-white"
-        >
-          最初から話し直す
-        </button>
-
-        <button
-          onClick={onSkip}
-          className="w-full py-3 text-white/40 text-sm underline underline-offset-4"
-        >
-          別の問いへ
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function Scene3_5_VoiceCheck({
   data,
-  question,
   onAddMore,
   onRetry,
   onRetryTranscription,
@@ -4247,17 +4160,6 @@ function Scene3_5_VoiceCheck({
   );
 }
 
-function Scene_Processing() {
-  return (
-    <div className="h-full flex flex-col items-center justify-center fade-enter text-center">
-      <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white/80 animate-spin mb-6"></div>
-
-      <p className="text-white/50 tracking-widest text-sm text-narrative">
-        声を預かり、<br/>言葉を編んでいます...
-      </p>
-    </div>
-  );
-}
 
 function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto, onNext }) {
   const photoInputRef = useRef(null);
@@ -5185,10 +5087,14 @@ const getAudioPathsForAnswer = (answerId) => {
 const startEditRecordFromModal = (mode) => {
   if (!editingAnswer || !onEditRecord) return;
 
-  const audioPaths = getAudioPathsForAnswer(editingAnswer.id);
+  const answer = editingAnswer;
+  const audioPaths = getAudioPathsForAnswer(answer.id);
+
+  const started = onEditRecord(answer, mode, audioPaths);
+
+  if (started === false) return;
 
   closeAnswerEditor();
-  onEditRecord(editingAnswer, mode, audioPaths);
 };
 
   const deletePhoto = async (photo) => {
@@ -6035,7 +5941,7 @@ return (
           </p>
           </div>
         ) : (
-          visibleAnswers.map((answer, index) => {
+          visibleAnswers.map((answer) => {
             const body = getStoryBody(answer);
             const questionText = getQuestionTextForAnswer(answer);
 
