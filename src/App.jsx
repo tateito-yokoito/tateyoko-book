@@ -4467,21 +4467,32 @@ const getPointInImage = (event, options = {}) => {
   };
 };
 
+
 const startDrag = (handle, event) => {
   event.preventDefault();
   event.stopPropagation();
 
   dismissCoachMark();
 
-  dragRef.current = {
-      handle,
-      mode: perspectiveEnabled ? "perspective" : "rect",
-      lastRect: rect,
-      lastPoints: perspectivePoints
-    };
+  const touchPoint = getPointInImage(event);
+  const handlePoint = perspectiveEnabled ? perspectivePoints[handle] : null;
 
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+  dragRef.current = {
+    handle,
+    mode: perspectiveEnabled ? "perspective" : "rect",
+    lastRect: rect,
+    lastPoints: perspectivePoints,
+    grabOffset:
+      perspectiveEnabled && touchPoint && handlePoint
+        ? {
+            x: handlePoint.x - touchPoint.x,
+            y: handlePoint.y - touchPoint.y
+          }
+        : { x: 0, y: 0 }
   };
+
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+};
 
   const moveDrag = (event) => {
     if (!dragRef.current) return;
@@ -4493,10 +4504,16 @@ const startDrag = (handle, event) => {
 
     const handle = dragRef.current.handle;
 
-    if (dragRef.current.mode === "perspective") {
-      dragRef.current.lastPoints = updateLocalPerspectivePoint(handle, point);
-      return;
-    }
+if (dragRef.current.mode === "perspective") {
+  const grabOffset = dragRef.current.grabOffset || { x: 0, y: 0 };
+
+  dragRef.current.lastPoints = updateLocalPerspectivePoint(handle, {
+    x: point.x + grabOffset.x,
+    y: point.y + grabOffset.y
+  });
+
+  return;
+}
 
     const nextRect = { ...(dragRef.current.lastRect || rect) };
 
