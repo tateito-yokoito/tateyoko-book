@@ -4628,7 +4628,7 @@ return (
                   aria-label={`台形補正 ${key}`}
                   disabled={scanPreview.processing}
                   onPointerDown={(event) => startDrag(key, event)}
-                  className="absolute w-30 h-30 rounded-full bg-white/15 border border-white/60 touch-none -translate-x-1/2 -translate-y-1/2 shadow-lg flex items-center justify-center"
+                  className="absolute w-28 h-28 rounded-full bg-white/15 border border-white/60 touch-none -translate-x-1/2 -translate-y-1/2 shadow-lg flex items-center justify-center"
                   style={{
                     left: `${point.x * 100}%`,
                     top: `${point.y * 100}%`
