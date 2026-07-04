@@ -1120,7 +1120,6 @@ function App() {
   const [notificationPref, setNotificationPref] = useState(null);
   const [progress, setProgress] = useState({ currentIndex: 0, total: 0 });
   const [foundation, setFoundation] = useState(null);
-  const [editRecordingTarget, setEditRecordingTarget] = useState(null);
 
   const [voiceData, setVoiceData] = useState({
     duration: 0,
@@ -1467,8 +1466,6 @@ const startEditRecording = (answer, mode, existingAudioPaths = []) => {
     baseText: getAnswerTextForEditRecording(answer)
   };
 
-  setEditRecordingTarget(target);
-
   setVoiceData({
     duration: 0,
     transcript: "",
@@ -1813,35 +1810,47 @@ if (editMode === "replace") {
 }
 
 
-      const storagePaths = voiceData.storagePaths && voiceData.storagePaths.length > 0
-        ? voiceData.storagePaths
-        : (voiceData.storagePath ? [voiceData.storagePath] : []);
+const storagePaths = voiceData.storagePaths && voiceData.storagePaths.length > 0
+  ? voiceData.storagePaths
+  : (voiceData.storagePath ? [voiceData.storagePath] : []);
 
-      if (storagePaths.length > 0) {
-        const mediaRows = storagePaths.map((storagePath, index) => ({
-          answer_id: finalAnswerId,
-          user_id: user.id,
-          family_id: foundation?.family?.id || null,
-          book_project_id: foundation?.project?.id || currentQ?.book_project_id || null,
-          person_id: foundation?.person?.id || null,
-          asset_type: "audio",
-          storage_path: storagePath,
-          meta_json: {
-            part: index + 1,
-            total_parts: storagePaths.length,
-            duration_seconds: voiceData.audioSegments?.[index]?.duration || null,
-            transcript: voiceData.audioSegments?.[index]?.transcript || null
-          }
-        }));
+const existingAudioPaths =
+  editMode === "append"
+    ? (voiceData.existingAudioPaths || [])
+    : [];
 
-        const { error: assetError } = await supabaseClient
-          .from("media_assets")
-          .upsert(mediaRows, { onConflict: "answer_id, asset_type, storage_path" });
+const mediaStoragePaths =
+  editMode === "append"
+    ? storagePaths.filter(path => !existingAudioPaths.includes(path))
+    : storagePaths;
 
-        if (assetError) {
-          console.error("media asset save error", assetError);
-        }
-      }
+if (mediaStoragePaths.length > 0) {
+  const existingAudioCount = existingAudioPaths.length;
+
+  const mediaRows = mediaStoragePaths.map((storagePath, index) => ({
+    answer_id: finalAnswerId,
+    user_id: user.id,
+    family_id: foundation?.family?.id || null,
+    book_project_id: foundation?.project?.id || currentQ?.book_project_id || null,
+    person_id: foundation?.person?.id || null,
+    asset_type: "audio",
+    storage_path: storagePath,
+    meta_json: {
+      part: existingAudioCount + index + 1,
+      total_parts: storagePaths.length,
+      duration_seconds: voiceData.audioSegments?.[index]?.duration || null,
+      transcript: voiceData.audioSegments?.[index]?.transcript || null
+    }
+  }));
+
+  const { error: assetError } = await supabaseClient
+    .from("media_assets")
+    .upsert(mediaRows, { onConflict: "answer_id, asset_type, storage_path" });
+
+  if (assetError) {
+    console.error("media asset save error", assetError);
+  }
+}
 
       const photoItems = voiceData.photoItems || [];
 
@@ -1907,7 +1916,6 @@ if (editMode === "replace") {
       await markUserQuestionAnswered(currentQ?.user_question_id);
 
       if (isEditRecording) {
-        setEditRecordingTarget(null);
         resetVoiceData();
         setScene("story_pages");
         return;
