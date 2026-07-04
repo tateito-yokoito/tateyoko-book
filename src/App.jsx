@@ -1132,7 +1132,8 @@ function App() {
     targetAnswerId: null,
     targetSequenceOrder: null,
     editBaseText: "",
-    existingAudioPaths: []
+    existingAudioPaths: [],
+    returnQuestionIndex: null
   });
 
   useEffect(() => {
@@ -1223,7 +1224,8 @@ function App() {
     targetAnswerId: null,
     targetSequenceOrder: null,
     editBaseText: "",
-    existingAudioPaths: []
+    existingAudioPaths: [],
+    returnQuestionIndex: null
   });
 };
 
@@ -1477,7 +1479,8 @@ const startEditRecording = (answer, mode, existingAudioPaths = []) => {
     targetAnswerId: answer.id,
     targetSequenceOrder: answer.sequence_order,
     editBaseText: target.baseText,
-    existingAudioPaths: target.existingAudioPaths
+    existingAudioPaths: target.existingAudioPaths,
+    returnQuestionIndex: progress.currentIndex
   });
 
   setScene(2);
@@ -1781,7 +1784,37 @@ const handleSaveAnswer = async (tag) => {
 
       const finalAnswerId = savedAnswer?.id || ansId;
 
+const storagePaths = voiceData.storagePaths && voiceData.storagePaths.length > 0
+  ? voiceData.storagePaths
+  : (voiceData.storagePath ? [voiceData.storagePath] : []);
+
 if (editMode === "replace") {
+  const { data: oldAudioRows, error: oldAudioSelectError } = await supabaseClient
+    .from("media_assets")
+    .select("storage_path")
+    .eq("answer_id", finalAnswerId)
+    .eq("user_id", user.id)
+    .eq("asset_type", "audio");
+
+  if (oldAudioSelectError) {
+    console.warn("old audio media rows select error", oldAudioSelectError);
+  }
+
+  const oldAudioPaths = (oldAudioRows || [])
+    .map(row => row.storage_path)
+    .filter(Boolean)
+    .filter(path => !storagePaths.includes(path));
+
+  if (oldAudioPaths.length > 0) {
+    const { error: oldAudioStorageError } = await supabaseClient.storage
+      .from("audio")
+      .remove(oldAudioPaths);
+
+    if (oldAudioStorageError) {
+      console.warn("old audio storage delete error", oldAudioStorageError);
+    }
+  }
+
   const { error: deleteAudioRowsError } = await supabaseClient
     .from("media_assets")
     .delete()
@@ -1794,10 +1827,6 @@ if (editMode === "replace") {
   }
 }
 
-
-const storagePaths = voiceData.storagePaths && voiceData.storagePaths.length > 0
-  ? voiceData.storagePaths
-  : (voiceData.storagePath ? [voiceData.storagePath] : []);
 
 const existingAudioPaths =
   editMode === "append"
@@ -1901,7 +1930,21 @@ if (mediaStoragePaths.length > 0) {
       await markUserQuestionAnswered(currentQ?.user_question_id);
 
       if (isEditRecording) {
+        const returnQuestionIndex =
+          Number.isInteger(voiceData.returnQuestionIndex)
+            ? voiceData.returnQuestionIndex
+            : progress.currentIndex;
+
         resetVoiceData();
+
+        setProgress(prev => ({
+          ...prev,
+          currentIndex: Math.min(
+            returnQuestionIndex,
+            Math.max(questionsDB.length - 1, 0)
+          )
+        }));
+
         setScene("story_pages");
         return;
       }
