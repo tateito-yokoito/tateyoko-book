@@ -116,6 +116,22 @@ function isBetaMode() {
   return params.get("beta") === "1";
 }
 
+function isTokenMode() {
+  const params = new URLSearchParams(window.location.search);
+  return !!params.get("token");
+}
+
+function withHonorific(name) {
+  const text = String(name || "あなた").trim();
+
+  if (!text || text === "あなた") {
+    return "あなた";
+  }
+
+  return text.endsWith("さん") ? text : `${text}さん`;
+}
+
+
 function formatTranscriptForReading(input) {
   let text = String(input || "").replace(/\s+/g, " ").trim();
   if (!text) return "";
@@ -3148,7 +3164,7 @@ function Scene_Home({ userName, onStartTalking, onOpenStoryPages, onOpenBookBuil
           </p>
 
           <p className="text-white/82 text-[1.05rem] text-narrative">
-            {userName}さんの物語
+            {withHonorific(userName)}の物語
           </p>
         </div>
 
@@ -3192,7 +3208,7 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [coverPhoto, setCoverPhoto] = useState(null);
   const [coverColor, setCoverColor] = useState("#d9cdbd");
-  const [bookTitle, setBookTitle] = useState(`${userName}さんの物語`);
+  const [bookTitle, setBookTitle] = useState(`${withHonorific(userName)}の物語`);
   const [bookSubtitle, setBookSubtitle] = useState("家族に愛を込めて");
   const coverInputRef = useRef(null);
 
@@ -3691,9 +3707,11 @@ function Scene1_MyPage({ progress, question, userName, onNext, onSkip }) {
             />
           </div>
 
+          {!isTokenMode() && (
           <p className="text-white/80 text-sm tracking-widest mt-2">
             {progress.currentIndex + 1} / {progress.total} ページ
           </p>
+          )}
         </div>
       </header>
 
