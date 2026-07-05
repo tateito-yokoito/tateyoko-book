@@ -6464,23 +6464,25 @@ return (
     </div>
   );
 }
-
 function Scene_NotificationSetup({ user, onComplete }) {
   const presets = [
     {
       label: "日曜の夜 20:00",
       weekday: 0,
-      hour: 20
+      hour: 20,
+      minute: 0
     },
     {
       label: "月曜の朝 7:00",
       weekday: 1,
-      hour: 7
+      hour: 7,
+      minute: 0
     },
     {
       label: "金曜の夜 21:00",
       weekday: 5,
-      hour: 21
+      hour: 21,
+      minute: 0
     }
   ];
 
@@ -6488,22 +6490,20 @@ function Scene_NotificationSetup({ user, onComplete }) {
 
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [customMode, setCustomMode] = useState(false);
-  const [weekday, setWeekday] = useState(0); 
+  const [weekday, setWeekday] = useState(0);
   const [hour, setHour] = useState(20);
   const [minute, setMinute] = useState(0);
-
   const [loading, setLoading] = useState(false);
   const [deliveryMode, setDeliveryMode] = useState("email");
   const [phoneNumber, setPhoneNumber] = useState("");
 
- const hourOptions = [];
+  const hourOptions = [];
 
-for (let h = 5; h <= 23; h++) {
-  hourOptions.push(h);
-}
+  for (let h = 5; h <= 23; h++) {
+    hourOptions.push(h);
+  }
 
-const minuteOptions = [0, 15, 30, 45];
-
+  const minuteOptions = [0, 15, 30, 45];
 
   async function savePreference() {
     try {
@@ -6511,8 +6511,7 @@ const minuteOptions = [0, 15, 30, 45];
 
       let finalWeekday;
       let finalHour;
-      let finalMinute = 0;
-
+      let finalMinute;
 
       if (customMode) {
         finalWeekday = weekday;
@@ -6542,35 +6541,34 @@ const minuteOptions = [0, 15, 30, 45];
 
       const activeUserId = session.user.id;
 
- if (
-  (deliveryMode === "sms" || deliveryMode === "both") &&
-  !phoneNumber.trim()
-) {
-  alert("SMSで受け取る場合は、電話番号を入力してください");
-  return;
-}     
+      if (
+        (deliveryMode === "sms" || deliveryMode === "both") &&
+        !phoneNumber.trim()
+      ) {
+        alert("SMSで受け取る場合は、電話番号を入力してください");
+        return;
+      }
 
       const { error } = await supabaseClient
         .from("notification_preferences")
- 
-  .upsert({
-  user_id: activeUserId,
-  email_enabled: deliveryMode === "email" || deliveryMode === "both",
-  sms_enabled: deliveryMode === "sms" || deliveryMode === "both",
-  phone_number:
-    deliveryMode === "sms" || deliveryMode === "both"
-      ? phoneNumber.trim()
-      : null,
-  line_enabled: false,
-  weekday: finalWeekday,
-  hour: finalHour,
-  minute: finalMinute,
-  timezone: "Asia/Tokyo",
-  delivery_channel: deliveryMode,
-  is_active: true
-}, {
-  onConflict: "user_id"
-});
+        .upsert({
+          user_id: activeUserId,
+          email_enabled: deliveryMode === "email" || deliveryMode === "both",
+          sms_enabled: deliveryMode === "sms" || deliveryMode === "both",
+          phone_number:
+            deliveryMode === "sms" || deliveryMode === "both"
+              ? phoneNumber.trim()
+              : null,
+          line_enabled: false,
+          weekday: finalWeekday,
+          hour: finalHour,
+          minute: finalMinute,
+          timezone: "Asia/Tokyo",
+          delivery_channel: deliveryMode,
+          is_active: true
+        }, {
+          onConflict: "user_id"
+        });
 
       if (error) {
         throw error;
@@ -6584,6 +6582,56 @@ const minuteOptions = [0, 15, 30, 45];
       setLoading(false);
     }
   }
+
+  const DeliveryModeSelector = () => (
+    <div className="mb-10">
+      <p className="text-white/50 text-sm mb-5">
+        問いの届き方
+      </p>
+
+      <div className="space-y-3">
+        {[
+          { key: "email", label: "メールで受け取る" },
+          { key: "sms", label: "SMSで受け取る" },
+          { key: "both", label: "メールとSMSの両方で受け取る" }
+        ].map(option => (
+          <button
+            key={option.key}
+            type="button"
+            onClick={() => setDeliveryMode(option.key)}
+            className={`w-full py-4 rounded-xl transition-all border ${
+              deliveryMode === option.key
+                ? "bg-white/12 border-white/25 text-white"
+                : "border-white/10 text-white/45"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {(deliveryMode === "sms" || deliveryMode === "both") && (
+        <div className="mt-5">
+          <p className="text-white/40 text-xs tracking-widest mb-2">
+            SMSを受け取る電話番号
+          </p>
+
+          <input
+            type="tel"
+            value={phoneNumber}
+            onChange={e => setPhoneNumber(e.target.value)}
+            className="quiet-input"
+            placeholder="09012345678"
+          />
+
+          <p className="mt-3 text-white/35 text-xs leading-loose">
+            SMSで問いの通知を受け取ることに同意します。<br />
+            通信料がかかる場合があります。
+          </p>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="h-full flex flex-col justify-center fade-enter text-center px-4">
@@ -6601,18 +6649,21 @@ const minuteOptions = [0, 15, 30, 45];
             {presets.map(preset => (
               <button
                 key={preset.label}
+                type="button"
                 onClick={() => setSelectedPreset(preset)}
                 className={`
                   w-full py-4 rounded-xl transition-all
                   ${selectedPreset?.label === preset.label
-                    ? 'bg-white/12 border border-white/25 text-white'
-                    : 'btn-quiet'}
+                    ? "bg-white/12 border border-white/25 text-white"
+                    : "btn-quiet"}
                 `}
               >
                 ○ {preset.label}
               </button>
             ))}
           </div>
+
+          <DeliveryModeSelector />
 
           <button
             onClick={savePreference}
@@ -6651,8 +6702,8 @@ const minuteOptions = [0, 15, 30, 45];
                   className={`
                     w-12 h-12 rounded-full transition-all
                     ${weekday === index
-                      ? 'bg-white text-slate-900'
-                      : 'btn-quiet'}
+                      ? "bg-white text-slate-900"
+                      : "btn-quiet"}
                   `}
                 >
                   {day}
@@ -6666,34 +6717,34 @@ const minuteOptions = [0, 15, 30, 45];
               問いが届く時間
             </p>
 
-<div className="flex justify-center gap-3">
-<select
-  value={hour}
-  onChange={e => setHour(Number(e.target.value))}
-  className="max-w-[110px] rounded-xl bg-white px-4 py-3 text-center text-slate-900 outline-none"
->
-    {hourOptions.map(h => (
-      <option key={h} value={h}>
-        {String(h).padStart(2, "0")}時
-      </option>
-    ))}
-  </select>
+            <div className="flex justify-center gap-3">
+              <select
+                value={hour}
+                onChange={e => setHour(Number(e.target.value))}
+                className="max-w-[110px] rounded-xl bg-white px-4 py-3 text-center text-slate-900 outline-none"
+              >
+                {hourOptions.map(h => (
+                  <option key={h} value={h}>
+                    {String(h).padStart(2, "0")}時
+                  </option>
+                ))}
+              </select>
 
- <select
-  value={minute}
-  onChange={e => setMinute(Number(e.target.value))}
-  className="max-w-[110px] rounded-xl bg-white px-4 py-3 text-center text-slate-900 outline-none"
->
-
-    {minuteOptions.map(m => (
-      <option key={m} value={m}>
-        {String(m).padStart(2, "0")}分
-      </option>
-    ))}
-  </select>
-</div>
-
+              <select
+                value={minute}
+                onChange={e => setMinute(Number(e.target.value))}
+                className="max-w-[110px] rounded-xl bg-white px-4 py-3 text-center text-slate-900 outline-none"
+              >
+                {minuteOptions.map(m => (
+                  <option key={m} value={m}>
+                    {String(m).padStart(2, "0")}分
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+
+          <DeliveryModeSelector />
 
           <button
             onClick={savePreference}
@@ -6707,5 +6758,6 @@ const minuteOptions = [0, 15, 30, 45];
     </div>
   );
 }
+
 
 export default App;
