@@ -77,6 +77,35 @@ async function polishTranscriptOnServer({ answerId, transcriptRaw, questionText 
   return data;
 }
 
+async function saveTokenAnswerOnServer({ token, voiceData, tag }) {
+  const { data, error } = await supabaseClient.functions.invoke("save-token-answer", {
+    body: {
+      token,
+      transcriptRaw: voiceData.transcript,
+      transcriptClean: voiceData.transcriptClean || voiceData.editedText || voiceData.transcript,
+      transcriptReadable: voiceData.transcriptReadable || voiceData.editedText || voiceData.transcript,
+      transcriptEssay: voiceData.transcriptEssay || null,
+      transcriptEdited: voiceData.editedText || voiceData.transcriptReadable || voiceData.transcript,
+      selectedStyle: voiceData.selectedStyle || "readable",
+      aiMirror: voiceData.aiMirror || "",
+      snippet: voiceData.extractedSnippet || "",
+      meaningTag: tag
+    }
+  });
+
+  if (error) {
+    console.error("save-token-answer invoke error", error);
+    throw error;
+  }
+
+  if (!data || data.success === false) {
+    console.error("save-token-answer returned error", data);
+    throw new Error(data?.error || "回答の保存に失敗しました");
+  }
+
+  return data;
+}
+
 function isDevMode() {
   const params = new URLSearchParams(window.location.search);
   return params.get("dev") === "1";
@@ -1174,6 +1203,9 @@ function App() {
   const [foundation, setFoundation] = useState(null);
 
   const [pendingBetaSurvey, setPendingBetaSurvey] = useState(null);
+  const [accessMode, setAccessMode] = useState("session");
+  const [deliveryToken, setDeliveryToken] = useState(null);
+  const [deliveryTokenData, setDeliveryTokenData] = useState(null);
 
   const [voiceData, setVoiceData] = useState({
     duration: 0,
@@ -1212,10 +1244,56 @@ function App() {
       try {
         const { data: { session } } = await supabaseClient.auth.getSession();
 
-        if (!session) {
-          setScene(-1);
-          return;
-        }
+  const initialDeliveryToken = getDeliveryTokenFromUrl();
+
+if (!session) {
+  if (initialDeliveryToken) {
+    try {
+      const tokenData = await resolveDeliveryToken(initialDeliveryToken);
+
+      if (tokenData?.user_question_id) {
+        setAccessMode("delivery_token");
+        setDeliveryToken(initialDeliveryToken);
+        setDeliveryTokenData(tokenData);
+
+        setUser({
+          id: tokenData.user_id,
+          name: tokenData.user_name || "あなた"
+        });
+
+        setQuestionsDB([
+          {
+            user_question_id: tokenData.user_question_id,
+            book_project_id: tokenData.book_project_id || null,
+            participant_id: tokenData.participant_id || null,
+            id: tokenData.question_id,
+            question_id: tokenData.question_id,
+            sequence_order: tokenData.sequence_order,
+            content: tokenData.question_text,
+            chapter: "",
+            chapter_label: "",
+            chapter_description: "",
+            min_duration_seconds: 15,
+            min_transcript_chars: 20
+          }
+        ]);
+
+        setProgress({
+          currentIndex: 0,
+          total: 1
+        });
+
+        setScene(1);
+        return;
+      }
+    } catch (tokenError) {
+      console.error("token init error", tokenError);
+    }
+  }
+
+  setScene(-1);
+  return;
+}
 
         const profile = await ensureProfileExists(session.user);
 
@@ -1621,6 +1699,36 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
     const currentQ = questionsDB[progress.currentIndex];
     const currentSeq = sourceVoiceData.targetSequenceOrder || currentQ?.sequence_order;
 
+    if (accessMode === "delivery_token") {
+  const targetAnswerId = crypto.randomUUID();
+  const transcriptRaw =
+    sourceVoiceData.transcript ||
+    "音声は保存されましたが、文字起こしを取得できませんでした。";
+
+  const firstData = {
+    ...sourceVoiceData,
+    answerId: targetAnswerId,
+    transcript: transcriptRaw,
+    transcriptClean: transcriptRaw,
+    transcriptReadable: transcriptRaw,
+    transcriptEssay: "",
+    selectedStyle: "readable",
+    editedText: transcriptRaw,
+    aiMirror: "ひとつの時間が、形になっています",
+    extractedSnippet: transcriptRaw
+      ? `「${transcriptRaw.slice(0, 45)}${transcriptRaw.length > 45 ? "…" : ""}」`
+      : "",
+    transcriptionStatus: "done",
+    transcriptionError: "",
+    polishStatus: "done",
+    polishError: ""
+  };
+
+  setVoiceData(firstData);
+  setScene(3.5);
+  return;
+}
+
 const editMode = sourceVoiceData.editRecordingMode || null;
 const existingAudioPaths = sourceVoiceData.existingAudioPaths || [];
 
@@ -1840,6 +1948,21 @@ const handleSaveAnswer = async (tag) => {
 
   try {
     const currentQ = questionsDB[progress.currentIndex];
+    if (accessMode === "delivery_token") {
+  if (!deliveryToken) {
+    throw new Error("回答リンクの情報が見つかりません");
+  }
+
+  await saveTokenAnswerOnServer({
+    token: deliveryToken,
+    voiceData,
+    tag
+  });
+
+  resetVoiceData();
+  setScene("token_completion");
+  return;
+}
     const currentSeq = voiceData.targetSequenceOrder || currentQ?.sequence_order;
 
       const editMode = voiceData.editRecordingMode || null;
@@ -2436,6 +2559,11 @@ onRetry={() => {
           }}
           onOpenStoryPages={() => setScene("story_pages")}
           onEndToday={() => setScene("end_today")}
+        />
+      )}
+      {scene === "token_completion" && (
+        <Scene_TokenCompletion
+          onLogin={() => setScene(-1)}
         />
       )}
 
@@ -4801,6 +4929,42 @@ function Scene6_Completion({ onTalkMore, onOpenStoryPages, onEndToday }) {
           今日はここまで
         </button>
 
+      </div>
+    </div>
+  );
+}
+
+function Scene_TokenCompletion({ onLogin }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter text-center px-6">
+      <div className="space-y-7 mb-12 text-narrative">
+        <p className="text-white/90 text-[1.08rem]">
+          語りを保存しました
+        </p>
+
+        <p className="text-white/60 text-[0.96rem] leading-loose">
+          今日の問いへの語りは、<br />
+          ちゃんと残っています。
+        </p>
+
+        <p className="text-white/42 text-sm leading-loose">
+          続けて語る場合や、これまでの語りを見る場合は、<br />
+          本人確認をお願いします。
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-4 w-full max-w-[280px]">
+        <button
+          type="button"
+          onClick={onLogin}
+          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+        >
+          本人確認して続ける
+        </button>
+
+        <p className="text-white/35 text-xs leading-loose">
+          この画面は、そのまま閉じて大丈夫です。
+        </p>
       </div>
     </div>
   );
