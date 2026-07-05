@@ -696,6 +696,32 @@ async function markUserQuestionAnswered(userQuestionId) {
   }
 }
 
+const BETA_SURVEYS = {
+  1: {
+    key: "survey_1",
+    title: "1問目を終えて",
+    url: "https://forms.gle/w8dVw44gnLL6bacH7"
+  },
+  7: {
+    key: "survey_7",
+    title: "7問目を終えて",
+    url: "https://forms.gle/FMGDjuJvofKoDTQm7"
+  },
+  15: {
+    key: "survey_15",
+    title: "15問目を終えて",
+    url: "https://forms.gle/p8aC9TNddKXPFqpx5"
+  }
+};
+
+function getBetaSurveyForSequence(sequenceOrder) {
+  return BETA_SURVEYS[Number(sequenceOrder)] || null;
+}
+
+function getBetaSurveySeenKey(userId, surveyKey) {
+  return `tateyoko_beta_${userId}_${surveyKey}_seen`;
+}
+
 const MIN_RECORDING_SECONDS = 15;
 
 function isRecordingTooShort(duration) {
@@ -1103,6 +1129,8 @@ function App() {
   const [notificationPref, setNotificationPref] = useState(null);
   const [progress, setProgress] = useState({ currentIndex: 0, total: 0 });
   const [foundation, setFoundation] = useState(null);
+
+  const [pendingBetaSurvey, setPendingBetaSurvey] = useState(null);
 
   const [voiceData, setVoiceData] = useState({
     duration: 0,
@@ -1962,8 +1990,28 @@ if (mediaStoragePaths.length > 0) {
         currentIndex: Math.min(nextIndex, questionsDB.length - 1)
       }));
 
-      localStorage.setItem("koe_last_visit", Date.now().toString());
-      setScene(6);
+localStorage.setItem("koe_last_visit", Date.now().toString());
+
+const betaSurvey = getBetaSurveyForSequence(currentSeq);
+
+if (betaSurvey && user?.id) {
+  const seenKey = getBetaSurveySeenKey(user.id, betaSurvey.key);
+  const hasSeenSurvey = localStorage.getItem(seenKey) === "1";
+
+  if (!hasSeenSurvey) {
+    setPendingBetaSurvey({
+      ...betaSurvey,
+      sequenceOrder: currentSeq,
+      seenKey
+    });
+    setScene("beta_survey_prompt");
+    return;
+  }
+}
+
+setScene(6);
+
+
     } catch (error) {
       console.error(error);
       alert("保存に失敗しました。");
@@ -2241,6 +2289,28 @@ onRetry={() => {
         />
       )}
 
+{scene === "beta_survey_prompt" && (
+  <Scene_BetaSurveyPrompt
+    survey={pendingBetaSurvey}
+    onOpenSurvey={() => {
+      if (pendingBetaSurvey?.url) {
+        window.open(pendingBetaSurvey.url, "_blank", "noopener,noreferrer");
+      }
+
+      if (pendingBetaSurvey?.seenKey) {
+        localStorage.setItem(pendingBetaSurvey.seenKey, "1");
+      }
+    }}
+    onContinue={() => {
+      if (pendingBetaSurvey?.seenKey) {
+        localStorage.setItem(pendingBetaSurvey.seenKey, "1");
+      }
+
+      setPendingBetaSurvey(null);
+      setScene(6);
+    }}
+  />
+)}
       {scene === 6 && (
         <Scene6_Completion
           onTalkMore={() => {
@@ -4461,7 +4531,45 @@ function Scene5_Meaning({ onNext }) {
     </div>
   );
 }
+function Scene_BetaSurveyPrompt({ survey, onOpenSurvey, onContinue }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
+      <div className="space-y-6 mb-12 text-narrative">
+        <p className="text-white/90 text-[1.08rem]">
+          ここまで語っていただき、ありがとうございます
+        </p>
 
+        <p className="text-white/62 text-[0.96rem] leading-loose">
+          β版をより良い体験にするために、<br />
+          短いアンケートへのご協力をお願いします。
+        </p>
+
+        <p className="text-white/42 text-sm leading-loose">
+          {survey?.title || "アンケート"}<br />
+          お名前やメールアドレスの入力は不要です。
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-4 w-full max-w-[280px]">
+        <button
+          type="button"
+          onClick={onOpenSurvey}
+          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+        >
+          アンケートに答える
+        </button>
+
+        <button
+          type="button"
+          onClick={onContinue}
+          className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
+        >
+          あとで答える
+        </button>
+      </div>
+    </div>
+  );
+}
 function Scene6_Completion({ onTalkMore, onOpenStoryPages, onEndToday }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter text-center">
