@@ -64,6 +64,11 @@ function isDevMode() {
   return params.get("dev") === "1";
 }
 
+function isBetaMode() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("beta") === "1";
+}
+
 function formatTranscriptForReading(input) {
   let text = String(input || "").replace(/\s+/g, " ").trim();
   if (!text) return "";
@@ -141,7 +146,7 @@ if (existingProfile) {
     display_name: nextFullName,
     preferred_name: nextPreferredName
   };
-  
+
     if (registrationData.hasSpouse !== undefined) {
       updatePayload.has_spouse = registrationData.hasSpouse;
     }
@@ -2030,7 +2035,9 @@ if (mediaStoragePaths.length > 0) {
 
 localStorage.setItem("koe_last_visit", Date.now().toString());
 
-const betaSurvey = getBetaSurveyForSequence(currentSeq);
+const betaSurvey = isBetaMode()
+  ? getBetaSurveyForSequence(currentSeq)
+  : null;
 
 if (betaSurvey && user?.id) {
   const seenKey = getBetaSurveySeenKey(user.id, betaSurvey.key);
@@ -4586,17 +4593,20 @@ function Scene_BetaSurveyPrompt({ survey, onOpenSurvey, onContinue }) {
     <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
       <div className="space-y-6 mb-12 text-narrative">
         <p className="text-white/90 text-[1.08rem]">
-          ここまで語っていただき、ありがとうございます
+          まずは初めての問いに語ってみていただき、ありがとうございます<br />
+          完璧な答えは要りません。<br />
+          なかなか思い出せない間も楽しみながら進めてみてください。<br />
+
         </p>
 
         <p className="text-white/62 text-[0.96rem] leading-loose">
-          β版をより良い体験にするために、<br />
-          短いアンケートへのご協力をお願いします。
+          tateito yokoito をより良い体験にするために、<br />
+          短いアンケートへのご協力をお願いします。<br />
+          (所要時間30秒-1分)
         </p>
 
         <p className="text-white/42 text-sm leading-loose">
-          {survey?.title || "アンケート"}<br />
-          お名前やメールアドレスの入力は不要です。
+          {survey?.title || "アンケート"}
         </p>
       </div>
 
