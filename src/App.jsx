@@ -4659,21 +4659,54 @@ function Scene5_Meaning({ onNext }) {
     </div>
   );
 }
+
 function Scene_BetaSurveyPrompt({ survey, onOpenSurvey, onContinue }) {
+  const sequenceOrder = Number(survey?.sequenceOrder || 0);
+
+  const message =
+    sequenceOrder === 1
+      ? {
+          main: (
+            <>
+              まずは初めての問いに語ってみていただき、ありがとうございます。<br />
+              完璧な答えは要りません。<br />
+              なかなか思い出せない間も楽しみながら進めてみてください。
+            </>
+          ),
+          time: "所要時間30秒〜1分"
+        }
+      : sequenceOrder === 7
+        ? {
+            main: (
+              <>
+                ここまで語っていただき、ありがとうございます。<br />
+                少しずつ、あなたの物語が形になり始めています。
+              </>
+            ),
+            time: "所要時間1分程度"
+          }
+        : {
+            main: (
+              <>
+                ここまで語っていただき、本当にありがとうございました。<br />
+                最後のアンケートです。<br />
+                今回の体験について、率直な感想をお聞かせください。
+              </>
+            ),
+            time: "所要時間2〜3分"
+          };
+
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
       <div className="space-y-6 mb-12 text-narrative">
-        <p className="text-white/90 text-[1.08rem]">
-          まずは初めての問いに語ってみていただき、ありがとうございます<br />
-          完璧な答えは要りません。<br />
-          なかなか思い出せない間も楽しみながら進めてみてください。<br />
-
+        <p className="text-white/90 text-[1.08rem] leading-loose">
+          {message.main}
         </p>
 
         <p className="text-white/62 text-[0.96rem] leading-loose">
           tateito yokoito をより良い体験にするために、<br />
           短いアンケートへのご協力をお願いします。<br />
-          (所要時間30秒-1分)
+          （{message.time}）
         </p>
 
         <p className="text-white/42 text-sm leading-loose">
@@ -4701,6 +4734,7 @@ function Scene_BetaSurveyPrompt({ survey, onOpenSurvey, onContinue }) {
     </div>
   );
 }
+
 function Scene6_Completion({ onTalkMore, onOpenStoryPages, onEndToday }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter text-center">
