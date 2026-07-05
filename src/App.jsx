@@ -6493,6 +6493,8 @@ function Scene_NotificationSetup({ user, onComplete }) {
   const [minute, setMinute] = useState(0);
 
   const [loading, setLoading] = useState(false);
+  const [deliveryMode, setDeliveryMode] = useState("email");
+  const [phoneNumber, setPhoneNumber] = useState("");
 
  const hourOptions = [];
 
@@ -6540,20 +6542,35 @@ const minuteOptions = [0, 15, 30, 45];
 
       const activeUserId = session.user.id;
 
+ if (
+  (deliveryMode === "sms" || deliveryMode === "both") &&
+  !phoneNumber.trim()
+) {
+  alert("SMSで受け取る場合は、電話番号を入力してください");
+  return;
+}     
+
       const { error } = await supabaseClient
         .from("notification_preferences")
-        .upsert({
-          user_id: activeUserId,
-          email_enabled: true,
-          line_enabled: false,
-          weekday: finalWeekday,
-          hour: finalHour,
-          minute: finalMinute,
-          timezone: "Asia/Tokyo",
-          delivery_channel: "email"
-        }, {
-          onConflict: "user_id"
-        });
+ 
+  .upsert({
+  user_id: activeUserId,
+  email_enabled: deliveryMode === "email" || deliveryMode === "both",
+  sms_enabled: deliveryMode === "sms" || deliveryMode === "both",
+  phone_number:
+    deliveryMode === "sms" || deliveryMode === "both"
+      ? phoneNumber.trim()
+      : null,
+  line_enabled: false,
+  weekday: finalWeekday,
+  hour: finalHour,
+  minute: finalMinute,
+  timezone: "Asia/Tokyo",
+  delivery_channel: deliveryMode,
+  is_active: true
+}, {
+  onConflict: "user_id"
+});
 
       if (error) {
         throw error;
