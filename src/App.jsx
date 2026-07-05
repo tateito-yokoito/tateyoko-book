@@ -118,15 +118,30 @@ async function ensureProfileExists(sessionUser, registrationData = {}) {
     throw existingError;
   }
 
-  if (existingProfile) {
-    const updatePayload = {
-      family_name: familyName || existingProfile.family_name,
-      given_name: givenName || existingProfile.given_name,
-      name: fullName || existingProfile.name,
-      display_name: fullName || existingProfile.display_name,
-      preferred_name: preferredName || existingProfile.preferred_name
-    };
+if (existingProfile) {
+  const nextFamilyName = familyName || existingProfile.family_name || null;
+  const nextGivenName = givenName || existingProfile.given_name || null;
 
+  const nextFullName =
+    registrationData.fullName ||
+    [nextFamilyName, nextGivenName].filter(Boolean).join(" ") ||
+    existingProfile.display_name ||
+    existingProfile.name ||
+    "あなた";
+
+  const nextPreferredName =
+    registrationData.preferredName ||
+    existingProfile.preferred_name ||
+    (nextGivenName ? `${nextGivenName}さん` : nextFullName);
+
+  const updatePayload = {
+    family_name: nextFamilyName,
+    given_name: nextGivenName,
+    name: nextFullName,
+    display_name: nextFullName,
+    preferred_name: nextPreferredName
+  };
+  
     if (registrationData.hasSpouse !== undefined) {
       updatePayload.has_spouse = registrationData.hasSpouse;
     }
