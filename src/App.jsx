@@ -6488,16 +6488,20 @@ function Scene_NotificationSetup({ user, onComplete }) {
 
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [customMode, setCustomMode] = useState(false);
-  const [weekday, setWeekday] = useState(0);
-  const [time, setTime] = useState("20:00");
+  const [weekday, setWeekday] = useState(0); 
+  const [hour, setHour] = useState(20);
+  const [minute, setMinute] = useState(0);
+
   const [loading, setLoading] = useState(false);
 
-  const timeOptions = [];
+ const hourOptions = [];
 
-  for (let h = 5; h <= 23; h++) {
-    timeOptions.push(`${String(h).padStart(2, "0")}:00`);
-    timeOptions.push(`${String(h).padStart(2, "0")}:30`);
-  }
+for (let h = 5; h <= 23; h++) {
+  hourOptions.push(h);
+}
+
+const minuteOptions = [0, 15, 30, 45];
+
 
   async function savePreference() {
     try {
@@ -6507,12 +6511,11 @@ function Scene_NotificationSetup({ user, onComplete }) {
       let finalHour;
       let finalMinute = 0;
 
+
       if (customMode) {
         finalWeekday = weekday;
-
-        const [h, m] = time.split(":").map(Number);
-        finalHour = h;
-        finalMinute = m;
+        finalHour = hour;
+        finalMinute = minute;
       } else {
         if (!selectedPreset) {
           alert("時間を選択してください");
@@ -6646,17 +6649,32 @@ function Scene_NotificationSetup({ user, onComplete }) {
               問いが届く時間
             </p>
 
-            <select
-              value={time}
-              onChange={e => setTime(e.target.value)}
-              className="quiet-input max-w-[180px] mx-auto text-center"
-            >
-              {timeOptions.map(t => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+<div className="flex justify-center gap-3">
+  <select
+    value={hour}
+    onChange={e => setHour(Number(e.target.value))}
+    className="quiet-input max-w-[110px] text-center"
+  >
+    {hourOptions.map(h => (
+      <option key={h} value={h}>
+        {String(h).padStart(2, "0")}時
+      </option>
+    ))}
+  </select>
+
+  <select
+    value={minute}
+    onChange={e => setMinute(Number(e.target.value))}
+    className="quiet-input max-w-[110px] text-center"
+  >
+    {minuteOptions.map(m => (
+      <option key={m} value={m}>
+        {String(m).padStart(2, "0")}分
+      </option>
+    ))}
+  </select>
+</div>
+
           </div>
 
           <button
