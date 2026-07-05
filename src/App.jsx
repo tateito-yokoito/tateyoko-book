@@ -1344,6 +1344,10 @@ if (deliveryToken) {
     const tokenData = await resolveDeliveryToken(deliveryToken);
 
     if (tokenData?.sequence_order) {
+      setAccessMode("delivery_token");
+      setDeliveryToken(deliveryToken);
+      setDeliveryTokenData(tokenData);
+
       const tokenQuestionIndex = questionSet.findIndex(q =>
         Number(q.sequence_order) === Number(tokenData.sequence_order)
       );
@@ -1357,6 +1361,7 @@ if (deliveryToken) {
     console.error("delivery token handling error", tokenError);
   }
 }
+
 
 setUser(currentUser);
 setQuestionsDB(questionSet);
@@ -3690,7 +3695,7 @@ function Scene1_MyPage({ progress, question, userName, onNext, onSkip }) {
     <div className="h-full flex flex-col fade-enter">
       <header className="mb-8 pt-2">
         <h1 className="text-white/70 text-sm tracking-widest mb-6">
-          {userName || "あなた"}さんの物語
+          {withHonorific(userName)}の物語
         </h1>
 
         <div className="space-y-2">
@@ -3735,12 +3740,14 @@ function Scene1_MyPage({ progress, question, userName, onNext, onSkip }) {
           今回の問いに答える
         </button>
 
-        <button
-          onClick={onSkip}
-          className="w-full py-3 text-white/40 text-sm underline underline-offset-4"
-        >
-          別の問いへ
-        </button>
+{!isTokenMode() && (
+  <button
+    onClick={onSkip}
+    className="w-full py-3 text-white/40 text-sm underline underline-offset-4"
+  >
+    別の問いへ
+  </button>
+)}
       </div>
     </div>
   );
