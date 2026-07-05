@@ -1305,6 +1305,29 @@ const handleSkipQuestion = async () => {
   }
 };
 
+const handleDevLogout = async () => {
+  if (!isDevMode()) return;
+
+  const ok = window.confirm("開発用ログアウトしますか？");
+  if (!ok) return;
+
+  try {
+    await supabaseClient.auth.signOut();
+
+    resetVoiceData();
+    setUser(null);
+    setQuestionsDB([]);
+    setNotificationPref(null);
+    setProgress({ currentIndex: 0, total: 0 });
+    setFoundation(null);
+    setPendingBetaSurvey(null);
+    setScene(-1);
+  } catch (e) {
+    console.error("dev logout error", e);
+    alert("ログアウトに失敗しました。");
+  }
+};
+
 const pickTranscriptByStyle = (data, style) => {
   if (style === "clean") {
     return data.transcriptClean || data.transcriptReadable || data.editedText || data.transcript || "";
@@ -2141,12 +2164,13 @@ setScene(6);
         />
       )}
       {scene === "home" && (
-        <Scene_Home
-          userName={user?.name || "あなた"}
-          onStartTalking={() => setScene(0)}
-          onOpenStoryPages={() => setScene("story_pages")}
-          onOpenBookBuilder={() => setScene("book_builder")}
-        />
+       <Scene_Home
+         userName={user?.name || "あなた"}
+         onStartTalking={() => setScene(0)}
+         onOpenStoryPages={() => setScene("story_pages")}
+         onOpenBookBuilder={() => setScene("book_builder")}
+         onDevLogout={isDevMode() ? handleDevLogout : null}
+       />
       )}
 
       {scene === "book_builder" && (
@@ -2856,7 +2880,7 @@ function HomeMenuButton({ icon: Icon, label, onClick }) {
   );
 }
 
-function Scene_Home({ userName, onStartTalking, onOpenStoryPages, onOpenBookBuilder }) {
+function Scene_Home({ userName, onStartTalking, onOpenStoryPages, onOpenBookBuilder, onDevLogout }) {
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8">
       <div className="flex-1 flex flex-col justify-center">
@@ -2888,6 +2912,17 @@ function Scene_Home({ userName, onStartTalking, onOpenStoryPages, onOpenBookBuil
             label="本に仕上げる"
             onClick={onOpenBookBuilder}
           />
+
+          {onDevLogout && (
+            <button
+              type="button"
+              onClick={onDevLogout}
+              className="w-full py-3 text-white/35 text-sm underline underline-offset-4"
+            >
+              開発用ログアウト
+            </button>
+          )}
+
         </div>
       </div>
     </div>
