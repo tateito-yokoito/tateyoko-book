@@ -742,6 +742,11 @@ function getBetaSurveySeenKey(userId, surveyKey) {
   return `tateyoko_beta_${userId}_${surveyKey}_seen`;
 }
 
+function getBetaIntroSeenKey(userId) {
+  return `tateyoko_beta_${userId}_intro_seen`;
+}
+
+
 const MIN_RECORDING_SECONDS = 15;
 
 function isRecordingTooShort(duration) {
@@ -1227,11 +1232,20 @@ function App() {
           total: questionSet.length
         });
 
-      if (!notificationData) {
-        setScene("setup_intro");
-      } else {
-        setScene("home");
+       const nextScene = !notificationData ? "setup_intro" : "home";
+
+      if (isBetaMode() && session.user?.id) {
+        const betaIntroSeenKey = getBetaIntroSeenKey(session.user.id);
+
+        if (localStorage.getItem(betaIntroSeenKey) !== "1") {
+          setScene("beta_intro");
+          return;
+        }      
       }
+
+      setScene(nextScene);
+
+
       } catch (e) {
         console.error("init error", e);
         setScene(-1);
@@ -2114,14 +2128,34 @@ setScene(6);
                 total: questionSet.length
               });
 
-              if (!notificationData) {
-                setScene("setup_intro");
-              } else {
-                setScene("home");
+            const nextScene = !notificationData ? "setup_intro" : "home";
+
+            if (isBetaMode() && u?.id) {
+              const betaIntroSeenKey = getBetaIntroSeenKey(u.id);
+
+              if (localStorage.getItem(betaIntroSeenKey) !== "1") {
+                setScene("beta_intro");
+                return;
               }
+            }
+
+            setScene(nextScene); 
+
             } finally {
               setIsInitializing(false);
             }
+          }}
+        />
+      )}
+
+      {scene === "beta_intro" && (
+        <Scene_BetaIntro
+          onNext={() => {
+            if (user?.id) {
+              localStorage.setItem(getBetaIntroSeenKey(user.id), "1");
+            }
+
+            setScene(notificationPref ? "home" : "setup_intro");
           }}
         />
       )}
@@ -2672,6 +2706,43 @@ function Scene_Login({ onLogin }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function Scene_BetaIntro({ onNext }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
+      <div className="space-y-7 mb-12 text-narrative">
+        <p className="text-white/90 text-[1.08rem]">
+          β版先行体験へようこそ
+        </p>
+
+        <p className="text-white/62 text-[0.96rem] leading-loose">
+          このβ版では、いくつかの問いに答えながら、<br />
+          人生を少し振り返り、語った言葉が<br />
+          文章として形になっていく体験をしていただきます。
+        </p>
+
+        <p className="text-white/52 text-[0.94rem] leading-loose">
+          β版では、書籍の完成・製本までは行いません。<br />
+          ただし、ここで語っていただいた内容は、<br />
+          正式リリース版へ進む際に引き継ぐことができます。
+        </p>
+
+        <p className="text-white/45 text-[0.92rem] leading-loose">
+          体験の途中で、短いアンケートへの<br />
+          ご協力をお願いする場面があります。
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={onNext}
+        className="btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white"
+      >
+        理解してはじめる
+      </button>
     </div>
   );
 }
