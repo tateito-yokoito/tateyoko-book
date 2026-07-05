@@ -2260,8 +2260,10 @@ onRetry={() => {
       )}
 
       {scene === "story_pages" && (
+
 <Scene_StoryPages
   user={user}
+  foundation={foundation}
   questionSet={questionsDB}
   onTalkMore={() => {
     resetVoiceData();
@@ -2930,6 +2932,14 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
               .createSignedUrl(media.storage_path, 60 * 60);
 
             url = signed?.signedUrl || null;
+          }
+
+          if (media.asset_type === "audio") {
+            const { data: signed } = await supabaseClient.storage
+              .from("audio")
+              .createSignedUrl(media.storage_path, 60 * 60);
+
+            url = signed?.signedUrl || null;          
           }
 
           grouped[media.answer_id].push({ ...media, url });
@@ -4915,8 +4925,7 @@ handles.map(handle => (
 }
 
 
-
-function Scene_StoryPages({ user, questionSet = [], onTalkMore, onEditRecord, onBack }) {
+function Scene_StoryPages({ user, foundation, questionSet = [], onTalkMore, onEditRecord, onBack }) {
 
   const getStoryBody = (answer) => {
     const selectedStyle = answer?.selected_style || "";
@@ -5613,9 +5622,9 @@ const handleStoryPhotoSelect = async (files, options = {}) => {
         photoRows.push({
           answer_id: answerId,
           user_id: user.id,
-          family_id: null,
-          book_project_id: targetAnswer?.book_project_id || null,
-          person_id: null,
+          family_id: foundation?.family?.id || null,
+          book_project_id: targetAnswer?.book_project_id || foundation?.project?.id || null,
+          person_id: foundation?.person?.id || null,
           asset_type: "photo",
           storage_path: photoPath,
           meta_json: {
@@ -5651,6 +5660,24 @@ const handleStoryPhotoSelect = async (files, options = {}) => {
       }
     }
   };
+
+useEffect(() => {
+  const sections = buildChapterSections(answers);
+
+  if (sections.length === 0) return;
+
+  const currentSection = sections[selectedChapterIndex];
+
+  if (currentSection?.answers?.length > 0) return;
+
+  const firstAnsweredIndex = sections.findIndex(section =>
+    section.answers.length > 0
+  );
+
+  if (firstAnsweredIndex >= 0) {
+    setSelectedChapterIndex(firstAnsweredIndex);
+  }
+}, [answers, questionSet, selectedChapterIndex]);
 
   const chapterSections = buildChapterSections(answers);
   const safeChapterIndex = Math.min(
