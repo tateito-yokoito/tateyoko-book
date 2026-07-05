@@ -15,6 +15,24 @@ function getSequenceFromUrl() {
   return Number.isFinite(seq) && seq > 0 ? seq : null;
 }
 
+function getDeliveryTokenFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("token") || null;
+}
+
+async function resolveDeliveryToken(token) {
+  const { data, error } = await supabaseClient.rpc("resolve_delivery_token", {
+    input_token: token
+  });
+
+  if (error) {
+    console.error("resolve delivery token error", error);
+    throw error;
+  }
+
+  return Array.isArray(data) ? data[0] : data;
+}
+
 async function transcribeAudioOnServer({ answerId, audioPaths, fallbackTranscript }) {
   const { data, error } = await supabaseClient.functions.invoke("transcribe-audio", {
     body: {
@@ -1223,16 +1241,35 @@ function App() {
           foundationData
         );
 
-        const currentIndex = getInitialQuestionIndex(questionSet, profile);
+const deliveryToken = getDeliveryTokenFromUrl();
+let currentIndex = getInitialQuestionIndex(questionSet, profile);
+let nextScene = !notificationData ? "setup_intro" : "home";
 
-        setUser(currentUser);
-        setQuestionsDB(questionSet);
-        setProgress({
-          currentIndex,
-          total: questionSet.length
-        });
+if (deliveryToken) {
+  try {
+    const tokenData = await resolveDeliveryToken(deliveryToken);
 
-       const nextScene = !notificationData ? "setup_intro" : "home";
+    if (tokenData?.sequence_order) {
+      const tokenQuestionIndex = questionSet.findIndex(q =>
+        Number(q.sequence_order) === Number(tokenData.sequence_order)
+      );
+
+      if (tokenQuestionIndex >= 0) {
+        currentIndex = tokenQuestionIndex;
+        nextScene = 1;
+      }
+    }
+  } catch (tokenError) {
+    console.error("delivery token handling error", tokenError);
+  }
+}
+
+setUser(currentUser);
+setQuestionsDB(questionSet);
+setProgress({
+  currentIndex,
+  total: questionSet.length
+});
 
       if (isBetaMode() && session.user?.id) {
         const betaIntroSeenKey = getBetaIntroSeenKey(session.user.id);
