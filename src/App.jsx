@@ -6650,11 +6650,11 @@ const minuteOptions = [0, 15, 30, 45];
             </p>
 
 <div className="flex justify-center gap-3">
-  <select
-    value={hour}
-    onChange={e => setHour(Number(e.target.value))}
-    className="quiet-input max-w-[110px] text-center"
-  >
+<select
+  value={hour}
+  onChange={e => setHour(Number(e.target.value))}
+  className="max-w-[110px] rounded-xl bg-white px-4 py-3 text-center text-slate-900 outline-none"
+>
     {hourOptions.map(h => (
       <option key={h} value={h}>
         {String(h).padStart(2, "0")}時
@@ -6662,11 +6662,12 @@ const minuteOptions = [0, 15, 30, 45];
     ))}
   </select>
 
-  <select
-    value={minute}
-    onChange={e => setMinute(Number(e.target.value))}
-    className="quiet-input max-w-[110px] text-center"
-  >
+ <select
+  value={minute}
+  onChange={e => setMinute(Number(e.target.value))}
+  className="max-w-[110px] rounded-xl bg-white px-4 py-3 text-center text-slate-900 outline-none"
+>
+
     {minuteOptions.map(m => (
       <option key={m} value={m}>
         {String(m).padStart(2, "0")}分
