@@ -77,7 +77,57 @@ async function polishTranscriptOnServer({ answerId, transcriptRaw, questionText 
   return data;
 }
 
+async function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const commaIndex = result.indexOf(",");
+      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+    };
+
+    reader.onerror = () => reject(reader.error || new Error("音声の変換に失敗しました"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function buildTokenAudioItems(voiceData) {
+  const segments =
+    voiceData.audioSegments && voiceData.audioSegments.length > 0
+      ? voiceData.audioSegments
+      : (
+          voiceData.audioBlob
+            ? [{
+                blob: voiceData.audioBlob,
+                duration: voiceData.duration || 0,
+                transcript: voiceData.transcript || ""
+              }]
+            : []
+        );
+
+  const items = [];
+
+  for (const segment of segments) {
+    const blob = segment?.blob;
+
+    if (!blob || !blob.size) continue;
+
+    items.push({
+      base64: await blobToBase64(blob),
+      contentType: blob.type || "audio/mp4",
+      durationSeconds: segment.duration || 0,
+      transcript: segment.transcript || ""
+    });
+  }
+
+  return items;
+}
+
+
 async function saveTokenAnswerOnServer({ token, voiceData, tag }) {
+  const audioItems = await buildTokenAudioItems(voiceData);
+
   const { data, error } = await supabaseClient.functions.invoke("save-token-answer", {
     body: {
       token,
@@ -89,7 +139,9 @@ async function saveTokenAnswerOnServer({ token, voiceData, tag }) {
       selectedStyle: voiceData.selectedStyle || "readable",
       aiMirror: voiceData.aiMirror || "",
       snippet: voiceData.extractedSnippet || "",
-      meaningTag: tag
+      meaningTag: tag,
+      durationSeconds: voiceData.duration || 0,
+      audioItems
     }
   });
 
@@ -148,7 +200,7 @@ commaWords.forEach(word => {
 
   text = text
     .replace(/、+/g, "、")
-    .replace(/、\s*/g, "、")
+    .replace(/、\s*/g, "、")　　　　　　　　　
     .replace(/\s+/g, " ")
     .trim();
 
