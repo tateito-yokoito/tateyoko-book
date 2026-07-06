@@ -158,6 +158,47 @@ async function saveTokenAnswerOnServer({ token, voiceData, tag }) {
   return data;
 }
 
+async function startTokenAuthOnServer(token) {
+  const { data, error } = await supabaseClient.functions.invoke("start-token-auth", {
+    body: {
+      token
+    }
+  });
+
+  if (error) {
+    console.error("start-token-auth invoke error", error);
+    throw error;
+  }
+
+  if (!data || data.success === false) {
+    console.error("start-token-auth returned error", data);
+    throw new Error(data?.error || "認証コードの送信に失敗しました");
+  }
+
+  return data;
+}
+
+async function verifyTokenAuthOnServer({ token, pin }) {
+  const { data, error } = await supabaseClient.functions.invoke("verify-token-auth", {
+    body: {
+      token,
+      pin
+    }
+  });
+
+  if (error) {
+    console.error("verify-token-auth invoke error", error);
+    throw error;
+  }
+
+  if (!data || data.success === false || !data.session) {
+    console.error("verify-token-auth returned error", data);
+    throw new Error(data?.error || "認証に失敗しました");
+  }
+
+  return data;
+}
+
 function isDevMode() {
   const params = new URLSearchParams(window.location.search);
   return params.get("dev") === "1";
@@ -200,7 +241,7 @@ commaWords.forEach(word => {
 
   text = text
     .replace(/、+/g, "、")
-    .replace(/、\s*/g, "、")　　　　　　　　　
+    .replace(/、\s*/g, "、")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -733,6 +774,8 @@ function normalizeUserQuestions(rows) {
       id: row.questions?.id || row.question_id,
       question_id: row.question_id,
       sequence_order: row.sequence_order,
+      status: row.status || "pending",
+      answered_at: row.answered_at || null,
       content,
       chapter: chapterDescription || chapterTitle,
       chapter_label: chapterTitle,
@@ -767,6 +810,7 @@ async function loadUserQuestionSet(userId, foundationData = null) {
       question_id,
       is_active,
       status,
+      answered_at,
       meta_json,
       questions (
         id,
@@ -813,6 +857,33 @@ function getInitialQuestionIndex(questionSet, profile) {
   }
 
   return currentIndex;
+}
+
+function getResumeQuestionIndexFromToken(questionSet, tokenData) {
+  const tokenSeq = Number(tokenData?.sequence_order || 0);
+
+  if (!tokenSeq || !questionSet || questionSet.length === 0) {
+    return 0;
+  }
+
+  const nextUnansweredIndex = questionSet.findIndex(q =>
+    Number(q.sequence_order) >= tokenSeq &&
+    q.status !== "answered"
+  );
+
+  if (nextUnansweredIndex >= 0) {
+    return nextUnansweredIndex;
+  }
+
+  const anyUnansweredIndex = questionSet.findIndex(q =>
+    q.status !== "answered"
+  );
+
+  if (anyUnansweredIndex >= 0) {
+    return anyUnansweredIndex;
+  }
+
+  return Math.max(questionSet.length - 1, 0);
 }
 
 async function markUserQuestionAnswered(userQuestionId) {
@@ -1319,43 +1390,20 @@ if (!session) {
     try {
       const tokenData = await resolveDeliveryToken(initialDeliveryToken);
 
-      if (tokenData?.user_question_id) {
-        setAccessMode("delivery_token");
+      if (tokenData?.user_id) {
+        setAccessMode("token_auth");
         setDeliveryToken(initialDeliveryToken);
         setDeliveryTokenData(tokenData);
-
-        setUser({
-          id: tokenData.user_id,
-          name: tokenData.user_name || "あなた"
-        });
-
-        setQuestionsDB([
-          {
-            user_question_id: tokenData.user_question_id,
-            book_project_id: tokenData.book_project_id || null,
-            participant_id: tokenData.participant_id || null,
-            id: tokenData.question_id,
-            question_id: tokenData.question_id,
-            sequence_order: tokenData.sequence_order,
-            content: tokenData.question_text,
-            chapter: "",
-            chapter_label: "",
-            chapter_description: "",
-            min_duration_seconds: 15,
-            min_transcript_chars: 20
-          }
-        ]);
-
-        setProgress({
-          currentIndex: 0,
-          total: 1
-        });
-
-        setScene(1);
+        setScene("token_auth");
         return;
       }
+
+      setScene("token_invalid");
+      return;
     } catch (tokenError) {
       console.error("token init error", tokenError);
+      setScene("token_invalid");
+      return;
     }
   }
 
@@ -1396,21 +1444,16 @@ if (deliveryToken) {
     const tokenData = await resolveDeliveryToken(deliveryToken);
 
     if (tokenData?.sequence_order) {
-      setAccessMode("delivery_token");
+      setAccessMode("session");
       setDeliveryToken(deliveryToken);
       setDeliveryTokenData(tokenData);
 
-      const tokenQuestionIndex = questionSet.findIndex(q =>
-        Number(q.sequence_order) === Number(tokenData.sequence_order)
-      );
-
-      if (tokenQuestionIndex >= 0) {
-        currentIndex = tokenQuestionIndex;
-        nextScene = 1;
-      }
+      currentIndex = getResumeQuestionIndexFromToken(questionSet, tokenData);
+      nextScene = 1;
     }
   } catch (tokenError) {
     console.error("delivery token handling error", tokenError);
+    nextScene = "token_invalid";
   }
 }
 
@@ -1772,35 +1815,6 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
     const currentQ = questionsDB[progress.currentIndex];
     const currentSeq = sourceVoiceData.targetSequenceOrder || currentQ?.sequence_order;
 
-    if (accessMode === "delivery_token") {
-  const targetAnswerId = crypto.randomUUID();
-  const transcriptRaw =
-    sourceVoiceData.transcript ||
-    "音声は保存されましたが、文字起こしを取得できませんでした。";
-
-  const firstData = {
-    ...sourceVoiceData,
-    answerId: targetAnswerId,
-    transcript: transcriptRaw,
-    transcriptClean: transcriptRaw,
-    transcriptReadable: transcriptRaw,
-    transcriptEssay: "",
-    selectedStyle: "readable",
-    editedText: transcriptRaw,
-    aiMirror: "ひとつの時間が、形になっています",
-    extractedSnippet: transcriptRaw
-      ? `「${transcriptRaw.slice(0, 45)}${transcriptRaw.length > 45 ? "…" : ""}」`
-      : "",
-    transcriptionStatus: "done",
-    transcriptionError: "",
-    polishStatus: "done",
-    polishError: ""
-  };
-
-  setVoiceData(firstData);
-  setScene(3.5);
-  return;
-}
 
 const editMode = sourceVoiceData.editRecordingMode || null;
 const existingAudioPaths = sourceVoiceData.existingAudioPaths || [];
@@ -2021,21 +2035,7 @@ const handleSaveAnswer = async (tag) => {
 
   try {
     const currentQ = questionsDB[progress.currentIndex];
-    if (accessMode === "delivery_token") {
-  if (!deliveryToken) {
-    throw new Error("回答リンクの情報が見つかりません");
-  }
 
-  await saveTokenAnswerOnServer({
-    token: deliveryToken,
-    voiceData,
-    tag
-  });
-
-  resetVoiceData();
-  setScene("token_completion");
-  return;
-}
     const currentSeq = voiceData.targetSequenceOrder || currentQ?.sequence_order;
 
       const editMode = voiceData.editRecordingMode || null;
@@ -2381,6 +2381,30 @@ setScene(6);
         />
       )}
 
+      {scene === "token_auth" && (
+        <Scene_TokenAuthRequired
+          token={deliveryToken}
+          tokenData={deliveryTokenData}
+          onAuthenticated={() => {
+            window.location.reload();
+          }}
+          onInvalid={() => {
+            setScene(-1);
+          }}
+        />
+      )}
+
+      {scene === "token_invalid" && (
+        <Scene_TokenInvalid
+          onBack={() => {
+            setAccessMode("session");
+            setDeliveryToken(null);
+            setDeliveryTokenData(null);
+            setScene(-1);
+          }}
+        />
+      )}
+
       {scene === "beta_intro" && (
         <Scene_BetaIntro
           onNext={() => {
@@ -2693,6 +2717,151 @@ function StoryThemeToggle({ label, value, onToggle }) {
         </p>
       </div>
     </button>
+  );
+}
+
+function Scene_TokenAuthRequired({ token, tokenData, onAuthenticated, onInvalid }) {
+  const [step, setStep] = useState("ready");
+  const [pin, setPin] = useState("");
+  const [maskedEmail, setMaskedEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const sendCode = async () => {
+    try {
+      setLoading(true);
+
+      const result = await startTokenAuthOnServer(token);
+
+      setMaskedEmail(result.maskedEmail || "");
+      setStep("pin");
+    } catch (e) {
+      console.error("token auth send error", e);
+      alert("認証コードを送信できませんでした。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyCode = async () => {
+    try {
+      setLoading(true);
+
+      const result = await verifyTokenAuthOnServer({
+        token,
+        pin
+      });
+
+      const session = result.session;
+
+      await supabaseClient.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token
+      });
+
+      onAuthenticated();
+    } catch (e) {
+      console.error("token auth verify error", e);
+      alert("認証コードが正しくありません。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!token || !tokenData?.user_id) {
+    return (
+      <Scene_TokenInvalid onBack={onInvalid} />
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
+      <div className="space-y-7 mb-12 text-narrative">
+        <p className="text-white/90 text-[1.08rem]">
+          物語の続きを開きます
+        </p>
+
+        <p className="text-white/62 text-[0.96rem] leading-loose">
+          ご本人確認のため、<br />
+          登録済みのメールアドレスに<br />
+          認証コードをお送りします。
+        </p>
+
+        {maskedEmail && (
+          <p className="text-white/42 text-sm leading-loose">
+            送信先：{maskedEmail}
+          </p>
+        )}
+      </div>
+
+      {step === "ready" ? (
+        <button
+          type="button"
+          onClick={sendCode}
+          disabled={loading}
+          className={`btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white ${
+            loading ? "opacity-40" : ""
+          }`}
+        >
+          {loading ? "送信中..." : "認証コードを送る"}
+        </button>
+      ) : (
+        <div className="w-full max-w-[280px] space-y-6">
+          <input
+            type="text"
+            className="quiet-input tracking-widest text-xl text-center"
+            value={pin}
+            onChange={e => setPin(e.target.value)}
+            placeholder="000000"
+            maxLength="6"
+          />
+
+          <button
+            type="button"
+            onClick={verifyCode}
+            disabled={pin.length !== 6 || loading}
+            className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${
+              pin.length !== 6 || loading ? "opacity-40" : ""
+            }`}
+          >
+            {loading ? "確認中..." : "続きを開く"}
+          </button>
+
+          <button
+            type="button"
+            onClick={sendCode}
+            disabled={loading}
+            className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
+          >
+            認証コードを再送する
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Scene_TokenInvalid({ onBack }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
+      <div className="space-y-7 mb-12 text-narrative">
+        <p className="text-white/90 text-[1.08rem]">
+          このリンクは開けませんでした
+        </p>
+
+        <p className="text-white/62 text-[0.96rem] leading-loose">
+          期限切れ、または無効なリンクの可能性があります。<br />
+          ログインして、物語の続きを開いてください。
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={onBack}
+        className="btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white"
+      >
+        ログイン画面へ
+      </button>
+    </div>
   );
 }
 
