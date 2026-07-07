@@ -1453,7 +1453,7 @@ if (deliveryToken) {
       setDeliveryTokenData(tokenData);
 
       currentIndex = getResumeQuestionIndexFromToken(questionSet, tokenData);
-      nextScene = 1;
+      nextScene = hasDoneDailyMicCheck() ? 1 : "daily_mic_check";
     }
   } catch (tokenError) {
     console.error("delivery token handling error", tokenError);
@@ -1662,7 +1662,7 @@ const continueAfterTokenAuth = async () => {
       total: questionSet.length
     });
 
-    setScene(1);
+    setScene(hasDoneDailyMicCheck() ? 1 : "daily_mic_check");
   } catch (e) {
     console.error("continue after token auth error", e);
     alert(e instanceof Error ? e.message : "物語の続きを開けませんでした。");
@@ -4321,7 +4321,16 @@ function Scene_Recording({ question, onComplete }) {
   const transcriptRef = useRef("");
   const interimRef = useRef("");
 
-    const debugRunIdRef = useRef(
+  const isIOSLikeBrowser = () => {
+    const ua = navigator.userAgent || "";
+
+    return (
+      /iPad|iPhone|iPod/.test(ua) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+    );
+  };
+
+  const debugRunIdRef = useRef(
     `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   );
 
@@ -4462,10 +4471,14 @@ useEffect(() => {
 }, [step, isPaused]);
 
   const startWaveMonitor = async (stream) => {
-    console.log("[recording-debug] wave monitor disabled for isolation test", {
-      runId: debugRunIdRef.current,
-      stream: getStreamDebug(stream)
-    });
+    if (isIOSLikeBrowser()) {
+      console.log("[recording-debug] wave monitor skipped on iOS", {
+        runId: debugRunIdRef.current,
+        stream: getStreamDebug(stream)
+      });
+
+      return;
+    }
 
     try {
       stopWaveMonitor();
@@ -4515,6 +4528,8 @@ useEffect(() => {
     }
   };
 
+
+
   const stopWaveMonitor = () => {
     if (waveTimerRef.current) {
       clearInterval(waveTimerRef.current);
@@ -4553,14 +4568,13 @@ const start = async () => {
 
     streamRef.current = stream;
 
-console.log("[recording-debug] A-test: starting wave monitor before recorder", {
-  runId: debugRunIdRef.current,
-  stream: getStreamDebug(stream)
-});
-
-    await startWaveMonitor(stream);
+    console.log("[recording-debug] recorder-first: wave monitor not started before recorder", {
+      runId: debugRunIdRef.current,
+      stream: getStreamDebug(stream)
+    });
 
     setCountdown(3);
+
     hasStartedRecordingRef.current = false;
     setStep("countdown");
 
@@ -4683,9 +4697,29 @@ mediaRef.current.onstop = () => {
           duration: timeRef.current
         });
 
-        const hasRecordedAudio = blob.size > 0;
+        if (!blob.size) {
+          console.warn("[recording-debug] empty blob detected", {
+            runId: debugRunIdRef.current,
+            duration: timeRef.current,
+            chunks: getChunksDebug(),
+            stream: getStreamDebug()
+          });
 
-        const url = hasRecordedAudio ? URL.createObjectURL(blob) : null;
+          stopWaveMonitor();
+
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach(t => t.stop());
+            streamRef.current = null;
+          }
+
+          mediaRef.current = null;
+
+          alert("音声をうまく取得できませんでした。もう一度、録音をお試しください。");
+          setStep(0);
+          return;
+        }
+
+        const url = URL.createObjectURL(blob);
 
         const finalTranscript = formatTranscriptForReading([
           transcriptRef.current,
@@ -4696,9 +4730,8 @@ mediaRef.current.onstop = () => {
           finalTranscript,
           timeRef.current,
           url,
-          hasRecordedAudio ? blob : null
+          blob
         );
-
 
         stopWaveMonitor();
 
@@ -4711,7 +4744,7 @@ mediaRef.current.onstop = () => {
 
       };
 
-mediaRef.current.start(250);
+mediaRef.current.start();
 
 console.log("[recording-debug] MediaRecorder started", {
   runId: debugRunIdRef.current,
@@ -4719,10 +4752,13 @@ console.log("[recording-debug] MediaRecorder started", {
   recorderMimeType: mediaRef.current.mimeType
 });
 
-console.log("[recording-debug] A-test: wave monitor was already started before recorder", {
+await startWaveMonitor(stream);
+
+console.log("[recording-debug] recorder-first: wave monitor started after recorder", {
   runId: debugRunIdRef.current,
   stream: getStreamDebug(stream),
-  hasAnalyser: !!analyserRef.current
+  hasAnalyser: !!analyserRef.current,
+  isIOSLikeBrowser: isIOSLikeBrowser()
 });
 
       // This is only a fallback transcript for now.
@@ -4843,7 +4879,14 @@ const stop = () => {
         mediaState: mediaRef.current.state
       });
 
+      try {
+        mediaRef.current.requestData?.();
+      } catch (e) {
+        console.warn("media recorder requestData failed", e);
+      }
+
       mediaRef.current.stop();
+
     } else {
       console.warn("[recording-debug] mediaRecorder not stoppable, fallback null audio", {
         runId: debugRunIdRef.current,
@@ -4853,19 +4896,18 @@ const stop = () => {
         stream: getStreamDebug()
       });
 
-      const finalTranscript = formatTranscriptForReading([
-        transcriptRef.current,
-        interimRef.current
-      ].filter(Boolean).join(" "));
-
-      onComplete(finalTranscript, timeRef.current, null, null);
-
       stopWaveMonitor();
 
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
         streamRef.current = null;
       }
+
+      mediaRef.current = null;
+
+      alert("録音をうまく終了できませんでした。もう一度、録音をお試しください。");
+      setStep(0);
+
     }
   }, 1200);
 };
