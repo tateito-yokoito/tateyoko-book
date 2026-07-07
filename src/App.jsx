@@ -4744,12 +4744,13 @@ mediaRef.current.onstop = () => {
 
       };
 
-mediaRef.current.start();
+mediaRef.current.start(1000);
 
-console.log("[recording-debug] MediaRecorder started", {
+console.log("[recording-debug] MediaRecorder started with timeslice", {
   runId: debugRunIdRef.current,
   recorderState: mediaRef.current.state,
-  recorderMimeType: mediaRef.current.mimeType
+  recorderMimeType: mediaRef.current.mimeType,
+  timesliceMs: 1000
 });
 
 await startWaveMonitor(stream);
