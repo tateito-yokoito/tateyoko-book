@@ -4555,15 +4555,13 @@ useEffect(() => {
 
       streamRef.current = stream;
 
-      await startWaveMonitor(stream);
-
-      console.log("[recording-debug] mic check wave monitor started", {
+      console.log("[recording-debug] mic check skipped before recorder", {
         runId: debugRunIdRef.current,
-        stream: getStreamDebug(stream),
-        hasAnalyser: !!analyserRef.current
+        stream: getStreamDebug(stream)
       });
 
       setCountdown(3);
+
       hasStartedRecordingRef.current = false;
       setStep("countdown");
 
@@ -4607,11 +4605,8 @@ const startActualRecording = async (preparedStream = null) => {
       streamRef.current = stream;
     }
 
-        if (!analyserRef.current) {
-          await startWaveMonitor(stream);
-        }
+      const mimeType = getSupportedMimeType();
 
-       const mimeType = getSupportedMimeType();
       mimeTypeRef.current = mimeType;
 
       console.log("[recording-debug] before MediaRecorder create", {
@@ -4729,6 +4724,14 @@ mediaRef.current.onstop = () => {
         runId: debugRunIdRef.current,
         recorderState: mediaRef.current?.state || null,
         recorderMimeType: mediaRef.current?.mimeType || null
+      });
+
+      await startWaveMonitor(stream);
+
+      console.log("[recording-debug] wave monitor started after recorder", {
+        runId: debugRunIdRef.current,
+        stream: getStreamDebug(stream),
+        hasAnalyser: !!analyserRef.current
       });
 
       // This is only a fallback transcript for now.
