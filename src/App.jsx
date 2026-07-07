@@ -4543,44 +4543,32 @@ useEffect(() => {
     return types.find(type => MediaRecorder.isTypeSupported(type)) || "";
   };
 
-  const start = async () => {
-    logRecordingDebug("start clicked");
+const start = async () => {
+  setStep("checking_mic");
 
-    setStep("checking_mic");
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true
+    });
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true
-      });
+    streamRef.current = stream;
 
-      console.log("[recording-debug] getUserMedia success", {
-        runId: debugRunIdRef.current,
-        stream: getStreamDebug(stream)
-      });
+    console.log("[recording-debug] A-test: starting wave monitor before recorder", {
+      runId: runIdRef.current,
+      stream: describeStream(stream)
+    });
 
-      streamRef.current = stream;
+    await startWaveMonitor(stream);
 
-      console.log("[recording-debug] mic check skipped before recorder", {
-        runId: debugRunIdRef.current,
-        stream: getStreamDebug(stream)
-      });
+    setCountdown(3);
+    hasStartedRecordingRef.current = false;
+    setStep("countdown");
 
-      setCountdown(3);
-
-      hasStartedRecordingRef.current = false;
-      setStep("countdown");
-
-    } catch (e) {
-      console.error("[recording-debug] getUserMedia failed", {
-        runId: debugRunIdRef.current,
-        name: e?.name,
-        message: e?.message,
-        error: e
-      });
-
-      setStep("mic_error");
-    }
-  };
+  } catch (e) {
+    console.error(e);
+    setStep("mic_error");
+  }
+};
 
 const startActualRecording = async (preparedStream = null) => {
   logRecordingDebug("startActualRecording called", {
@@ -4723,21 +4711,19 @@ mediaRef.current.onstop = () => {
 
       };
 
-      mediaRef.current.start(250);
+mediaRef.current.start(250);
 
-      console.log("[recording-debug] MediaRecorder started", {
-        runId: debugRunIdRef.current,
-        recorderState: mediaRef.current?.state || null,
-        recorderMimeType: mediaRef.current?.mimeType || null
-      });
+console.log("[recording-debug] MediaRecorder started", {
+  runId: runIdRef.current,
+  recorderState: mediaRef.current.state,
+  recorderMimeType: mediaRef.current.mimeType
+});
 
-      await startWaveMonitor(stream);
-
-      console.log("[recording-debug] wave monitor started after recorder", {
-        runId: debugRunIdRef.current,
-        stream: getStreamDebug(stream),
-        hasAnalyser: !!analyserRef.current
-      });
+console.log("[recording-debug] A-test: wave monitor was already started before recorder", {
+  runId: runIdRef.current,
+  stream: describeStream(stream),
+  hasAnalyser: !!analyserRef.current
+});
 
       // This is only a fallback transcript for now.
       // It is not shown during recording, to keep the user immersed in speaking.
