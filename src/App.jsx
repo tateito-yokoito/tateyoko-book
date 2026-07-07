@@ -2831,11 +2831,25 @@ function Scene_TokenAuthRequired({ token, tokenData, onAuthenticated, onInvalid 
           ? e.message
           : String(e || "unknown error");
 
+      if (
+        message.includes("otp_rate_limited") ||
+        message.includes("送信回数")
+      ) {
+        setStep("pin");
+
+        alert(
+          "認証コードの送信回数が短時間で多くなっています。\n\nすでに届いている最新の認証コードを入力してください。届いていない場合は、少し時間を置いてから再送してください。"
+        );
+        return;
+      }
+
       alert(`認証コードを送信できませんでした。\n${message}`);
     } finally {
       setLoading(false);
     }
   };
+
+
 
   const verifyCode = async () => {
     try {
@@ -4307,6 +4321,45 @@ function Scene_Recording({ question, onComplete }) {
   const transcriptRef = useRef("");
   const interimRef = useRef("");
 
+    const debugRunIdRef = useRef(
+    `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  );
+
+  const getStreamDebug = (stream = streamRef.current) => ({
+    exists: !!stream,
+    active: stream?.active || false,
+    tracks: stream?.getTracks?.().map(track => ({
+      kind: track.kind,
+      enabled: track.enabled,
+      muted: track.muted,
+      readyState: track.readyState,
+      label: track.label
+    })) || []
+  });
+
+  const getChunksDebug = () => ({
+    count: chunksRef.current.length,
+    totalSize: chunksRef.current.reduce((sum, chunk) => sum + (chunk?.size || 0), 0),
+    items: chunksRef.current.map((chunk, index) => ({
+      index,
+      size: chunk?.size || 0,
+      type: chunk?.type || ""
+    }))
+  });
+
+  const logRecordingDebug = (label, extra = {}) => {
+    console.log(`[recording-debug] ${label}`, {
+      runId: debugRunIdRef.current,
+      step,
+      time: timeRef.current,
+      mediaState: mediaRef.current?.state || null,
+      mimeType: mimeTypeRef.current || "",
+      stream: getStreamDebug(),
+      chunks: getChunksDebug(),
+      ...extra
+    });
+  };
+
 useEffect(() => {
   if (recordingTimerRef.current) {
     clearInterval(recordingTimerRef.current);
@@ -4338,7 +4391,19 @@ useEffect(() => {
 }, [step, isPaused]);
 
 useEffect(() => {
+    console.log("[recording-debug] mounted", {
+    runId: debugRunIdRef.current
+    });
+
   return () => {
+    console.log("[recording-debug] unmount cleanup", {
+      runId: debugRunIdRef.current,
+      mediaState: mediaRef.current?.state || null,
+      stream: getStreamDebug(),
+      chunks: getChunksDebug(),
+      suppressComplete: suppressCompleteRef.current
+    });
+
     if (recordingTimerRef.current) {
       clearInterval(recordingTimerRef.current);
       recordingTimerRef.current = null;
@@ -4474,6 +4539,8 @@ useEffect(() => {
   };
 
   const start = async () => {
+    logRecordingDebug("start clicked");
+
     setStep("checking_mic");
 
     try {
@@ -4481,21 +4548,43 @@ useEffect(() => {
         audio: true
       });
 
+      console.log("[recording-debug] getUserMedia success", {
+        runId: debugRunIdRef.current,
+        stream: getStreamDebug(stream)
+      });
+
       streamRef.current = stream;
 
       await startWaveMonitor(stream);
+
+      console.log("[recording-debug] mic check wave monitor started", {
+        runId: debugRunIdRef.current,
+        stream: getStreamDebug(stream),
+        hasAnalyser: !!analyserRef.current
+      });
 
       setCountdown(3);
       hasStartedRecordingRef.current = false;
       setStep("countdown");
 
     } catch (e) {
-      console.error(e);
+      console.error("[recording-debug] getUserMedia failed", {
+        runId: debugRunIdRef.current,
+        name: e?.name,
+        message: e?.message,
+        error: e
+      });
+
       setStep("mic_error");
     }
   };
 
-const startActualRecording = async () => {
+const startActualRecording = async (preparedStream = null) => {
+  logRecordingDebug("startActualRecording called", {
+    preparedStreamExists: !!preparedStream,
+    hasAnalyser: !!analyserRef.current
+  });
+
   suppressCompleteRef.current = false;
 
   setTime(0);
@@ -4522,21 +4611,61 @@ const startActualRecording = async () => {
           await startWaveMonitor(stream);
         }
 
-      const mimeType = getSupportedMimeType();
+       const mimeType = getSupportedMimeType();
       mimeTypeRef.current = mimeType;
+
+      console.log("[recording-debug] before MediaRecorder create", {
+        runId: debugRunIdRef.current,
+        selectedMimeType: mimeType,
+        stream: getStreamDebug(stream),
+        mediaRecorderSupported: !!window.MediaRecorder
+      });
 
       mediaRef.current = new MediaRecorder(
         stream,
         mimeType ? { mimeType } : undefined
       );
 
+      console.log("[recording-debug] MediaRecorder created", {
+        runId: debugRunIdRef.current,
+        recorderState: mediaRef.current?.state || null,
+        recorderMimeType: mediaRef.current?.mimeType || null
+      });
+
       mediaRef.current.ondataavailable = e => {
+        console.log("[recording-debug] dataavailable", {
+          runId: debugRunIdRef.current,
+          size: e.data?.size || 0,
+          type: e.data?.type || "",
+          recorderState: mediaRef.current?.state || null,
+          chunksBefore: chunksRef.current.length
+        });
+
         if (e.data && e.data.size > 0) {
           chunksRef.current.push(e.data);
         }
       };
 
+      mediaRef.current.onerror = e => {
+        console.error("[recording-debug] MediaRecorder error", {
+          runId: debugRunIdRef.current,
+          error: e
+        });
+      };
+
 mediaRef.current.onstop = () => {
+  console.log("[recording-debug] MediaRecorder onstop", {
+    runId: debugRunIdRef.current,
+    suppressComplete: suppressCompleteRef.current,
+    mediaState: mediaRef.current?.state || null,
+    finalMimeType: mimeTypeRef.current || mediaRef.current?.mimeType || "",
+    chunks: getChunksDebug(),
+    stream: getStreamDebug(),
+    duration: timeRef.current,
+    transcriptRef: transcriptRef.current,
+    interimRef: interimRef.current
+  });
+
   if (suppressCompleteRef.current) {
     stopWaveMonitor();
 
@@ -4558,7 +4687,16 @@ mediaRef.current.onstop = () => {
           type: finalMimeType
         });
 
+        console.log("[recording-debug] blob created", {
+          runId: debugRunIdRef.current,
+          blobType: blob.type,
+          blobSize: blob.size,
+          chunks: getChunksDebug(),
+          duration: timeRef.current
+        });
+
         const hasRecordedAudio = blob.size > 0;
+
         const url = hasRecordedAudio ? URL.createObjectURL(blob) : null;
 
         const finalTranscript = formatTranscriptForReading([
@@ -4586,6 +4724,12 @@ mediaRef.current.onstop = () => {
       };
 
       mediaRef.current.start(250);
+
+      console.log("[recording-debug] MediaRecorder started", {
+        runId: debugRunIdRef.current,
+        recorderState: mediaRef.current?.state || null,
+        recorderMimeType: mediaRef.current?.mimeType || null
+      });
 
       // This is only a fallback transcript for now.
       // It is not shown during recording, to keep the user immersed in speaking.
@@ -4677,9 +4821,12 @@ const pauseRecording = () => {
     }
   };
 
-
-
 const stop = () => {
+  logRecordingDebug("stop clicked", {
+    speechExists: !!speechRef.current,
+    suppressComplete: suppressCompleteRef.current
+  });
+
   setIsPaused(false);
 
   if (recordingTimerRef.current) {
@@ -4689,30 +4836,47 @@ const stop = () => {
 
   setStep(2);
 
-    if (speechRef.current) {
-      try { speechRef.current.stop(); } catch (e) {}
-    }
+  if (speechRef.current) {
+    try { speechRef.current.stop(); } catch (e) {}
+  }
 
-    setTimeout(() => {
-      if (mediaRef.current && mediaRef.current.state !== "inactive") {
-        mediaRef.current.stop();
-      } else {
-        const finalTranscript = formatTranscriptForReading([
-          transcriptRef.current,
-          interimRef.current
-        ].filter(Boolean).join(" "));
+  setTimeout(() => {
+    logRecordingDebug("stop timeout fired");
 
-        onComplete(finalTranscript, timeRef.current, null, null);
+    if (mediaRef.current && mediaRef.current.state !== "inactive") {
+      console.log("[recording-debug] calling mediaRecorder.stop", {
+        runId: debugRunIdRef.current,
+        mediaState: mediaRef.current.state
+      });
 
-        stopWaveMonitor();
+      mediaRef.current.stop();
+    } else {
+      console.warn("[recording-debug] mediaRecorder not stoppable, fallback null audio", {
+        runId: debugRunIdRef.current,
+        mediaExists: !!mediaRef.current,
+        mediaState: mediaRef.current?.state || null,
+        chunks: getChunksDebug(),
+        stream: getStreamDebug()
+      });
 
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(t => t.stop());
-          streamRef.current = null;
-        }
+      const finalTranscript = formatTranscriptForReading([
+        transcriptRef.current,
+        interimRef.current
+      ].filter(Boolean).join(" "));
+
+      onComplete(finalTranscript, timeRef.current, null, null);
+
+      stopWaveMonitor();
+
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
       }
-    }, 1200);
-  };
+    }
+  }, 1200);
+};
+
+
 
   return (
     <div className="h-full flex flex-col fade-enter text-center pt-12">
