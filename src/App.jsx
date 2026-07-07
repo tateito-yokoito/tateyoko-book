@@ -4462,6 +4462,11 @@ useEffect(() => {
 }, [step, isPaused]);
 
   const startWaveMonitor = async (stream) => {
+    console.log("[recording-debug] wave monitor disabled for isolation test", {
+      runId: debugRunIdRef.current,
+      stream: getStreamDebug(stream)
+    });
+
     try {
       stopWaveMonitor();
 
