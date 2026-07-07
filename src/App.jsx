@@ -4553,10 +4553,10 @@ const start = async () => {
 
     streamRef.current = stream;
 
-    console.log("[recording-debug] A-test: starting wave monitor before recorder", {
-      runId: debugRunIdRef.current,
-      stream: describeStream(stream)
-    });
+console.log("[recording-debug] A-test: starting wave monitor before recorder", {
+  runId: debugRunIdRef.current,
+  stream: getStreamDebug(stream)
+});
 
     await startWaveMonitor(stream);
 
