@@ -4554,7 +4554,7 @@ const start = async () => {
     streamRef.current = stream;
 
     console.log("[recording-debug] A-test: starting wave monitor before recorder", {
-      runId: runIdRef.current,
+      runId: debugRunIdRef.current,
       stream: describeStream(stream)
     });
 
@@ -4714,14 +4714,14 @@ mediaRef.current.onstop = () => {
 mediaRef.current.start(250);
 
 console.log("[recording-debug] MediaRecorder started", {
-  runId: runIdRef.current,
+  runId: debugRunIdRef.current,
   recorderState: mediaRef.current.state,
   recorderMimeType: mediaRef.current.mimeType
 });
 
 console.log("[recording-debug] A-test: wave monitor was already started before recorder", {
-  runId: runIdRef.current,
-  stream: describeStream(stream),
+  runId: debugRunIdRef.current,
+  stream: getStreamDebug(stream),
   hasAnalyser: !!analyserRef.current
 });
 
