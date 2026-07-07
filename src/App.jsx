@@ -1593,6 +1593,81 @@ const handleDevLogout = async () => {
   }
 };
 
+const continueAfterTokenAuth = async () => {
+  setIsInitializing(true);
+
+  try {
+    const {
+      data: { session },
+      error: sessionError
+    } = await supabaseClient.auth.getSession();
+
+    if (sessionError || !session) {
+      throw new Error("ログイン情報を取得できませんでした");
+    }
+
+    const token = deliveryToken || getDeliveryTokenFromUrl();
+
+    if (!token) {
+      throw new Error("復帰リンクの情報が見つかりません");
+    }
+
+    const tokenData = deliveryTokenData || await resolveDeliveryToken(token);
+
+    if (!tokenData?.user_id) {
+      throw new Error("復帰リンクを確認できませんでした");
+    }
+
+    if (session.user.id !== tokenData.user_id) {
+      await supabaseClient.auth.signOut();
+      throw new Error("このリンクは別のアカウントのものです");
+    }
+
+    const profile = await ensureProfileExists(session.user);
+
+    const currentUser = {
+      id: session.user.id,
+      ...profile,
+      name: profile?.display_name || profile?.name || "あなた"
+    };
+
+    const foundationData = await ensureUserFoundation(session.user.id, currentUser);
+    setFoundation(foundationData);
+
+    const questionSet = await loadUserQuestionSet(
+      session.user.id,
+      foundationData
+    );
+
+    const { data: notificationData } = await supabaseClient
+      .from("notification_preferences")
+      .select("*")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+
+    const resumeIndex = getResumeQuestionIndexFromToken(questionSet, tokenData);
+
+    setAccessMode("session");
+    setDeliveryToken(token);
+    setDeliveryTokenData(tokenData);
+    setUser(currentUser);
+    setNotificationPref(notificationData || null);
+    setQuestionsDB(questionSet);
+    setProgress({
+      currentIndex: resumeIndex,
+      total: questionSet.length
+    });
+
+    setScene(1);
+  } catch (e) {
+    console.error("continue after token auth error", e);
+    alert(e instanceof Error ? e.message : "物語の続きを開けませんでした。");
+    setScene(-1);
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
 const pickTranscriptByStyle = (data, style) => {
   if (style === "clean") {
     return data.transcriptClean || data.transcriptReadable || data.editedText || data.transcript || "";
@@ -2385,9 +2460,7 @@ setScene(6);
         <Scene_TokenAuthRequired
           token={deliveryToken}
           tokenData={deliveryTokenData}
-          onAuthenticated={() => {
-            window.location.reload();
-          }}
+          onAuthenticated={continueAfterTokenAuth}
           onInvalid={() => {
             setScene(-1);
           }}
@@ -2736,7 +2809,13 @@ function Scene_TokenAuthRequired({ token, tokenData, onAuthenticated, onInvalid 
       setStep("pin");
     } catch (e) {
       console.error("token auth send error", e);
-      alert("認証コードを送信できませんでした。");
+
+      const message =
+        e instanceof Error
+          ? e.message
+          : String(e || "unknown error");
+
+      alert(`認証コードを送信できませんでした。\n${message}`);
     } finally {
       setLoading(false);
     }
@@ -2761,7 +2840,13 @@ function Scene_TokenAuthRequired({ token, tokenData, onAuthenticated, onInvalid 
       onAuthenticated();
     } catch (e) {
       console.error("token auth verify error", e);
-      alert("認証コードが正しくありません。");
+
+      const message =
+        e instanceof Error
+          ? e.message
+          : String(e || "unknown error");
+
+      alert(`認証コードが正しくありません。\n${message}`);
     } finally {
       setLoading(false);
     }
