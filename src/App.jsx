@@ -1004,13 +1004,22 @@ function getTodayKey() {
   return `${y}-${m}-${d}`;
 }
 
-function hasDoneDailyMicCheck() {
-  return localStorage.getItem("tateyoko_daily_mic_check") === getTodayKey();
+const MIC_CHECK_VALID_MS = 60 * 60 * 1000;
+
+function hasRecentMicCheck() {
+  const raw = localStorage.getItem("tateyoko_last_mic_check_at");
+  const checkedAt = Number(raw || 0);
+
+  if (!checkedAt) return false;
+
+  return Date.now() - checkedAt < MIC_CHECK_VALID_MS;
 }
 
-function markDailyMicCheckDone() {
-  localStorage.setItem("tateyoko_daily_mic_check", getTodayKey());
+function markMicCheckDone() {
+  localStorage.setItem("tateyoko_last_mic_check_at", Date.now().toString());
 }
+
+
 async function loadImageFromFile(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -1453,7 +1462,7 @@ if (deliveryToken) {
       setDeliveryTokenData(tokenData);
 
       currentIndex = getResumeQuestionIndexFromToken(questionSet, tokenData);
-      nextScene = hasDoneDailyMicCheck() ? 1 : "daily_mic_check";
+      nextScene = hasRecentMicCheck() ? 1 : "daily_mic_check";
     }
   } catch (tokenError) {
     console.error("delivery token handling error", tokenError);
@@ -1662,7 +1671,7 @@ const continueAfterTokenAuth = async () => {
       total: questionSet.length
     });
 
-    setScene(hasDoneDailyMicCheck() ? 1 : "daily_mic_check");
+    setScene(hasRecentMicCheck() ? 1 : "daily_mic_check");
   } catch (e) {
     console.error("continue after token auth error", e);
     alert(e instanceof Error ? e.message : "物語の続きを開けませんでした。");
@@ -2586,7 +2595,7 @@ setScene(6);
       {scene === 0 && (
         <Scene0_Door
           onNext={() => {
-            if (hasDoneDailyMicCheck()) {
+            if (hasRecentMicCheck()) {
               setScene(1);
             } else {
               setScene("daily_mic_check");
@@ -2598,7 +2607,7 @@ setScene(6);
       {scene === "daily_mic_check" && (
         <Scene_DailyMicCheck
           onComplete={() => {
-            markDailyMicCheckDone();
+            markMicCheckDone();
             setScene(1);
           }}
         />
@@ -4135,6 +4144,32 @@ function VoiceWave({ level = 0 }) {
   );
 }
 
+function QuietRecordingCircle({ seconds = 0, isPaused = false }) {
+  const cycleSeconds = 180;
+  const progress = ((seconds % cycleSeconds) / cycleSeconds) * 100;
+
+  return (
+    <div className="relative w-28 h-28 mx-auto" aria-hidden="true">
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{
+          background: `conic-gradient(rgba(255,255,255,0.52) ${progress}%, rgba(255,255,255,0.08) ${progress}% 100%)`
+        }}
+      />
+
+      <div className="absolute inset-[3px] rounded-full bg-[#0f172a]" />
+
+      <div className="absolute inset-[15px] rounded-full border border-white/10 bg-white/[0.03] flex items-center justify-center">
+        <div
+          className={`w-2 h-2 rounded-full ${
+            isPaused ? "bg-white/28" : "bg-white/55"
+          }`}
+        />
+      </div>
+    </div>
+  );
+}
+
 function Scene_DailyMicCheck({ onComplete }) {
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
@@ -4574,7 +4609,6 @@ const start = async () => {
     });
 
     setCountdown(3);
-
     hasStartedRecordingRef.current = false;
     setStep("countdown");
 
@@ -4583,6 +4617,8 @@ const start = async () => {
     setStep("mic_error");
   }
 };
+
+
 
 const startActualRecording = async (preparedStream = null) => {
   logRecordingDebug("startActualRecording called", {
@@ -4753,12 +4789,9 @@ console.log("[recording-debug] MediaRecorder started with timeslice", {
   timesliceMs: 1000
 });
 
-await startWaveMonitor(stream);
-
-console.log("[recording-debug] recorder-first: wave monitor started after recorder", {
+console.log("[recording-debug] recorder-only: wave monitor not used while recording", {
   runId: debugRunIdRef.current,
   stream: getStreamDebug(stream),
-  hasAnalyser: !!analyserRef.current,
   isIOSLikeBrowser: isIOSLikeBrowser()
 });
 
@@ -4825,7 +4858,6 @@ const pauseRecording = () => {
       try { speechRef.current.stop(); } catch (e) {}
     }
 
-    stopWaveMonitor();
   };
 
   const resumeRecording = async () => {
@@ -4839,9 +4871,25 @@ const pauseRecording = () => {
       }
     }
 
-    if (streamRef.current) {
-      await startWaveMonitor(streamRef.current);
+  const resumeRecording = async () => {
+    setIsPaused(false);
+
+    if (mediaRef.current && mediaRef.current.state === "paused") {
+      try {
+        mediaRef.current.resume();
+      } catch (e) {
+        console.warn("media recorder resume failed", e);
+      }
     }
+
+    if (speechRef.current) {
+      try {
+        speechRef.current.start();
+      } catch (e) {
+        console.warn("speech recognition resume failed", e);
+      }
+    }
+  };
 
     if (speechRef.current) {
       try {
@@ -4971,17 +5019,23 @@ const stop = () => {
 
       {step === 1 && (
         <div className="space-y-7 pb-4">
-          <div className="glass-card py-5 px-4">
-            <p className="text-white/35 text-xs tracking-[0.18em] mb-3">
-              {isPaused ? "一時停止中" : "録音中"}
-            </p>
+        <div className="glass-card py-7 px-4">
+          <p className="text-white/35 text-xs tracking-[0.18em] mb-4">
+    {isPaused ? "一時停止中" : "録音中"}
+  </p>
 
-            <VoiceWave level={voiceLevel + waveTick * 0} />
+  <QuietRecordingCircle seconds={time} isPaused={isPaused} />
 
-            <p className="text-white/45 text-sm tracking-widest mt-3">
-              {Math.floor(time / 60)}:{String(time % 60).padStart(2, "0")}
-            </p>
-          </div>
+  <p className="text-white/55 text-[0.95rem] tracking-widest mt-5">
+    {Math.floor(time / 60)}:{String(time % 60).padStart(2, "0")}
+  </p>
+
+  <p className="text-white/38 text-sm leading-loose mt-4">
+    ゆっくりで大丈夫です
+  </p>
+</div>
+
+
 
           <div className="flex items-center justify-center gap-5">
             <button
@@ -7207,8 +7261,8 @@ return (
 
                 <p className="text-white/75 text-[0.98rem] leading-[2.15] whitespace-pre-wrap text-narrative">{body}</p>
 
-<button
-  type="button"
+        <button
+          type="button"
   onClick={() => openAnswerEditor(answer)}
   className="mt-5 text-white/35 text-sm underline underline-offset-4"
 >
