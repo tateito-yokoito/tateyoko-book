@@ -172,7 +172,11 @@ async function startTokenAuthOnServer(token) {
 
   if (!data || data.success === false) {
     console.error("start-token-auth returned error", data);
-    throw new Error(data?.error || "認証コードの送信に失敗しました");
+
+    const message = data?.error || "認証コードの送信に失敗しました";
+    const code = data?.code ? `\n(${data.code})` : "";
+
+    throw new Error(`${message}${code}`);
   }
 
   return data;
@@ -1391,7 +1395,7 @@ if (!session) {
       const tokenData = await resolveDeliveryToken(initialDeliveryToken);
 
       if (tokenData?.user_id) {
-        setAccessMode("token_auth");
+        setAccessMode("session");
         setDeliveryToken(initialDeliveryToken);
         setDeliveryTokenData(tokenData);
         setScene("token_auth");
@@ -1733,6 +1737,16 @@ const handleRecordComplete = (txt, dur, url, blob) => {
     transcript: txt
   });
 
+  const hasBlob = !!blob && blob.size > 0;
+  const hasTranscript = !!String(txt || "").trim();
+
+  if (!hasBlob && !hasTranscript) {
+    alert("音声を取得できませんでした。ブラウザのマイク許可を確認して、もう一度お試しください。");
+    resetVoiceData();
+    setScene(3);
+    return;
+  }
+
   const nextVoiceData = buildRecordedVoiceData(voiceData, txt, dur, url, blob);
 
   setVoiceData({
@@ -1745,6 +1759,8 @@ const handleRecordComplete = (txt, dur, url, blob) => {
 
   handleTranscribeForReview(nextVoiceData);
 };
+
+
   const handlePhotoSelect = (files) => {
     const selectedFiles = Array.from(files || [])
       .filter(file => file && file.type && file.type.startsWith("image/"));
@@ -4380,12 +4396,23 @@ useEffect(() => {
   return () => clearInterval(timer);
 }, [step, isPaused]);
 
-  const startWaveMonitor = (stream) => {
+  const startWaveMonitor = async (stream) => {
     try {
+      stopWaveMonitor();
+
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       if (!AudioContext) return;
 
       const ctx = new AudioContext();
+
+      if (ctx.state === "suspended") {
+        try {
+          await ctx.resume();
+        } catch (e) {
+          console.warn("audio context resume failed", e);
+        }
+      }
+
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
 
@@ -4401,6 +4428,7 @@ useEffect(() => {
         analyser.getByteTimeDomainData(dataArray);
 
         let sum = 0;
+
         for (let i = 0; i < dataArray.length; i++) {
           const value = (dataArray[i] - 128) / 128;
           sum += value * value;
@@ -4408,6 +4436,7 @@ useEffect(() => {
 
         const rms = Math.sqrt(sum / dataArray.length);
         const level = Math.min(1, rms * 5);
+
         setVoiceLevel(level > 0.08 ? level : 0);
         setWaveTick(t => t + 1);
       }, 120);
@@ -4454,9 +4483,12 @@ useEffect(() => {
 
       streamRef.current = stream;
 
+      await startWaveMonitor(stream);
+
       setCountdown(3);
       hasStartedRecordingRef.current = false;
       setStep("countdown");
+
     } catch (e) {
       console.error(e);
       setStep("mic_error");
@@ -4486,7 +4518,9 @@ const startActualRecording = async () => {
       streamRef.current = stream;
     }
 
-    startWaveMonitor(stream);
+        if (!analyserRef.current) {
+          await startWaveMonitor(stream);
+        }
 
       const mimeType = getSupportedMimeType();
       mimeTypeRef.current = mimeType;
@@ -4524,14 +4558,21 @@ mediaRef.current.onstop = () => {
           type: finalMimeType
         });
 
-        const url = URL.createObjectURL(blob);
+        const hasRecordedAudio = blob.size > 0;
+        const url = hasRecordedAudio ? URL.createObjectURL(blob) : null;
 
         const finalTranscript = formatTranscriptForReading([
           transcriptRef.current,
           interimRef.current
         ].filter(Boolean).join(" "));
 
-        onComplete(finalTranscript, timeRef.current, url, blob);
+        onComplete(
+          finalTranscript,
+          timeRef.current,
+          url,
+          hasRecordedAudio ? blob : null
+        );
+
 
         stopWaveMonitor();
 
@@ -4612,7 +4653,7 @@ const pauseRecording = () => {
     stopWaveMonitor();
   };
 
-  const resumeRecording = () => {
+  const resumeRecording = async () => {
     setIsPaused(false);
 
     if (mediaRef.current && mediaRef.current.state === "paused") {
@@ -4624,7 +4665,7 @@ const pauseRecording = () => {
     }
 
     if (streamRef.current) {
-      startWaveMonitor(streamRef.current);
+      await startWaveMonitor(streamRef.current);
     }
 
     if (speechRef.current) {
@@ -4635,6 +4676,8 @@ const pauseRecording = () => {
       }
     }
   };
+
+
 
 const stop = () => {
   setIsPaused(false);
