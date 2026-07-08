@@ -5072,9 +5072,7 @@ return (
   </div>
 </div>
 
-
-
-          <div className="flex items-center justify-center gap-5">
+          <div className="flex items-center justify-center gap-8">
           <button
             type="button"
             onClick={isPaused ? resumeRecording : pauseRecording}
@@ -5083,13 +5081,13 @@ return (
             {isPaused ? "再開" : "一時停止"}
           </button>
 
-            <button
-              type="button"
-              onClick={stop}
-              className="w-20 h-20 rounded-full bg-white/82 text-slate-900/82 shadow-lg text-sm"
-            >
-              終了
-            </button>
+<button
+  type="button"
+  onClick={stop}
+  className="w-20 h-20 rounded-full bg-white text-slate-900 shadow-lg text-sm"
+>
+  終了
+</button>
           </div>
 
         </div>
@@ -5276,23 +5274,25 @@ return (
          ) : displayText ? (
           <>
             {!isEditingTranscript && (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={startTranscriptEdit}
-                  disabled={isPolishing}
-                  className={`absolute right-0 top-0 w-8 h-8 flex items-center justify-center rounded-full ${
-                    isPolishing ? "opacity-30" : "opacity-80"
-                  }`}
-                  aria-label="本文を修正する"
-                >
-                  <Pencil size={15} className="text-white/35" strokeWidth={1.7} />
-                </button>
+<div>
+  <p className="text-white/78 text-[1rem] leading-[2.05] whitespace-pre-wrap text-narrative">
+    {displayText}
+  </p>
 
-                <p className="text-white/78 text-[1rem] leading-[2.05] whitespace-pre-wrap text-narrative pr-9">
-                  {displayText}
-                </p>
-              </div>
+  <div className="mt-3 flex justify-end">
+    <button
+      type="button"
+      onClick={startTranscriptEdit}
+      disabled={isPolishing}
+      className={`w-8 h-8 flex items-center justify-center rounded-full ${
+        isPolishing ? "opacity-30" : "opacity-80"
+      }`}
+      aria-label="本文を修正する"
+    >
+      <Pencil size={15} className="text-white/32" strokeWidth={1.7} />
+    </button>
+  </div>
+</div>
             )}
 
             {isEditingTranscript && (
