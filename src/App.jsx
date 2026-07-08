@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronRight, Files, Mic, RotateCw, ScanLine } from "lucide-react";
+import { BookOpen, ChevronRight, Files, Mic, Pencil, RotateCw, ScanLine } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumossjxehdop.supabase.co";
@@ -1012,7 +1012,7 @@ function formatRecordedAt(value) {
   const h = String(date.getHours()).padStart(2, "0");
   const min = String(date.getMinutes()).padStart(2, "0");
 
-  return `${y}年${m}月${d}日 ${h}:${min}`;
+  return `${y}/${m}/${d} ${h}:${min}`;
 }
 
 function getTodayKey() {
@@ -2738,6 +2738,25 @@ onRetry={() => {
       };
     });
   }}
+  onUpdateText={(style, text) => {
+    setVoiceData(prev => {
+      const next = {
+        ...prev,
+        selectedStyle: style,
+        editedText: text
+      };
+
+      if (style === "clean") {
+        next.transcriptClean = text;
+      } else if (style === "essay") {
+        next.transcriptEssay = text;
+      } else {
+        next.transcriptReadable = text;
+      }
+
+      return next;
+    });
+  }}
   onProceed={() => setScene(4)}
 />
 
@@ -4180,20 +4199,22 @@ function VoiceWave({ level = 0 }) {
   );
 }
 
-function QuietRecordingCircle({ isPaused = false }) {
+function QuietRecordingCircle({ seconds = 0, isPaused = false }) {
+  const cycleSeconds = 180;
+  const progress = ((Number(seconds || 0) % cycleSeconds) / cycleSeconds) * 100;
+
   return (
-    <div className="relative w-24 h-24 mx-auto" aria-hidden="true">
-      <div className="absolute inset-0 rounded-full border border-white/[0.08]" />
-
+    <div className={`relative w-20 h-20 mx-auto ${isPaused ? "opacity-45" : ""}`} aria-hidden="true">
       <div
-        className={`absolute inset-0 rounded-full quiet-recording-orbit ${
-          isPaused ? "quiet-recording-orbit-paused" : ""
-        }`}
-      >
-        <div className="absolute left-1/2 top-[-2px] w-1.5 h-1.5 -translate-x-1/2 rounded-full bg-white/45 shadow-[0_0_14px_rgba(255,255,255,0.18)]" />
-      </div>
+        className="absolute inset-0 rounded-full quiet-recording-progress"
+        style={{
+          background: `conic-gradient(rgba(184,95,58,0.52) ${progress}%, rgba(255,255,255,0.075) ${progress}% 100%)`
+        }}
+      />
 
-      <div className="absolute inset-[18px] rounded-full border border-white/[0.05] bg-white/[0.015]" />
+      <div className="absolute inset-[3px] rounded-full bg-[#0f172a]" />
+
+      <div className="absolute inset-[15px] rounded-full border border-white/[0.045] bg-white/[0.012]" />
     </div>
   );
 }
@@ -4969,14 +4990,18 @@ const stop = () => {
   }, 1200);
 };
 
+return (
+<div className="h-full flex flex-col fade-enter text-center pt-2">
+  <div className="flex-1 flex flex-col justify-center">
+    <div className="glass-card p-6 text-center space-y-6">
+      <p className="text-white/50 text-sm tracking-widest">
+        今日の問い
+      </p>
 
-
-  return (
-<div className="h-full flex flex-col fade-enter text-center pt-10">
-  <div className="flex-1 flex flex-col justify-center px-2">
-    <p className="text-white/82 text-[1.12rem] leading-[2.05] text-narrative whitespace-pre-wrap">
-      {question.content}
-    </p>
+      <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
+        {question.content}
+      </p>
+    </div>
   </div>
 
       {step === 0 && (
@@ -5027,8 +5052,9 @@ const stop = () => {
 
       {step === 1 && (
         <div className="space-y-7 pb-4">
+
 <div className="py-5 px-4">
-  <QuietRecordingCircle isPaused={isPaused} />
+  <QuietRecordingCircle seconds={time} isPaused={isPaused} />
 
   <div className="mt-5 flex items-center justify-center gap-3">
     <span
@@ -5076,16 +5102,18 @@ const stop = () => {
   );
 }
 
-
-
 function Scene3_5_VoiceCheck({
   data,
   onAddMore,
   onRetry,
   onRetryTranscription,
   onSelectStyle,
+  onUpdateText,
   onProceed
 }) {
+  const [isEditingTranscript, setIsEditingTranscript] = useState(false);
+  const [draftTranscript, setDraftTranscript] = useState("");
+
   const isShortAnswer = isRecordingTooShort(data.duration);
   const hasAlreadyAddedMore = (data.addMoreCount || 0) > 0;
   const shouldSuggestAddMore = isShortAnswer && !hasAlreadyAddedMore;
@@ -5118,6 +5146,29 @@ function Scene3_5_VoiceCheck({
   const isProcessing = data.transcriptionStatus === "processing";
   const isPolishing = data.polishStatus === "processing";
   const canUseStyles = !isProcessing && !isPolishing && !!displayText;
+
+  const startTranscriptEdit = () => {
+    setDraftTranscript(displayText);
+    setIsEditingTranscript(true);
+  };
+
+  const cancelTranscriptEdit = () => {
+    setDraftTranscript("");
+    setIsEditingTranscript(false);
+  };
+
+  const applyTranscriptEdit = () => {
+    const nextText = String(draftTranscript || "").trim();
+
+    if (!nextText) {
+      alert("本文が空になっています。");
+      return;
+    }
+
+    onUpdateText?.(data.selectedStyle || "readable", nextText);
+    setIsEditingTranscript(false);
+    setDraftTranscript("");
+  };
 
   const showAddMoreSuggestion =
     shouldSuggestAddMore &&
@@ -5176,33 +5227,33 @@ function Scene3_5_VoiceCheck({
         <div className="flex gap-2 mb-5">
           <button
             type="button"
-            disabled={!canUseStyles}
+            disabled={!canUseStyles || isEditingTranscript}
             onClick={() => onSelectStyle("clean")}
             className={`flex-1 py-2 rounded-full text-xs border ${
               data.selectedStyle === "clean"
                 ? "bg-white/15 border-white/25 text-white"
                 : "border-white/10 text-white/45"
-            } ${!canUseStyles ? "opacity-40" : ""}`}
+            } ${!canUseStyles || isEditingTranscript ? "opacity-40" : ""}`}
           >
             そのまま
           </button>
 
           <button
             type="button"
-            disabled={!canUseStyles}
+            disabled={!canUseStyles || isEditingTranscript}
             onClick={() => onSelectStyle("readable")}
             className={`flex-1 py-2 rounded-full text-xs border ${
               data.selectedStyle === "readable"
                 ? "bg-white/15 border-white/25 text-white"
                 : "border-white/10 text-white/45"
-            } ${!canUseStyles ? "opacity-40" : ""}`}
+            } ${!canUseStyles || isEditingTranscript ? "opacity-40" : ""}`}
           >
             語り調
           </button>
 
           <button
             type="button"
-            disabled={!canUseStyles}
+            disabled={!canUseStyles || isEditingTranscript}
             onClick={() => onSelectStyle("essay")}
             className={`flex-1 py-2 rounded-full text-xs border ${
               data.selectedStyle === "essay"
@@ -5220,15 +5271,62 @@ function Scene3_5_VoiceCheck({
              <p>文字起こし中です</p>
            </div>
          ) : displayText ? (
+          <>
+            {!isEditingTranscript && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={startTranscriptEdit}
+                  disabled={isPolishing}
+                  className={`absolute right-0 top-0 w-8 h-8 flex items-center justify-center rounded-full ${
+                    isPolishing ? "opacity-30" : "opacity-80"
+                  }`}
+                  aria-label="本文を修正する"
+                >
+                  <Pencil size={15} className="text-white/35" strokeWidth={1.7} />
+                </button>
 
-          <p className="text-white/78 text-[1rem] leading-[2.05] whitespace-pre-wrap text-narrative">
-            {displayText}
-          </p>
+                <p className="text-white/78 text-[1rem] leading-[2.05] whitespace-pre-wrap text-narrative pr-9">
+                  {displayText}
+                </p>
+              </div>
+            )}
+
+            {isEditingTranscript && (
+              <div>
+                <textarea
+                  value={draftTranscript}
+                  onChange={e => setDraftTranscript(e.target.value)}
+                  className="w-full min-h-[220px] bg-transparent text-white/82 text-[1rem] leading-[2.05] outline-none resize-none text-narrative"
+                  autoFocus
+                />
+
+                <div className="mt-5 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={cancelTranscriptEdit}
+                    className="flex-1 py-3 rounded-full border border-white/10 text-white/45 text-sm"
+                  >
+                    キャンセル
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={applyTranscriptEdit}
+                    className="flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm"
+                  >
+                    反映する
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <p className="text-white/45 text-sm leading-loose">
             文字起こしを取得できませんでした。
           </p>
         )}
+
         {isPolishing && !isProcessing && (
           <div className="mt-4 flex items-center gap-3 text-white/35 text-xs leading-loose">
             <div className="w-3 h-3 rounded-full border-2 border-white/15 border-t-white/50 animate-spin shrink-0"></div>
@@ -7324,31 +7422,32 @@ return (
   本文を編集する
 </button>
 
-                                {audios.length > 0 && (
-                  <div className="mt-5 space-y-4">
-                    {audios.map((audio, audioIndex) => {
-                      const recordedAt = formatRecordedAt(audio.created_at);
+              {audios.length > 0 && (
+                <div className="mt-5 space-y-4">
+                  {audios.map((audio, audioIndex) => {
+                    const recordedAt = formatRecordedAt(audio.created_at);
+                    const audioLabel = audios.length > 1 ? `音声 ${audioIndex + 1}` : "音声";
 
-                      return (
-                        <div key={audio.storage_path || audioIndex}>
-                          {audios.length > 1 && (
-                            <p className="text-white/32 text-xs mb-2">
-                              音声 {audioIndex + 1}
-                            </p>
-                          )}
-
-                          <audio src={audio.url} controls className="w-full" />
+                    return (
+                      <div key={audio.storage_path || audioIndex}>
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <p className="text-white/28 text-xs">
+                            {audioLabel}
+                          </p>
 
                           {recordedAt && (
-                            <p className="mt-2 text-white/28 text-[0.72rem] tracking-widest text-right">
+                            <p className="text-white/22 text-[0.68rem] tracking-widest">
                               {recordedAt}
                             </p>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+
+                        <audio src={audio.url} controls className="w-full" />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               </article>
             );

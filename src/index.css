@@ -162,21 +162,7 @@ input.quiet-input:-webkit-autofill:active {
   transition: background-color 9999s ease-in-out 0s;
 }
 
-.quiet-recording-orbit {
-  animation: quiet-recording-orbit 180s linear infinite;
-  transform-origin: center;
+.quiet-recording-progress {
+  transition: background 1.6s ease-out;
 }
 
-.quiet-recording-orbit-paused {
-  animation-play-state: paused;
-}
-
-@keyframes quiet-recording-orbit {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
