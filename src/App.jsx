@@ -937,12 +937,13 @@ function getBetaIntroSeenKey(userId) {
 }
 
 
+const MIN_RECORDING_SECONDS = 15;
 const MAX_RECORDING_SECONDS_PER_QUESTION = 10 * 60;
 const MAX_AUDIO_PARTS_PER_QUESTION = 5;
 
 function isRecordingTooShort(duration) {
   const seconds = Number(duration || 0);
-  return seconds < MIN_RECORDING_SECONDS;
+  return seconds > 0 && seconds < MIN_RECORDING_SECONDS;
 }
 
 async function markUserQuestionSkipped(userQuestionId) {
@@ -1861,8 +1862,8 @@ const startEditRecording = (answer, mode, existingAudioPaths = []) => {
   }
 
   if (mode === "append") {
-    if ((existingAudioPaths || []).length >= 3) {
-      alert("語り足しは上限に達しました。本文の編集はできます。");
+    if ((existingAudioPaths || []).length >= MAX_AUDIO_PARTS_PER_QUESTION) {
+      alert("語り足しの上限に達しました。\nここからは本文の編集で整えられます。");
       return false;
     }
 
@@ -4898,26 +4899,6 @@ const pauseRecording = () => {
       }
     }
 
-  const resumeRecording = async () => {
-    setIsPaused(false);
-
-    if (mediaRef.current && mediaRef.current.state === "paused") {
-      try {
-        mediaRef.current.resume();
-      } catch (e) {
-        console.warn("media recorder resume failed", e);
-      }
-    }
-
-    if (speechRef.current) {
-      try {
-        speechRef.current.start();
-      } catch (e) {
-        console.warn("speech recognition resume failed", e);
-      }
-    }
-  };
-
     if (speechRef.current) {
       try {
         speechRef.current.start();
@@ -7161,9 +7142,9 @@ return (
       <button
         type="button"
         onClick={() => startEditRecordFromModal("append")}
-        disabled={savingEdit || getAudioPathsForAnswer(editingAnswer.id).length >= 3}
+        disabled={savingEdit || getAudioPathsForAnswer(editingAnswer.id).length >= MAX_AUDIO_PARTS_PER_QUESTION}
         className={`py-3 rounded-full border border-white/10 text-sm ${
-          getAudioPathsForAnswer(editingAnswer.id).length >= 3
+          getAudioPathsForAnswer(editingAnswer.id).length >= MAX_AUDIO_PARTS_PER_QUESTION
             ? "text-white/20 opacity-50"
             : "text-white/45"
         }`}
@@ -7172,9 +7153,10 @@ return (
       </button>
     </div>
 
-    {getAudioPathsForAnswer(editingAnswer.id).length >= 3 && (
-      <p className="mt-2 text-center text-white/28 text-xs">
-        語り足しは上限に達しました
+    {getAudioPathsForAnswer(editingAnswer.id).length >= MAX_AUDIO_PARTS_PER_QUESTION && (
+      <p className="mt-2 text-center text-white/28 text-xs leading-loose">
+        語り足しの上限に達しました<br />
+        ここからは本文の編集で整えられます。
       </p>
     )}
 
