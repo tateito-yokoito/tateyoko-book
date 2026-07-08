@@ -5004,14 +5004,16 @@ return (
     </div>
   </div>
 
-      {step === 0 && (
-        <button
-          onClick={start}
-          className="btn-quiet bg-white/10 w-full py-5 rounded-full text-white"
-        >
-          録音をはじめる
-        </button>
-      )}
+{step === 0 && (
+  <div className="pb-12 pt-10">
+    <button
+      onClick={start}
+      className="btn-quiet bg-white/10 w-full py-5 rounded-full text-white"
+    >
+      録音をはじめる
+    </button>
+  </div>
+)}
 
       {step === "checking_mic" && (
         <div className="pb-16 text-center fade-enter">
@@ -5043,15 +5045,15 @@ return (
       )}
 
       {step === "countdown" && (
-        <div className="pb-16 text-center fade-enter">
-          <p className="text-white/90 text-[4.5rem] leading-none font-light">
+        <div className="pb-10 pt-12 text-center fade-enter">
+          <p className="text-white/82 text-[4.2rem] leading-none font-light">
             {countdown}
           </p>
-        </div>
+         </div>
       )}
 
-      {step === 1 && (
-        <div className="space-y-7 pb-4">
+{step === 1 && (
+  <div className="space-y-6 pb-8 pt-3">
 
 <div className="py-5 px-4">
   <QuietRecordingCircle seconds={time} isPaused={isPaused} />
@@ -5064,27 +5066,27 @@ return (
       aria-hidden="true"
     />
 
-    <p className="text-white/38 text-[0.82rem] tracking-[0.18em]">
-      {Math.floor(time / 60)}:{String(time % 60).padStart(2, "0")}
-    </p>
+<p className="text-white/26 text-[0.78rem] tracking-[0.18em]">
+  {Math.floor(time / 60)}:{String(time % 60).padStart(2, "0")}
+</p>
   </div>
 </div>
 
 
 
           <div className="flex items-center justify-center gap-5">
-            <button
-              type="button"
-              onClick={isPaused ? resumeRecording : pauseRecording}
-              className="w-24 h-24 rounded-full border border-white/15 bg-white/10 text-white shadow-xl"
+          <button
+            type="button"
+            onClick={isPaused ? resumeRecording : pauseRecording}
+            className="w-20 h-20 rounded-full border border-white/12 bg-white/[0.07] text-white/72 shadow-lg text-sm"
             >
-              {isPaused ? "再開" : "一時停止"}
-            </button>
+            {isPaused ? "再開" : "一時停止"}
+          </button>
 
             <button
               type="button"
               onClick={stop}
-              className="w-24 h-24 rounded-full bg-white text-slate-900 shadow-xl"
+              className="w-20 h-20 rounded-full bg-white/82 text-slate-900/82 shadow-lg text-sm"
             >
               終了
             </button>
@@ -5093,11 +5095,13 @@ return (
         </div>
       )}
 
-      {step === 2 && (
-        <p className="text-white/45 text-sm tracking-widest pb-10">
-          声を、言葉にしています...
-        </p>
-      )}
+{step === 2 && (
+  <div className="pb-10 pt-12">
+    <p className="text-white/38 text-sm tracking-widest">
+      声を、言葉にしています...
+    </p>
+  </div>
+)}
     </div>
   );
 }
@@ -5180,15 +5184,14 @@ function Scene3_5_VoiceCheck({
     !isProcessing &&
     canAddMore;
 
-  return (
-    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-hidden">
+return (
+  <div className="h-full flex flex-col fade-enter px-4 pt-2 pb-8 overflow-hidden">
 
-      <div className="text-center mb-6">
-        <p className="text-white/90 text-[1.05rem] text-narrative mb-3">
-          語りを確認します
-        </p>
-
-      </div>
+    <div className="text-center mb-4">
+      <p className="text-white/86 text-[1.02rem] text-narrative">
+        語りを確認します
+      </p>
+    </div>
 
       <div className="flex-1 overflow-y-auto pb-6">
         <div className="glass-card p-5 mb-6">
