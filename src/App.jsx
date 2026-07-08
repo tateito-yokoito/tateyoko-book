@@ -937,7 +937,8 @@ function getBetaIntroSeenKey(userId) {
 }
 
 
-const MIN_RECORDING_SECONDS = 15;
+const MAX_RECORDING_SECONDS_PER_QUESTION = 10 * 60;
+const MAX_AUDIO_PARTS_PER_QUESTION = 5;
 
 function isRecordingTooShort(duration) {
   const seconds = Number(duration || 0);
@@ -996,6 +997,23 @@ function getNextDeliveryText(notificationPref) {
 
   return `次の問いは、${month}月${date}日（${weekday}）${hour}:${minute}ごろに届きます。`;
 }
+
+function formatRecordedAt(value) {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  const y = date.getFullYear();
+  const m = date.getMonth() + 1;
+  const d = date.getDate();
+  const h = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+
+  return `${y}年${m}月${d}日 ${h}:${min}`;
+}
+
 function getTodayKey() {
   const now = new Date();
   const y = now.getFullYear();
@@ -1702,8 +1720,14 @@ const buildRecordedVoiceData = (prev, txt, dur, url, blob) => {
     : newTranscript;
 
   const mergedDuration = prev.appendMode
-    ? (prev.duration || 0) + (dur || 0)
-    : dur;
+    ? Math.min(
+        MAX_RECORDING_SECONDS_PER_QUESTION,
+        (prev.duration || 0) + (dur || 0)
+      )
+    : Math.min(
+        MAX_RECORDING_SECONDS_PER_QUESTION,
+        dur || 0
+      );
 
   const newSegment = blob && blob.size > 0
     ? {
@@ -2647,6 +2671,17 @@ onComplete={(t, d, u, b) => {
 <Scene3_5_VoiceCheck
   data={voiceData}
   onAddMore={() => {
+    const audioPartCount = (voiceData.audioSegments || []).length;
+    const totalDuration = Number(voiceData.duration || 0);
+
+    if (
+      audioPartCount >= MAX_AUDIO_PARTS_PER_QUESTION ||
+      totalDuration >= MAX_RECORDING_SECONDS_PER_QUESTION
+    ) {
+      alert("語り足しの上限に達しました。\nここからは本文の編集で整えられます。");
+      return;
+    }
+
     setVoiceData(prev => ({
       ...prev,
       appendMode: true,
@@ -4144,28 +4179,20 @@ function VoiceWave({ level = 0 }) {
   );
 }
 
-function QuietRecordingCircle({ seconds = 0, isPaused = false }) {
-  const cycleSeconds = 180;
-  const progress = ((seconds % cycleSeconds) / cycleSeconds) * 100;
-
+function QuietRecordingCircle({ isPaused = false }) {
   return (
-    <div className="relative w-28 h-28 mx-auto" aria-hidden="true">
+    <div className="relative w-24 h-24 mx-auto" aria-hidden="true">
+      <div className="absolute inset-0 rounded-full border border-white/[0.08]" />
+
       <div
-        className="absolute inset-0 rounded-full"
-        style={{
-          background: `conic-gradient(rgba(255,255,255,0.52) ${progress}%, rgba(255,255,255,0.08) ${progress}% 100%)`
-        }}
-      />
-
-      <div className="absolute inset-[3px] rounded-full bg-[#0f172a]" />
-
-      <div className="absolute inset-[15px] rounded-full border border-white/10 bg-white/[0.03] flex items-center justify-center">
-        <div
-          className={`w-2 h-2 rounded-full ${
-            isPaused ? "bg-white/28" : "bg-white/55"
-          }`}
-        />
+        className={`absolute inset-0 rounded-full quiet-recording-orbit ${
+          isPaused ? "quiet-recording-orbit-paused" : ""
+        }`}
+      >
+        <div className="absolute left-1/2 top-[-2px] w-1.5 h-1.5 -translate-x-1/2 rounded-full bg-white/45 shadow-[0_0_14px_rgba(255,255,255,0.18)]" />
       </div>
+
+      <div className="absolute inset-[18px] rounded-full border border-white/[0.05] bg-white/[0.015]" />
     </div>
   );
 }
@@ -4964,12 +4991,12 @@ const stop = () => {
 
 
   return (
-    <div className="h-full flex flex-col fade-enter text-center pt-12">
-      <div className="flex-1 flex flex-col justify-center">
-        <p className="text-white/65 text-[1.05rem] text-narrative mb-8 whitespace-pre-wrap">
-          {question.content}
-        </p>
-      </div>
+<div className="h-full flex flex-col fade-enter text-center pt-10">
+  <div className="flex-1 flex flex-col justify-center px-2">
+    <p className="text-white/82 text-[1.12rem] leading-[2.05] text-narrative whitespace-pre-wrap">
+      {question.content}
+    </p>
+  </div>
 
       {step === 0 && (
         <button
@@ -5019,20 +5046,21 @@ const stop = () => {
 
       {step === 1 && (
         <div className="space-y-7 pb-4">
-        <div className="glass-card py-7 px-4">
-          <p className="text-white/35 text-xs tracking-[0.18em] mb-4">
-    {isPaused ? "一時停止中" : "録音中"}
-  </p>
+<div className="py-5 px-4">
+  <QuietRecordingCircle isPaused={isPaused} />
 
-  <QuietRecordingCircle seconds={time} isPaused={isPaused} />
+  <div className="mt-5 flex items-center justify-center gap-3">
+    <span
+      className={`w-2.5 h-2.5 rounded-full ${
+        isPaused ? "bg-white/22" : "bg-[#B85F3A]/85"
+      }`}
+      aria-hidden="true"
+    />
 
-  <p className="text-white/55 text-[0.95rem] tracking-widest mt-5">
-    {Math.floor(time / 60)}:{String(time % 60).padStart(2, "0")}
-  </p>
-
-  <p className="text-white/38 text-sm leading-loose mt-4">
-    ゆっくりで大丈夫です
-  </p>
+    <p className="text-white/38 text-[0.82rem] tracking-[0.18em]">
+      {Math.floor(time / 60)}:{String(time % 60).padStart(2, "0")}
+    </p>
+  </div>
 </div>
 
 
@@ -5081,6 +5109,23 @@ function Scene3_5_VoiceCheck({
   const hasAlreadyAddedMore = (data.addMoreCount || 0) > 0;
   const shouldSuggestAddMore = isShortAnswer && !hasAlreadyAddedMore;
 
+  const audioPartCount = (data.audioSegments || []).length;
+  const totalDuration = Number(data.duration || 0);
+
+  const hasReachedAudioPartLimit =
+    audioPartCount >= MAX_AUDIO_PARTS_PER_QUESTION;
+
+  const hasReachedDurationLimit =
+    totalDuration >= MAX_RECORDING_SECONDS_PER_QUESTION;
+
+  const canAddMore =
+    !data.editRecordingMode &&
+    !hasReachedAudioPartLimit &&
+    !hasReachedDurationLimit;
+
+  const hasReachedAddMoreLimit =
+    hasReachedAudioPartLimit || hasReachedDurationLimit;
+
   const displayText =
     data.editedText ||
     data.transcriptReadable ||
@@ -5096,7 +5141,12 @@ function Scene3_5_VoiceCheck({
   const showAddMoreSuggestion =
     shouldSuggestAddMore &&
     !isProcessing &&
-    !data.editRecordingMode;
+    canAddMore;
+
+  const showSubtleAddMore =
+    !showAddMoreSuggestion &&
+    !isProcessing &&
+    canAddMore;
 
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-hidden">
@@ -5218,9 +5268,24 @@ function Scene3_5_VoiceCheck({
             </p>
           </div>
         )}
+
+        {hasReachedAddMoreLimit && !data.editRecordingMode && (
+          <div className="glass-card p-5 mb-6">
+            <p className="text-white/70 text-sm leading-loose mb-3">
+              語り足しの上限に達しました
+            </p>
+
+            <p className="text-white/48 text-sm leading-loose">
+              ここからは本文の編集で整えられます。
+            </p>
+          </div>
+        )}
+
+
       </div>
 
       <div className="pt-5 border-t border-white/10 space-y-4">
+
        {showAddMoreSuggestion && (
          <button
            onClick={onAddMore}
@@ -5228,7 +5293,15 @@ function Scene3_5_VoiceCheck({
          >
            少し話し足す
          </button>
+       )}
 
+       {showSubtleAddMore && (
+         <button
+           onClick={onAddMore}
+           className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
+         >
+           少し話し足す
+         </button>
        )}
 
         <button
@@ -7269,11 +7342,29 @@ return (
   本文を編集する
 </button>
 
-                {audios.length > 0 && (
-                  <div className="mt-5 space-y-3">
-                    {audios.map((audio, audioIndex) => (
-                      <audio key={audio.storage_path || audioIndex} src={audio.url} controls className="w-full" />
-                    ))}
+                                {audios.length > 0 && (
+                  <div className="mt-5 space-y-4">
+                    {audios.map((audio, audioIndex) => {
+                      const recordedAt = formatRecordedAt(audio.created_at);
+
+                      return (
+                        <div key={audio.storage_path || audioIndex}>
+                          {audios.length > 1 && (
+                            <p className="text-white/32 text-xs mb-2">
+                              音声 {audioIndex + 1}
+                            </p>
+                          )}
+
+                          <audio src={audio.url} controls className="w-full" />
+
+                          {recordedAt && (
+                            <p className="mt-2 text-white/28 text-[0.72rem] tracking-widest text-right">
+                              {recordedAt}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -7588,6 +7679,7 @@ function Scene_NotificationSetup({ user, onComplete }) {
     </div>
   );
 }
+
 
 
 export default App;
