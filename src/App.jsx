@@ -3559,6 +3559,176 @@ function HomeMenuButton({ icon: Icon, label, onClick }) {
   );
 }
 
+function DummyQrCode() {
+  const cells = [
+    1, 0, 1, 1, 0,
+    0, 1, 0, 1, 1,
+    1, 1, 0, 0, 1,
+    1, 0, 1, 0, 0,
+    0, 1, 1, 1, 0
+  ];
+
+  return (
+    <div className="grid grid-cols-5 gap-[1px] w-7 h-7" aria-hidden="true">
+      {cells.map((cell, index) => (
+        <div
+          key={index}
+          className={cell ? "bg-slate-700" : "bg-slate-200"}
+        />
+      ))}
+    </div>
+  );
+}
+
+function formatBodyForPagePreview(text) {
+  const raw = String(text || "").trim();
+
+  if (!raw) return [];
+
+  const existingParagraphs = raw
+    .split(/\n+/)
+    .map(item => item.trim())
+    .filter(Boolean);
+
+  if (existingParagraphs.length >= 2) {
+    return existingParagraphs;
+  }
+
+  const sentences = raw
+    .split(/(?<=。)/)
+    .map(item => item.trim())
+    .filter(Boolean);
+
+  if (sentences.length <= 1) {
+    return [raw];
+  }
+
+  const paragraphs = [];
+  let buffer = "";
+
+  for (const sentence of sentences) {
+    const next = buffer ? `${buffer}${sentence}` : sentence;
+
+    if (next.length >= 85) {
+      paragraphs.push(next);
+      buffer = "";
+    } else {
+      buffer = next;
+    }
+  }
+
+  if (buffer) {
+    paragraphs.push(buffer);
+  }
+
+  return paragraphs;
+}
+
+function BookPagePreview({
+  type = "left",
+  pageNumber = 1,
+  sequenceOrder = "",
+  questionText = "",
+  bodyParagraphs = [],
+  headingPhoto = null,
+  photo = null
+}) {
+  if (type === "right") {
+    return (
+      <div className="mx-auto w-full max-w-[360px] aspect-[182/257] bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[11%] py-[13%]">
+        <div className="h-full flex flex-col">
+          <div className="flex-1">
+            {bodyParagraphs.length > 0 ? (
+              bodyParagraphs.slice(0, 10).map((paragraph, index) => (
+                <p
+                  key={index}
+                  className="text-[0.72rem] leading-[2.05] text-slate-800 mb-5 whitespace-pre-wrap"
+                >
+                  {paragraph}
+                </p>
+              ))
+            ) : (
+              <p className="text-[0.72rem] leading-[2.05] text-slate-400">
+                文章が入ります。
+              </p>
+            )}
+          </div>
+
+          <p className="text-[0.56rem] text-slate-400 text-right">
+            {pageNumber}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === "photo") {
+    return (
+      <div className="mx-auto w-full max-w-[360px] aspect-[182/257] bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10%] py-[11%]">
+        <div className="h-full flex flex-col">
+          <div className="flex-1 flex items-center justify-center">
+            {photo?.url ? (
+              <img
+                src={photo.url}
+                alt=""
+                className="w-full max-h-[72%] object-contain"
+              />
+            ) : (
+              <div className="w-full h-[55%]" />
+            )}
+          </div>
+
+          <p className="text-[0.56rem] text-slate-400 text-right">
+            {pageNumber}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-[360px] aspect-[182/257] bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10%] py-[10%]">
+      <div className="h-full flex flex-col">
+        <div className="text-left">
+          <p className="text-[0.68rem] leading-tight text-slate-500">
+            Story<br />
+            {sequenceOrder || pageNumber}
+          </p>
+
+          <div className="mt-2">
+            <DummyQrCode />
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col">
+          <div className="flex-[0.95] flex items-center justify-center text-center">
+            <p className="text-[0.82rem] leading-loose text-slate-700 whitespace-pre-wrap">
+              {questionText || "問い"}
+            </p>
+          </div>
+
+          <div className="flex-[1.05] flex items-end justify-center">
+            {headingPhoto?.url ? (
+              <img
+                src={headingPhoto.url}
+                alt=""
+                className="w-full h-[86%] object-cover"
+              />
+            ) : (
+              <div className="w-full h-[86%]" />
+            )}
+          </div>
+        </div>
+
+        <p className="text-[0.56rem] text-slate-400 text-right mt-4">
+          {pageNumber}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+
 function Scene_Home({ userName, onStartTalking, onOpenStoryPages, onOpenBookBuilder, onDevLogout }) {
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8">
@@ -3763,23 +3933,56 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
     .filter(answer => includedStoryIds.includes(answer.id))
     .sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0));
 
-  const previewAnswer = includedStories[0] || null;
-  const previewQuestion = previewAnswer ? getQuestionForAnswer(previewAnswer) : null;
-  const previewMedia = previewAnswer ? (bookMediaByAnswerId[previewAnswer.id] || []) : [];
-  const previewPhotos = previewMedia.filter(item => item.asset_type === "photo" && item.url);
-  const previewHeadingPhoto = previewPhotos[0] || null;
-  const previewAdditionalPhotos = previewPhotos.slice(1);
+  let previewPageNumber = 1;
 
-  const previewBody = previewAnswer ? getStoryBody(previewAnswer) : "";
-  const previewParagraphs = String(previewBody || "")
-    .split(/\n+/)
-    .map(text => text.trim())
-    .filter(Boolean);
+  const previewPageGroups = includedStories.map(answer => {
+    const question = getQuestionForAnswer(answer);
+    const media = bookMediaByAnswerId[answer.id] || [];
+    const photos = media.filter(item => item.asset_type === "photo" && item.url);
+    const headingPhoto = photos[0] || null;
+    const additionalPhotos = photos.slice(1);
+    const body = getStoryBody(answer);
+    const bodyParagraphs = formatBodyForPagePreview(body);
+
+    const leftPageNumber = previewPageNumber;
+    const rightPageNumber = previewPageNumber + 1;
+
+    previewPageNumber += 2;
+
+    const photoPages = additionalPhotos.map(photo => {
+      const pageNumber = previewPageNumber;
+      previewPageNumber += 1;
+
+      return {
+        photo,
+        pageNumber
+      };
+    });
+
+    return {
+      answer,
+      question,
+      headingPhoto,
+      bodyParagraphs,
+      leftPageNumber,
+      rightPageNumber,
+      photoPages
+    };
+  });
 
   return (
     <div className="fixed inset-0 min-h-0 flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
       <div className="shrink-0 pb-3">
-        <div className="text-center mb-3">
+        <div className="relative flex items-center justify-center mb-3 h-10">
+          <button
+            type="button"
+            onClick={onBack}
+            className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"
+            aria-label="戻る"
+          >
+            <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+          </button>
+
           <p className="text-white/90 text-[1.02rem] text-narrative">
             本に仕上げる
           </p>
@@ -4001,11 +4204,6 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
                               </p>
                             )}
 
-                            {!photo && included && (
-                              <p className="text-amber-300/55 text-xs">
-                                写真がありません
-                              </p>
-                            )}
                           </div>
                         </div>
                       </div>
@@ -4055,92 +4253,47 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
               <p className="text-white/45 text-sm leading-loose">
                 語った言葉が、このような紙面になります。
               </p>
+
+              <p className="mt-4 text-white/32 text-xs leading-loose">
+                ※ 実際の書籍では、読みやすさに合わせて余白や改行を整えます。
+              </p>
             </div>
 
-            {!previewAnswer ? (
+            {previewPageGroups.length === 0 ? (
               <div className="glass-card p-6 text-center">
                 <p className="text-white/40 text-sm leading-loose">
                   収録する語りを選ぶと、紙面プレビューが表示されます。
                 </p>
               </div>
             ) : (
-              <>
-                <div className="bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-sm px-7 py-9 min-h-[520px]">
-                  <div className="h-full flex flex-col">
-                    <div className="text-left mb-10">
-                      <p className="text-[0.62rem] tracking-widest text-slate-500">
-                        QUESTION {previewAnswer.sequence_order || ""}
-                      </p>
-                    </div>
+              <div className="space-y-10">
+                {previewPageGroups.map(group => (
+                  <div key={group.answer.id} className="space-y-5">
+                    <BookPagePreview
+                      type="left"
+                      pageNumber={group.leftPageNumber}
+                      sequenceOrder={group.answer.sequence_order}
+                      questionText={group.question?.content || ""}
+                      headingPhoto={group.headingPhoto}
+                    />
 
-                    <div className="flex-1 flex flex-col items-center justify-center text-center">
-                      <p className="text-[0.9rem] leading-loose text-slate-700 whitespace-pre-wrap">
-                        {previewQuestion?.content || "問い"}
-                      </p>
+                    <BookPagePreview
+                      type="right"
+                      pageNumber={group.rightPageNumber}
+                      bodyParagraphs={group.bodyParagraphs}
+                    />
 
-                      <div className="mt-12 w-full min-h-[190px] flex items-center justify-center">
-                        {previewHeadingPhoto ? (
-                          <img
-                            src={previewHeadingPhoto.url}
-                            alt=""
-                            className="w-full max-h-[230px] object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-[190px]" />
-                        )}
-                      </div>
-                    </div>
-
-                    <p className="text-[0.58rem] text-slate-400 text-center mt-8">
-                      left page
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-sm px-8 py-10 min-h-[520px]">
-                  <div className="max-w-[280px] mx-auto">
-                    {previewParagraphs.length > 0 ? (
-                      previewParagraphs.slice(0, 8).map((paragraph, index) => (
-                        <p
-                          key={index}
-                          className="text-[0.78rem] leading-[2.05] text-slate-800 mb-5 whitespace-pre-wrap"
-                        >
-                          {paragraph}
-                        </p>
-                      ))
-                    ) : (
-                      <p className="text-[0.78rem] leading-[2.05] text-slate-400">
-                        文章が入ります。
-                      </p>
-                    )}
-                  </div>
-
-                  <p className="text-[0.58rem] text-slate-400 text-center mt-8">
-                    right page
-                  </p>
-                </div>
-
-                {previewAdditionalPhotos.length > 0 && (
-                  <div className="space-y-5">
-                    {previewAdditionalPhotos.map((photo, index) => (
-                      <div
-                        key={photo.storage_path || index}
-                        className="bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-sm px-7 py-9 min-h-[520px] flex flex-col justify-center"
-                      >
-                        <img
-                          src={photo.url}
-                          alt=""
-                          className="w-full max-h-[360px] object-contain"
-                        />
-
-                        <p className="text-[0.58rem] text-slate-400 text-center mt-8">
-                          photo page
-                        </p>
-                      </div>
+                    {group.photoPages.map(photoPage => (
+                      <BookPagePreview
+                        key={photoPage.photo.storage_path || photoPage.pageNumber}
+                        type="photo"
+                        pageNumber={photoPage.pageNumber}
+                        photo={photoPage.photo}
+                      />
                     ))}
                   </div>
-                )}
-              </>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -4173,10 +4326,10 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
             className={`flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm ${
               stepIndex >= steps.length - 1 ? "opacity-40" : ""
             }`}
-          >
-            次へ
-        </button>
-      </div>
+            >
+              次へ
+            </button>
+          </div>
 
       </div>
 
