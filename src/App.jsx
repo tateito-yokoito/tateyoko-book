@@ -3687,7 +3687,7 @@ function BookPagePreview({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[360px] aspect-[182/257] bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10%] py-[10%]">
+        <div className="mx-auto w-full max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10%] py-[10%]">
       <div className="h-full flex flex-col">
         <div className="text-left">
           <p className="text-[0.68rem] leading-tight text-slate-500">
@@ -3700,25 +3700,27 @@ function BookPagePreview({
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col">
-          <div className="flex-[0.95] flex items-center justify-center text-center">
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="h-[42%] flex items-center justify-center text-center px-2">
             <p className="text-[0.82rem] leading-loose text-slate-700 whitespace-pre-wrap">
               {questionText || "問い"}
             </p>
           </div>
 
-          <div className="flex-[1.05] flex items-end justify-center">
+          <div className="h-[46%] mt-auto overflow-hidden flex items-center justify-center">
             {headingPhoto?.url ? (
               <img
                 src={headingPhoto.url}
                 alt=""
-                className="w-full h-[86%] object-cover"
+                className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-[86%]" />
+              <div className="w-full h-full" />
             )}
           </div>
         </div>
+
+
 
         <p className="text-[0.56rem] text-slate-400 text-right mt-4">
           {pageNumber}
@@ -3728,6 +3730,57 @@ function BookPagePreview({
   );
 }
 
+function BookCoverPreview({ title, subtitle, authorName, coverPhoto, coverColor = "#26382f" }) {
+  return (
+    <div className="flex justify-center py-3">
+      <div className="relative w-[230px] h-[330px]">
+        <div className="absolute left-4 top-5 w-[218px] h-[310px] rounded-r-[10px] bg-black/30 blur-xl" />
+
+          <div
+            className="absolute left-0 top-0 w-[214px] h-[318px] rounded-r-[10px] shadow-2xl overflow-hidden border border-white/10"
+            style={{ backgroundColor: coverColor }}
+          >
+
+          <div className="absolute left-0 top-0 h-full w-[18px] bg-black/18 border-r border-white/10" />
+          <div className="absolute left-[28px] top-0 h-full w-px bg-white/10" />
+
+          {coverPhoto?.url && (
+            <div className="absolute inset-x-[34px] top-[34px] h-[104px] overflow-hidden rounded-[2px] border border-white/10">
+              <img
+                src={coverPhoto.url}
+                alt=""
+                className="w-full h-full object-cover opacity-85"
+              />
+            </div>
+          )}
+
+          <div className={`absolute inset-x-[34px] ${coverPhoto?.url ? "top-[162px]" : "top-[82px]"} text-center`}>
+            <p className="text-white/90 text-[1.18rem] leading-relaxed text-narrative tracking-[0.08em] whitespace-pre-wrap">
+              {title || "わたしの物語"}
+            </p>
+
+            <div className="mx-auto my-5 w-10 h-px bg-white/24" />
+
+            <p className="text-white/58 text-[0.72rem] leading-loose tracking-[0.14em] whitespace-pre-wrap">
+              {subtitle || "これまでの時間を、家族へ"}
+            </p>
+          </div>
+
+          <p className="absolute inset-x-[34px] bottom-9 text-center text-white/50 text-[0.68rem] tracking-[0.18em]">
+            {authorName || ""}
+          </p>
+        </div>
+
+        <div className="absolute left-[214px] top-[8px] w-[14px] h-[302px] rounded-r-[8px] bg-[#f5f1e8] shadow-lg">
+          <div className="absolute left-1 top-4 bottom-4 w-px bg-slate-300/70" />
+          <div className="absolute left-2 top-5 bottom-5 w-px bg-slate-200/80" />
+        </div>
+
+        <div className="absolute left-[206px] top-[14px] w-[12px] h-[290px] rounded-r-[6px] bg-black/12" />
+      </div>
+    </div>
+  );
+}
 
 function Scene_Home({ userName, onStartTalking, onOpenStoryPages, onOpenBookBuilder, onDevLogout }) {
   return (
@@ -4021,41 +4074,19 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pb-6">
         {stepIndex === 0 && (
           <div className="space-y-5">
+
             <div className="glass-card p-5">
               <p className="text-white/40 text-xs tracking-widest mb-5">
                 PREVIEW
               </p>
 
-              <div className="flex justify-center">
-                <div
-                  className="relative w-[210px] h-[300px] shadow-2xl"
-                  style={{ backgroundColor: coverColor }}
-                >
-                  <div className="absolute left-3 top-0 h-full w-px bg-black/18" />
-
-                  <div className="h-full flex flex-col items-center justify-center px-8 text-center">
-                    <div className="w-12 h-px bg-slate-900/55 mb-4" />
-
-                    <p className="text-slate-900/85 text-[0.95rem] leading-relaxed text-narrative whitespace-pre-wrap">
-                      {bookTitle || "タイトル"}
-                    </p>
-
-                    {coverPhoto?.url && (
-                      <img
-                        src={coverPhoto.url}
-                        alt="表紙写真"
-                        className="w-24 h-24 object-cover mt-6 mb-6"
-                      />
-                    )}
-
-                    <p className="text-slate-900/65 text-[0.65rem] leading-relaxed">
-                      {bookSubtitle || "副題"}
-                    </p>
-                  </div>
-
-                  <div className="absolute right-0 top-0 w-5 h-full bg-white/50 shadow-lg" />
-                </div>
-              </div>
+              <BookCoverPreview
+                title={bookTitle}
+                subtitle={bookSubtitle}
+                authorName={withHonorific(foundation?.display_name || foundation?.subject_name || "")}
+                coverPhoto={coverPhoto}
+                coverColor={coverColor}
+              />
             </div>
 
             <div className="glass-card p-5">
@@ -4079,7 +4110,7 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
                 onClick={() => coverInputRef.current?.click()}
                 className="btn-quiet w-full py-4 rounded-full text-white/80 mb-6"
               >
-                写真を挿入する
+                表紙に写真を添える
               </button>
 
               <div className="mb-6">
