@@ -4080,13 +4080,13 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
                 PREVIEW
               </p>
 
-              <BookCoverPreview
-                title={bookTitle}
-                subtitle={bookSubtitle}
-                authorName={withHonorific(foundation?.display_name || foundation?.subject_name || "")}
-                coverPhoto={coverPhoto}
-                coverColor={coverColor}
-              />
+            <BookCoverPreview
+              title={bookTitle}
+              subtitle={bookSubtitle}
+              authorName=""
+              coverPhoto={coverPhoto}
+              coverColor={coverColor}
+            />
             </div>
 
             <div className="glass-card p-5">
