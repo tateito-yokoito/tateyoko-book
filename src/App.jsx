@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronRight, Files, Mic, Pencil, RotateCw, ScanLine } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Files, Mic, Pencil, RotateCw, ScanLine } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumossjxehdop.supabase.co";
@@ -3609,12 +3609,12 @@ function Scene_Home({ userName, onStartTalking, onOpenStoryPages, onOpenBookBuil
 }
 
 function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
-  const steps = ["表紙", "語り", "紙面", "注文", "完了"];
+  const steps = ["表紙", "収録", "紙面", "注文", "完了"];
   const [stepIndex, setStepIndex] = useState(0);
   const [coverPhoto, setCoverPhoto] = useState(null);
   const [coverColor, setCoverColor] = useState("#d9cdbd");
   const [bookTitle, setBookTitle] = useState(`${withHonorific(userName)}の物語`);
-  const [bookSubtitle, setBookSubtitle] = useState("家族に愛を込めて");
+  const [bookSubtitle, setBookSubtitle] = useState("これまでの時間を、家族へ");
   const coverInputRef = useRef(null);
 
   const [bookStories, setBookStories] = useState([]);
@@ -3758,6 +3758,23 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
       name: file.name || "cover-photo"
     });
   };
+
+  const includedStories = [...bookStories]
+    .filter(answer => includedStoryIds.includes(answer.id))
+    .sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0));
+
+  const previewAnswer = includedStories[0] || null;
+  const previewQuestion = previewAnswer ? getQuestionForAnswer(previewAnswer) : null;
+  const previewMedia = previewAnswer ? (bookMediaByAnswerId[previewAnswer.id] || []) : [];
+  const previewPhotos = previewMedia.filter(item => item.asset_type === "photo" && item.url);
+  const previewHeadingPhoto = previewPhotos[0] || null;
+  const previewAdditionalPhotos = previewPhotos.slice(1);
+
+  const previewBody = previewAnswer ? getStoryBody(previewAnswer) : "";
+  const previewParagraphs = String(previewBody || "")
+    .split(/\n+/)
+    .map(text => text.trim())
+    .filter(Boolean);
 
   return (
     <div className="fixed inset-0 min-h-0 flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
@@ -3939,15 +3956,10 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
                 </p>
               </div>
             ) : (
-              [...bookStories]
-                .sort((a, b) => {
-                  const aIncluded = includedStoryIds.includes(a.id);
-                  const bIncluded = includedStoryIds.includes(b.id);
-
-                  if (aIncluded !== bIncluded) return aIncluded ? -1 : 1;
-                  return Number(a.sequence_order || 0) - Number(b.sequence_order || 0);
-                })
+                            [...bookStories]
+                .sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0))
                 .map((answer, index) => {
+
                   const included = includedStoryIds.includes(answer.id);
                   const question = getQuestionForAnswer(answer);
                   const body = getStoryBody(answer);
@@ -3972,7 +3984,7 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <p className="text-white/75 text-sm leading-relaxed text-narrative line-clamp-2">
+                          <p className="text-white/78 text-[0.92rem] leading-relaxed text-narrative line-clamp-2">
                             {question?.content || answer.ai_mirror || answer.snippet || `語り ${index + 1}`}
                           </p>
 
@@ -3998,9 +4010,14 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
                         </div>
                       </div>
 
-                      <div className="flex gap-3 mt-4">
+                      <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3">
+                        <p className={`text-sm ${included ? "text-white/65" : "text-white/35"}`}>
+                          収録する
+                        </p>
+
                         <button
                           type="button"
+                          aria-pressed={included}
                           onClick={() => {
                             setIncludedStoryIds(prev =>
                               prev.includes(answer.id)
@@ -4008,21 +4025,17 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
                                 : [...prev, answer.id]
                             );
                           }}
-                          className={`flex-1 py-3 rounded-full border text-sm flex items-center justify-center gap-2 ${
+                          className={`relative w-14 h-8 rounded-full transition ${
                             included
-                              ? "border-white/[0.18] bg-white/[0.12] text-white"
-                              : "border-white/10 text-white/40"
+                              ? "bg-emerald-700/85"
+                              : "bg-white/12"
                           }`}
                         >
-                          <span className={`w-5 h-5 rounded border flex items-center justify-center text-xs ${
-                            included
-                              ? "bg-white text-slate-900 border-white"
-                              : "border-white/20"
-                          }`}>
-                            {included ? "✓" : ""}
-                          </span>
-
-                          <span>{included ? "本に入れる" : "本に入れない"}</span>
+                          <span
+                            className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-all ${
+                              included ? "left-7" : "left-1"
+                            }`}
+                          />
                         </button>
                       </div>
                     </div>
@@ -4032,7 +4045,107 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
           </div>
         )}
 
-        {stepIndex >= 2 && (
+        {stepIndex === 2 && (
+          <div className="space-y-5">
+            <div className="glass-card p-5 text-center">
+              <p className="text-white/82 text-[1.05rem] text-narrative mb-3">
+                紙面プレビュー
+              </p>
+
+              <p className="text-white/45 text-sm leading-loose">
+                語った言葉が、このような紙面になります。
+              </p>
+            </div>
+
+            {!previewAnswer ? (
+              <div className="glass-card p-6 text-center">
+                <p className="text-white/40 text-sm leading-loose">
+                  収録する語りを選ぶと、紙面プレビューが表示されます。
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-sm px-7 py-9 min-h-[520px]">
+                  <div className="h-full flex flex-col">
+                    <div className="text-left mb-10">
+                      <p className="text-[0.62rem] tracking-widest text-slate-500">
+                        QUESTION {previewAnswer.sequence_order || ""}
+                      </p>
+                    </div>
+
+                    <div className="flex-1 flex flex-col items-center justify-center text-center">
+                      <p className="text-[0.9rem] leading-loose text-slate-700 whitespace-pre-wrap">
+                        {previewQuestion?.content || "問い"}
+                      </p>
+
+                      <div className="mt-12 w-full min-h-[190px] flex items-center justify-center">
+                        {previewHeadingPhoto ? (
+                          <img
+                            src={previewHeadingPhoto.url}
+                            alt=""
+                            className="w-full max-h-[230px] object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-[190px]" />
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-[0.58rem] text-slate-400 text-center mt-8">
+                      left page
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-sm px-8 py-10 min-h-[520px]">
+                  <div className="max-w-[280px] mx-auto">
+                    {previewParagraphs.length > 0 ? (
+                      previewParagraphs.slice(0, 8).map((paragraph, index) => (
+                        <p
+                          key={index}
+                          className="text-[0.78rem] leading-[2.05] text-slate-800 mb-5 whitespace-pre-wrap"
+                        >
+                          {paragraph}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="text-[0.78rem] leading-[2.05] text-slate-400">
+                        文章が入ります。
+                      </p>
+                    )}
+                  </div>
+
+                  <p className="text-[0.58rem] text-slate-400 text-center mt-8">
+                    right page
+                  </p>
+                </div>
+
+                {previewAdditionalPhotos.length > 0 && (
+                  <div className="space-y-5">
+                    {previewAdditionalPhotos.map((photo, index) => (
+                      <div
+                        key={photo.storage_path || index}
+                        className="bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-sm px-7 py-9 min-h-[520px] flex flex-col justify-center"
+                      >
+                        <img
+                          src={photo.url}
+                          alt=""
+                          className="w-full max-h-[360px] object-contain"
+                        />
+
+                        <p className="text-[0.58rem] text-slate-400 text-center mt-8">
+                          photo page
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {stepIndex >= 3 && (
           <div className="glass-card p-6 text-center opacity-60">
             <p className="text-white/82 text-[1.05rem] text-narrative mb-5">
               {steps[stepIndex]}
@@ -5416,13 +5529,6 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
   const [isEditingText, setIsEditingText] = useState(false);
   const [draftText, setDraftText] = useState(data.editedText || "");
 
-  const styleLabel =
-    data.selectedStyle === "clean"
-      ? "そのまま"
-      : data.selectedStyle === "essay"
-        ? "作品調"
-        : "語り調";
-
   useEffect(() => {
     setDraftText(data.editedText || "");
   }, [data.editedText]);
@@ -5435,11 +5541,7 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
   return (
     <div className="h-full flex flex-col fade-enter">
       <div className="flex-1 overflow-y-auto pb-10">
-        <div className="mb-8 p-4 bg-white/5 border-l-2 border-amber-600/50 rounded-r-lg">
-          <p className="text-white/35 text-xs tracking-[0.18em] mb-3">
-            選択中の文体：{styleLabel}
-          </p>
-
+            <div className="mb-8 p-4 bg-white/5 border-l-2 border-amber-600/50 rounded-r-lg">
           <p className="text-amber-50/90 text-[0.95rem] tracking-widest leading-loose">
             {data.aiMirror}
           </p>
@@ -5489,13 +5591,9 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
             </button>
           </>
         )}
-
         <div className="glass-card p-5 mt-10">
-          <p className="text-white/35 text-xs tracking-[0.18em] mb-4">
-            PHOTO
-          </p>
-
           {data.photoItems && data.photoItems.length > 0 && (
+
             <div className="grid grid-cols-2 gap-3 mb-5">
               {data.photoItems.map((photo, index) => (
                 <div
@@ -5528,18 +5626,19 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
             }}
           />
 
-          <button
-            type="button"
-            onClick={() => photoInputRef.current?.click()}
-            className="btn-quiet w-full py-4 rounded-full text-white/80"
-          >
-            写真を挿入する
-          </button>
+           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              className="btn-quiet flex-1 py-4 rounded-full text-white/80"
+            >
+              写真を添える
+            </button>
 
-          <p className="mt-4 text-white/35 text-xs leading-loose text-center">
-            この語りに添えたい写真があれば、<br />
-            あとから本のページに使えます。
-          </p>
+            <p className="text-white/32 text-xs whitespace-nowrap">
+              後でもできます
+            </p>
+          </div>
         </div>
 
         {data.audioSegments && data.audioSegments.length > 0 && (
@@ -5684,12 +5783,38 @@ function Scene_BetaSurveyPrompt({ survey, onOpenSurvey, onContinue }) {
   );
 }
 
+function BookPageAddedVisual() {
+  return (
+    <div className="my-10 flex items-center justify-center gap-5" aria-hidden="true">
+      <div className="relative w-12 h-16 rounded-sm border border-white/22 bg-white/[0.035] shadow-lg">
+        <div className="absolute inset-x-3 top-4 h-px bg-white/18" />
+        <div className="absolute inset-x-3 top-7 h-px bg-white/12" />
+        <div className="absolute inset-x-3 top-10 h-px bg-white/10" />
+      </div>
+
+      <div className="text-white/28 text-xl">
+        →
+      </div>
+
+      <div className="relative w-14 h-[4.25rem]">
+        <div className="absolute left-0 top-1 w-12 h-16 rounded-sm border border-white/24 bg-white/[0.045] shadow-xl" />
+        <div className="absolute left-2 top-0 w-12 h-16 rounded-sm border border-white/18 bg-white/[0.032]" />
+        <div className="absolute right-0 top-2 h-14 w-2 rounded-r-sm bg-white/[0.12]" />
+        <div className="absolute right-1 top-3 h-12 w-px bg-white/16" />
+        <div className="absolute right-3 top-4 h-10 w-px bg-white/10" />
+      </div>
+    </div>
+  );
+}
+
 function Scene6_Completion({ onTalkMore, onOpenStoryPages, onEndToday }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter text-center">
-      <p className="text-white/90 text-[1.05rem] mb-12">
+      <p className="text-white/90 text-[1.05rem] mb-2">
         あなたの物語に、<br/>ひとつのページが加わりました
       </p>
+
+      <BookPageAddedVisual />
 
       <div className="flex flex-col gap-4 w-full max-w-[280px]">
         <button
@@ -6291,6 +6416,7 @@ function Scene_StoryPages({ user, foundation, questionSet = [], onTalkMore, onEd
   const pendingScanAnswerIdRef = useRef(null);
   const [scanPreview, setScanPreview] = useState(null);
   const [editingAnswer, setEditingAnswer] = useState(null);
+  const [photoActionAnswerId, setPhotoActionAnswerId] = useState(null);
 
   const [editSelectedStyle, setEditSelectedStyle] = useState("readable");
   const [editDraftText, setEditDraftText] = useState("");
@@ -6531,6 +6657,26 @@ const startEditRecordFromModal = (mode) => {
     pendingPhotoAnswerIdRef.current = answerId;
     storyPhotoInputRef.current?.click();
   };
+
+const openPhotoActionSheet = (answerId) => {
+  setPhotoActionAnswerId(answerId);
+};
+
+const choosePhotoFromLibrary = () => {
+  if (!photoActionAnswerId) return;
+
+  pendingPhotoAnswerIdRef.current = photoActionAnswerId;
+  setPhotoActionAnswerId(null);
+  storyPhotoInputRef.current?.click();
+};
+
+const choosePhotoScan = () => {
+  if (!photoActionAnswerId) return;
+
+  pendingScanAnswerIdRef.current = photoActionAnswerId;
+  setPhotoActionAnswerId(null);
+  storyScanInputRef.current?.click();
+};
 
 const openScannerForAnswer = (answerId) => {
   pendingScanAnswerIdRef.current = answerId;
@@ -6981,6 +7127,41 @@ return (
   </div>
 )}
 
+{photoActionAnswerId && createPortal((
+  <div className="fixed inset-0 z-[9998] bg-black/45 flex items-end px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+    <div className="w-full rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl fade-enter">
+      <p className="text-white/72 text-center text-narrative mb-5">
+        写真を添える
+      </p>
+
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={choosePhotoFromLibrary}
+          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+        >
+          写真を選ぶ
+        </button>
+
+        <button
+          type="button"
+          onClick={choosePhotoScan}
+          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+        >
+          {isDesktopBrowser ? "画像を選んで補正する" : "写真をスキャンする"}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPhotoActionAnswerId(null)}
+          className="w-full py-3 text-white/42 text-sm underline underline-offset-4"
+        >
+          キャンセル
+        </button>
+      </div>
+    </div>
+  </div>
+), document.body)}
 
 {scanPreview && createPortal((
   <div className="fixed inset-0 z-[9999] w-[100dvw] h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden overscroll-none">
@@ -7197,7 +7378,7 @@ return (
   <div className="fixed inset-0 z-[9999] w-[100dvw] h-[100dvh] bg-slate-950 px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden">
     <div className="shrink-0 text-center mb-4">
       <p className="text-white/82 text-[1rem] text-narrative">
-        本文を編集
+        文章を整える
       </p>
     </div>
 
@@ -7287,7 +7468,16 @@ return (
 
 
 
-<div className="text-center mb-2">
+<div className="relative flex items-center justify-center mb-3 h-10">
+  <button
+    type="button"
+    onClick={onBack}
+    className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"
+    aria-label="戻る"
+  >
+    <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+  </button>
+
   <p className="text-white/85 text-[0.95rem] text-narrative">
     これまでの語り
   </p>
@@ -7356,8 +7546,8 @@ return (
             return (
               <article key={answer.id} className="glass-card p-5 text-left">
                 {questionText && (
-                  <div className="border-l-2 border-amber-400/70 pl-4 mb-5">
-                    <p className="text-white/35 text-xs leading-loose">
+                  <div className="border-l-2 border-amber-400/60 pl-4 mb-5">
+                    <p className="text-white/58 text-[0.92rem] leading-loose text-narrative">
                       {questionText}
                     </p>
                   </div>
@@ -7391,26 +7581,13 @@ return (
   )}
   <button
     type="button"
-    onClick={() => openPhotoPickerForAnswer(answer.id)}
+    onClick={() => openPhotoActionSheet(answer.id)}
     className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-14 flex items-center justify-center"
   >
-    <span className="text-white/35 text-sm tracking-widest">
-      写真を挿入
+    <span className="text-white/42 text-sm tracking-widest">
+      ＋ 写真を添える
     </span>
   </button>
-
-  <button
-    type="button"
-    onClick={() => openScannerForAnswer(answer.id)}
-    className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-14 flex items-center justify-center"
-  >
-
-  <span className="text-white/35 text-sm tracking-widest">
-    {isDesktopBrowser ? "画像を選んで補正する" : "写真をスキャンする"}
-  </span>
-
-  </button>
-
 
 
 </div>
@@ -7422,7 +7599,7 @@ return (
   onClick={() => openAnswerEditor(answer)}
   className="mt-5 text-white/35 text-sm underline underline-offset-4"
 >
-  本文を編集する
+  文章を整える
 </button>
 
               {audios.length > 0 && (
