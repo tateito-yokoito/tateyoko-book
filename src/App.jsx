@@ -284,63 +284,52 @@ async function ensureProfileExists(sessionUser, registrationData = {}) {
   }
 
 if (existingProfile) {
-  const nextFamilyName = familyName || existingProfile.family_name || null;
-  const nextGivenName = givenName || existingProfile.given_name || null;
+  const updatePayload = {};
 
-  const nextFullName =
-    registrationData.fullName ||
-    [nextFamilyName, nextGivenName].filter(Boolean).join(" ") ||
-    existingProfile.display_name ||
-    existingProfile.name ||
-    "あなた";
-
-  const nextPreferredName =
-    registrationData.preferredName ||
-    existingProfile.preferred_name ||
-    (nextGivenName ? `${nextGivenName}さん` : nextFullName);
-
-  const updatePayload = {
-    family_name: nextFamilyName,
-    given_name: nextGivenName,
-    name: nextFullName,
-    display_name: nextFullName,
-    preferred_name: nextPreferredName
-  };
-
-    if (registrationData.hasSpouse !== undefined) {
-      updatePayload.has_spouse = registrationData.hasSpouse;
-    }
-
-    if (registrationData.hasChildren !== undefined) {
-      updatePayload.has_children = registrationData.hasChildren;
-    }
-
-    if (registrationData.hasGrandchildren !== undefined) {
-      updatePayload.has_grandchildren = registrationData.hasGrandchildren;
-    }
-
-    if (registrationData.canTalkAboutParents !== undefined) {
-      updatePayload.can_talk_about_parents = registrationData.canTalkAboutParents;
-    }
-
-    if (registrationData.canTalkAboutPets !== undefined) {
-      updatePayload.can_talk_about_pets = registrationData.canTalkAboutPets;
-    }
-
-    const { data: updatedProfile, error: updateError } = await supabaseClient
-      .from("profiles")
-      .update(updatePayload)
-      .eq("id", userId)
-      .select()
-      .single();
-
-    if (updateError) {
-      console.error("profile update error", updateError);
-      throw updateError;
-    }
-
-    return updatedProfile;
+  if (registrationData.hasSpouse !== undefined) {
+    updatePayload.has_spouse = registrationData.hasSpouse;
   }
+
+  if (registrationData.hasChildren !== undefined) {
+    updatePayload.has_children = registrationData.hasChildren;
+  }
+
+  if (registrationData.hasGrandchildren !== undefined) {
+    updatePayload.has_grandchildren = registrationData.hasGrandchildren;
+  }
+
+  if (registrationData.canTalkAboutParents !== undefined) {
+    updatePayload.can_talk_about_parents = registrationData.canTalkAboutParents;
+  }
+
+  if (registrationData.canTalkAboutPets !== undefined) {
+    updatePayload.can_talk_about_pets = registrationData.canTalkAboutPets;
+  }
+
+  if (Object.keys(updatePayload).length === 0) {
+    return {
+      ...existingProfile,
+      __isNewProfile: false
+    };
+  }
+
+  const { data: updatedProfile, error: updateError } = await supabaseClient
+    .from("profiles")
+    .update(updatePayload)
+    .eq("id", userId)
+    .select()
+    .single();
+
+  if (updateError) {
+    console.error("profile update error", updateError);
+    throw updateError;
+  }
+
+  return {
+    ...updatedProfile,
+    __isNewProfile: false
+  };
+}
 
   const { data: newProfile, error: profileError } = await supabaseClient
     .from("profiles")
@@ -386,7 +375,12 @@ if (existingProfile) {
     throw profileError;
   }
 
-  return newProfile;
+return {
+  ...newProfile,
+  __isNewProfile: true
+};
+
+
 }
 
 async function ensureUserFoundation(userId, profile) {
@@ -1497,14 +1491,14 @@ setProgress({
   total: questionSet.length
 });
 
-      if (isBetaMode() && session.user?.id) {
-        const betaIntroSeenKey = getBetaIntroSeenKey(session.user.id);
+if (isBetaMode() && currentUser?.__isNewProfile && session.user?.id) {
+  const betaIntroSeenKey = getBetaIntroSeenKey(session.user.id);
 
-        if (localStorage.getItem(betaIntroSeenKey) !== "1") {
-          setScene("beta_intro");
-          return;
-        }      
-      }
+  if (localStorage.getItem(betaIntroSeenKey) !== "1") {
+    setScene("beta_intro");
+    return;
+  }
+}
 
       setScene(nextScene);
 
@@ -2488,7 +2482,7 @@ setScene(6);
 
             const nextScene = !notificationData ? "setup_intro" : "home";
 
-            if (isBetaMode() && u?.id) {
+            if (isBetaMode() && profile?.__isNewProfile && u?.id) {
               const betaIntroSeenKey = getBetaIntroSeenKey(u.id);
 
               if (localStorage.getItem(betaIntroSeenKey) !== "1") {
