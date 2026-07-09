@@ -3105,22 +3105,43 @@ function Scene_Login({ onLogin }) {
     }
   };
 
-  const handleSendPin = async () => {
-    setLoading(true);
+const handleSendPin = async () => {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
 
-    const { error } = await supabaseClient.auth.signInWithOtp({
-      email
-    });
+  if (!normalizedEmail) {
+    alert("メールアドレスを入力してください。");
+    return;
+  }
 
-    setLoading(false);
+  setLoading(true);
 
-    if (error) {
-      console.error(error);
-      alert("エラーが発生しました。");
-    } else {
-      setStep(2);
+  const { error } = await supabaseClient.auth.signInWithOtp({
+    email: normalizedEmail
+  });
+
+  setLoading(false);
+
+  if (error) {
+    console.error(error);
+
+    const message = String(error?.message || "").toLowerCase();
+
+    if (
+      error?.status === 429 ||
+      message.includes("rate limit") ||
+      message.includes("email rate limit")
+    ) {
+      alert("認証メールの送信回数が一時的に上限に達しました。少し時間をおいてから、もう一度お試しください。");
+      return;
     }
-  };
+
+    alert("認証メールを送れませんでした。メールアドレスをご確認のうえ、もう一度お試しください。");
+    return;
+  }
+
+  setEmail(normalizedEmail);
+  setStep(2);
+};
 
   const handleVerifyPin = async () => {
     setLoading(true);
