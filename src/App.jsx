@@ -3138,17 +3138,23 @@ function Scene_Login({ onLogin }) {
 
     setLoading(true);
 
-    if (isNewMode) {
-      const exists = await checkExistingProfileByEmail(normalizedEmail);
+if (isNewMode) {
+  const exists = await checkExistingProfileByEmail(normalizedEmail);
 
-      if (exists === true) {
-        setLoading(false);
-        setEmail(normalizedEmail);
-        setMode("returning");
-        alert("このメールアドレスは、すでに登録されています。前回の続きを開くからお進みください。");
-        return;
-      }
-    }
+  if (exists === null) {
+    setLoading(false);
+    alert("メールアドレスの確認ができませんでした。少し時間をおいてから、もう一度お試しください。");
+    return;
+  }
+
+  if (exists === true) {
+    setLoading(false);
+    setEmail(normalizedEmail);
+    setMode("returning");
+    alert("このメールアドレスは、すでに登録されています。前回の続きを開くからお進みください。");
+    return;
+  }
+}
 
     const { error } = await supabaseClient.auth.signInWithOtp({
       email: normalizedEmail,
