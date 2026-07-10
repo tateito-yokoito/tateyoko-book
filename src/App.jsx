@@ -2482,7 +2482,7 @@ setScene(6);
 
             const nextScene = !notificationData ? "setup_intro" : "home";
 
-            if (isBetaMode() && profile?.__isNewProfile && u?.id) {
+            if (isBetaMode() && u?.__isNewProfile && u?.id) {
               const betaIntroSeenKey = getBetaIntroSeenKey(u.id);
 
               if (localStorage.getItem(betaIntroSeenKey) !== "1") {
