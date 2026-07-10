@@ -3038,22 +3038,42 @@ function Scene_TokenInvalid({ onBack }) {
   );
 }
 
+
 function Scene_Login({ onLogin }) {
+  const [mode, setMode] = useState("entry"); // entry | new | returning | pin
+  const [authMode, setAuthMode] = useState(null); // new | returning
   const [email, setEmail] = useState("");
   const [familyName, setFamilyName] = useState("");
   const [givenName, setGivenName] = useState("");
-
-  const [step, setStep] = useState(1);
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const checkExistingProfileByEmail = async (targetEmail) => {
+    const normalizedEmail = String(targetEmail || "").trim().toLowerCase();
+
+    if (!normalizedEmail) return false;
+
+    const { data, error } = await supabaseClient
+      .from("profiles")
+      .select("id")
+      .eq("email", normalizedEmail)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("existing profile email check failed", error);
+      return null;
+    }
+
+    return Boolean(data);
+  };
 
   const handleDevLogin = async () => {
     if (!isDevMode()) return;
 
-  if (!DEV_LOGIN_EMAIL || !DEV_LOGIN_PASSWORD) {
-    alert("開発用ログインのメールアドレスとパスワードを環境変数で設定してください。");
-    return;
-  }
+    if (!DEV_LOGIN_EMAIL || !DEV_LOGIN_PASSWORD) {
+      alert("開発用ログインのメールアドレスとパスワードを環境変数で設定してください。");
+      return;
+    }
 
     setLoading(true);
 
@@ -3081,11 +3101,7 @@ function Scene_Login({ onLogin }) {
       }
 
       const profile = await ensureProfileExists(session.user, {
-        email: session.user.email,
-        familyName: "開発",
-        givenName: "太郎",
-        fullName: "開発 太郎",
-        preferredName: "太郎さん"
+        email: session.user.email
       });
 
       onLogin({
@@ -3105,49 +3121,90 @@ function Scene_Login({ onLogin }) {
     }
   };
 
-const handleSendPin = async () => {
-  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const handleSendPin = async (targetMode = mode) => {
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    const isNewMode = targetMode === "new";
+    const isReturningMode = targetMode === "returning";
 
-  if (!normalizedEmail) {
-    alert("メールアドレスを入力してください。");
-    return;
-  }
-
-  setLoading(true);
-
-  const { error } = await supabaseClient.auth.signInWithOtp({
-    email: normalizedEmail
-  });
-
-  setLoading(false);
-
-  if (error) {
-    console.error(error);
-
-    const message = String(error?.message || "").toLowerCase();
-
-    if (
-      error?.status === 429 ||
-      message.includes("rate limit") ||
-      message.includes("email rate limit")
-    ) {
-      alert("認証メールの送信回数が一時的に上限に達しました。少し時間をおいてから、もう一度お試しください。");
+    if (!normalizedEmail) {
+      alert("メールアドレスを入力してください。");
       return;
     }
 
-    alert("認証メールを送れませんでした。メールアドレスをご確認のうえ、もう一度お試しください。");
-    return;
-  }
+    if (isNewMode && (!familyName.trim() || !givenName.trim())) {
+      alert("お名前を入力してください。");
+      return;
+    }
 
-  setEmail(normalizedEmail);
-  setStep(2);
-};
+    setLoading(true);
+
+    if (isNewMode) {
+      const exists = await checkExistingProfileByEmail(normalizedEmail);
+
+      if (exists === true) {
+        setLoading(false);
+        setEmail(normalizedEmail);
+        setMode("returning");
+        alert("このメールアドレスは、すでに登録されています。前回の続きを開くからお進みください。");
+        return;
+      }
+    }
+
+    const { error } = await supabaseClient.auth.signInWithOtp({
+      email: normalizedEmail,
+      options: isReturningMode
+        ? {
+            shouldCreateUser: false
+          }
+        : undefined
+    });
+
+    setLoading(false);
+
+    if (error) {
+      console.error(error);
+
+      const message = String(error?.message || "").toLowerCase();
+
+      if (
+        error?.status === 429 ||
+        message.includes("rate limit") ||
+        message.includes("email rate limit")
+      ) {
+        alert("認証メールの送信回数が一時的に上限に達しました。少し時間をおいてから、もう一度お試しください。");
+        return;
+      }
+
+      if (
+        isReturningMode &&
+        (
+          message.includes("not found") ||
+          message.includes("signup") ||
+          message.includes("signups")
+        )
+      ) {
+        alert("このメールアドレスの登録が見つかりませんでした。はじめて利用する方は、そちらからお進みください。");
+        setMode("entry");
+        return;
+      }
+
+      alert("認証メールを送れませんでした。メールアドレスをご確認のうえ、もう一度お試しください。");
+      return;
+    }
+
+    setEmail(normalizedEmail);
+    setAuthMode(targetMode);
+    setPin("");
+    setMode("pin");
+  };
 
   const handleVerifyPin = async () => {
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+
     setLoading(true);
 
     const { data, error } = await supabaseClient.auth.verifyOtp({
-      email,
+      email: normalizedEmail,
       token: pin,
       type: "email"
     });
@@ -3172,20 +3229,26 @@ const handleSendPin = async () => {
     }
 
     const userId = session.user.id;
-
     const fullName = `${familyName} ${givenName}`.trim();
     const preferredName = givenName ? `${givenName}さん` : fullName || "あなた";
+
+    const registrationData =
+      authMode === "new"
+        ? {
+            email: normalizedEmail,
+            familyName,
+            givenName,
+            fullName,
+            preferredName
+          }
+        : {
+            email: normalizedEmail
+          };
 
     let profile;
 
     try {
-      profile = await ensureProfileExists(session.user, {
-        email,
-        familyName,
-        givenName,
-        fullName,
-        preferredName
-      });
+      profile = await ensureProfileExists(session.user, registrationData);
     } catch (e) {
       setLoading(false);
       console.error(e);
@@ -3199,28 +3262,81 @@ const handleSendPin = async () => {
       onLogin({
         id: userId,
         ...profile,
-        name: profile?.display_name || profile?.name || "あなた",
-        family_name: profile?.family_name || familyName || null,
-        given_name: profile?.given_name || givenName || null,
-        display_name: profile?.display_name || fullName || profile?.name || "あなた",
-        preferred_name: profile?.preferred_name || preferredName
+        name: profile?.display_name || profile?.name || fullName || "あなた",
+        family_name: profile?.family_name || (authMode === "new" ? familyName : null),
+        given_name: profile?.given_name || (authMode === "new" ? givenName : null),
+        display_name: profile?.display_name || profile?.name || fullName || "あなた",
+        preferred_name: profile?.preferred_name || (authMode === "new" ? preferredName : "あなた")
       });
     }, 100);
   };
 
+  const goEntry = () => {
+    setMode("entry");
+    setAuthMode(null);
+    setPin("");
+  };
+
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center overflow-y-auto">
-      <div className="mb-12 pt-8">
-        <p className="text-[1.1rem] text-white/90 text-narrative mb-4">
-          この物語を開くために<br />お名前とメールアドレスを教えてください。
-        </p>
-        <p className="ui-small">
-          同じメールアドレスでは、前回の続きが開きます。
-        </p>
-      </div>
+      {mode === "entry" && (
+        <div className="w-full max-w-[320px] space-y-8 py-10">
+          <div className="space-y-5 text-narrative">
+            <p className="text-[1.1rem] text-white/90">
+              この物語を開くために
+            </p>
 
-      {step === 1 ? (
-        <div className="w-full max-w-[320px] space-y-8 mb-12">
+            <p className="text-white/55 text-[0.95rem] leading-loose">
+              はじめて利用する方は、お名前とメールアドレスを登録します。<br />
+              以前に利用した方は、メールアドレスで前回の続きが開けます。
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <button
+              type="button"
+              onClick={() => setMode("new")}
+              disabled={loading}
+              className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+            >
+              はじめて利用する
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMode("returning")}
+              disabled={loading}
+              className="w-full py-4 rounded-full border border-white/10 text-white/65 text-sm"
+            >
+              前回の続きを開く
+            </button>
+
+            {isDevMode() && (
+              <button
+                type="button"
+                onClick={handleDevLogin}
+                disabled={loading}
+                className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
+              >
+                開発用ログイン
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {mode === "new" && (
+        <div className="w-full max-w-[320px] space-y-8 py-10 fade-enter">
+          <div className="space-y-4 text-narrative">
+            <p className="text-[1.1rem] text-white/90">
+              はじめて利用する
+            </p>
+
+            <p className="ui-small">
+              お名前とメールアドレスを教えてください。
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="ui-label mb-2">姓</p>
@@ -3229,7 +3345,6 @@ const handleSendPin = async () => {
                 className="quiet-input"
                 value={familyName}
                 onChange={e => setFamilyName(e.target.value)}
-                placeholder=""
               />
             </div>
 
@@ -3240,7 +3355,6 @@ const handleSendPin = async () => {
                 className="quiet-input"
                 value={givenName}
                 onChange={e => setGivenName(e.target.value)}
-                placeholder=""
               />
             </div>
           </div>
@@ -3256,28 +3370,83 @@ const handleSendPin = async () => {
           </div>
 
           <button
-            onClick={handleSendPin}
+            type="button"
+            onClick={() => handleSendPin("new")}
             disabled={!email || !familyName || !givenName || loading}
-            className="btn-quiet w-full py-4 rounded-full text-sm"
+            className={`btn-quiet w-full py-4 rounded-full text-sm ${
+              !email || !familyName || !givenName || loading ? "opacity-40" : ""
+            }`}
           >
             {loading ? "送信中..." : "認証コードを送る"}
           </button>
 
-          {isDevMode() && (
-            <button
-              onClick={handleDevLogin}
-              disabled={loading}
-              className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
-            >
-              開発用ログイン
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={goEntry}
+            disabled={loading}
+            className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
+          >
+            戻る
+          </button>
         </div>
-      ) : (
-        <div className="w-full max-w-[280px] space-y-8 mb-12 fade-enter">
-          <p className="ui-small">
-            メールに届いた6桁のコードを入力してください
-          </p>
+      )}
+
+      {mode === "returning" && (
+        <div className="w-full max-w-[320px] space-y-8 py-10 fade-enter">
+          <div className="space-y-4 text-narrative">
+            <p className="text-[1.1rem] text-white/90">
+              前回の続きを開く
+            </p>
+
+            <p className="ui-small">
+              登録したメールアドレスを入力してください。<br />
+              同じメールアドレスで、前回の続きが開きます。
+            </p>
+          </div>
+
+          <div>
+            <p className="ui-label mb-2">メールアドレス</p>
+            <input
+              type="email"
+              className="quiet-input"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => handleSendPin("returning")}
+            disabled={!email || loading}
+            className={`btn-quiet w-full py-4 rounded-full text-sm ${
+              !email || loading ? "opacity-40" : ""
+            }`}
+          >
+            {loading ? "送信中..." : "認証コードを送る"}
+          </button>
+
+          <button
+            type="button"
+            onClick={goEntry}
+            disabled={loading}
+            className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
+          >
+            戻る
+          </button>
+        </div>
+      )}
+
+      {mode === "pin" && (
+        <div className="w-full max-w-[280px] space-y-8 py-10 fade-enter">
+          <div className="space-y-4 text-narrative">
+            <p className="text-[1.1rem] text-white/90">
+              認証コードを入力
+            </p>
+
+            <p className="ui-small">
+              メールに届いた6桁のコードを入力してください
+            </p>
+          </div>
 
           <input
             type="text"
@@ -3289,15 +3458,28 @@ const handleSendPin = async () => {
           />
 
           <button
+            type="button"
             onClick={handleVerifyPin}
             disabled={pin.length !== 6 || loading}
-            className="btn-quiet w-full py-4 rounded-full text-sm"
+            className={`btn-quiet w-full py-4 rounded-full text-sm ${
+              pin.length !== 6 || loading ? "opacity-40" : ""
+            }`}
           >
-            {loading ? "確認中..." : "物語をはじめる"}
+            {loading ? "確認中..." : authMode === "returning" ? "続きを開く" : "物語をはじめる"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMode(authMode === "returning" ? "returning" : "new")}
+            disabled={loading}
+            className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
+          >
+            メールアドレスを修正する
           </button>
 
           {isDevMode() && (
             <button
+              type="button"
               onClick={handleDevLogin}
               disabled={loading}
               className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
@@ -3310,6 +3492,7 @@ const handleSendPin = async () => {
     </div>
   );
 }
+
 
 function Scene_BetaIntro({ onNext }) {
   return (
