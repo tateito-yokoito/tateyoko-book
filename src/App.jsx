@@ -3048,24 +3048,24 @@ function Scene_Login({ onLogin }) {
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const checkExistingProfileByEmail = async (targetEmail) => {
-    const normalizedEmail = String(targetEmail || "").trim().toLowerCase();
+const checkExistingProfileByEmail = async (targetEmail) => {
+  const normalizedEmail = String(targetEmail || "").trim().toLowerCase();
 
-    if (!normalizedEmail) return false;
+  if (!normalizedEmail) return false;
 
-    const { data, error } = await supabaseClient
-      .from("profiles")
-      .select("id")
-      .eq("email", normalizedEmail)
-      .maybeSingle();
-
-    if (error) {
-      console.warn("existing profile email check failed", error);
-      return null;
+  const { data, error } = await supabaseClient.functions.invoke("check-existing-email", {
+    body: {
+      email: normalizedEmail
     }
+  });
 
-    return Boolean(data);
-  };
+  if (error) {
+    console.warn("existing profile email check function failed", error);
+    return null;
+  }
+
+  return Boolean(data?.exists);
+};
 
   const handleDevLogin = async () => {
     if (!isDevMode()) return;
