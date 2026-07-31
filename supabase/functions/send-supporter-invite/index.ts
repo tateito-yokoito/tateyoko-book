@@ -31,11 +31,11 @@ function withHonorific(value: unknown, fallback = "ご家族") {
   return text.endsWith("さん") ? text : `${text}さん`;
 }
 
-function buildInvitationUrl() {
+function buildInvitationUrl(inviteId: string) {
   const appUrl = Deno.env.get("APP_URL") ||
     "https://tateyoko-book.vercel.app/?beta=1";
   const url = new URL(appUrl);
-  url.searchParams.set("supporter_invite", "1");
+  url.searchParams.set("supporter_invite", inviteId);
   return url.toString();
 }
 
@@ -176,7 +176,7 @@ serve(async (request) => {
       inviterResult.data?.display_name ||
       subjectName;
 
-    const invitationUrl = buildInvitationUrl();
+    const invitationUrl = buildInvitationUrl(invite.id);
     const safeInvitationUrl = escapeHtml(invitationUrl);
     const safeInviterName = escapeHtml(withHonorific(inviterName));
     const safeSubjectName = escapeHtml(withHonorific(subjectName));

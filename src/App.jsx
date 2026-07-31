@@ -20,6 +20,11 @@ function getDeliveryTokenFromUrl() {
   return params.get("token") || null;
 }
 
+function getSupporterInviteReferenceFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("supporter_invite") || null;
+}
+
 async function resolveDeliveryToken(token) {
   const { data, error } = await supabaseClient.rpc("resolve_delivery_token", {
     input_token: token
@@ -1951,6 +1956,7 @@ if (!session) {
         const currentUser = {
           id: session.user.id,
           ...profile,
+          email: session.user.email || profile?.email || "",
           name: profile?.display_name || profile?.name || "あなた"
         };
 
@@ -2037,8 +2043,20 @@ const [supportedStoryProjects, pendingInvites] = await Promise.all([
   loadPendingSupporterInvites()
 ]);
 
+const supporterInviteReference = getSupporterInviteReferenceFromUrl();
+const targetedSupporterInviteId =
+  supporterInviteReference && supporterInviteReference !== "1"
+    ? supporterInviteReference
+    : null;
+const orderedPendingInvites = targetedSupporterInviteId
+  ? [...pendingInvites].sort((a, b) =>
+      Number(b.invite_id === targetedSupporterInviteId) -
+      Number(a.invite_id === targetedSupporterInviteId)
+    )
+  : pendingInvites;
+
 setSupportedProjects(supportedStoryProjects);
-setPendingSupporterInvites(pendingInvites);
+setPendingSupporterInvites(orderedPendingInvites);
 setProgress({
   currentIndex,
   total: questionSet.length
@@ -2054,7 +2072,19 @@ if (isBetaMode() && currentUser?.__isNewProfile && session.user?.id) {
   }
 }
 
-if (pendingInvites.length > 0 && !deliveryToken) {
+if (
+  targetedSupporterInviteId &&
+  !orderedPendingInvites.some(
+    invite => invite.invite_id === targetedSupporterInviteId
+  ) &&
+  !deliveryToken
+) {
+  setPostSupporterInviteScene(sceneAfterInvite);
+  setScene("supporter_invite_account_mismatch");
+  return;
+}
+
+if (orderedPendingInvites.length > 0 && !deliveryToken) {
   setPostSupporterInviteScene(sceneAfterInvite);
   setHasAcceptedSupporterInvite(false);
   setScene("supporter_invite_received");
@@ -2153,6 +2183,18 @@ const handleSkipQuestion = async () => {
     console.error("skip question error", e);
     alert("次の問いへ進めませんでした。");
   } finally {
+    setIsInitializing(false);
+  }
+};
+
+const handleSupporterInviteAccountSwitch = async () => {
+  try {
+    setIsInitializing(true);
+    await supabaseClient.auth.signOut();
+    window.location.reload();
+  } catch (e) {
+    console.error("supporter invite account switch error", e);
+    alert("アカウントを切り替えられませんでした。");
     setIsInitializing(false);
   }
 };
@@ -2266,6 +2308,7 @@ const continueAfterTokenAuth = async () => {
     const currentUser = {
       id: session.user.id,
       ...profile,
+      email: session.user.email || profile?.email || "",
       name: profile?.display_name || profile?.name || "あなた"
     };
 
@@ -3852,8 +3895,20 @@ const [supportedStoryProjects, pendingInvites] = await Promise.all([
   loadPendingSupporterInvites()
 ]);
 
+const supporterInviteReference = getSupporterInviteReferenceFromUrl();
+const targetedSupporterInviteId =
+  supporterInviteReference && supporterInviteReference !== "1"
+    ? supporterInviteReference
+    : null;
+const orderedPendingInvites = targetedSupporterInviteId
+  ? [...pendingInvites].sort((a, b) =>
+      Number(b.invite_id === targetedSupporterInviteId) -
+      Number(a.invite_id === targetedSupporterInviteId)
+    )
+  : pendingInvites;
+
 setSupportedProjects(supportedStoryProjects);
-setPendingSupporterInvites(pendingInvites);
+setPendingSupporterInvites(orderedPendingInvites);
 
 let sceneAfterInvite = nextScene;
 
@@ -3865,7 +3920,18 @@ let sceneAfterInvite = nextScene;
               }
             }
 
-            if (pendingInvites.length > 0) {
+            if (
+              targetedSupporterInviteId &&
+              !orderedPendingInvites.some(
+                invite => invite.invite_id === targetedSupporterInviteId
+              )
+            ) {
+              setPostSupporterInviteScene(sceneAfterInvite);
+              setScene("supporter_invite_account_mismatch");
+              return;
+            }
+
+            if (orderedPendingInvites.length > 0) {
               setPostSupporterInviteScene(sceneAfterInvite);
               setHasAcceptedSupporterInvite(false);
               setScene("supporter_invite_received");
@@ -4031,6 +4097,13 @@ let sceneAfterInvite = nextScene;
           onDecline={() =>
             handleSupporterInviteResponse(pendingSupporterInvites[0], false)
           }
+        />
+      )}
+
+      {scene === "supporter_invite_account_mismatch" && (
+        <Scene_SupporterInviteAccountMismatch
+          currentEmail={user?.email}
+          onSwitchAccount={handleSupporterInviteAccountSwitch}
         />
       )}
 
@@ -4717,6 +4790,7 @@ const checkExistingProfileByEmail = async (targetEmail) => {
       onLogin({
         id: session.user.id,
         ...profile,
+        email: session.user.email || profile?.email || "",
         name: profile?.display_name || profile?.name || "あなた",
         family_name: profile?.family_name || "開発",
         given_name: profile?.given_name || "太郎",
@@ -4878,6 +4952,7 @@ if (isNewMode) {
       onLogin({
         id: userId,
         ...profile,
+        email: session.user.email || normalizedEmail,
         name: profile?.display_name || profile?.name || fullName || "あなた",
         family_name: profile?.family_name || (authMode === "new" ? familyName : null),
         given_name: profile?.given_name || (authMode === "new" ? givenName : null),
@@ -6056,6 +6131,48 @@ function Scene_SupporterInvite({
             {isInitialSetup ? "今は設定しない" : "今はひとりで始める"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function Scene_SupporterInviteAccountMismatch({
+  currentEmail,
+  onSwitchAccount
+}) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
+      <div className="w-full max-w-[340px] space-y-9">
+        <div className="space-y-5 text-narrative">
+          <p className="text-white/40 text-xs tracking-[0.18em]">
+            サポーターのお願い
+          </p>
+
+          <p className="text-[1.1rem] text-white/90 leading-loose">
+            このお願いは、<br />
+            別のメールアドレスに届いています。
+          </p>
+
+          <p className="text-white/58 text-sm leading-loose">
+            メールを受け取ったアドレスで<br />
+            開き直してください。
+          </p>
+        </div>
+
+        {currentEmail && (
+          <div className="glass-card p-5 text-left space-y-2">
+            <p className="text-white/38 text-xs">現在開いているアカウント</p>
+            <p className="text-white/72 text-sm break-all">{currentEmail}</p>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onSwitchAccount}
+          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-sm text-white"
+        >
+          別のアカウントで開く
+        </button>
       </div>
     </div>
   );
