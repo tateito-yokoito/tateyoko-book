@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronLeft, ChevronRight, Files, Mic, Pencil, RotateCw, ScanLine } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Files, Mic, Pause, Pencil, Play, RotateCw, ScanLine, Square, Users } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumossjxehdop.supabase.co";
@@ -383,6 +383,70 @@ return {
 
 }
 
+async function getDefaultQuestionSet() {
+  const { data, error } = await supabaseClient
+    .from("question_sets")
+    .select("id, code, name, version")
+    .eq("product_type", "koebook")
+    .eq("is_default", true)
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("default question set load error", error);
+    throw error;
+  }
+
+  if (!data) {
+    throw new Error("デフォルト質問セットが見つかりません");
+  }
+
+  return data;
+}
+
+function isFormalOnboardingQuestion(question) {
+  return (
+    question?.flow_type === "onboarding" ||
+    question?.flow_phase === "onboarding" ||
+    question?.onboarding_group === "voice_intro" ||
+    question?.onboarding_group === "life_outline"
+  );
+}
+
+function isFirstStoryQuestion(question) {
+  return (
+    question?.question_role === "first_story" ||
+    question?.onboarding_group === "first_story" ||
+    question?.flow_phase === "first_story" ||
+    question?.completes_onboarding === true
+  );
+}
+
+function getMainStoryProgress(questionSet, currentIndex) {
+  const mainStoryQuestions = (questionSet || []).filter(
+    question => question?.include_in_story_list !== false
+  );
+  const currentQuestion = questionSet?.[currentIndex] || null;
+  const mainStoryIndex = mainStoryQuestions.findIndex(question =>
+    question === currentQuestion ||
+    (
+      question?.user_question_id &&
+      question.user_question_id === currentQuestion?.user_question_id
+    ) ||
+    Number(question?.sequence_order) === Number(currentQuestion?.sequence_order)
+  );
+
+  return {
+    currentIndex: Math.max(mainStoryIndex, 0),
+    total: mainStoryQuestions.length
+  };
+}
+
+function isProjectOnboardingComplete(project) {
+  return project?.onboarding_status === "completed";
+}
+
 async function ensureUserFoundation(userId, profile) {
   const displayName =
     profile?.display_name ||
@@ -497,18 +561,27 @@ async function ensureUserFoundation(userId, profile) {
   }
 
   if (!project) {
-    const { data: newProject, error: projectInsertError } = await supabaseClient
-      .from("book_projects")
-      .insert({
-        family_id: family.id,
-        owner_user_id: userId,
-        subject_person_id: person.id,
-        project_type: "koebook",
-        title: `${displayName}さんのtateyoko BOOK`,
-        status: "active"
-      })
-      .select()
-      .single();
+    const defaultQuestionSet = await getDefaultQuestionSet();
+
+    const { data: newProject, error: projectInsertError } =
+      await supabaseClient
+        .from("book_projects")
+        .insert({
+          family_id: family.id,
+          owner_user_id: userId,
+          subject_person_id: person.id,
+          project_type: "koebook",
+          title: `${displayName}さんの縦糸横糸`,
+          status: "active",
+
+          base_question_set_id: defaultQuestionSet.id,
+          onboarding_status: "not_started",
+          current_onboarding_user_question_id: null,
+          onboarding_started_at: null,
+          onboarding_completed_at: null
+        })
+        .select()
+        .single();
 
     if (projectInsertError) {
       console.error("book_projects insert error", projectInsertError);
@@ -516,7 +589,66 @@ async function ensureUserFoundation(userId, profile) {
     }
 
     project = newProject;
+  } else if (!project.base_question_set_id) {
+    /*
+     * 既存プロジェクトの場合は、すでに配布済みの質問セットを優先する。
+     * 旧ユーザーへ新しいv2を強制適用しないための処理。
+     */
+    const { data: existingUserQuestion } = await supabaseClient
+      .from("user_questions")
+      .select("meta_json")
+      .eq("book_project_id", project.id)
+      .order("sequence_order", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const existingQuestionSetId =
+      existingUserQuestion?.meta_json?.question_set_id || null;
+
+    const existingQuestionSetCode =
+      existingUserQuestion?.meta_json?.question_set_code || null;
+
+    let baseQuestionSetId = existingQuestionSetId;
+    let onboardingUpdate = {};
+
+    if (!baseQuestionSetId) {
+      const defaultQuestionSet = await getDefaultQuestionSet();
+      baseQuestionSetId = defaultQuestionSet.id;
+    }
+
+    /*
+     * 旧v1利用者は、新オンボーディングの対象外。
+     * migrationでnot_startedが入っているため、completedに補正する。
+     */
+    if (existingQuestionSetCode === "koebook_standard_v1") {
+      onboardingUpdate = {
+        onboarding_status: "completed",
+        current_onboarding_user_question_id: null,
+        onboarding_completed_at:
+          project.onboarding_completed_at || new Date().toISOString()
+      };
+    }
+
+    const { data: updatedProject, error: projectUpdateError } =
+      await supabaseClient
+        .from("book_projects")
+        .update({
+          base_question_set_id: baseQuestionSetId,
+          ...onboardingUpdate
+        })
+        .eq("id", project.id)
+        .select()
+        .single();
+
+    if (projectUpdateError) {
+      console.error("book project question set backfill error", projectUpdateError);
+      throw projectUpdateError;
+    }
+
+    project = updatedProject;
   }
+
+
 
   const participantRoles = ["owner", "subject", "speaker"];
 
@@ -616,25 +748,38 @@ async function ensureUserQuestions(userId, foundationData = null) {
     return;
   }
 
-  const { data: questionSet, error: setError } = await supabaseClient
+ let questionSet = null;
+
+const fixedQuestionSetId =
+  foundationData?.project?.base_question_set_id || null;
+
+if (fixedQuestionSetId) {
+  const { data, error } = await supabaseClient
     .from("question_sets")
-    .select("id, code, name")
-    .eq("product_type", "koebook")
-    .eq("is_default", true)
+    .select("id, code, name, version")
+    .eq("id", fixedQuestionSetId)
     .eq("is_active", true)
-    .order("created_at", { ascending: true })
-    .limit(1)
     .maybeSingle();
 
-  if (setError) {
-    console.error("question set load error", setError);
+  if (error) {
+    console.error("fixed question set load error", error);
     return;
   }
 
-  if (!questionSet) {
-    console.error("default question set not found");
+  questionSet = data;
+} else {
+  try {
+    questionSet = await getDefaultQuestionSet();
+  } catch (error) {
+    console.error("default question set load error", error);
     return;
   }
+}
+
+if (!questionSet) {
+  console.error("question set not found");
+  return;
+}
 
   const { data: setItems, error: itemError } = await supabaseClient
     .from("question_set_items")
@@ -655,6 +800,7 @@ async function ensureUserQuestions(userId, foundationData = null) {
       min_transcript_chars,
       is_required,
       is_active,
+      meta_json,
       questions (
         id,
         content,
@@ -713,15 +859,21 @@ async function ensureUserQuestions(userId, foundationData = null) {
       status: "pending",
       is_active: true,
       meta_json: {
+        ...(item.meta_json || {}),
+
         question_set_id: questionSet.id,
         question_set_code: questionSet.code,
         question_set_name: questionSet.name,
+        question_set_version: questionSet.version || null,
         question_set_item_id: item.id,
+
         original_sequence_order: item.sequence_order,
+
         prompt_style: item.prompt_style || null,
         prompt_hint: item.prompt_hint_snapshot || null,
         reassurance_text: item.reassurance_text_snapshot || null,
         followup_hint: item.followup_hint_snapshot || null,
+
         min_duration_seconds: item.min_duration_seconds || 25,
         min_transcript_chars: item.min_transcript_chars || 80
       }
@@ -736,8 +888,44 @@ async function ensureUserQuestions(userId, foundationData = null) {
         : "user_id,question_id"
     });
 
-  if (insertError) {
+    if (insertError) {
     console.error("user_questions insert error", insertError);
+    return;
+  }
+
+  if (
+    projectId &&
+    questionSet.code === "tateito_yokoito_standard_v2"
+  ) {
+    const { data: firstOnboardingQuestion, error: firstQuestionError } =
+      await supabaseClient
+        .from("user_questions")
+        .select("id")
+        .eq("book_project_id", projectId)
+        .eq("is_active", true)
+        .order("sequence_order", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+    if (firstQuestionError) {
+      console.warn("first onboarding question load error", firstQuestionError);
+      return;
+    }
+
+    const { error: onboardingUpdateError } = await supabaseClient
+      .from("book_projects")
+      .update({
+        onboarding_status: "in_progress",
+        current_onboarding_user_question_id:
+          firstOnboardingQuestion?.id || null,
+        onboarding_started_at: new Date().toISOString()
+      })
+      .eq("id", projectId)
+      .eq("onboarding_status", "not_started");
+
+    if (onboardingUpdateError) {
+      console.warn("project onboarding start error", onboardingUpdateError);
+    }
   }
 }
 
@@ -783,7 +971,40 @@ function normalizeUserQuestions(rows) {
       reassurance_text: meta.reassurance_text || "",
       followup_hint: meta.followup_hint || "",
       min_duration_seconds: meta.min_duration_seconds || 25,
-      min_transcript_chars: meta.min_transcript_chars || 80
+      min_transcript_chars: meta.min_transcript_chars || 80,
+
+      flow_type: meta.flow_type || null,
+      flow_phase: meta.flow_phase || null,
+      onboarding_group: meta.onboarding_group || null,
+      onboarding_order: meta.onboarding_order ?? null,
+      question_role: meta.question_role || null,
+
+      include_in_profile_text:
+        meta.include_in_profile_text === true,
+
+      include_in_profile_audio:
+        meta.include_in_profile_audio === true,
+
+      include_in_story_list:
+        meta.include_in_story_list !== false,
+
+      include_in_book_body:
+        meta.include_in_book_body !== false,
+
+      completes_onboarding:
+        meta.completes_onboarding === true,
+
+      progress_label:
+        meta.progress_label || null,
+
+      question_set_id:
+        meta.question_set_id || null,
+
+      question_set_code:
+        meta.question_set_code || null,
+
+      question_set_version:
+        meta.question_set_version || null
     };
   });
 }
@@ -837,6 +1058,108 @@ async function loadUserQuestionSet(userId, foundationData = null) {
   if (uqError) throw uqError;
 
   return normalizeUserQuestions(userQuestions || []);
+}
+
+function getProjectQuestionIndex(questionSet, project, profile) {
+  if (!questionSet || questionSet.length === 0) return 0;
+
+  const onboardingQuestionId =
+    project?.current_onboarding_user_question_id || null;
+
+  if (
+    project?.onboarding_status !== "completed" &&
+    onboardingQuestionId
+  ) {
+    const onboardingIndex = questionSet.findIndex(
+      question => question.user_question_id === onboardingQuestionId
+    );
+
+    if (onboardingIndex >= 0) {
+      return onboardingIndex;
+    }
+  }
+
+  return getInitialQuestionIndex(questionSet, profile);
+}
+
+
+function getInitialSceneForProject({
+  project,
+  notificationPref
+}) {
+  if (project?.onboarding_status === "introduction_review") {
+    return "life_outline_summary";
+  }
+
+  const onboardingIncomplete =
+    project &&
+    project.onboarding_status !== "completed";
+
+  /*
+   * 初回体験中で、まだ通知設定もない場合
+   * 全体説明から始める。
+   */
+  if (onboardingIncomplete && !notificationPref) {
+    return "onboarding_overview";
+  }
+
+  /*
+   * 全体説明と通知設定を終えた後、
+   * 初回の語りへ進む。
+   */
+  if (onboardingIncomplete) {
+    return 0;
+  }
+
+  /*
+   * 旧利用者など、初回体験は完了しているが
+   * 通知設定がない場合。
+   */
+  if (!notificationPref) {
+    return "notification_setup";
+  }
+
+  return "home";
+}
+
+async function ensureLifeOutlineReviewPhase({
+  foundationData,
+  questionSet,
+  currentIndex
+}) {
+  const project = foundationData?.project;
+  const currentQuestion = questionSet?.[currentIndex] || null;
+
+  /*
+   * まとめ画面の導入前に「人生の輪郭」を終えた利用者は、
+   * projectがin_progressのまま最初の物語を指している。
+   * その場合だけ一度まとめ画面へ戻し、既存回答から生成する。
+   */
+  if (
+    project?.onboarding_status !== "in_progress" ||
+    !isFirstStoryQuestion(currentQuestion)
+  ) {
+    return foundationData;
+  }
+
+  const { data: updatedProject, error } = await supabaseClient
+    .from("book_projects")
+    .update({
+      onboarding_status: "introduction_review"
+    })
+    .eq("id", project.id)
+    .select()
+    .single();
+
+  if (error) {
+    console.warn("life outline review phase migration error", error);
+    return foundationData;
+  }
+
+  return {
+    ...foundationData,
+    project: updatedProject
+  };
 }
 
 function getInitialQuestionIndex(questionSet, profile) {
@@ -901,17 +1224,17 @@ async function markUserQuestionAnswered(userQuestionId) {
 }
 
 const BETA_SURVEYS = {
-  1: {
+  5: {
     key: "survey_1",
     title: "1問目を終えて",
     url: "https://forms.gle/w8dVw44gnLL6bacH7"
   },
-  7: {
+  11: {
     key: "survey_7",
     title: "7問目を終えて",
     url: "https://forms.gle/FMGDjuJvofKoDTQm7"
   },
-  15: {
+  19: {
     key: "survey_15",
     title: "15問目を終えて",
     url: "https://forms.gle/p8aC9TNddKXPFqpx5"
@@ -934,6 +1257,7 @@ function getBetaIntroSeenKey(userId) {
 const MIN_RECORDING_SECONDS = 15;
 const MAX_RECORDING_SECONDS_PER_QUESTION = 10 * 60;
 const MAX_AUDIO_PARTS_PER_QUESTION = 5;
+const MAX_LIFE_OUTLINE_ADDITIONS = 5;
 
 function isRecordingTooShort(duration) {
   const seconds = Number(duration || 0);
@@ -953,6 +1277,172 @@ async function markUserQuestionSkipped(userQuestionId) {
   if (error) {
     console.warn("question skip update error", error);
   }
+}
+
+async function loadStorySharingPreference(bookProjectId) {
+  if (!bookProjectId) return null;
+
+  const { data, error } = await supabaseClient
+    .from("story_sharing_preferences")
+    .select("*")
+    .eq("book_project_id", bookProjectId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("story sharing preference load error", error);
+    return null;
+  }
+
+  return data || null;
+}
+
+async function upsertStorySharingPreference({
+  bookProjectId,
+  ownerPersonId,
+  liveScope,
+  markInitialSetupComplete = false
+}) {
+  if (!bookProjectId) {
+    throw new Error("物語の情報が見つかりません");
+  }
+
+  const payload = {
+    book_project_id: bookProjectId,
+    owner_person_id: ownerPersonId || null,
+    live_scope: liveScope,
+    updated_at: new Date().toISOString()
+  };
+
+  if (markInitialSetupComplete) {
+    payload.initial_setup_completed_at = new Date().toISOString();
+  }
+
+  const { data, error } = await supabaseClient
+    .from("story_sharing_preferences")
+    .upsert(payload, { onConflict: "book_project_id" })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("story sharing preference save error", error);
+    throw error;
+  }
+
+  return data;
+}
+
+async function loadSupportedStoryProjects() {
+  const { data, error } = await supabaseClient.rpc(
+    "list_supported_story_projects"
+  );
+
+  if (error) {
+    console.warn("supported story projects load error", error);
+    return [];
+  }
+
+  return data || [];
+}
+
+async function loadPendingSupporterInvites() {
+  const { data, error } = await supabaseClient.rpc(
+    "list_pending_supporter_invites"
+  );
+
+  if (error) {
+    console.warn("pending supporter invites load error", error);
+    return [];
+  }
+
+  return data || [];
+}
+
+async function respondToSupporterInvite(inviteId, accept) {
+  if (!inviteId) {
+    throw new Error("招待の情報が見つかりません");
+  }
+
+  const { data, error } = await supabaseClient.rpc(
+    "respond_to_supporter_invite",
+    {
+      input_invite_id: inviteId,
+      input_accept: accept
+    }
+  );
+
+  if (error) {
+    console.error("supporter invite response error", error);
+    throw error;
+  }
+
+  return Array.isArray(data) ? data[0] : data;
+}
+
+async function loadSupporterBookData(bookProjectId) {
+  const [storiesResult, photosResult] = await Promise.all([
+    supabaseClient.rpc("get_supporter_book_stories", {
+      input_book_project_id: bookProjectId
+    }),
+    supabaseClient.rpc("get_supporter_book_photos", {
+      input_book_project_id: bookProjectId
+    })
+  ]);
+
+  if (storiesResult.error) throw storiesResult.error;
+  if (photosResult.error) throw photosResult.error;
+
+  const storyRows = (storiesResult.data || []).map(row => ({
+    id: row.answer_id,
+    book_project_id: bookProjectId,
+    sequence_order: row.sequence_order,
+    transcript_raw: "",
+    transcript_clean: row.book_text || "",
+    transcript_readable: row.book_text || "",
+    transcript_essay: "",
+    transcript_edited: row.book_text || "",
+    selected_style: "readable",
+    ai_mirror: "",
+    snippet: "",
+    created_at: row.created_at
+  }));
+
+  const questionSet = (storiesResult.data || []).map(row => ({
+    sequence_order: row.sequence_order,
+    question_id: row.question_id,
+    content: row.question_text || "",
+    chapter: row.chapter_title || "その他",
+    chapter_label: row.chapter_title || "その他",
+    chapter_description: row.chapter_title || "その他",
+    include_in_story_list: true
+  }));
+
+  const groupedMedia = {};
+
+  for (const photo of photosResult.data || []) {
+    const { data: signed } = await supabaseClient.storage
+      .from("photos")
+      .createSignedUrl(photo.storage_path, 60 * 60);
+
+    if (!groupedMedia[photo.answer_id]) {
+      groupedMedia[photo.answer_id] = [];
+    }
+
+    groupedMedia[photo.answer_id].push({
+      id: photo.media_id,
+      answer_id: photo.answer_id,
+      asset_type: "photo",
+      storage_path: photo.storage_path,
+      meta_json: photo.meta_json || {},
+      created_at: photo.created_at,
+      url: signed?.signedUrl || null
+    });
+  }
+
+  return {
+    storyRows,
+    questionSet,
+    mediaByAnswerId: groupedMedia
+  };
 }
 
 function getNextDeliveryText(notificationPref) {
@@ -1366,6 +1856,17 @@ function App() {
   const [notificationPref, setNotificationPref] = useState(null);
   const [progress, setProgress] = useState({ currentIndex: 0, total: 0 });
   const [foundation, setFoundation] = useState(null);
+  const [sharingPreference, setSharingPreference] = useState(null);
+  const [supportedProjects, setSupportedProjects] = useState([]);
+  const [supportContext, setSupportContext] = useState(null);
+  const [pendingSupporterInvites, setPendingSupporterInvites] = useState([]);
+  const [postSupporterInviteScene, setPostSupporterInviteScene] = useState("home");
+  const [hasAcceptedSupporterInvite, setHasAcceptedSupporterInvite] = useState(false);
+  const [endTodayHasSavedAnswer, setEndTodayHasSavedAnswer] = useState(false);
+  const [lifeOutlineIntroduction, setLifeOutlineIntroduction] = useState(null);
+  const [lifeOutlineStatus, setLifeOutlineStatus] = useState("idle");
+  const [lifeOutlineError, setLifeOutlineError] = useState("");
+  const [lifeOutlineReturnScene, setLifeOutlineReturnScene] = useState(null);
 
   const [pendingBetaSurvey, setPendingBetaSurvey] = useState(null);
   const [accessMode, setAccessMode] = useState("session");
@@ -1453,17 +1954,62 @@ if (!session) {
           name: profile?.display_name || profile?.name || "あなた"
         };
 
-        const foundationData = await ensureUserFoundation(session.user.id, currentUser);
-        setFoundation(foundationData);
+const foundationData = await ensureUserFoundation(
+  session.user.id,
+  currentUser
+);
 
-        const questionSet = await loadUserQuestionSet(
-          session.user.id,
-          foundationData
-        );
+const questionSet = await loadUserQuestionSet(
+  session.user.id,
+  foundationData
+);
+
+/*
+ * loadUserQuestionSet内でuser_questions作成と
+ * onboarding状態更新が行われる可能性があるため、
+ * 最新のbook_projectsを取得し直す。
+ */
+const refreshedFoundationData = await ensureUserFoundation(
+  session.user.id,
+  currentUser
+);
 
 const deliveryToken = getDeliveryTokenFromUrl();
-let currentIndex = getInitialQuestionIndex(questionSet, profile);
-let nextScene = !notificationData ? "setup_intro" : "home";
+
+let currentIndex = getProjectQuestionIndex(
+  questionSet,
+  refreshedFoundationData?.project,
+  profile
+);
+
+let activeFoundationData = await ensureLifeOutlineReviewPhase({
+  foundationData: refreshedFoundationData,
+  questionSet,
+  currentIndex
+});
+
+setFoundation(activeFoundationData);
+
+const sharingPreferenceData = await loadStorySharingPreference(
+  activeFoundationData?.project?.id
+);
+
+setSharingPreference(sharingPreferenceData);
+
+let nextScene = getInitialSceneForProject({
+  project: activeFoundationData?.project,
+  notificationPref: notificationData || null
+});
+
+const currentQuestion = questionSet[currentIndex] || null;
+
+if (
+  activeFoundationData?.project?.onboarding_status === "in_progress" &&
+  currentQuestion?.onboarding_group === "life_outline" &&
+  !sharingPreferenceData?.initial_setup_completed_at
+) {
+  nextScene = "sharing_setup";
+}
 
 if (deliveryToken) {
   try {
@@ -1486,21 +2032,36 @@ if (deliveryToken) {
 
 setUser(currentUser);
 setQuestionsDB(questionSet);
+const [supportedStoryProjects, pendingInvites] = await Promise.all([
+  loadSupportedStoryProjects(),
+  loadPendingSupporterInvites()
+]);
+
+setSupportedProjects(supportedStoryProjects);
+setPendingSupporterInvites(pendingInvites);
 setProgress({
   currentIndex,
   total: questionSet.length
 });
 
+let sceneAfterInvite = nextScene;
+
 if (isBetaMode() && currentUser?.__isNewProfile && session.user?.id) {
   const betaIntroSeenKey = getBetaIntroSeenKey(session.user.id);
 
   if (localStorage.getItem(betaIntroSeenKey) !== "1") {
-    setScene("beta_intro");
-    return;
+    sceneAfterInvite = "beta_intro";
   }
 }
 
-      setScene(nextScene);
+if (pendingInvites.length > 0 && !deliveryToken) {
+  setPostSupporterInviteScene(sceneAfterInvite);
+  setHasAcceptedSupporterInvite(false);
+  setScene("supporter_invite_received");
+  return;
+}
+
+      setScene(sceneAfterInvite);
 
 
       } catch (e) {
@@ -1617,6 +2178,57 @@ const handleDevLogout = async () => {
     console.error("dev logout error", e);
     alert("ログアウトに失敗しました。");
   }
+};
+
+const openSupportedProject = async (supportedProject) => {
+  if (!supportedProject?.book_project_id) return;
+
+  try {
+    setIsInitializing(true);
+
+    const bookData = await loadSupporterBookData(
+      supportedProject.book_project_id
+    );
+
+    setSupportContext({
+      project: supportedProject,
+      ...bookData
+    });
+    setScene("support_project_home");
+  } catch (error) {
+    console.error("supported project open error", error);
+    alert("お手伝いする物語を開けませんでした。");
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
+const handleSupporterInviteResponse = async (invite, accept) => {
+  if (!invite?.invite_id) return;
+
+  await respondToSupporterInvite(invite.invite_id, accept);
+
+  const remainingInvites = pendingSupporterInvites.filter(
+    item => item.invite_id !== invite.invite_id
+  );
+  const acceptedAfterResponse = hasAcceptedSupporterInvite || accept;
+
+  setPendingSupporterInvites(remainingInvites);
+  setHasAcceptedSupporterInvite(acceptedAfterResponse);
+
+  if (accept) {
+    setSupportedProjects(await loadSupportedStoryProjects());
+  }
+
+  if (remainingInvites.length > 0) {
+    return;
+  }
+
+  setScene(
+    acceptedAfterResponse
+      ? "home"
+      : postSupporterInviteScene || "home"
+  );
 };
 
 const continueAfterTokenAuth = async () => {
@@ -1918,7 +2530,7 @@ const startEditRecording = (answer, mode, existingAudioPaths = []) => {
     returnQuestionIndex: progress.currentIndex
   });
 
-  setScene(2);
+  setScene(3);
   return true;
 };
 
@@ -2149,7 +2761,618 @@ try {
   }
 };
 
-const handleSaveAnswer = async (tag) => {
+const getLifeOutlineSourceAnswers = async () => {
+  const lifeOutlineQuestions = questionsDB
+    .filter(question => question?.onboarding_group === "life_outline")
+    .sort((a, b) => Number(a.sequence_order) - Number(b.sequence_order));
+
+  const sequenceOrders = lifeOutlineQuestions
+    .map(question => Number(question.sequence_order))
+    .filter(Number.isFinite);
+
+  if (!user?.id || sequenceOrders.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabaseClient
+    .from("answers")
+    .select(`
+      id,
+      sequence_order,
+      transcript_raw,
+      transcript_clean,
+      transcript_readable,
+      transcript_essay,
+      transcript_edited,
+      selected_style
+    `)
+    .eq("user_id", user.id)
+    .in("sequence_order", sequenceOrders)
+    .order("sequence_order", { ascending: true });
+
+  if (error) {
+    console.error("life outline source answers load error", error);
+    throw new Error("人生の輪郭の語りを読み込めませんでした");
+  }
+
+  return (data || []).map(answer => {
+    const question = lifeOutlineQuestions.find(
+      item => Number(item.sequence_order) === Number(answer.sequence_order)
+    );
+
+    const selectedText =
+      answer.transcript_edited ||
+      (
+        answer.selected_style === "essay"
+          ? answer.transcript_essay
+          : answer.transcript_readable
+      ) ||
+      answer.transcript_readable ||
+      answer.transcript_clean ||
+      answer.transcript_raw ||
+      "";
+
+    return {
+      ...answer,
+      questionText: question?.content || "",
+      selectedText: String(selectedText || "").trim()
+    };
+  });
+};
+
+const loadLifeOutlineAudioItems = async (sourceAnswerIds, additions = []) => {
+  const audioRows = [];
+
+  if (sourceAnswerIds.length > 0) {
+    const { data, error } = await supabaseClient
+      .from("media_assets")
+      .select("id, answer_id, storage_path, meta_json, created_at")
+      .in("answer_id", sourceAnswerIds)
+      .eq("asset_type", "audio")
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.warn("life outline audio load error", error);
+    } else {
+      audioRows.push(...(data || []).map(row => ({
+        id: row.id,
+        storagePath: row.storage_path,
+        duration: Number(row.meta_json?.duration_seconds || 0),
+        createdAt: row.created_at,
+        source: "answer"
+      })));
+    }
+  }
+
+  audioRows.push(
+    ...additions
+      .filter(item => item?.storage_path)
+      .map(item => ({
+        id: item.id || item.storage_path,
+        storagePath: item.storage_path,
+        duration: Number(item.duration_seconds || 0),
+        createdAt: item.created_at || null,
+        source: "addition"
+      }))
+  );
+
+  const withUrls = await Promise.all(
+    audioRows.map(async item => {
+      const { data } = await supabaseClient.storage
+        .from("audio")
+        .createSignedUrl(item.storagePath, 60 * 60);
+
+      return {
+        ...item,
+        url: data?.signedUrl || null
+      };
+    })
+  );
+
+  return withUrls.filter(item => item.url);
+};
+
+const normalizeLifeOutlineIntroduction = async (row, sourceAnswerIds = []) => {
+  const meta = row?.meta_json || {};
+  const additions = Array.isArray(meta.additional_audio)
+    ? meta.additional_audio
+    : [];
+
+  const readable =
+    String(meta.transcript_readable || row?.body_text || "").trim();
+
+  const essay =
+    String(meta.transcript_essay || readable || row?.body_text || "").trim();
+
+  const selectedStyle =
+    meta.selected_style === "essay" ? "essay" : "readable";
+
+  const audioItems = await loadLifeOutlineAudioItems(
+    sourceAnswerIds,
+    additions
+  );
+
+  return {
+    ...row,
+    meta_json: meta,
+    transcriptReadable: readable,
+    transcriptEssay: essay,
+    selectedStyle,
+    selectedText:
+      String(
+        row?.body_text ||
+        (selectedStyle === "essay" ? essay : readable)
+      ).trim(),
+    additions,
+    additionCount: additions.length,
+    audioItems
+  };
+};
+
+const generateLifeOutlineIntroduction = async ({
+  existingIntroduction = null,
+  additionsOverride = null,
+  editorialBase = ""
+} = {}) => {
+  if (!user?.id || !foundation?.project?.id) {
+    throw new Error("「私の歩み」の保存先が見つかりません");
+  }
+
+  setLifeOutlineStatus("generating");
+  setLifeOutlineError("");
+
+  try {
+    const sourceAnswers = await getLifeOutlineSourceAnswers();
+
+    if (sourceAnswers.length === 0) {
+      throw new Error("人生の輪郭の回答が見つかりません");
+    }
+
+    let introduction = existingIntroduction;
+
+    if (!introduction) {
+      const { data, error } = await supabaseClient
+        .from("project_introductions")
+        .select("*")
+        .eq("book_project_id", foundation.project.id)
+        .eq("introduction_type", "life_outline")
+        .maybeSingle();
+
+      if (error) throw error;
+      introduction = data || null;
+    }
+
+    const currentMeta = introduction?.meta_json || {};
+    const additions = additionsOverride || (
+      Array.isArray(currentMeta.additional_audio)
+        ? currentMeta.additional_audio
+        : []
+    );
+
+    const sourceSections = sourceAnswers
+      .filter(answer => answer.selectedText)
+      .map((answer, index) => (
+        `【語り ${index + 1}】\n` +
+        `${answer.questionText ? `問い：${answer.questionText}\n` : ""}` +
+        `答え：${answer.selectedText}`
+      ));
+
+    const additionSections = additions
+      .filter(item => String(item?.transcript_raw || "").trim())
+      .map((item, index) => (
+        `【語り足し ${index + 1}】\n${String(item.transcript_raw).trim()}`
+      ));
+
+    const editedSection =
+      String(editorialBase || "").trim()
+        ? [`【現在の編集済み文章】\n${String(editorialBase).trim()}`]
+        : [];
+
+    const sourceText = [
+      ...sourceSections,
+      ...additionSections,
+      ...editedSection
+    ].join("\n\n");
+
+    const generationId = introduction?.id || crypto.randomUUID();
+    const generated = await polishTranscriptOnServer({
+      answerId: generationId,
+      transcriptRaw: sourceText,
+      questionText:
+        "複数の語りを重複なく一つにつなぎ、その人の生い立ち、担ってきた役割、現在の暮らしが自然に伝わる人物紹介文「私の歩み」にまとめてください。問いや見出しは本文に残さないでください。"
+    });
+
+    const readable = String(
+      generated.transcript_readable ||
+      generated.transcript_clean ||
+      sourceText
+    ).trim();
+
+    const essay = String(
+      generated.transcript_essay ||
+      readable
+    ).trim();
+
+    const selectedStyle =
+      currentMeta.selected_style === "essay" ? "essay" : "readable";
+
+    const selectedBody =
+      selectedStyle === "essay" ? essay : readable;
+
+    const nextMeta = {
+      ...currentMeta,
+      transcript_readable: readable,
+      transcript_essay: essay,
+      selected_style: selectedStyle,
+      additional_audio: additions,
+      addition_count: additions.length,
+      source_answer_ids: sourceAnswers.map(answer => answer.id)
+    };
+
+    const { data: savedIntroduction, error: saveError } = await supabaseClient
+      .from("project_introductions")
+      .upsert({
+        id: generationId,
+        book_project_id: foundation.project.id,
+        person_id: foundation?.person?.id || null,
+        introduction_type: "life_outline",
+        title: "私の歩み",
+        body_text: selectedBody,
+        generation_status: "generated",
+        generation_version: "polish-transcript-v1",
+        is_user_edited: false,
+        generated_at: new Date().toISOString(),
+        edited_at: null,
+        meta_json: nextMeta
+      }, {
+        onConflict: "book_project_id,introduction_type"
+      })
+      .select()
+      .single();
+
+    if (saveError) {
+      console.error("life outline introduction save error", saveError);
+      throw new Error("「私の歩み」を保存できませんでした");
+    }
+
+    const sourceLinks = sourceAnswers.map((answer, index) => ({
+      project_introduction_id: savedIntroduction.id,
+      answer_id: answer.id,
+      include_in_text: true,
+      include_in_audio: true,
+      text_order: index + 1,
+      audio_order: index + 1
+    }));
+
+    const { error: sourceError } = await supabaseClient
+      .from("project_introduction_sources")
+      .upsert(sourceLinks, {
+        onConflict: "project_introduction_id,answer_id"
+      });
+
+    if (sourceError) {
+      console.warn("life outline source link save error", sourceError);
+    }
+
+    const normalized = await normalizeLifeOutlineIntroduction(
+      savedIntroduction,
+      sourceAnswers.map(answer => answer.id)
+    );
+
+    setLifeOutlineIntroduction(normalized);
+    setLifeOutlineStatus("ready");
+    return normalized;
+  } catch (error) {
+    console.error("life outline generation error", error);
+    setLifeOutlineStatus("error");
+    setLifeOutlineError(
+      error instanceof Error
+        ? error.message
+        : "「私の歩み」をまとめられませんでした"
+    );
+    throw error;
+  }
+};
+
+const loadLifeOutlineIntroduction = async ({ generateIfMissing = true } = {}) => {
+  if (!foundation?.project?.id) return null;
+
+  setLifeOutlineStatus("loading");
+  setLifeOutlineError("");
+
+  try {
+    const sourceAnswers = await getLifeOutlineSourceAnswers();
+
+    const { data, error } = await supabaseClient
+      .from("project_introductions")
+      .select("*")
+      .eq("book_project_id", foundation.project.id)
+      .eq("introduction_type", "life_outline")
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data?.body_text && generateIfMissing) {
+      return await generateLifeOutlineIntroduction({
+        existingIntroduction: data || null
+      });
+    }
+
+    if (!data) {
+      setLifeOutlineStatus("error");
+      setLifeOutlineError("「私の歩み」がまだ作成されていません");
+      return null;
+    }
+
+    const normalized = await normalizeLifeOutlineIntroduction(
+      data,
+      sourceAnswers.map(answer => answer.id)
+    );
+
+    setLifeOutlineIntroduction(normalized);
+    setLifeOutlineStatus("ready");
+    return normalized;
+  } catch (error) {
+    console.error("life outline introduction load error", error);
+    setLifeOutlineStatus("error");
+    setLifeOutlineError(
+      error instanceof Error
+        ? error.message
+        : "「私の歩み」を読み込めませんでした"
+    );
+    return null;
+  }
+};
+
+const persistLifeOutlineText = async ({
+  style,
+  text,
+  isUserEdited
+}) => {
+  if (!lifeOutlineIntroduction?.id) return;
+
+  const selectedStyle = style === "essay" ? "essay" : "readable";
+  const nextText = String(text || "").trim();
+  const currentMeta = lifeOutlineIntroduction.meta_json || {};
+  const nextMeta = {
+    ...currentMeta,
+    selected_style: selectedStyle,
+    transcript_readable:
+      selectedStyle === "readable"
+        ? nextText
+        : lifeOutlineIntroduction.transcriptReadable,
+    transcript_essay:
+      selectedStyle === "essay"
+        ? nextText
+        : lifeOutlineIntroduction.transcriptEssay
+  };
+
+  const optimistic = {
+    ...lifeOutlineIntroduction,
+    body_text: nextText,
+    selectedStyle,
+    selectedText: nextText,
+    transcriptReadable: nextMeta.transcript_readable,
+    transcriptEssay: nextMeta.transcript_essay,
+    is_user_edited:
+      isUserEdited ? true : lifeOutlineIntroduction.is_user_edited,
+    meta_json: nextMeta
+  };
+
+  setLifeOutlineIntroduction(optimistic);
+
+  const { error } = await supabaseClient
+    .from("project_introductions")
+    .update({
+      body_text: nextText,
+      is_user_edited:
+        isUserEdited ? true : lifeOutlineIntroduction.is_user_edited,
+      edited_at:
+        isUserEdited
+          ? new Date().toISOString()
+          : lifeOutlineIntroduction.edited_at,
+      meta_json: nextMeta
+    })
+    .eq("id", lifeOutlineIntroduction.id);
+
+  if (error) {
+    console.error("life outline text save error", error);
+    setLifeOutlineError("文章の変更を保存できませんでした");
+  }
+};
+
+const handleLifeOutlineAddRecording = async (txt, dur, _url, blob) => {
+  const introduction = lifeOutlineIntroduction;
+  const additions = introduction?.additions || [];
+
+  if (!introduction?.id) {
+    alert("「私の歩み」を読み込んでから、もう一度お試しください。");
+    setScene("life_outline_summary");
+    return;
+  }
+
+  if (additions.length >= MAX_LIFE_OUTLINE_ADDITIONS) {
+    alert("語り足しはここまでです。文章の編集で仕上げられます。");
+    setScene("life_outline_summary");
+    return;
+  }
+
+  setScene("life_outline_summary");
+  setLifeOutlineStatus("generating");
+  setLifeOutlineError("");
+
+  try {
+    const additionId = crypto.randomUUID();
+    let storagePath = null;
+
+    if (blob?.size) {
+      const contentType = blob.type || "audio/mp4";
+      const ext = contentType.includes("mp4")
+        ? "mp4"
+        : contentType.includes("aac")
+          ? "aac"
+          : "webm";
+
+      storagePath =
+        `${user.id}/introductions/${introduction.id}/` +
+        `addition-${String(additions.length + 1).padStart(2, "0")}-${additionId}.${ext}`;
+
+      const { error: uploadError } = await supabaseClient.storage
+        .from("audio")
+        .upload(storagePath, blob, {
+          contentType,
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error("life outline addition upload error", uploadError);
+        throw new Error("追加の音声を保存できませんでした");
+      }
+    }
+
+    let transcriptRaw = String(txt || "").trim();
+
+    if (storagePath) {
+      try {
+        const transcription = await transcribeAudioOnServer({
+          answerId: introduction.id,
+          audioPaths: [storagePath],
+          fallbackTranscript: transcriptRaw
+        });
+
+        transcriptRaw = String(
+          transcription.transcript_raw ||
+          transcription.transcript ||
+          transcriptRaw
+        ).trim();
+      } catch (error) {
+        if (!transcriptRaw) throw error;
+        console.warn("life outline addition transcription fallback", error);
+      }
+    }
+
+    if (!transcriptRaw) {
+      throw new Error("追加した語りを文字にできませんでした");
+    }
+
+    const nextAddition = {
+      id: additionId,
+      storage_path: storagePath,
+      duration_seconds: Number(dur || 0),
+      transcript_raw: transcriptRaw,
+      created_at: new Date().toISOString()
+    };
+
+    const nextAdditions = [...additions, nextAddition];
+    const nextMeta = {
+      ...(introduction.meta_json || {}),
+      additional_audio: nextAdditions,
+      addition_count: nextAdditions.length
+    };
+
+    const { error: additionSaveError } = await supabaseClient
+      .from("project_introductions")
+      .update({ meta_json: nextMeta })
+      .eq("id", introduction.id);
+
+    if (additionSaveError) {
+      throw new Error("追加した語りを保存できませんでした");
+    }
+
+    const introductionWithAddition = {
+      ...introduction,
+      meta_json: nextMeta,
+      additions: nextAdditions,
+      additionCount: nextAdditions.length
+    };
+
+    setLifeOutlineIntroduction(introductionWithAddition);
+
+    await generateLifeOutlineIntroduction({
+      existingIntroduction: introductionWithAddition,
+      additionsOverride: nextAdditions,
+      editorialBase:
+        introduction.is_user_edited
+          ? introduction.body_text
+          : ""
+    });
+  } catch (error) {
+    console.error("life outline add recording error", error);
+    setLifeOutlineStatus("error");
+    setLifeOutlineError(
+      error instanceof Error
+        ? error.message
+        : "語り足した内容を反映できませんでした"
+    );
+  }
+};
+
+const continueFromLifeOutline = async () => {
+  if (!foundation?.project?.id) return;
+
+  setIsInitializing(true);
+
+  try {
+    const firstStoryIndex = questionsDB.findIndex(isFirstStoryQuestion);
+    const nextIndex =
+      firstStoryIndex >= 0 ? firstStoryIndex : progress.currentIndex;
+    const firstStoryQuestion = questionsDB[nextIndex] || null;
+
+    const { data: updatedProject, error } = await supabaseClient
+      .from("book_projects")
+      .update({
+        onboarding_status: "first_story",
+        current_onboarding_user_question_id:
+          firstStoryQuestion?.user_question_id || null
+      })
+      .eq("id", foundation.project.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    setFoundation(prev => ({
+      ...prev,
+      project: updatedProject
+    }));
+
+    setProgress(prev => ({
+      ...prev,
+      currentIndex: nextIndex
+    }));
+
+    resetVoiceData();
+    setScene(1);
+  } catch (error) {
+    console.error("life outline continue error", error);
+    alert("最初の物語へ進めませんでした。");
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
+useEffect(() => {
+  if (
+    scene !== "life_outline_summary" ||
+    !user?.id ||
+    !foundation?.project?.id
+  ) {
+    return;
+  }
+
+  if (
+    lifeOutlineStatus === "idle" ||
+    (!lifeOutlineIntroduction && lifeOutlineStatus !== "generating")
+  ) {
+    loadLifeOutlineIntroduction();
+  }
+}, [
+  scene,
+  user?.id,
+  foundation?.project?.id
+]);
+
+const handleSaveAnswer = async (tag = null) => {
   setIsInitializing(true);
 
   try {
@@ -2366,6 +3589,62 @@ if (mediaStoragePaths.length > 0) {
 
       await markUserQuestionAnswered(currentQ?.user_question_id);
 
+      if (
+  foundation?.project?.id &&
+  foundation?.project?.onboarding_status !== "completed"
+) {
+  const nextQuestion = questionsDB[progress.currentIndex + 1] || null;
+
+  const isCompletingOnboarding =
+    currentQ?.completes_onboarding === true ||
+    isFirstStoryQuestion(currentQ);
+
+  const isCompletingLifeOutline =
+    currentQ?.onboarding_group === "life_outline" &&
+    (
+      !nextQuestion ||
+      nextQuestion?.onboarding_group !== "life_outline"
+    );
+
+  const onboardingUpdate = isCompletingOnboarding
+    ? {
+        onboarding_status: "completed",
+        current_onboarding_user_question_id: null,
+        onboarding_completed_at: new Date().toISOString()
+      }
+    : isCompletingLifeOutline
+      ? {
+          onboarding_status: "introduction_review",
+          current_onboarding_user_question_id:
+            nextQuestion?.user_question_id || null
+        }
+    : {
+        onboarding_status: "in_progress",
+        current_onboarding_user_question_id:
+          nextQuestion?.user_question_id || null
+      };
+
+  const { data: updatedProject, error: onboardingProgressError } =
+    await supabaseClient
+      .from("book_projects")
+      .update(onboardingUpdate)
+      .eq("id", foundation.project.id)
+      .select()
+      .single();
+
+  if (onboardingProgressError) {
+    console.warn(
+      "onboarding progress update error",
+      onboardingProgressError
+    );
+  } else if (updatedProject) {
+    setFoundation(prev => ({
+      ...prev,
+      project: updatedProject
+    }));
+  }
+}
+
       if (isEditRecording) {
         const returnQuestionIndex =
           Number.isInteger(voiceData.returnQuestionIndex)
@@ -2401,6 +3680,20 @@ if (mediaStoragePaths.length > 0) {
 
 localStorage.setItem("koe_last_visit", Date.now().toString());
 
+const completedFormalOnboarding =
+  currentQ?.completes_onboarding === true ||
+  isFirstStoryQuestion(currentQ);
+
+const completedLifeOutline =
+  currentQ?.onboarding_group === "life_outline" &&
+  (
+    !questionsDB[progress.currentIndex + 1] ||
+    questionsDB[progress.currentIndex + 1]?.onboarding_group !== "life_outline"
+  );
+
+const completedVoiceIntro =
+  currentQ?.onboarding_group === "voice_intro";
+
 const betaSurvey = isBetaMode()
   ? getBetaSurveyForSequence(currentSeq)
   : null;
@@ -2413,11 +3706,61 @@ if (betaSurvey && user?.id) {
     setPendingBetaSurvey({
       ...betaSurvey,
       sequenceOrder: currentSeq,
-      seenKey
+      seenKey,
+      returnScene: completedFormalOnboarding
+        ? "onboarding_complete"
+        : 6
     });
     setScene("beta_survey_prompt");
     return;
   }
+}
+
+if (completedLifeOutline) {
+  resetVoiceData();
+  setLifeOutlineReturnScene(null);
+  setScene("life_outline_summary");
+  setIsInitializing(false);
+
+  try {
+    await generateLifeOutlineIntroduction();
+  } catch (_error) {
+    // まとめ画面側で再試行できるため、回答の保存自体は完了扱いにする。
+  }
+
+  return;
+}
+
+if (
+  completedVoiceIntro &&
+  !sharingPreference?.initial_setup_completed_at
+) {
+  resetVoiceData();
+  setScene("sharing_setup");
+  return;
+}
+
+const isContinuingFormalOnboarding =
+  isFormalOnboardingQuestion(currentQ) &&
+  !completedFormalOnboarding;
+
+/*
+ * 「人生の輪郭」の途中では完了画面を挟まず、
+ * すでにcurrentIndexへ設定された次の問いへ進む。
+ */
+if (isContinuingFormalOnboarding) {
+  resetVoiceData();
+  setScene(1);
+  return;
+}
+
+/*
+ * 最初の物語まで保存した時点で正式な初回体験が完了。
+ */
+if (completedFormalOnboarding) {
+  resetVoiceData();
+  setScene("onboarding_complete");
+  return;
 }
 
 setScene(6);
@@ -2426,7 +3769,7 @@ setScene(6);
     } catch (error) {
       console.error(error);
       alert("保存に失敗しました。");
-      setScene(5);
+      setScene(4);
     } finally {
       setIsInitializing(false);
     }
@@ -2458,40 +3801,78 @@ setScene(6);
             try {
               setUser(u);
 
-              const foundationData = await ensureUserFoundation(u.id, u);
-              setFoundation(foundationData);
+const foundationData = await ensureUserFoundation(u.id, u);
 
-              const questionSet = await loadUserQuestionSet(
-                u.id,
-                foundationData
-              );
+const questionSet = await loadUserQuestionSet(
+  u.id,
+  foundationData
+);
 
-              const { data: notificationData } = await supabaseClient
-                .from("notification_preferences")
-                .select("*")
-                .eq("user_id", u.id)
-                .maybeSingle();
+const refreshedFoundationData = await ensureUserFoundation(
+  u.id,
+  u
+);
 
-              setNotificationPref(notificationData || null);
+const { data: notificationData } = await supabaseClient
+  .from("notification_preferences")
+  .select("*")
+  .eq("user_id", u.id)
+  .maybeSingle();
 
-              setQuestionsDB(questionSet);
-              setProgress({
-                currentIndex: 0,
-                total: questionSet.length
-              });
+setNotificationPref(notificationData || null);
 
-            const nextScene = !notificationData ? "setup_intro" : "home";
+setQuestionsDB(questionSet);
+
+const currentIndex = getProjectQuestionIndex(
+  questionSet,
+  refreshedFoundationData?.project,
+  u
+);
+
+const activeFoundationData = await ensureLifeOutlineReviewPhase({
+  foundationData: refreshedFoundationData,
+  questionSet,
+  currentIndex
+});
+
+setFoundation(activeFoundationData);
+
+setProgress({
+  currentIndex,
+  total: questionSet.length
+});
+
+const nextScene = getInitialSceneForProject({
+  project: activeFoundationData?.project,
+  notificationPref: notificationData || null
+});
+
+const [supportedStoryProjects, pendingInvites] = await Promise.all([
+  loadSupportedStoryProjects(),
+  loadPendingSupporterInvites()
+]);
+
+setSupportedProjects(supportedStoryProjects);
+setPendingSupporterInvites(pendingInvites);
+
+let sceneAfterInvite = nextScene;
 
             if (isBetaMode() && u?.__isNewProfile && u?.id) {
               const betaIntroSeenKey = getBetaIntroSeenKey(u.id);
 
               if (localStorage.getItem(betaIntroSeenKey) !== "1") {
-                setScene("beta_intro");
-                return;
+                sceneAfterInvite = "beta_intro";
               }
             }
 
-            setScene(nextScene); 
+            if (pendingInvites.length > 0) {
+              setPostSupporterInviteScene(sceneAfterInvite);
+              setHasAcceptedSupporterInvite(false);
+              setScene("supporter_invite_received");
+              return;
+            }
+
+            setScene(sceneAfterInvite);
 
             } finally {
               setIsInitializing(false);
@@ -2529,8 +3910,23 @@ setScene(6);
               localStorage.setItem(getBetaIntroSeenKey(user.id), "1");
             }
 
-            setScene(notificationPref ? "home" : "setup_intro");
+            setScene(getInitialSceneForProject({
+              project: foundation?.project,
+              notificationPref
+            }));
           }}
+        />
+      )}
+
+      {scene === "onboarding_overview" && (
+        <Scene_OnboardingOverview
+          onNext={() => setScene("onboarding_pace")}
+        />
+      )}
+
+      {scene === "onboarding_pace" && (
+        <Scene_OnboardingPace
+          onNext={() => setScene("notification_setup")}
         />
       )}
 
@@ -2561,46 +3957,246 @@ setScene(6);
         <Scene_SupporterInvite
           user={user}
           foundation={foundation}
+          sharingPreference={sharingPreference}
           onComplete={() => setScene("notification_setup")}
         />
       )}
 
-      {scene === "notification_setup" && (
-        <Scene_NotificationSetup
-          user={user}
-          onComplete={async () => {
-            setIsInitializing(true);
+      {scene === "sharing_setup" && (
+        <Scene_SharingSetup
+          initialScope={sharingPreference?.live_scope || "family"}
+          onComplete={async (liveScope) => {
             try {
-              const foundationData =
-                foundation || (await ensureUserFoundation(user.id, user));
+              setIsInitializing(true);
 
-              setFoundation(foundationData);
-
-              const questionSet = await loadUserQuestionSet(
-                user.id,
-                foundationData
-              );
-
-              setQuestionsDB(questionSet);
-              setProgress({
-                currentIndex: 0,
-                total: questionSet.length
+              const savedPreference = await upsertStorySharingPreference({
+                bookProjectId: foundation?.project?.id,
+                ownerPersonId:
+                  foundation?.project?.subject_person_id ||
+                  foundation?.person?.id,
+                liveScope
               });
-              setScene("home");
+
+              setSharingPreference(savedPreference);
+              setScene("supporter_invite_initial");
+            } catch (error) {
+              console.error("initial sharing setup error", error);
+              alert("共有範囲を保存できませんでした。");
             } finally {
               setIsInitializing(false);
             }
           }}
         />
       )}
+
+      {scene === "supporter_invite_initial" && (
+        <Scene_SupporterInvite
+          user={user}
+          foundation={foundation}
+          sharingPreference={sharingPreference}
+          isInitialSetup
+          onSharingPreferenceChange={setSharingPreference}
+          onComplete={async () => {
+            try {
+              setIsInitializing(true);
+
+              const completedPreference = await upsertStorySharingPreference({
+                bookProjectId: foundation?.project?.id,
+                ownerPersonId:
+                  foundation?.project?.subject_person_id ||
+                  foundation?.person?.id,
+                liveScope: sharingPreference?.live_scope || "family",
+                markInitialSetupComplete: true
+              });
+
+              setSharingPreference(completedPreference);
+              setScene(1);
+            } catch (error) {
+              console.error("initial supporter setup completion error", error);
+              alert("設定を完了できませんでした。");
+            } finally {
+              setIsInitializing(false);
+            }
+          }}
+        />
+      )}
+
+      {scene === "supporter_invite_received" && pendingSupporterInvites[0] && (
+        <Scene_SupporterInviteReceived
+          invite={pendingSupporterInvites[0]}
+          remainingCount={pendingSupporterInvites.length}
+          onAccept={() =>
+            handleSupporterInviteResponse(pendingSupporterInvites[0], true)
+          }
+          onDecline={() =>
+            handleSupporterInviteResponse(pendingSupporterInvites[0], false)
+          }
+        />
+      )}
+
+ {scene === "notification_setup" && (
+  <Scene_NotificationSetup
+    user={user}
+    onComplete={async () => {
+      setIsInitializing(true);
+
+      try {
+        const foundationData =
+          foundation || (await ensureUserFoundation(user.id, user));
+
+        const questionSet = await loadUserQuestionSet(
+          user.id,
+          foundationData
+        );
+
+        const refreshedFoundationData =
+          await ensureUserFoundation(user.id, user);
+
+        const { data: notificationData } = await supabaseClient
+          .from("notification_preferences")
+          .select("*")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        setFoundation(refreshedFoundationData);
+        setNotificationPref(notificationData || null);
+        setQuestionsDB(questionSet);
+
+        const currentIndex = getProjectQuestionIndex(
+          questionSet,
+          refreshedFoundationData?.project,
+          user
+        );
+
+        setProgress({
+          currentIndex,
+          total: questionSet.length
+        });
+
+        if (
+          refreshedFoundationData?.project?.onboarding_status !== "completed"
+        ) {
+          setScene(0);
+        } else {
+          setScene("home");
+        }
+      } finally {
+        setIsInitializing(false);
+      }
+    }}
+  />
+)}
+
+{scene === "onboarding_complete" && (
+  <Scene_OnboardingComplete
+    onHome={() => setScene("home")}
+  />
+)}
+
+{scene === "life_outline_summary" && (
+  <Scene_LifeOutlineSummary
+    data={lifeOutlineIntroduction}
+    status={lifeOutlineStatus}
+    error={lifeOutlineError}
+    isRevisit={lifeOutlineReturnScene === "story_pages"}
+    onRetry={() => {
+      generateLifeOutlineIntroduction({
+        existingIntroduction: lifeOutlineIntroduction,
+        editorialBase:
+          lifeOutlineIntroduction?.is_user_edited
+            ? lifeOutlineIntroduction.body_text
+            : ""
+      }).catch(() => {});
+    }}
+    onSelectStyle={(style) => {
+      const text =
+        style === "essay"
+          ? lifeOutlineIntroduction?.transcriptEssay
+          : lifeOutlineIntroduction?.transcriptReadable;
+
+      persistLifeOutlineText({
+        style,
+        text,
+        isUserEdited: false
+      });
+    }}
+    onUpdateText={(style, text) => {
+      persistLifeOutlineText({
+        style,
+        text,
+        isUserEdited: true
+      });
+    }}
+    onAddMore={() => {
+      if (
+        (lifeOutlineIntroduction?.additionCount || 0) >=
+        MAX_LIFE_OUTLINE_ADDITIONS
+      ) {
+        alert("語り足しはここまでです。文章の編集で仕上げられます。");
+        return;
+      }
+
+      setScene("life_outline_recording");
+    }}
+    onNext={() => {
+      if (lifeOutlineReturnScene === "story_pages") {
+        setLifeOutlineReturnScene(null);
+        setScene("story_pages");
+        return;
+      }
+
+      continueFromLifeOutline();
+    }}
+  />
+)}
+
+{scene === "life_outline_recording" && (
+  <Scene_Recording
+    question={{
+      onboarding_group: "life_outline",
+      flow_type: "onboarding",
+      chapter: "人生の輪郭",
+      content: "もう少し、残しておきたいことをお話しください。"
+    }}
+    progress={{ currentIndex: 0, total: 1 }}
+    userName={user?.name || "あなた"}
+    autoStart
+    onComplete={handleLifeOutlineAddRecording}
+  />
+)}
+
       {scene === "home" && (
        <Scene_Home
          userName={user?.name || "あなた"}
+         supportedProjects={supportedProjects}
          onStartTalking={() => setScene(0)}
          onOpenStoryPages={() => setScene("story_pages")}
          onOpenBookBuilder={() => setScene("book_builder")}
+         onOpenSupportedProject={openSupportedProject}
          onDevLogout={isDevMode() ? handleDevLogout : null}
        />
+      )}
+
+      {scene === "support_project_home" && supportContext && (
+        <Scene_SupportProjectHome
+          project={supportContext.project}
+          onOpenBookBuilder={() => setScene("support_book_builder")}
+          onBack={() => {
+            setSupportContext(null);
+            setScene("home");
+          }}
+        />
+      )}
+
+      {scene === "support_book_builder" && supportContext && (
+        <Scene_BookBuilder
+          user={user}
+          userName={supportContext.project.subject_name || "物語の持ち主"}
+          questionSet={supportContext.questionSet}
+          initialBookStories={supportContext.storyRows}
+          initialBookMediaByAnswerId={supportContext.mediaByAnswerId}
+          onBack={() => setScene("support_project_home")}
+        />
       )}
 
       {scene === "book_builder" && (
@@ -2635,26 +4231,28 @@ setScene(6);
       {scene === 1 && (
         <Scene1_MyPage
           progress={progress}
+          storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
           question={currentQ}
           userName={user?.name || "あなた"}
           onNext={() => {
             resetVoiceData();
-            setScene(2);
+            setScene(3);
           }}
           onSkip={handleSkipQuestion}
-        />
-      )}
-
-      {scene === 2 && (
-        <Scene2_PreVoice
-          onNext={() => setScene(3)}
-          duration={3000}
+          onEndToday={() => {
+            setEndTodayHasSavedAnswer(false);
+            setScene("end_today");
+          }}
         />
       )}
 
       {scene === 3 && (
 <Scene_Recording
   question={currentQ}
+  progress={progress}
+  storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
+  userName={user?.name || "あなた"}
+  autoStart
 onComplete={(t, d, u, b) => {
   handleRecordComplete(t, d, u, b);
 }}
@@ -2751,7 +4349,14 @@ onRetry={() => {
       return next;
     });
   }}
-  onProceed={() => setScene(4)}
+  onProceed={() => {
+    if (currentQ?.onboarding_group === "life_outline") {
+      handleSaveAnswer("人生の輪郭");
+      return;
+    }
+
+    setScene(4);
+  }}
 />
 
       )}
@@ -2763,13 +4368,7 @@ onRetry={() => {
           onEditedTextChange={handleEditedTextChange}
           onAddPhotos={handlePhotoSelect}
           onRemovePhoto={handleRemovePhoto}
-          onNext={() => setScene(5)}
-        />
-      )}
-
-      {scene === 5 && (
-        <Scene5_Meaning
-          onNext={handleSaveAnswer}
+          onNext={() => handleSaveAnswer(null)}
         />
       )}
 
@@ -2791,20 +4390,24 @@ onRetry={() => {
       }
 
       setPendingBetaSurvey(null);
-      setScene(6);
+      setScene(pendingBetaSurvey?.returnScene || 6);
     }}
   />
 )}
-      {scene === 6 && (
-        <Scene6_Completion
-          onTalkMore={() => {
-            resetVoiceData();
-            setScene(2);
-          }}
-          onOpenStoryPages={() => setScene("story_pages")}
-          onEndToday={() => setScene("end_today")}
-        />
-      )}
+
+{scene === 6 && (
+  <Scene6_Completion
+    onTalkMore={() => {
+      resetVoiceData();
+      setScene(1);
+    }}
+    onHome={() => setScene("home")}
+    onEndToday={() => {
+      setEndTodayHasSavedAnswer(true);
+      setScene("end_today");
+    }}
+  />
+)}
       {scene === "token_completion" && (
         <Scene_TokenCompletion
           onLogin={() => setScene(-1)}
@@ -2814,7 +4417,9 @@ onRetry={() => {
       {scene === "end_today" && (
         <Scene_EndToday
           notificationPref={notificationPref}
+          hasSavedAnswer={endTodayHasSavedAnswer}
           onOpenStoryPages={() => setScene("story_pages")}
+          onResume={() => setScene(1)}
         />
       )}
 
@@ -2824,9 +4429,14 @@ onRetry={() => {
   user={user}
   foundation={foundation}
   questionSet={questionsDB}
+  onOpenLifeOutline={() => {
+    setLifeOutlineStatus("idle");
+    setLifeOutlineReturnScene("story_pages");
+    setScene("life_outline_summary");
+  }}
   onTalkMore={() => {
     resetVoiceData();
-    setScene(2);
+    setScene(1);
   }}
   onEditRecord={startEditRecording}
   onBack={() => setScene("home")}
@@ -3537,6 +5147,537 @@ function Scene_BetaIntro({ onNext }) {
   );
 }
 
+function Scene_OnboardingOverview({ onNext }) {
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8">
+      <div className="flex-1 flex flex-col justify-center">
+        <div className="text-center mb-10">
+          <p className="text-white/38 text-xs tracking-[0.22em] mb-4">
+            縦糸横糸の進め方
+          </p>
+
+          <p className="text-white/90 text-[1.12rem] leading-loose text-narrative">
+            声で語りながら、<br />
+            あなたの物語を重ねていきます
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <div className="glass-card p-5 flex items-center gap-5">
+            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white/70 text-lg shrink-0">
+              1
+            </div>
+
+            <div className="text-left">
+              <p className="text-white/82 text-[1rem] text-narrative mb-1">
+                最初の一度
+              </p>
+
+              <p className="text-white/48 text-sm leading-loose">
+                人生の輪郭と、最初の物語を残します
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-center text-white/20 text-xl">
+            ↓
+          </div>
+
+          <div className="glass-card p-5 flex items-center gap-5">
+            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white/70 text-lg shrink-0">
+              2
+            </div>
+
+            <div className="text-left">
+              <p className="text-white/82 text-[1rem] text-narrative mb-1">
+                その後は毎週
+              </p>
+
+              <p className="text-white/48 text-sm leading-loose">
+                届いた問いに、ご自身のペースで語ります
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-center text-white/20 text-xl">
+            ↓
+          </div>
+
+          <div className="glass-card p-5 flex items-center gap-5">
+            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white/70 text-lg shrink-0">
+              3
+            </div>
+
+            <div className="text-left">
+              <p className="text-white/82 text-[1rem] text-narrative mb-1">
+                一冊の本へ
+              </p>
+
+              <p className="text-white/48 text-sm leading-loose">
+                声と文章で、家族に残る物語になります
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-9 text-center text-white/42 text-sm leading-loose">
+          全部で23の問いがあります
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={onNext}
+        className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+      >
+        進め方を見る
+      </button>
+    </div>
+  );
+}
+
+
+function Scene_OnboardingPace({ onNext }) {
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8">
+      <div className="flex-1 flex flex-col justify-center">
+        <div className="text-center mb-9">
+          <p className="text-white/90 text-[1.1rem] text-narrative">
+            ご自身のペースで進められます
+          </p>
+        </div>
+
+        <div className="glass-card p-5 space-y-5 mb-6">
+          {[
+            "毎週、新しい問いが届きます",
+            "答えにくい問いは、飛ばして大丈夫です",
+            "あとから語り直したり、問いを加えたりできます"
+          ].map(item => (
+            <div key={item} className="flex gap-4 items-start">
+              <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white/65 shrink-0 mt-0.5">
+                ✓
+              </div>
+
+              <p className="text-white/68 text-[0.94rem] leading-loose text-left">
+                {item}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-7">
+          <div className="glass-card p-5 text-center">
+            <p className="text-white/38 text-xs tracking-widest mb-3">
+              ゆっくり
+            </p>
+
+            <p className="text-white/80 text-[1rem] mb-2">
+              週に2問
+            </p>
+
+            <p className="text-white/48 text-sm">
+              約3か月
+            </p>
+          </div>
+
+          <div className="glass-card p-5 text-center">
+            <p className="text-white/38 text-xs tracking-widest mb-3">
+              しっかり
+            </p>
+
+            <p className="text-white/80 text-[1rem] mb-2">
+              週に6問
+            </p>
+
+            <p className="text-white/48 text-sm">
+              約1か月
+            </p>
+          </div>
+        </div>
+
+        <div className="text-center space-y-3">
+          <p className="text-white/62 text-[0.94rem] text-narrative">
+            問いが届くまでの時間も、物語の一部です
+          </p>
+
+          <div className="flex justify-center gap-5 text-white/42 text-xs">
+            <span>▧ 昔の写真</span>
+            <span>♪ 好きだった音楽</span>
+            <span>✦ ふと思い出す</span>
+          </div>
+
+          <p className="text-white/38 text-xs leading-loose">
+            記憶がよみがえる瞬間も、楽しんでみてください
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onNext}
+        className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+      >
+        問いが届く時間を決める
+      </button>
+    </div>
+  );
+}
+
+function Scene_OnboardingComplete({ onHome }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
+      <p className="text-white/90 text-[1.1rem] leading-loose text-narrative">
+        最初の物語が残りました
+      </p>
+
+      <BookPageAddedVisual />
+
+      <div className="space-y-5 mb-12">
+        <p className="text-white/62 text-[0.96rem] leading-loose">
+          これから、毎週問いが届きます。
+        </p>
+
+        <p className="text-white/45 text-sm leading-loose">
+          ご自身のペースで、<br />
+          少しずつ物語を重ねていきましょう。
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={onHome}
+        className="btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white"
+      >
+        ホームへ
+      </button>
+    </div>
+  );
+}
+
+function Scene_LifeOutlineSummary({
+  data,
+  status,
+  error,
+  isRevisit = false,
+  onRetry,
+  onSelectStyle,
+  onUpdateText,
+  onAddMore,
+  onNext
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftText, setDraftText] = useState("");
+  const [playingAudioId, setPlayingAudioId] = useState(null);
+  const audioRefs = useRef(new Map());
+
+  const isBusy = status === "loading" || status === "generating";
+  const selectedStyle = data?.selectedStyle || "readable";
+  const displayText =
+    data?.selectedText ||
+    (
+      selectedStyle === "essay"
+        ? data?.transcriptEssay
+        : data?.transcriptReadable
+    ) ||
+    "";
+
+  const hasReachedAdditionLimit =
+    (data?.additionCount || 0) >= MAX_LIFE_OUTLINE_ADDITIONS;
+
+  useEffect(() => {
+    setIsEditing(false);
+    setDraftText("");
+  }, [data?.id, selectedStyle]);
+
+  useEffect(() => {
+    return () => {
+      for (const audio of audioRefs.current.values()) {
+        audio?.pause();
+      }
+    };
+  }, []);
+
+  const startEditing = () => {
+    setDraftText(displayText);
+    setIsEditing(true);
+  };
+
+  const saveEdit = () => {
+    const nextText = String(draftText || "").trim();
+
+    if (!nextText) {
+      alert("文章が空になっています。");
+      return;
+    }
+
+    onUpdateText?.(selectedStyle, nextText);
+    setIsEditing(false);
+    setDraftText("");
+  };
+
+  const toggleAudio = async (audioId) => {
+    const target = audioRefs.current.get(audioId);
+    if (!target) return;
+
+    for (const [id, audio] of audioRefs.current.entries()) {
+      if (id !== audioId && audio && !audio.paused) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    }
+
+    if (!target.paused) {
+      target.pause();
+      setPlayingAudioId(null);
+      return;
+    }
+
+    try {
+      await target.play();
+      setPlayingAudioId(audioId);
+    } catch (playError) {
+      console.warn("life outline audio play failed", playError);
+      setPlayingAudioId(null);
+    }
+  };
+
+  const formatDuration = (seconds) => {
+    const total = Math.max(0, Math.round(Number(seconds || 0)));
+    const minutes = Math.floor(total / 60);
+    const remaining = String(total % 60).padStart(2, "0");
+    return `${minutes}:${remaining}`;
+  };
+
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 pt-3 pb-8 overflow-hidden">
+      <div className="text-center mb-6">
+        <p className="text-white/38 text-xs tracking-[0.22em] mb-3">
+          人生の輪郭
+        </p>
+
+        <h1 className="text-white/90 text-[1.15rem] text-narrative">
+          {isRevisit
+            ? "私の歩み"
+            : "人生の輪郭がまとまりました"}
+        </h1>
+      </div>
+
+      <div className="flex-1 overflow-y-auto pb-6">
+        {isBusy && (
+          <div className="h-full min-h-[360px] flex flex-col items-center justify-center text-center">
+            <div className="w-5 h-5 rounded-full border-2 border-white/15 border-t-white/65 animate-spin mb-6"></div>
+            <p className="text-white/58 text-sm tracking-widest">
+              {status === "generating"
+                ? "語りを、ひとつの文章にまとめています"
+                : "私の歩みを読み込んでいます"}
+            </p>
+          </div>
+        )}
+
+        {!isBusy && status === "error" && (
+          <div className="glass-card p-6 text-center">
+            <p className="text-white/72 text-sm leading-loose mb-3">
+              「私の歩み」をまとめられませんでした
+            </p>
+
+            <p className="text-white/42 text-xs leading-loose mb-6">
+              {error || "通信を確認して、もう一度お試しください。"}
+            </p>
+
+            <button
+              type="button"
+              onClick={onRetry}
+              className="btn-quiet bg-white/10 w-full py-3 rounded-full text-white text-sm"
+            >
+              もう一度まとめる
+            </button>
+          </div>
+        )}
+
+        {!isBusy && data && status !== "error" && (
+          <>
+            <div className="glass-card p-5 mb-5">
+              <p className="text-white/38 text-xs tracking-widest mb-5">
+                私の歩み
+              </p>
+
+              <div className="flex gap-3 mb-6">
+                <button
+                  type="button"
+                  disabled={isEditing}
+                  onClick={() => onSelectStyle?.("readable")}
+                  className={`flex-1 py-2.5 rounded-full text-sm border ${
+                    selectedStyle === "readable"
+                      ? "bg-white/15 border-white/25 text-white"
+                      : "border-white/10 text-white/45"
+                  } ${isEditing ? "opacity-40" : ""}`}
+                >
+                  語り調
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isEditing}
+                  onClick={() => onSelectStyle?.("essay")}
+                  className={`flex-1 py-2.5 rounded-full text-sm border ${
+                    selectedStyle === "essay"
+                      ? "bg-white/15 border-white/25 text-white"
+                      : "border-white/10 text-white/45"
+                  } ${isEditing ? "opacity-40" : ""}`}
+                >
+                  作品調
+                </button>
+              </div>
+
+              {!isEditing && (
+                <div>
+                  <p className="text-white/80 text-[1rem] leading-[2.05] whitespace-pre-wrap text-narrative">
+                    {displayText}
+                  </p>
+
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={startEditing}
+                      className="w-8 h-8 flex items-center justify-center rounded-full opacity-80"
+                      aria-label="私の歩みを修正する"
+                    >
+                      <Pencil
+                        size={15}
+                        className="text-white/32"
+                        strokeWidth={1.7}
+                      />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {isEditing && (
+                <div>
+                  <textarea
+                    value={draftText}
+                    onChange={event => setDraftText(event.target.value)}
+                    className="w-full min-h-[260px] bg-transparent text-white/82 text-[1rem] leading-[2.05] outline-none resize-none text-narrative"
+                    autoFocus
+                  />
+
+                  <div className="mt-5 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditing(false);
+                        setDraftText("");
+                      }}
+                      className="flex-1 py-3 rounded-full border border-white/10 text-white/45 text-sm"
+                    >
+                      キャンセル
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={saveEdit}
+                      className="flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm"
+                    >
+                      反映する
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {(data.audioItems || []).length > 0 && (
+              <div className="glass-card px-5 py-2 mb-5">
+                {(data.audioItems || []).map((item, index) => (
+                  <div
+                    key={item.id || item.storagePath}
+                    className={`flex items-center justify-between py-3 ${
+                      index > 0 ? "border-t border-white/[0.07]" : ""
+                    }`}
+                  >
+                    <audio
+                      ref={node => {
+                        const key = item.id || item.storagePath;
+                        if (node) {
+                          audioRefs.current.set(key, node);
+                        } else {
+                          audioRefs.current.delete(key);
+                        }
+                      }}
+                      src={item.url}
+                      className="hidden"
+                      onEnded={() => setPlayingAudioId(null)}
+                    />
+
+                    <span className="text-white/42 text-xs tracking-widest">
+                      声 {index + 1}
+                    </span>
+
+                    <div className="flex items-center gap-3">
+                      {item.duration > 0 && (
+                        <span className="text-white/25 text-xs tabular-nums">
+                          {formatDuration(item.duration)}
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => toggleAudio(item.id || item.storagePath)}
+                        className="w-8 h-8 flex items-center justify-center rounded-full"
+                        aria-label={
+                          playingAudioId === (item.id || item.storagePath)
+                            ? `声 ${index + 1} の再生を止める`
+                            : `声 ${index + 1} を再生する`
+                        }
+                      >
+                        <span
+                          className="text-white/35 text-xs"
+                          aria-hidden="true"
+                        >
+                          {playingAudioId === (item.id || item.storagePath)
+                            ? "Ⅱ"
+                            : "▶"}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {hasReachedAdditionLimit && (
+              <p className="text-center text-white/32 text-xs py-2">
+                語り足しはここまでです
+              </p>
+            )}
+          </>
+        )}
+      </div>
+
+      {!isBusy && data && status !== "error" && !isEditing && (
+        <div className="pt-5 border-t border-white/10 space-y-4">
+          {!hasReachedAdditionLimit && (
+            <button
+              type="button"
+              onClick={onAddMore}
+              className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+            >
+              少し語り足す
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onNext}
+            className="btn-quiet w-full py-4 rounded-full text-white"
+          >
+            {isRevisit ? "これまでの語りへ戻る" : "最初の物語へ"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Scene_SetupIntro({ onNext }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
@@ -3661,32 +5802,193 @@ function Scene_StoryThemeSetup({ user, onComplete }) {
   );
 }
 
-function Scene_SupporterInvite({ user, foundation, onComplete }) {
-  const [supporterEmail, setSupporterEmail] = useState("");
+function Scene_SharingSetup({ initialScope = "family", onComplete }) {
+  const [selectedScope, setSelectedScope] = useState(initialScope);
   const [loading, setLoading] = useState(false);
 
+  const options = [
+    {
+      value: "family",
+      label: "ファミリーへ共有する",
+      note: "おすすめ"
+    },
+    {
+      value: "selected",
+      label: "選んだ人へ共有する"
+    },
+    {
+      value: "private",
+      label: "まずは自分だけで残す"
+    }
+  ];
+
+  const proceed = async () => {
+    try {
+      setLoading(true);
+      await onComplete(selectedScope);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
+      <div className="w-full max-w-[340px] space-y-9">
+        <div className="space-y-5 text-narrative">
+          <p className="text-[1.1rem] text-white/90 leading-loose">
+            この物語を、<br />どなたと残していきますか？
+          </p>
+
+          <p className="text-white/48 text-sm leading-loose">
+            共有範囲は、後からいつでも変更できます。
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {options.map(option => {
+            const selected = selectedScope === option.value;
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setSelectedScope(option.value)}
+                className={`w-full rounded-2xl border px-5 py-4 text-left transition ${
+                  selected
+                    ? "border-white/42 bg-white/[0.12] text-white"
+                    : "border-white/10 bg-white/[0.035] text-white/62"
+                }`}
+              >
+                <span className="flex items-center justify-between gap-4">
+                  <span className="text-[0.98rem]">{option.label}</span>
+                  {option.note && (
+                    <span className="text-[0.72rem] text-white/42">
+                      {option.note}
+                    </span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={proceed}
+          disabled={loading}
+          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-sm text-white"
+        >
+          {loading ? "保存中..." : "この内容で進む"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Scene_SupporterInvite({
+  user,
+  foundation,
+  sharingPreference,
+  isInitialSetup = false,
+  onSharingPreferenceChange,
+  onComplete
+}) {
+  const [supporterEmail, setSupporterEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [confirmPrivateChange, setConfirmPrivateChange] = useState(false);
+
   const saveInvite = async () => {
-    const inviteeEmail = supporterEmail.trim();
+    const inviteeEmail = supporterEmail.trim().toLowerCase();
 
     if (!inviteeEmail) {
       onComplete();
       return;
     }
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteeEmail)) {
+      alert("メールアドレスを確認してください。");
+      return;
+    }
+
+    if (inviteeEmail === String(user?.email || "").trim().toLowerCase()) {
+      alert("ご自身以外のメールアドレスを入力してください。");
+      return;
+    }
+
+    if (
+      sharingPreference?.live_scope === "private" &&
+      !confirmPrivateChange
+    ) {
+      setConfirmPrivateChange(true);
+      return;
+    }
+
     try {
       setLoading(true);
 
-      const { error } = await supabaseClient
+      const { data: pendingInvites, error: existingInviteError } =
+        await supabaseClient
+          .from("project_invites")
+          .select("id, invitee_email, email_delivery_status")
+          .eq("book_project_id", foundation?.project?.id || null)
+          .eq("inviter_user_id", user.id)
+          .eq("role", "supporter")
+          .eq("status", "pending");
+
+      if (existingInviteError) throw existingInviteError;
+
+      const existingInvite = (pendingInvites || []).find(
+        item =>
+          String(item.invitee_email || "").trim().toLowerCase() === inviteeEmail
+      );
+
+      let invite = existingInvite;
+
+      if (!invite) {
+        const { data: createdInvite, error: inviteInsertError } =
+          await supabaseClient
         .from("project_invites")
         .insert({
           book_project_id: foundation?.project?.id || null,
           inviter_user_id: user.id,
           invitee_email: inviteeEmail,
           role: "supporter",
-          status: "pending"
+          status: "pending",
+          auto_share_on_accept: true
+        })
+        .select("id, email_delivery_status")
+        .single();
+
+        if (inviteInsertError) throw inviteInsertError;
+        invite = createdInvite;
+      }
+
+      if (sharingPreference?.live_scope === "private") {
+        const updatedPreference = await upsertStorySharingPreference({
+          bookProjectId: foundation?.project?.id,
+          ownerPersonId:
+            foundation?.project?.subject_person_id ||
+            foundation?.person?.id,
+          liveScope: "selected"
         });
 
-      if (error) throw error;
+        onSharingPreferenceChange?.(updatedPreference);
+      }
+
+      const { data: sendResult, error: sendError } =
+        await supabaseClient.functions.invoke("send-supporter-invite", {
+          body: {
+            inviteId: invite.id
+          }
+        });
+
+      if (sendError || sendResult?.success === false) {
+        console.error("supporter invite email send error", sendError || sendResult);
+        alert(
+          "お願いは保存しましたが、メールを送信できませんでした。もう一度お試しください。"
+        );
+        return;
+      }
 
       onComplete();
     } catch (e) {
@@ -3701,18 +6003,30 @@ function Scene_SupporterInvite({ user, foundation, onComplete }) {
     <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
       <div className="w-full max-w-[320px] space-y-9">
         <div className="space-y-5 text-narrative">
-          <p className="text-[1.1rem] text-white/90">
-            本づくりを手伝う人
+          <p className="text-[1.1rem] text-white/90 leading-loose">
+            物語づくりを、<br />ご家族に手伝ってもらいますか？
           </p>
 
           <p className="text-white/60 text-[0.98rem] leading-loose">
-            写真の追加や、完成前の確認を<br />
-            家族に手伝ってもらうことができます。
+            録音の操作や写真の追加、<br />
+            文章や本の形を整える作業をお願いできます。
           </p>
         </div>
 
+        {confirmPrivateChange && (
+          <div className="glass-card p-5 text-left space-y-3">
+            <p className="text-white/82 text-sm leading-loose">
+              この方をサポーターにすると、共有範囲が「選んだ人」に変わり、共有相手にも追加されます。
+            </p>
+
+            <p className="text-white/45 text-xs leading-loose">
+              「ずっと自分だけ」にした語りは表示されません。
+            </p>
+          </div>
+        )}
+
         <div>
-          <p className="ui-label mb-2">サポーターのメールアドレス</p>
+          <p className="ui-label mb-2">手伝ってもらう方のメールアドレス</p>
           <input
             type="email"
             className="quiet-input"
@@ -3727,7 +6041,11 @@ function Scene_SupporterInvite({ user, foundation, onComplete }) {
             disabled={loading}
             className="btn-quiet bg-white/10 w-full py-4 rounded-full text-sm text-white"
           >
-            {loading ? "保存中..." : "サポーターを招待する"}
+            {loading
+              ? "お願いを送っています..."
+              : confirmPrivateChange
+                ? "内容を確認してお願いする"
+                : "手伝ってもらう方を招待する"}
           </button>
 
           <button
@@ -3735,9 +6053,104 @@ function Scene_SupporterInvite({ user, foundation, onComplete }) {
             disabled={loading}
             className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
           >
-            今はひとりで始める
+            {isInitialSetup ? "今は設定しない" : "今はひとりで始める"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function Scene_SupporterInviteReceived({
+  invite,
+  remainingCount = 1,
+  onAccept,
+  onDecline
+}) {
+  const [loadingAction, setLoadingAction] = useState(null);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const respond = async action => {
+    try {
+      setLoadingAction(action);
+      setErrorMessage("");
+
+      if (action === "accept") {
+        await onAccept();
+      } else {
+        await onDecline();
+      }
+    } catch (error) {
+      console.error("supporter invitation response error", error);
+      setErrorMessage("招待への回答を保存できませんでした。もう一度お試しください。");
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
+      <div className="w-full max-w-[340px] space-y-9">
+        <div className="space-y-5 text-narrative">
+          <p className="text-white/40 text-xs tracking-[0.18em]">
+            サポーターのお願い
+          </p>
+
+          <p className="text-[1.1rem] text-white/90 leading-loose">
+            {withHonorific(invite?.inviter_name || invite?.subject_name)}から、<br />
+            物語づくりを手伝ってほしいという<br />
+            お願いが届いています。
+          </p>
+
+          <p className="text-white/58 text-sm leading-loose">
+            {withHonorific(invite?.subject_name || "ご家族")}の写真や文章、<br />
+            本の形を整える作業をお手伝いできます。
+          </p>
+        </div>
+
+        <div className="glass-card p-5 text-left space-y-3">
+          <p className="text-white/76 text-sm leading-loose">
+            共有範囲や将来の手渡し方は、物語のご本人だけが変更できます。
+          </p>
+
+          <p className="text-white/42 text-xs leading-loose">
+            「ずっと自分だけ」にした語りは、サポーターにも表示されません。
+          </p>
+        </div>
+
+        {errorMessage && (
+          <p className="text-rose-200/80 text-sm leading-relaxed">
+            {errorMessage}
+          </p>
+        )}
+
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={() => respond("accept")}
+            disabled={Boolean(loadingAction)}
+            className="btn-quiet bg-white/10 w-full py-4 rounded-full text-sm text-white"
+          >
+            {loadingAction === "accept"
+              ? "承認しています..."
+              : "お手伝いを引き受ける"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => respond("decline")}
+            disabled={Boolean(loadingAction)}
+            className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
+          >
+            {loadingAction === "decline" ? "保存しています..." : "今回は辞退する"}
+          </button>
+        </div>
+
+        {remainingCount > 1 && (
+          <p className="text-white/30 text-xs">
+            このほかに {remainingCount - 1} 件のお願いがあります
+          </p>
+        )}
       </div>
     </div>
   );
@@ -3986,10 +6399,18 @@ function BookCoverPreview({ title, subtitle, authorName, coverPhoto, coverColor 
   );
 }
 
-function Scene_Home({ userName, onStartTalking, onOpenStoryPages, onOpenBookBuilder, onDevLogout }) {
+function Scene_Home({
+  userName,
+  supportedProjects = [],
+  onStartTalking,
+  onOpenStoryPages,
+  onOpenBookBuilder,
+  onOpenSupportedProject,
+  onDevLogout
+}) {
   return (
-    <div className="h-full flex flex-col fade-enter px-4 py-8">
-      <div className="flex-1 flex flex-col justify-center">
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+      <div className="flex-1 flex flex-col justify-center min-h-fit">
         <div className="text-center mb-12">
           <p className="text-white/35 text-xs tracking-[0.22em] mb-3">
             tateyoko BOOK
@@ -4019,6 +6440,23 @@ function Scene_Home({ userName, onStartTalking, onOpenStoryPages, onOpenBookBuil
             onClick={onOpenBookBuilder}
           />
 
+          {supportedProjects.length > 0 && (
+            <div className="pt-8 mt-8 border-t border-white/10 space-y-4">
+              <p className="text-white/45 text-xs tracking-[0.18em] px-1">
+                お手伝いしている物語
+              </p>
+
+              {supportedProjects.map(project => (
+                <HomeMenuButton
+                  key={project.supporter_id}
+                  icon={Users}
+                  label={`${project.subject_name || "ご家族"}の物語`}
+                  onClick={() => onOpenSupportedProject?.(project)}
+                />
+              ))}
+            </div>
+          )}
+
           {onDevLogout && (
             <button
               type="button"
@@ -4035,7 +6473,53 @@ function Scene_Home({ userName, onStartTalking, onOpenStoryPages, onOpenBookBuil
   );
 }
 
-function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
+function Scene_SupportProjectHome({ project, onOpenBookBuilder, onBack }) {
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8">
+      <div className="shrink-0">
+        <button
+          type="button"
+          onClick={onBack}
+          className="w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"
+          aria-label="自分のホームへ戻る"
+        >
+          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+        </button>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center">
+        <div className="text-center mb-12 space-y-3">
+          <p className="text-white/38 text-xs tracking-[0.18em]">
+            物語づくりをお手伝い中
+          </p>
+
+          <p className="text-white/86 text-[1.08rem] text-narrative">
+            {withHonorific(project?.subject_name || "ご家族")}の物語
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {project?.can_build_book && (
+            <HomeMenuButton
+              icon={BookOpen}
+              label="本に仕上げる"
+              onClick={onOpenBookBuilder}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Scene_BookBuilder({
+  user,
+  userName,
+  questionSet = [],
+  initialBookStories = null,
+  initialBookMediaByAnswerId = null,
+  onBack
+}) {
   const steps = ["表紙", "収録", "紙面", "注文", "完了"];
   const [stepIndex, setStepIndex] = useState(0);
   const [coverPhoto, setCoverPhoto] = useState(null);
@@ -4085,6 +6569,14 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
 
   useEffect(() => {
     const loadBookStories = async () => {
+      if (initialBookStories) {
+        setBookStories(initialBookStories);
+        setIncludedStoryIds(initialBookStories.map(row => row.id));
+        setBookMediaByAnswerId(initialBookMediaByAnswerId || {});
+        setStoriesLoading(false);
+        return;
+      }
+
       if (!user?.id) return;
 
       try {
@@ -4166,7 +6658,7 @@ function Scene_BookBuilder({ user, userName, questionSet = [], onBack }) {
     };
 
     loadBookStories();
-  }, [user?.id]);
+  }, [user?.id, initialBookStories, initialBookMediaByAnswerId]);
 
   const handleCoverPhotoSelect = (files) => {
     const file = Array.from(files || []).find(item =>
@@ -4591,7 +7083,27 @@ function Scene0_Door({ onNext }) {
   );
 }
 
-function Scene1_MyPage({ progress, question, userName, onNext, onSkip }) {
+function Scene1_MyPage({
+  progress,
+  storyProgress = progress,
+  question,
+  userName,
+  onNext,
+  onSkip,
+  onEndToday
+}) {
+  const isFormalOnboarding = isFormalOnboardingQuestion(question);
+  const isFirstStory = isFirstStoryQuestion(question);
+  const isOnboardingQuestion = isFormalOnboarding || isFirstStory;
+
+  const sectionLabel = isFirstStory
+    ? "最初の物語"
+    : isFormalOnboarding
+      ? question.onboarding_group === "voice_intro"
+        ? "声の入口"
+        : "人生の輪郭"
+      : question.chapter_description || question.chapter || question.chapter_label;
+
   return (
     <div className="h-full flex flex-col fade-enter">
       <header className="mb-8 pt-2">
@@ -4601,35 +7113,51 @@ function Scene1_MyPage({ progress, question, userName, onNext, onSkip }) {
 
         <div className="space-y-2">
           <p className="text-white/60 text-sm tracking-widest">
-            {question.chapter_description || question.chapter || question.chapter_label}
+            {sectionLabel}
           </p>
 
-          <div className="w-full h-[2px] bg-white/10 rounded-full">
-            <div
-              className="h-full bg-white/40"
-              style={{
-                width: `${(progress.currentIndex / Math.max(progress.total, 1)) * 100}%`
-              }}
-            />
-          </div>
+          {!isOnboardingQuestion && (
+            <>
+              <div className="w-full h-[2px] bg-white/10 rounded-full">
+                <div
+                  className="h-full bg-white/40"
+                  style={{
+                    width: `${((storyProgress.currentIndex + 1) / Math.max(storyProgress.total, 1)) * 100}%`
+                  }}
+                />
+              </div>
+            </>
+          )}
 
-          {!isTokenMode() && (
-          <p className="text-white/80 text-sm tracking-widest mt-2">
-            {progress.currentIndex + 1} / {progress.total} ページ
-          </p>
+          {isFormalOnboarding && question.progress_label && (
+            <p className="text-white/55 text-sm tracking-widest mt-2">
+              {question.progress_label}
+            </p>
           )}
         </div>
       </header>
 
       <div className="flex-1 flex flex-col justify-center">
         <div className="glass-card p-6 text-center space-y-6">
-          <p className="text-white/50 text-sm tracking-widest">
-            今日の問い
-          </p>
-
           <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
             {question.content}
           </p>
+
+          {(question.prompt_hint || question.reassurance_text) && (
+            <div className="pt-1 space-y-2">
+              {question.prompt_hint && (
+                <p className="text-white/55 text-sm leading-loose">
+                  {question.prompt_hint}
+                </p>
+              )}
+
+              {question.reassurance_text && (
+                <p className="text-white/38 text-xs leading-loose">
+                  {question.reassurance_text}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -4638,33 +7166,27 @@ function Scene1_MyPage({ progress, question, userName, onNext, onSkip }) {
           onClick={onNext}
           className="btn-quiet bg-white/10 w-full py-4 rounded-full tracking-widest text-white"
         >
-          今回の問いに答える
+          録音を始める
         </button>
 
-{!isTokenMode() && (
-  <button
-    onClick={onSkip}
-    className="w-full py-3 text-white/40 text-sm underline underline-offset-4"
-  >
-    別の問いへ
-  </button>
-)}
+        {!isTokenMode() && !isOnboardingQuestion && (
+          <button
+            onClick={onSkip}
+            className="w-full py-3 text-white/40 text-sm underline underline-offset-4"
+          >
+            スキップ
+          </button>
+        )}
+
+        {!isTokenMode() && (
+          <button
+            onClick={onEndToday}
+            className="w-full py-3 text-white/40 text-sm underline underline-offset-4"
+          >
+            今日はここまで
+          </button>
+        )}
       </div>
-    </div>
-  );
-}
-
-function Scene2_PreVoice({ onNext, duration }) {
-  useEffect(() => {
-    const t = setTimeout(onNext, duration);
-    return () => clearTimeout(t);
-  }, []);
-
-  return (
-    <div className="h-full flex items-center justify-center text-center fade-enter">
-      <p className="text-[1.1rem] text-white/70 text-narrative tracking-[0.15em] animate-pulse">
-        すぐに答えなくても大丈夫です
-      </p>
     </div>
   );
 }
@@ -4705,9 +7227,13 @@ function QuietRecordingCircle({ seconds = 0, isPaused = false }) {
   const progress = ((Number(seconds || 0) % cycleSeconds) / cycleSeconds) * 100;
 
   return (
-    <div className={`relative w-20 h-20 mx-auto ${isPaused ? "opacity-45" : ""}`} aria-hidden="true">
+    <div
+      className="relative w-24 h-24 mx-auto"
+      role="status"
+      aria-label={isPaused ? "一時停止中" : "録音中"}
+    >
       <div
-        className="absolute inset-0 rounded-full quiet-recording-progress"
+        className={`absolute inset-0 rounded-full quiet-recording-progress ${isPaused ? "opacity-35" : ""}`}
         style={{
           background: `conic-gradient(rgba(184,95,58,0.52) ${progress}%, rgba(255,255,255,0.075) ${progress}% 100%)`
         }}
@@ -4716,6 +7242,12 @@ function QuietRecordingCircle({ seconds = 0, isPaused = false }) {
       <div className="absolute inset-[3px] rounded-full bg-[#0f172a]" />
 
       <div className="absolute inset-[15px] rounded-full border border-white/[0.045] bg-white/[0.012]" />
+
+      {isPaused && (
+        <span className="absolute inset-0 flex items-center justify-center text-white/62 text-[0.68rem] tracking-[0.08em]">
+          一時停止中
+        </span>
+      )}
     </div>
   );
 }
@@ -4812,11 +7344,12 @@ function Scene_DailyMicCheck({ onComplete }) {
     <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
       <div className="space-y-6 mb-10 text-narrative">
         <p className="text-white/90 text-[1.08rem]">
-          マイクをテストしてみましょう
+          声の届き方を確認します
         </p>
 
         <p className="text-white/60 text-[0.98rem] leading-loose">
-          いつもより少しゆっくり話してください。
+          ひとこと、声を出してみてください。<br />
+          波形が動けば準備できています。
         </p>
       </div>
 
@@ -4880,12 +7413,20 @@ function Scene_DailyMicCheck({ onComplete }) {
   );
 }
 
-function Scene_Recording({ question, onComplete }) {
-  const [step, setStep] = useState(0);
+function Scene_Recording({
+  question,
+  progress,
+  storyProgress = progress,
+  userName,
+  autoStart = false,
+  onComplete
+}) {
+  const [step, setStep] = useState(autoStart ? "checking_mic" : 0);
   const [time, setTime] = useState(0);
   const [countdown, setCountdown] = useState(3);
   const [isPaused, setIsPaused] = useState(false);
   const hasStartedRecordingRef = useRef(false);
+  const autoStartRequestedRef = useRef(false);
   const timeRef = useRef(0);
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [waveTick, setWaveTick] = useState(0);
@@ -4905,6 +7446,18 @@ function Scene_Recording({ question, onComplete }) {
 
   const transcriptRef = useRef("");
   const interimRef = useRef("");
+
+  const isFormalOnboarding = isFormalOnboardingQuestion(question);
+  const isFirstStory = isFirstStoryQuestion(question);
+  const isOnboardingQuestion = isFormalOnboarding || isFirstStory;
+
+  const sectionLabel = isFirstStory
+    ? "最初の物語"
+    : isFormalOnboarding
+      ? question.onboarding_group === "voice_intro"
+        ? "声の入口"
+        : "人生の輪郭"
+      : question.chapter_description || question.chapter || question.chapter_label;
 
   const isIOSLikeBrowser = () => {
     const ua = navigator.userAgent || "";
@@ -5168,6 +7721,12 @@ const start = async () => {
   }
 };
 
+useEffect(() => {
+  if (!autoStart || autoStartRequestedRef.current) return;
+
+  autoStartRequestedRef.current = true;
+  start();
+}, [autoStart]);
 
 
 const startActualRecording = async (preparedStream = null) => {
@@ -5492,16 +8051,59 @@ const stop = () => {
 };
 
 return (
-<div className="h-full flex flex-col fade-enter text-center pt-2">
-  <div className="flex-1 flex flex-col justify-center">
-    <div className="glass-card p-6 text-center space-y-6">
-      <p className="text-white/50 text-sm tracking-widest">
-        今日の問い
+<div className="h-full flex flex-col text-center pt-2 overflow-y-auto">
+  <header className="mb-6 text-left">
+    <h1 className="text-white/70 text-sm tracking-widest mb-5">
+      {withHonorific(userName)}の物語
+    </h1>
+
+    <div className="space-y-2">
+      <p className="text-white/60 text-sm tracking-widest">
+        {sectionLabel}
       </p>
 
+      {!isOnboardingQuestion && (
+        <>
+          <div className="w-full h-[2px] bg-white/10 rounded-full">
+            <div
+              className="h-full bg-white/40"
+              style={{
+                width: `${((storyProgress.currentIndex + 1) / Math.max(storyProgress.total, 1)) * 100}%`
+              }}
+            />
+          </div>
+        </>
+      )}
+
+      {isFormalOnboarding && question.progress_label && (
+        <p className="text-white/55 text-sm tracking-widest mt-2">
+          {question.progress_label}
+        </p>
+      )}
+    </div>
+  </header>
+
+  <div className="flex-1 flex flex-col justify-center">
+    <div className="glass-card p-6 text-center space-y-6">
       <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
         {question.content}
       </p>
+
+      {(question.prompt_hint || question.reassurance_text) && (
+        <div className="pt-1 space-y-2">
+          {question.prompt_hint && (
+            <p className="text-white/55 text-sm leading-loose">
+              {question.prompt_hint}
+            </p>
+          )}
+
+          {question.reassurance_text && (
+            <p className="text-white/38 text-xs leading-loose">
+              {question.reassurance_text}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   </div>
 
@@ -5559,35 +8161,32 @@ return (
 <div className="py-5 px-4">
   <QuietRecordingCircle seconds={time} isPaused={isPaused} />
 
-  <div className="mt-5 flex items-center justify-center gap-3">
-    <span
-      className={`w-2.5 h-2.5 rounded-full ${
-        isPaused ? "bg-white/22" : "bg-[#B85F3A]/85"
-      }`}
-      aria-hidden="true"
-    />
-
-<p className="text-white/26 text-[0.78rem] tracking-[0.18em]">
-  {Math.floor(time / 60)}:{String(time % 60).padStart(2, "0")}
-</p>
-  </div>
+  <p className="mt-5 text-white/42 text-[0.82rem] tracking-[0.18em]">
+    {Math.floor(time / 60)}:{String(time % 60).padStart(2, "0")}
+  </p>
 </div>
 
-          <div className="flex items-center justify-center gap-8">
+          <div className="flex items-center justify-center gap-10">
           <button
             type="button"
             onClick={isPaused ? resumeRecording : pauseRecording}
-            className="w-20 h-20 rounded-full border border-white/12 bg-white/[0.07] text-white/72 shadow-lg text-sm"
-            >
-            {isPaused ? "再開" : "一時停止"}
+            className="w-20 h-20 rounded-full border border-white/16 bg-white/[0.09] text-white/88 shadow-lg flex items-center justify-center"
+            aria-label={isPaused ? "録音を再開" : "録音を一時停止"}
+          >
+            {isPaused ? (
+              <Play size={29} strokeWidth={1.5} fill="currentColor" aria-hidden="true" />
+            ) : (
+              <Pause size={29} strokeWidth={1.5} fill="currentColor" aria-hidden="true" />
+            )}
           </button>
 
 <button
   type="button"
   onClick={stop}
-  className="w-20 h-20 rounded-full bg-white text-slate-900 shadow-lg text-sm"
+  className="w-16 h-16 rounded-full border border-white/12 bg-white/[0.035] text-white/55 shadow-lg flex items-center justify-center"
+  aria-label="録音を終了"
 >
-  終了
+  <Square size={21} strokeWidth={1.5} fill="currentColor" aria-hidden="true" />
 </button>
           </div>
 
@@ -5616,6 +8215,8 @@ function Scene3_5_VoiceCheck({
 }) {
   const [isEditingTranscript, setIsEditingTranscript] = useState(false);
   const [draftTranscript, setDraftTranscript] = useState("");
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const audioPreviewRef = useRef(null);
 
   const isShortAnswer = isRecordingTooShort(data.duration);
   const hasAlreadyAddedMore = (data.addMoreCount || 0) > 0;
@@ -5649,6 +8250,35 @@ function Scene3_5_VoiceCheck({
   const isProcessing = data.transcriptionStatus === "processing";
   const isPolishing = data.polishStatus === "processing";
   const canUseStyles = !isProcessing && !isPolishing && !!displayText;
+
+  const toggleAudioPreview = async () => {
+    const audio = audioPreviewRef.current;
+    if (!audio) return;
+
+    if (!audio.paused) {
+      audio.pause();
+      setIsAudioPlaying(false);
+      return;
+    }
+
+    try {
+      await audio.play();
+      setIsAudioPlaying(true);
+    } catch (error) {
+      console.warn("audio preview play failed", error);
+      setIsAudioPlaying(false);
+    }
+  };
+
+  useEffect(() => {
+    const audio = audioPreviewRef.current;
+
+    return () => {
+      if (audio) {
+        audio.pause();
+      }
+    };
+  }, []);
 
   const startTranscriptEdit = () => {
     setDraftTranscript(displayText);
@@ -5693,17 +8323,6 @@ return (
     </div>
 
       <div className="flex-1 overflow-y-auto pb-6">
-        <div className="glass-card p-5 mb-6">
-
-          {data.audioUrl ? (
-            <audio controls src={data.audioUrl} className="w-full" />
-          ) : (
-            <p className="text-white/40 text-sm">
-              音声プレビューを作成できませんでした
-            </p>
-          )}
-        </div>
-
         {hasTranscriptionError && (
           <div className="glass-card p-5 mb-6">
             <p className="text-white/75 text-sm leading-loose mb-3">
@@ -5725,6 +8344,16 @@ return (
         )}
 
         <div className="glass-card p-5 mb-6">
+
+        {/* 音声確認は文字起こしの補助操作として、控えめに表示する。 */}
+        {data.audioUrl && (
+          <audio
+            ref={audioPreviewRef}
+            src={data.audioUrl}
+            className="hidden"
+            onEnded={() => setIsAudioPlaying(false)}
+          />
+        )}
 
         <div className="flex gap-2 mb-5">
           <button
@@ -5780,7 +8409,26 @@ return (
     {displayText}
   </p>
 
-  <div className="mt-3 flex justify-end">
+  <div className={`mt-3 flex items-center ${
+    data.audioUrl ? "justify-between" : "justify-end"
+  }`}>
+    {data.audioUrl && (
+      <button
+        type="button"
+        onClick={toggleAudioPreview}
+        className="w-8 h-8 flex items-center justify-center rounded-full opacity-70"
+        aria-label={isAudioPlaying ? "録音の再生を止める" : "録音を再生する"}
+        title={isAudioPlaying ? "停止" : "録音を再生"}
+      >
+        <span
+          className="text-white/32 text-xs"
+          aria-hidden="true"
+        >
+          {isAudioPlaying ? "Ⅱ" : "▶"}
+        </span>
+      </button>
+    )}
+
     <button
       type="button"
       onClick={startTranscriptEdit}
@@ -5839,18 +8487,6 @@ return (
         )}
 
         </div>
-
-        {showAddMoreSuggestion && (
-          <div className="glass-card p-5 mb-6">
-            <p className="text-white/70 text-sm leading-loose mb-3">
-              もう少し話し足すこともできます。
-            </p>
-
-            <p className="text-white/48 text-sm leading-loose">
-              このまま進んでも大丈夫です。
-            </p>
-          </div>
-        )}
 
         {hasReachedAddMoreLimit && !data.editRecordingMode && (
           <div className="glass-card p-5 mb-6">
@@ -6058,49 +8694,11 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
   );
 }
 
-function Scene5_Meaning({ onNext }) {
-  const tags = [
-    "少し懐かしい時間",
-    "誰かを思い出す時間",
-    "自分を振り返る時間",
-    "言葉にできなかった時間"
-  ];
-
-  return (
-    <div className="h-full flex flex-col fade-enter">
-      <div className="flex-1 flex flex-col justify-center text-center">
-        <p className="text-white/80 text-[1.1rem] text-narrative mb-10">
-          この語りは、あなたにとって<br />どんな時間でしたか？
-        </p>
-
-        <div className="flex flex-col gap-4 px-4">
-          {tags.map(t => (
-            <button
-              key={t}
-              onClick={() => onNext(t)}
-              className="btn-quiet py-4 rounded-xl"
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <button
-        onClick={() => onNext("スキップ")}
-        className="mb-6 text-white/40 text-sm underline underline-offset-4"
-      >
-        スキップして保存
-      </button>
-    </div>
-  );
-}
-
 function Scene_BetaSurveyPrompt({ survey, onOpenSurvey, onContinue }) {
   const sequenceOrder = Number(survey?.sequenceOrder || 0);
 
   const message =
-    sequenceOrder === 1
+    sequenceOrder === 5
       ? {
           main: (
             <>
@@ -6111,7 +8709,7 @@ function Scene_BetaSurveyPrompt({ survey, onOpenSurvey, onContinue }) {
           ),
           time: "所要時間30秒〜1分"
         }
-      : sequenceOrder === 7
+      : sequenceOrder === 11
         ? {
             main: (
               <>
@@ -6195,7 +8793,7 @@ function BookPageAddedVisual() {
   );
 }
 
-function Scene6_Completion({ onTalkMore, onOpenStoryPages, onEndToday }) {
+function Scene6_Completion({ onTalkMore, onHome, onEndToday }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter text-center">
       <p className="text-white/90 text-[1.05rem] mb-2">
@@ -6209,14 +8807,14 @@ function Scene6_Completion({ onTalkMore, onOpenStoryPages, onEndToday }) {
           onClick={onTalkMore}
           className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
         >
-          もう1ページ進める
+          次の問いに進む
         </button>
 
         <button
-          onClick={onOpenStoryPages}
+          onClick={onHome}
           className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
         >
-          これまでの語りを見る
+          ホームへ
         </button>
 
         <button
@@ -6267,7 +8865,12 @@ function Scene_TokenCompletion({ onLogin }) {
   );
 }
 
-function Scene_EndToday({ notificationPref, onOpenStoryPages }) {
+function Scene_EndToday({
+  notificationPref,
+  hasSavedAnswer,
+  onOpenStoryPages,
+  onResume
+}) {
   const nextDeliveryText = getNextDeliveryText(notificationPref);
 
   return (
@@ -6278,17 +8881,27 @@ function Scene_EndToday({ notificationPref, onOpenStoryPages }) {
         </p>
 
         <p className="text-white/65 text-[0.98rem] leading-loose">
-          今日の語りは、<br />
-          ちゃんと残っています。
+          {hasSavedAnswer ? (
+            <>
+              今日の語りは、<br />
+              ちゃんと残っています。
+            </>
+          ) : (
+            <>
+              今の問いは、そのまま残っています。<br />
+              答えたり、飛ばしたことにはなりません。
+            </>
+          )}
         </p>
 
         <p className="text-white/55 text-[0.95rem] leading-loose">
-          {nextDeliveryText}
+          {hasSavedAnswer
+            ? nextDeliveryText
+            : "次に開いたとき、同じ問いから再開できます。"}
         </p>
 
         <p className="text-white/45 text-[0.92rem] leading-loose">
-          以前届いたメッセージから開いても、<br />
-          続きから再開できます。
+          この画面は、そのまま閉じて大丈夫です。
         </p>
       </div>
 
@@ -6300,9 +8913,14 @@ function Scene_EndToday({ notificationPref, onOpenStoryPages }) {
           これまでの語りを見る
         </button>
 
-        <p className="text-white/35 text-xs leading-loose">
-          この画面は、そのまま閉じて大丈夫です。
-        </p>
+        {!hasSavedAnswer && (
+          <button
+            onClick={onResume}
+            className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
+          >
+            問いに戻る
+          </button>
+        )}
       </div>
     </div>
   );
@@ -6696,7 +9314,15 @@ handles.map(handle => (
 }
 
 
-function Scene_StoryPages({ user, foundation, questionSet = [], onTalkMore, onEditRecord, onBack }) {
+function Scene_StoryPages({
+  user,
+  foundation,
+  questionSet = [],
+  onOpenLifeOutline,
+  onTalkMore,
+  onEditRecord,
+  onBack
+}) {
 
   const getStoryBody = (answer) => {
     const selectedStyle = answer?.selected_style || "";
@@ -6759,7 +9385,11 @@ function Scene_StoryPages({ user, foundation, questionSet = [], onTalkMore, onEd
   const buildChapterSections = (answerRows) => {
     const sections = [];
 
-    for (const question of questionSet || []) {
+    const storyQuestions = (questionSet || []).filter(
+      question => question?.include_in_story_list !== false
+    );
+
+    for (const question of storyQuestions) {
       const chapterTitle =
         question.chapter_label ||
         question.chapter_description ||
@@ -6775,6 +9405,12 @@ function Scene_StoryPages({ user, foundation, questionSet = [], onTalkMore, onEd
     }
 
     for (const answer of answerRows || []) {
+      const question = getQuestionForAnswer(answer);
+
+      if (question?.include_in_story_list === false) {
+        continue;
+      }
+
       const chapterTitle = getChapterTitleForAnswer(answer);
       let section = sections.find(s => s.chapterTitle === chapterTitle);
 
@@ -6794,6 +9430,7 @@ function Scene_StoryPages({ user, foundation, questionSet = [], onTalkMore, onEd
 
   const [answers, setAnswers] = useState([]);
   const [mediaByAnswerId, setMediaByAnswerId] = useState({});
+  const [hasLifeOutline, setHasLifeOutline] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deletingPhotoPath, setDeletingPhotoPath] = useState(null);
   const [uploadingPhotoAnswerId, setUploadingPhotoAnswerId] = useState(null);
@@ -6866,6 +9503,24 @@ const loadAnswers = async (options = {}) => {
 
       const answerRows = data || [];
       setAnswers(answerRows);
+
+      if (foundation?.project?.id) {
+        const { data: introductionRow, error: introductionError } =
+          await supabaseClient
+            .from("project_introductions")
+            .select("id")
+            .eq("book_project_id", foundation.project.id)
+            .eq("introduction_type", "life_outline")
+            .maybeSingle();
+
+        if (introductionError) {
+          console.warn("life outline presence load error", introductionError);
+        }
+
+        setHasLifeOutline(!!introductionRow?.id);
+      } else {
+        setHasLifeOutline(false);
+      }
 
       const answerIds = answerRows.map(a => a.id);
 
@@ -7871,6 +10526,29 @@ return (
   </p>
 </div>
 
+{hasLifeOutline && onOpenLifeOutline && (
+  <button
+    type="button"
+    onClick={onOpenLifeOutline}
+    className="glass-card mb-3 px-5 py-4 flex items-center justify-between text-left"
+  >
+    <div>
+      <p className="text-white/35 text-[0.68rem] tracking-[0.18em] mb-1">
+        人生の輪郭
+      </p>
+      <p className="text-white/78 text-[0.95rem] text-narrative">
+        私の歩み
+      </p>
+    </div>
+
+    <ChevronRight
+      size={18}
+      className="text-white/30"
+      strokeWidth={1.7}
+    />
+  </button>
+)}
+
 {chapterSections.length > 0 && (
   <div className="mb-3">
     <div className="flex gap-2 overflow-x-auto pb-1">
@@ -8056,47 +10734,14 @@ function Scene_NotificationSetup({ user, onComplete }) {
     }
   ];
 
-  const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
-
-  const [selectedPreset, setSelectedPreset] = useState(null);
-  const [customMode, setCustomMode] = useState(false);
-  const [weekday, setWeekday] = useState(0);
-  const [hour, setHour] = useState(20);
-  const [minute, setMinute] = useState(0);
+  const [selectedPreset, setSelectedPreset] = useState(presets[0]);
   const [loading, setLoading] = useState(false);
-  const [deliveryMode, setDeliveryMode] = useState("email");
-  const [phoneNumber, setPhoneNumber] = useState("");
-
-  const hourOptions = [];
-
-  for (let h = 5; h <= 23; h++) {
-    hourOptions.push(h);
-  }
-
-  const minuteOptions = [0, 15, 30, 45];
 
   async function savePreference() {
+    if (!selectedPreset) return;
+
     try {
       setLoading(true);
-
-      let finalWeekday;
-      let finalHour;
-      let finalMinute;
-
-      if (customMode) {
-        finalWeekday = weekday;
-        finalHour = hour;
-        finalMinute = minute;
-      } else {
-        if (!selectedPreset) {
-          alert("時間を選択してください");
-          return;
-        }
-
-        finalWeekday = selectedPreset.weekday;
-        finalHour = selectedPreset.hour;
-        finalMinute = selectedPreset.minute || 0;
-      }
 
       const {
         data: { session },
@@ -8111,30 +10756,19 @@ function Scene_NotificationSetup({ user, onComplete }) {
 
       const activeUserId = session.user.id;
 
-      if (
-        (deliveryMode === "sms" || deliveryMode === "both") &&
-        !phoneNumber.trim()
-      ) {
-        alert("SMSで受け取る場合は、電話番号を入力してください");
-        return;
-      }
-
       const { error } = await supabaseClient
         .from("notification_preferences")
         .upsert({
           user_id: activeUserId,
-          email_enabled: deliveryMode === "email" || deliveryMode === "both",
-          sms_enabled: deliveryMode === "sms" || deliveryMode === "both",
-          phone_number:
-            deliveryMode === "sms" || deliveryMode === "both"
-              ? phoneNumber.trim()
-              : null,
+          email_enabled: true,
+          sms_enabled: false,
+          phone_number: null,
           line_enabled: false,
-          weekday: finalWeekday,
-          hour: finalHour,
-          minute: finalMinute,
+          weekday: selectedPreset.weekday,
+          hour: selectedPreset.hour,
+          minute: selectedPreset.minute,
           timezone: "Asia/Tokyo",
-          delivery_channel: deliveryMode,
+          delivery_channel: "email",
           is_active: true
         }, {
           onConflict: "user_id"
@@ -8144,187 +10778,85 @@ function Scene_NotificationSetup({ user, onComplete }) {
         throw error;
       }
 
-      onComplete();
+      await onComplete();
     } catch (e) {
-      console.error(e);
-      alert("設定の保存に失敗しました");
+      console.error("notification setting save error", e);
+      alert("通知時間を保存できませんでした。");
     } finally {
       setLoading(false);
     }
   }
 
-  const DeliveryModeSelector = () => (
-    <div className="mb-10">
-      <p className="text-white/50 text-sm mb-5">
-        問いの届き方
-      </p>
-
-      <div className="space-y-3">
-        {[
-          { key: "email", label: "メールで受け取る" },
-          { key: "sms", label: "SMSで受け取る" },
-          { key: "both", label: "メールとSMSの両方で受け取る" }
-        ].map(option => (
-          <button
-            key={option.key}
-            type="button"
-            onClick={() => setDeliveryMode(option.key)}
-            className={`w-full py-4 rounded-xl transition-all border ${
-              deliveryMode === option.key
-                ? "bg-white/12 border-white/25 text-white"
-                : "border-white/10 text-white/45"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-
-      {(deliveryMode === "sms" || deliveryMode === "both") && (
-        <div className="mt-5">
-          <p className="text-white/40 text-xs tracking-widest mb-2">
-            SMSを受け取る電話番号
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8">
+      <div className="flex-1 flex flex-col justify-center">
+        <div className="text-center mb-10">
+          <p className="text-white/90 text-[1.1rem] text-narrative mb-4">
+            毎週、問いをお届けします
           </p>
 
-          <input
-            type="tel"
-            value={phoneNumber}
-            onChange={e => setPhoneNumber(e.target.value)}
-            className="quiet-input"
-            placeholder="09012345678"
-          />
-
-          <p className="mt-3 text-white/35 text-xs leading-loose">
-            SMSで問いの通知を受け取ることに同意します。<br />
-            通信料がかかる場合があります。
+          <p className="text-white/48 text-sm leading-loose">
+            受け取りやすい時間を選んでください
           </p>
         </div>
-      )}
-    </div>
-  );
 
-  return (
-    <div className="h-full flex flex-col justify-center fade-enter text-center px-4">
-      <p className="text-[1.1rem] text-white/90 text-narrative mb-3">
-        問いが届く時間を選んでください
-      </p>
+        <div className="space-y-3">
+          {presets.map(preset => {
+            const selected = selectedPreset?.label === preset.label;
 
-      <p className="ui-small mb-14">
-        ご自身のペースに合わせて選んでください。
-      </p>
-
-      {!customMode ? (
-        <>
-          <div className="space-y-4 mb-10">
-            {presets.map(preset => (
+            return (
               <button
                 key={preset.label}
                 type="button"
                 onClick={() => setSelectedPreset(preset)}
-                className={`
-                  w-full py-4 rounded-xl transition-all
-                  ${selectedPreset?.label === preset.label
-                    ? "bg-white/12 border border-white/25 text-white"
-                    : "btn-quiet"}
-                `}
+                aria-pressed={selected}
+                className={`glass-card w-full p-5 flex items-center gap-4 text-left transition-all ${
+                  selected ? "border-white/30 bg-white/[0.12]" : ""
+                }`}
               >
-                ○ {preset.label}
-              </button>
-            ))}
-          </div>
-
-          <DeliveryModeSelector />
-
-          <button
-            onClick={savePreference}
-            disabled={!selectedPreset || loading}
-            className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white mb-12"
-          >
-            {loading ? "保存中..." : "この時間に受け取る"}
-          </button>
-
-          <div>
-            <p className="ui-small mb-6">
-              ご自身のペースに合わせて<br />
-              選ぶこともできます。
-            </p>
-
-            <button
-              onClick={() => setCustomMode(true)}
-              className="text-white/45 text-sm underline underline-offset-4"
-            >
-              曜日と時間を設定する
-            </button>
-          </div>
-        </>
-      ) : (
-        <div className="fade-enter">
-          <div className="mb-12">
-            <p className="text-white/50 text-sm mb-6">
-              問いが届く曜日
-            </p>
-
-            <div className="flex justify-center gap-2 flex-wrap">
-              {weekdays.map((day, index) => (
-                <button
-                  key={day}
-                  onClick={() => setWeekday(index)}
-                  className={`
-                    w-12 h-12 rounded-full transition-all
-                    ${weekday === index
-                      ? "bg-white text-slate-900"
-                      : "btn-quiet"}
-                  `}
+                <div
+                  className={`w-7 h-7 rounded-full border flex items-center justify-center shrink-0 ${
+                    selected
+                      ? "border-white bg-white"
+                      : "border-white/20"
+                  }`}
                 >
-                  {day}
-                </button>
-              ))}
-            </div>
-          </div>
+                  {selected && (
+                    <div className="w-2.5 h-2.5 rounded-full bg-slate-800" />
+                  )}
+                </div>
 
-          <div className="mb-14">
-            <p className="text-white/50 text-sm mb-6">
-              問いが届く時間
-            </p>
-
-            <div className="flex justify-center gap-3">
-              <select
-                value={hour}
-                onChange={e => setHour(Number(e.target.value))}
-                className="max-w-[110px] rounded-xl bg-white px-4 py-3 text-center text-slate-900 outline-none"
-              >
-                {hourOptions.map(h => (
-                  <option key={h} value={h}>
-                    {String(h).padStart(2, "0")}時
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={minute}
-                onChange={e => setMinute(Number(e.target.value))}
-                className="max-w-[110px] rounded-xl bg-white px-4 py-3 text-center text-slate-900 outline-none"
-              >
-                {minuteOptions.map(m => (
-                  <option key={m} value={m}>
-                    {String(m).padStart(2, "0")}分
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <DeliveryModeSelector />
-
-          <button
-            onClick={savePreference}
-            disabled={loading}
-            className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
-          >
-            {loading ? "保存中..." : "この時間に受け取る"}
-          </button>
+                <p className={`text-[1rem] ${
+                  selected ? "text-white/88" : "text-white/55"
+                }`}>
+                  {preset.label}
+                </p>
+              </button>
+            );
+          })}
         </div>
-      )}
+
+        <div className="mt-8 text-center">
+          <p className="text-white/40 text-sm leading-loose">
+            登録したメールアドレスに届きます
+          </p>
+
+          <p className="mt-3 text-white/28 text-xs leading-loose">
+            曜日や時間は、あとから変更できます
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={savePreference}
+        disabled={loading}
+        className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${
+          loading ? "opacity-40" : ""
+        }`}
+      >
+        {loading ? "保存中..." : "この時間で受け取る"}
+      </button>
     </div>
   );
 }
