@@ -39,6 +39,11 @@ function buildInvitationUrl() {
   return url.toString();
 }
 
+function getInvitationFromAddress() {
+  return Deno.env.get("SUPPORTER_INVITE_FROM") ||
+    "tateyoko BOOK <hello@tateito-yokoito.jp>";
+}
+
 serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -183,7 +188,7 @@ serve(async (request) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        from: "tateyoko BOOK <hello@koeapp.jp>",
+        from: getInvitationFromAddress(),
         to: invite.invitee_email,
         subject: `tateyoko BOOK｜${withHonorific(inviterName)}からお手伝いのお願いが届きました`,
         text:
