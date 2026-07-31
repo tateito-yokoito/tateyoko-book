@@ -1,55 +1,7 @@
 begin;
 
--- 同じ物語・同じメールアドレスへの保留中招待を重複させない。
-create unique index if not exists project_invites_pending_supporter_unique
-  on public.project_invites (
-    book_project_id,
-    lower(btrim(invitee_email))
-  )
-  where status = 'pending' and role = 'supporter';
-
-
--- ログイン中ユーザー宛ての保留中招待だけを返す。
-create or replace function public.list_pending_supporter_invites()
-returns table (
-  invite_id uuid,
-  book_project_id uuid,
-  project_title text,
-  subject_name text,
-  inviter_name text,
-  created_at timestamptz
-)
-language sql
-stable
-security definer
-set search_path = public, auth
-as $$
-  select
-    pi.id,
-    pi.book_project_id,
-    bp.title,
-    coalesce(p.preferred_name, p.display_name, 'ご家族'),
-    coalesce(ip.preferred_name, ip.display_name, 'ご家族'),
-    pi.created_at
-  from public.project_invites pi
-  join public.book_projects bp
-    on bp.id = pi.book_project_id
-  left join public.persons p
-    on p.id = bp.subject_person_id
-  left join public.profiles ip
-    on ip.id = pi.inviter_user_id
-  where auth.uid() is not null
-    and nullif(btrim(coalesce(auth.jwt() ->> 'email', '')), '') is not null
-    and lower(btrim(pi.invitee_email)) =
-      lower(btrim(auth.jwt() ->> 'email'))
-    and pi.role = 'supporter'
-    and pi.status = 'pending'
-    and bp.status = 'active'
-  order by pi.created_at asc;
-$$;
-
-
--- 招待の承認・辞退を、メール照合を含む一つのトランザクションで処理する。
+-- RETURNS TABLE の book_project_id と列名が衝突しないよう、
+-- サポーターの upsert は制約名を明示する。
 create or replace function public.respond_to_supporter_invite(
   input_invite_id uuid,
   input_accept boolean
@@ -240,10 +192,10 @@ begin
 end;
 $$;
 
-revoke all on function public.list_pending_supporter_invites() from public;
-revoke all on function public.respond_to_supporter_invite(uuid, boolean) from public;
+revoke all on function public.respond_to_supporter_invite(uuid, boolean)
+  from public;
 
-grant execute on function public.list_pending_supporter_invites() to authenticated;
-grant execute on function public.respond_to_supporter_invite(uuid, boolean) to authenticated;
+grant execute on function public.respond_to_supporter_invite(uuid, boolean)
+  to authenticated;
 
 commit;
