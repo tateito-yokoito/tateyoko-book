@@ -458,9 +458,84 @@ function isFormalOnboardingQuestion(question) {
 function isFirstStoryQuestion(question) {
   return (
     question?.question_role === "first_story" ||
+    question?.question_role === "first_weekly_question" ||
     question?.onboarding_group === "first_story" ||
     question?.flow_phase === "first_story" ||
     question?.completes_onboarding === true
+  );
+}
+
+function getFirstMainStoryIndex(questionSet) {
+  const explicitIndex = (questionSet || []).findIndex(question =>
+    question?.question_role === "first_weekly_question" ||
+    question?.question_role === "first_story"
+  );
+
+  if (explicitIndex >= 0) return explicitIndex;
+
+  return (questionSet || []).findIndex(
+    question => question?.include_in_story_list !== false
+  );
+}
+
+function formatNextNotificationLabel(preference, now = new Date()) {
+  if (!preference || preference.is_active === false) return "";
+
+  const weekday = Number(preference.weekday);
+  const hour = Number(preference.hour);
+  const minute = Number(preference.minute || 0);
+
+  if (
+    !Number.isInteger(weekday) || weekday < 0 || weekday > 6 ||
+    !Number.isInteger(hour) || hour < 0 || hour > 23 ||
+    !Number.isInteger(minute) || minute < 0 || minute > 59
+  ) {
+    return "";
+  }
+
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    hourCycle: "h23"
+  });
+
+  const parts = Object.fromEntries(
+    formatter
+      .formatToParts(now)
+      .filter(part => part.type !== "literal")
+      .map(part => [part.type, Number(part.value)])
+  );
+
+  const currentDate = new Date(Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day
+  ));
+  const currentWeekday = currentDate.getUTCDay();
+  const currentMinutes = parts.hour * 60 + parts.minute;
+  const targetMinutes = hour * 60 + minute;
+  let daysUntil = (weekday - currentWeekday + 7) % 7;
+
+  if (daysUntil === 0 && targetMinutes <= currentMinutes) {
+    daysUntil = 7;
+  }
+
+  const targetDate = new Date(Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day + daysUntil
+  ));
+  const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
+  const targetHour = String(hour).padStart(2, "0");
+  const targetMinute = String(minute).padStart(2, "0");
+
+  return (
+    `次の問い　${targetDate.getUTCMonth() + 1}/${targetDate.getUTCDate()}` +
+    `（${weekdayLabels[targetDate.getUTCDay()]}）${targetHour}:${targetMinute}ごろ（メール）`
   );
 }
 
@@ -1128,6 +1203,13 @@ function getInitialSceneForProject({
   project,
   notificationPref
 }) {
+  if (
+    project?.onboarding_status === "life_outline_completed" ||
+    project?.onboarding_status === "first_story"
+  ) {
+    return "life_outline_complete";
+  }
+
   if (project?.onboarding_status === "introduction_review") {
     return "life_outline_summary";
   }
@@ -1173,7 +1255,7 @@ async function ensureLifeOutlineReviewPhase({
 
   /*
    * まとめ画面の導入前に「人生の輪郭」を終えた利用者は、
-   * projectがin_progressのまま最初の物語を指している。
+   * projectがin_progressのまま最初の毎週の問いを指している。
    * その場合だけ一度まとめ画面へ戻し、既存回答から生成する。
    */
   if (
@@ -1943,7 +2025,8 @@ function App() {
     targetSequenceOrder: null,
     editBaseText: "",
     existingAudioPaths: [],
-    returnQuestionIndex: null
+    returnQuestionIndex: null,
+    editReturnScene: null
   });
 
   useEffect(() => {
@@ -2171,7 +2254,8 @@ if (orderedPendingInvites.length > 0 && !deliveryToken) {
     targetSequenceOrder: null,
     editBaseText: "",
     existingAudioPaths: [],
-    returnQuestionIndex: null
+    returnQuestionIndex: null,
+    editReturnScene: null
   });
 };
 
@@ -2536,7 +2620,12 @@ const getAnswerTextForEditRecording = (answer) => (
   ""
 );
 
-const startEditRecording = (answer, mode, existingAudioPaths = []) => {
+const startEditRecording = (
+  answer,
+  mode,
+  existingAudioPaths = [],
+  editReturnScene = "story_pages"
+) => {
   if (!answer?.id) return false;
 
   if (mode === "replace") {
@@ -2606,7 +2695,8 @@ const startEditRecording = (answer, mode, existingAudioPaths = []) => {
     targetSequenceOrder: answer.sequence_order,
     editBaseText: target.baseText,
     existingAudioPaths: target.existingAudioPaths,
-    returnQuestionIndex: progress.currentIndex
+    returnQuestionIndex: progress.currentIndex,
+    editReturnScene
   });
 
   setScene(3);
@@ -2951,7 +3041,7 @@ const loadLifeOutlineAudioItems = async (sourceAnswerIds, additions = []) => {
   return withUrls.filter(item => item.url);
 };
 
-const normalizeLifeOutlineIntroduction = async (row, sourceAnswerIds = []) => {
+const normalizeLifeOutlineIntroduction = async (row, sourceAnswers = []) => {
   const meta = row?.meta_json || {};
   const additions = Array.isArray(meta.additional_audio)
     ? meta.additional_audio
@@ -2967,7 +3057,7 @@ const normalizeLifeOutlineIntroduction = async (row, sourceAnswerIds = []) => {
     meta.selected_style === "essay" ? "essay" : "readable";
 
   const audioItems = await loadLifeOutlineAudioItems(
-    sourceAnswerIds,
+    sourceAnswers.map(answer => answer.id),
     additions
   );
 
@@ -2984,7 +3074,8 @@ const normalizeLifeOutlineIntroduction = async (row, sourceAnswerIds = []) => {
       ).trim(),
     additions,
     additionCount: additions.length,
-    audioItems
+    audioItems,
+    sourceAnswers
   };
 };
 
@@ -3135,7 +3226,7 @@ const generateLifeOutlineIntroduction = async ({
 
     const normalized = await normalizeLifeOutlineIntroduction(
       savedIntroduction,
-      sourceAnswers.map(answer => answer.id)
+      sourceAnswers
     );
 
     setLifeOutlineIntroduction(normalized);
@@ -3185,7 +3276,7 @@ const loadLifeOutlineIntroduction = async ({ generateIfMissing = true } = {}) =>
 
     const normalized = await normalizeLifeOutlineIntroduction(
       data,
-      sourceAnswers.map(answer => answer.id)
+      sourceAnswers
     );
 
     setLifeOutlineIntroduction(normalized);
@@ -3386,23 +3477,50 @@ const handleLifeOutlineAddRecording = async (txt, dur, _url, blob) => {
   }
 };
 
-const continueFromLifeOutline = async () => {
+const startLifeOutlineAnswerRetake = async (answer) => {
+  if (!answer?.id) return;
+
+  try {
+    const { data, error } = await supabaseClient
+      .from("media_assets")
+      .select("storage_path")
+      .eq("answer_id", answer.id)
+      .eq("asset_type", "audio")
+      .order("created_at", { ascending: true });
+
+    if (error) throw error;
+
+    startEditRecording(
+      answer,
+      "replace",
+      (data || []).map(item => item.storage_path).filter(Boolean),
+      "life_outline_summary"
+    );
+  } catch (error) {
+    console.error("life outline answer retake start error", error);
+    alert("語り直しを始められませんでした。");
+  }
+};
+
+const completeLifeOutlineReview = async () => {
   if (!foundation?.project?.id) return;
 
   setIsInitializing(true);
 
   try {
-    const firstStoryIndex = questionsDB.findIndex(isFirstStoryQuestion);
-    const nextIndex =
-      firstStoryIndex >= 0 ? firstStoryIndex : progress.currentIndex;
+    const firstStoryIndex = getFirstMainStoryIndex(questionsDB);
+    const nextIndex = firstStoryIndex >= 0
+      ? firstStoryIndex
+      : progress.currentIndex;
     const firstStoryQuestion = questionsDB[nextIndex] || null;
 
     const { data: updatedProject, error } = await supabaseClient
       .from("book_projects")
       .update({
-        onboarding_status: "first_story",
+        onboarding_status: "life_outline_completed",
         current_onboarding_user_question_id:
-          firstStoryQuestion?.user_question_id || null
+          firstStoryQuestion?.user_question_id || null,
+        life_outline_completed_at: new Date().toISOString()
       })
       .eq("id", foundation.project.id)
       .select()
@@ -3421,10 +3539,68 @@ const continueFromLifeOutline = async () => {
     }));
 
     resetVoiceData();
-    setScene(1);
+    setScene("life_outline_complete");
   } catch (error) {
-    console.error("life outline continue error", error);
-    alert("最初の物語へ進めませんでした。");
+    console.error("life outline completion error", error);
+    alert("人生の輪郭を完了できませんでした。");
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
+const leaveLifeOutlineMilestone = async ({ continueNow }) => {
+  if (!foundation?.project?.id) return;
+
+  setIsInitializing(true);
+
+  try {
+    const firstStoryIndex = getFirstMainStoryIndex(questionsDB);
+    const nextIndex = firstStoryIndex >= 0
+      ? firstStoryIndex
+      : progress.currentIndex;
+    const firstStoryQuestion = questionsDB[nextIndex] || null;
+
+    const { data: updatedProject, error } = await supabaseClient
+      .from("book_projects")
+      .update({
+        onboarding_status: "completed",
+        current_onboarding_user_question_id: null,
+        onboarding_completed_at: new Date().toISOString(),
+        life_outline_completed_at:
+          foundation.project.life_outline_completed_at ||
+          new Date().toISOString()
+      })
+      .eq("id", foundation.project.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    setFoundation(prev => ({
+      ...prev,
+      project: updatedProject
+    }));
+
+    setProgress(prev => ({
+      ...prev,
+      currentIndex: nextIndex
+    }));
+
+    if (continueNow && firstStoryQuestion) {
+      await supabaseClient
+        .from("profiles")
+        .update({ current_sequence: firstStoryQuestion.sequence_order })
+        .eq("id", user.id);
+
+      resetVoiceData();
+      setScene(1);
+      return;
+    }
+
+    setScene("home");
+  } catch (error) {
+    console.error("life outline milestone leave error", error);
+    alert("次の画面へ進めませんでした。");
   } finally {
     setIsInitializing(false);
   }
@@ -3674,10 +3850,6 @@ if (mediaStoragePaths.length > 0) {
 ) {
   const nextQuestion = questionsDB[progress.currentIndex + 1] || null;
 
-  const isCompletingOnboarding =
-    currentQ?.completes_onboarding === true ||
-    isFirstStoryQuestion(currentQ);
-
   const isCompletingLifeOutline =
     currentQ?.onboarding_group === "life_outline" &&
     (
@@ -3685,13 +3857,7 @@ if (mediaStoragePaths.length > 0) {
       nextQuestion?.onboarding_group !== "life_outline"
     );
 
-  const onboardingUpdate = isCompletingOnboarding
-    ? {
-        onboarding_status: "completed",
-        current_onboarding_user_question_id: null,
-        onboarding_completed_at: new Date().toISOString()
-      }
-    : isCompletingLifeOutline
+  const onboardingUpdate = isCompletingLifeOutline
       ? {
           onboarding_status: "introduction_review",
           current_onboarding_user_question_id:
@@ -3729,6 +3895,8 @@ if (mediaStoragePaths.length > 0) {
           Number.isInteger(voiceData.returnQuestionIndex)
             ? voiceData.returnQuestionIndex
             : progress.currentIndex;
+        const editReturnScene =
+          voiceData.editReturnScene || "story_pages";
 
         resetVoiceData();
 
@@ -3740,7 +3908,24 @@ if (mediaStoragePaths.length > 0) {
           )
         }));
 
-        setScene("story_pages");
+        if (editReturnScene === "life_outline_summary") {
+          setScene("life_outline_summary");
+          setLifeOutlineStatus("generating");
+
+          try {
+            await generateLifeOutlineIntroduction({
+              existingIntroduction: lifeOutlineIntroduction,
+              editorialBase:
+                lifeOutlineIntroduction?.is_user_edited
+                  ? lifeOutlineIntroduction.body_text
+                  : ""
+            });
+          } catch (_error) {
+            // まとめ画面側で再試行できるため、語り直しの保存は完了扱いにする。
+          }
+        } else {
+          setScene(editReturnScene);
+        }
         return;
       }
 
@@ -3758,10 +3943,6 @@ if (mediaStoragePaths.length > 0) {
       }));
 
 localStorage.setItem("koe_last_visit", Date.now().toString());
-
-const completedFormalOnboarding =
-  currentQ?.completes_onboarding === true ||
-  isFirstStoryQuestion(currentQ);
 
 const completedLifeOutline =
   currentQ?.onboarding_group === "life_outline" &&
@@ -3786,9 +3967,7 @@ if (betaSurvey && user?.id) {
       ...betaSurvey,
       sequenceOrder: currentSeq,
       seenKey,
-      returnScene: completedFormalOnboarding
-        ? "onboarding_complete"
-        : 6
+      returnScene: 6
     });
     setScene("beta_survey_prompt");
     return;
@@ -3820,8 +3999,7 @@ if (
 }
 
 const isContinuingFormalOnboarding =
-  isFormalOnboardingQuestion(currentQ) &&
-  !completedFormalOnboarding;
+  isFormalOnboardingQuestion(currentQ);
 
 /*
  * 「人生の輪郭」の途中では完了画面を挟まず、
@@ -3830,15 +4008,6 @@ const isContinuingFormalOnboarding =
 if (isContinuingFormalOnboarding) {
   resetVoiceData();
   setScene(1);
-  return;
-}
-
-/*
- * 最初の物語まで保存した時点で正式な初回体験が完了。
- */
-if (completedFormalOnboarding) {
-  resetVoiceData();
-  setScene("onboarding_complete");
   return;
 }
 
@@ -4196,12 +4365,6 @@ let sceneAfterInvite = nextScene;
   />
 )}
 
-{scene === "onboarding_complete" && (
-  <Scene_OnboardingComplete
-    onHome={() => setScene("home")}
-  />
-)}
-
 {scene === "life_outline_summary" && (
   <Scene_LifeOutlineSummary
     data={lifeOutlineIntroduction}
@@ -4247,15 +4410,24 @@ let sceneAfterInvite = nextScene;
 
       setScene("life_outline_recording");
     }}
-    onNext={() => {
+    onRetakeAnswer={startLifeOutlineAnswerRetake}
+    onFinish={() => {
       if (lifeOutlineReturnScene === "story_pages") {
         setLifeOutlineReturnScene(null);
         setScene("story_pages");
         return;
       }
 
-      continueFromLifeOutline();
+      completeLifeOutlineReview();
     }}
+  />
+)}
+
+{scene === "life_outline_complete" && (
+  <Scene_LifeOutlineComplete
+    notificationLabel={formatNextNotificationLabel(notificationPref)}
+    onContinue={() => leaveLifeOutlineMilestone({ continueNow: true })}
+    onEndToday={() => leaveLifeOutlineMilestone({ continueNow: false })}
   />
 )}
 
@@ -5359,9 +5531,64 @@ function Scene_BetaIntro({ onNext }) {
   );
 }
 
+function OnboardingProgress({ current = "entry", outlineComplete = false }) {
+  const steps = [
+    { key: "registered", label: "登録" },
+    { key: "entry", label: "入口" },
+    { key: "outline", label: "輪郭" },
+    { key: "weekly", label: "毎週" }
+  ];
+  const activeIndex = steps.findIndex(step => step.key === current);
+
+  return (
+    <div className="w-full mb-7" aria-label="初回体験の進み具合">
+      <div className="flex items-start">
+        {steps.map((step, index) => {
+          const completed = outlineComplete
+            ? index <= 2
+            : index < activeIndex;
+          const active = !outlineComplete && index === activeIndex;
+
+          return (
+            <React.Fragment key={step.key}>
+              <div className="w-12 shrink-0 flex flex-col items-center gap-2">
+                <div
+                  className={`w-6 h-6 rounded-full border flex items-center justify-center text-[0.62rem] ${
+                    completed
+                      ? "bg-white/75 border-white/75 text-slate-900"
+                      : active
+                        ? "bg-amber-200/15 border-amber-100/65 text-amber-50"
+                        : "border-white/12 text-white/22"
+                  }`}
+                >
+                  {completed ? "✓" : active ? "●" : ""}
+                </div>
+                <span className={`text-[0.62rem] tracking-wider ${
+                  completed || active ? "text-white/55" : "text-white/22"
+                }`}>
+                  {step.label}
+                </span>
+              </div>
+
+              {index < steps.length - 1 && (
+                <div className={`mt-3 h-px flex-1 ${
+                  outlineComplete
+                    ? index < 2 ? "bg-white/45" : "bg-white/10"
+                    : index < activeIndex ? "bg-white/45" : "bg-white/10"
+                }`} />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Scene_OnboardingOverview({ onNext }) {
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8">
+      <OnboardingProgress current="entry" />
       <div className="flex-1 flex flex-col justify-center">
         <div className="text-center mb-10">
           <p className="text-white/38 text-xs tracking-[0.22em] mb-4">
@@ -5382,11 +5609,12 @@ function Scene_OnboardingOverview({ onNext }) {
 
             <div className="text-left">
               <p className="text-white/82 text-[1rem] text-narrative mb-1">
-                最初の一度
+                初回の語り
               </p>
 
               <p className="text-white/48 text-sm leading-loose">
-                人生の輪郭と、最初の物語を残します
+                目安 10〜15分<br />
+                3つの問いから、人生の輪郭をまとめます
               </p>
             </div>
           </div>
@@ -5422,7 +5650,7 @@ function Scene_OnboardingOverview({ onNext }) {
 
             <div className="text-left">
               <p className="text-white/82 text-[1rem] text-narrative mb-1">
-                一冊の本へ
+                一冊の物語へ
               </p>
 
               <p className="text-white/48 text-sm leading-loose">
@@ -5433,7 +5661,7 @@ function Scene_OnboardingOverview({ onNext }) {
         </div>
 
         <p className="mt-9 text-center text-white/42 text-sm leading-loose">
-          全部で23の問いがあります
+          毎週の問いは全部で23問あります
         </p>
       </div>
 
@@ -5442,7 +5670,7 @@ function Scene_OnboardingOverview({ onNext }) {
         onClick={onNext}
         className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
       >
-        進め方を見る
+        物語の入口へ
       </button>
     </div>
   );
@@ -5452,6 +5680,7 @@ function Scene_OnboardingOverview({ onNext }) {
 function Scene_OnboardingPace({ onNext }) {
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8">
+      <OnboardingProgress current="entry" />
       <div className="flex-1 flex flex-col justify-center">
         <div className="text-center mb-9">
           <p className="text-white/90 text-[1.1rem] text-narrative">
@@ -5535,37 +5764,6 @@ function Scene_OnboardingPace({ onNext }) {
   );
 }
 
-function Scene_OnboardingComplete({ onHome }) {
-  return (
-    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
-      <p className="text-white/90 text-[1.1rem] leading-loose text-narrative">
-        最初の物語が残りました
-      </p>
-
-      <BookPageAddedVisual />
-
-      <div className="space-y-5 mb-12">
-        <p className="text-white/62 text-[0.96rem] leading-loose">
-          これから、毎週問いが届きます。
-        </p>
-
-        <p className="text-white/45 text-sm leading-loose">
-          ご自身のペースで、<br />
-          少しずつ物語を重ねていきましょう。
-        </p>
-      </div>
-
-      <button
-        type="button"
-        onClick={onHome}
-        className="btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white"
-      >
-        ホームへ
-      </button>
-    </div>
-  );
-}
-
 function Scene_LifeOutlineSummary({
   data,
   status,
@@ -5575,7 +5773,8 @@ function Scene_LifeOutlineSummary({
   onSelectStyle,
   onUpdateText,
   onAddMore,
-  onNext
+  onRetakeAnswer,
+  onFinish
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftText, setDraftText] = useState("");
@@ -5662,6 +5861,8 @@ function Scene_LifeOutlineSummary({
 
   return (
     <div className="h-full flex flex-col fade-enter px-4 pt-3 pb-8 overflow-hidden">
+      {!isRevisit && <OnboardingProgress current="outline" />}
+
       <div className="text-center mb-6">
         <p className="text-white/38 text-xs tracking-[0.22em] mb-3">
           人生の輪郭
@@ -5797,6 +5998,37 @@ function Scene_LifeOutlineSummary({
               )}
             </div>
 
+            {(data.sourceAnswers || []).length > 0 && (
+              <div className="glass-card px-5 py-2 mb-5">
+                <p className="text-white/34 text-xs tracking-widest py-3">
+                  3つの語りを見直す
+                </p>
+
+                {(data.sourceAnswers || []).map((answer, index) => (
+                  <div
+                    key={answer.id}
+                    className={`py-4 ${
+                      index > 0 ? "border-t border-white/[0.07]" : ""
+                    }`}
+                  >
+                    <p className="text-white/62 text-sm leading-loose mb-3">
+                      {answer.questionText}
+                    </p>
+
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => onRetakeAnswer?.(answer)}
+                        className="text-white/38 text-xs underline underline-offset-4"
+                      >
+                        語り直す
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {(data.audioItems || []).length > 0 && (
               <div className="glass-card px-5 py-2 mb-5">
                 {(data.audioItems || []).map((item, index) => (
@@ -5879,13 +6111,142 @@ function Scene_LifeOutlineSummary({
 
           <button
             type="button"
-            onClick={onNext}
+            onClick={onFinish}
             className="btn-quiet w-full py-4 rounded-full text-white"
           >
-            {isRevisit ? "これまでの語りへ戻る" : "最初の物語へ"}
+            {isRevisit
+              ? "これまでの語りへ戻る"
+              : "この内容で人生の輪郭を残す"}
           </button>
+
+          {!isRevisit && (
+            <p className="text-center text-white/28 text-xs">
+              あとからいつでも見直せます
+            </p>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function MemoryJourneyVisual() {
+  return (
+    <div
+      className="relative h-44 w-full max-w-[330px] mx-auto my-7 overflow-hidden rounded-[2rem] border border-white/[0.07] bg-white/[0.025]"
+      aria-hidden="true"
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_72%,rgba(251,191,36,0.10),transparent_48%)]" />
+
+      <div className="absolute left-8 top-8 w-20 h-24 -rotate-6 rounded border border-amber-100/15 bg-amber-50/[0.035] shadow-xl">
+        <div className="absolute left-3 right-3 top-3 h-12 rounded-sm bg-white/[0.04]">
+          <div className="absolute left-4 right-4 bottom-2 h-5 border-l border-t border-r border-white/12" />
+          <div className="absolute left-7 bottom-2 h-8 w-px bg-white/12" />
+        </div>
+        <div className="absolute left-3 right-6 bottom-5 h-px bg-white/10" />
+        <div className="absolute left-3 right-4 bottom-3 h-px bg-white/[0.07]" />
+      </div>
+
+      <div className="absolute right-8 top-10 w-20 h-20 rotate-6 rounded-xl border border-white/10 bg-white/[0.035]">
+        <div className="absolute left-5 top-4 w-10 h-10 rounded-full border border-white/10" />
+        <div className="absolute left-9 top-3 w-px h-12 bg-white/10 rotate-45" />
+      </div>
+
+      <svg
+        viewBox="0 0 330 176"
+        className="absolute inset-0 w-full h-full"
+      >
+        <path
+          d="M32 135 C82 118, 103 153, 150 126 S229 90, 299 120"
+          fill="none"
+          stroke="rgba(253,230,138,0.42)"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          strokeDasharray="2 5"
+        />
+        <circle cx="151" cy="126" r="3" fill="rgba(253,230,138,0.75)" />
+        <circle cx="299" cy="120" r="2.5" fill="rgba(253,230,138,0.55)" />
+      </svg>
+
+      <div className="absolute left-1/2 -translate-x-1/2 bottom-6 flex items-end">
+        <div className="w-14 h-11 rounded-l-lg border border-r-0 border-white/15 bg-white/[0.045] -skew-y-6" />
+        <div className="w-14 h-11 rounded-r-lg border border-l-0 border-white/15 bg-white/[0.045] skew-y-6" />
+        <div className="absolute left-1/2 top-1 bottom-0 w-px bg-amber-100/25" />
+      </div>
+    </div>
+  );
+}
+
+function Scene_LifeOutlineComplete({
+  notificationLabel,
+  onContinue,
+  onEndToday
+}) {
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 pt-5 pb-8 overflow-hidden">
+      <OnboardingProgress current="weekly" outlineComplete />
+
+      <div className="flex-1 overflow-y-auto pb-6 text-center">
+        <p className="text-white/38 text-xs tracking-[0.22em] mb-4">
+          人生の輪郭がまとまりました
+        </p>
+
+        <h1 className="text-white/92 text-[1.2rem] leading-loose text-narrative">
+          物語づくりの、<br />
+          最初の節目を迎えました。
+        </h1>
+
+        <p className="mt-5 text-white/52 text-sm leading-loose">
+          ここまで語ってくださった時間が、<br />
+          あなたの物語の土台になりました。
+        </p>
+
+        <MemoryJourneyVisual />
+
+        <div className="glass-card px-5 py-6 text-left">
+          <p className="text-center text-white/82 text-[1rem] leading-loose text-narrative mb-5">
+            ここから、記憶をひらく時間が始まります
+          </p>
+
+          <p className="text-white/58 text-sm leading-[2]">
+            まずは、幼い頃の風景や、<br />
+            ご家族と過ごした時間から。
+          </p>
+
+          <p className="mt-4 text-white/50 text-sm leading-[2]">
+            毎週届く問いとともに、<br />
+            少しずつ記憶の扉を開いていきます。
+          </p>
+
+          <p className="mt-4 text-white/36 text-xs leading-[2]">
+            問いと問いの間に、昔の写真を眺めたり、<br />
+            思い出の品に触れてみるのもよいかもしれません。
+          </p>
+        </div>
+      </div>
+
+      <div className="pt-5 border-t border-white/10 space-y-3">
+        <button
+          type="button"
+          onClick={onContinue}
+          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+        >
+          最初の問いをひらく
+        </button>
+
+        <button
+          type="button"
+          onClick={onEndToday}
+          className="w-full rounded-2xl border border-white/10 px-4 py-3.5 text-white/58"
+        >
+          <span className="block text-sm">今日はここまで</span>
+          {notificationLabel && (
+            <span className="block mt-1.5 text-[0.72rem] text-white/32">
+              {notificationLabel}
+            </span>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -6046,6 +6407,8 @@ function Scene_SharingSetup({ initialScope = "family", onComplete }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
       <div className="w-full max-w-[340px] space-y-9">
+        <OnboardingProgress current="entry" />
+
         <div className="space-y-5 text-narrative">
           <p className="text-[1.1rem] text-white/90 leading-loose">
             この物語を、<br />どなたと残していきますか？
@@ -6214,6 +6577,8 @@ function Scene_SupporterInvite({
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
       <div className="w-full max-w-[320px] space-y-9">
+        {isInitialSetup && <OnboardingProgress current="entry" />}
+
         <div className="space-y-5 text-narrative">
           <p className="text-[1.1rem] text-white/90 leading-loose">
             物語づくりを、<br />ご家族に手伝ってもらいますか？
@@ -7348,19 +7713,31 @@ function Scene1_MyPage({
 }) {
   const isFormalOnboarding = isFormalOnboardingQuestion(question);
   const isFirstStory = isFirstStoryQuestion(question);
-  const isOnboardingQuestion = isFormalOnboarding || isFirstStory;
+  const isOnboardingQuestion = isFormalOnboarding;
 
-  const sectionLabel = isFirstStory
-    ? "最初の物語"
-    : isFormalOnboarding
-      ? question.onboarding_group === "voice_intro"
-        ? "声の入口"
-        : "人生の輪郭"
-      : question.chapter_description || question.chapter || question.chapter_label;
+  const sectionLabel = isFormalOnboarding
+    ? question.onboarding_group === "voice_intro"
+      ? "物語の入口"
+      : "人生の輪郭"
+    : question.chapter_description || question.chapter || question.chapter_label;
 
   return (
     <div className="h-full flex flex-col fade-enter">
       <header className="mb-8 pt-2">
+        {isFormalOnboarding && (
+          <OnboardingProgress
+            current={
+              question.onboarding_group === "voice_intro"
+                ? "entry"
+                : "outline"
+            }
+          />
+        )}
+
+        {isFirstStory && !isFormalOnboarding && (
+          <OnboardingProgress current="weekly" />
+        )}
+
         <h1 className="text-white/70 text-sm tracking-widest mb-6">
           {withHonorific(userName)}の物語
         </h1>
@@ -7703,15 +8080,13 @@ function Scene_Recording({
 
   const isFormalOnboarding = isFormalOnboardingQuestion(question);
   const isFirstStory = isFirstStoryQuestion(question);
-  const isOnboardingQuestion = isFormalOnboarding || isFirstStory;
+  const isOnboardingQuestion = isFormalOnboarding;
 
-  const sectionLabel = isFirstStory
-    ? "最初の物語"
-    : isFormalOnboarding
-      ? question.onboarding_group === "voice_intro"
-        ? "声の入口"
-        : "人生の輪郭"
-      : question.chapter_description || question.chapter || question.chapter_label;
+  const sectionLabel = isFormalOnboarding
+    ? question.onboarding_group === "voice_intro"
+      ? "物語の入口"
+      : "人生の輪郭"
+    : question.chapter_description || question.chapter || question.chapter_label;
 
   const isIOSLikeBrowser = () => {
     const ua = navigator.userAgent || "";
@@ -8307,6 +8682,20 @@ const stop = () => {
 return (
 <div className="h-full flex flex-col text-center pt-2 overflow-y-auto">
   <header className="mb-6 text-left">
+    {isFormalOnboarding && (
+      <OnboardingProgress
+        current={
+          question.onboarding_group === "voice_intro"
+            ? "entry"
+            : "outline"
+        }
+      />
+    )}
+
+    {isFirstStory && !isFormalOnboarding && (
+      <OnboardingProgress current="weekly" />
+    )}
+
     <h1 className="text-white/70 text-sm tracking-widest mb-5">
       {withHonorific(userName)}の物語
     </h1>
@@ -10967,33 +11356,23 @@ return (
   );
 }
 function Scene_NotificationSetup({ user, onComplete }) {
-  const presets = [
-    {
-      label: "日曜の夜 20:00",
-      weekday: 0,
-      hour: 20,
-      minute: 0
-    },
-    {
-      label: "月曜の朝 7:00",
-      weekday: 1,
-      hour: 7,
-      minute: 0
-    },
-    {
-      label: "金曜の夜 21:00",
-      weekday: 5,
-      hour: 21,
-      minute: 0
-    }
+  const weekdayOptions = [
+    "日曜日",
+    "月曜日",
+    "火曜日",
+    "水曜日",
+    "木曜日",
+    "金曜日",
+    "土曜日"
   ];
-
-  const [selectedPreset, setSelectedPreset] = useState(presets[0]);
+  const hourOptions = Array.from({ length: 24 }, (_, index) => index);
+  const minuteOptions = [0, 15, 30, 45];
+  const [weekday, setWeekday] = useState(0);
+  const [hour, setHour] = useState(20);
+  const [minute, setMinute] = useState(0);
   const [loading, setLoading] = useState(false);
 
   async function savePreference() {
-    if (!selectedPreset) return;
-
     try {
       setLoading(true);
 
@@ -11018,9 +11397,9 @@ function Scene_NotificationSetup({ user, onComplete }) {
           sms_enabled: false,
           phone_number: null,
           line_enabled: false,
-          weekday: selectedPreset.weekday,
-          hour: selectedPreset.hour,
-          minute: selectedPreset.minute,
+          weekday,
+          hour,
+          minute,
           timezone: "Asia/Tokyo",
           delivery_channel: "email",
           is_active: true
@@ -11043,6 +11422,8 @@ function Scene_NotificationSetup({ user, onComplete }) {
 
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8">
+      <OnboardingProgress current="entry" />
+
       <div className="flex-1 flex flex-col justify-center">
         <div className="text-center mb-10">
           <p className="text-white/90 text-[1.1rem] text-narrative mb-4">
@@ -11054,40 +11435,55 @@ function Scene_NotificationSetup({ user, onComplete }) {
           </p>
         </div>
 
-        <div className="space-y-3">
-          {presets.map(preset => {
-            const selected = selectedPreset?.label === preset.label;
+        <div className="space-y-4">
+          <label className="glass-card px-5 py-4 flex items-center justify-between gap-5">
+            <span className="text-white/45 text-sm">曜日</span>
+            <select
+              value={weekday}
+              onChange={event => setWeekday(Number(event.target.value))}
+              className="bg-transparent text-white/88 text-[1rem] text-right outline-none min-w-[130px]"
+            >
+              {weekdayOptions.map((label, index) => (
+                <option key={label} value={index} className="bg-slate-900">
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
 
-            return (
-              <button
-                key={preset.label}
-                type="button"
-                onClick={() => setSelectedPreset(preset)}
-                aria-pressed={selected}
-                className={`glass-card w-full p-5 flex items-center gap-4 text-left transition-all ${
-                  selected ? "border-white/30 bg-white/[0.12]" : ""
-                }`}
+          <div className="glass-card px-5 py-4 flex items-center justify-between gap-5">
+            <span className="text-white/45 text-sm">時間</span>
+
+            <div className="flex items-center gap-2 text-white/88 text-[1rem]">
+              <select
+                value={hour}
+                onChange={event => setHour(Number(event.target.value))}
+                aria-label="時"
+                className="bg-transparent text-right outline-none"
               >
-                <div
-                  className={`w-7 h-7 rounded-full border flex items-center justify-center shrink-0 ${
-                    selected
-                      ? "border-white bg-white"
-                      : "border-white/20"
-                  }`}
-                >
-                  {selected && (
-                    <div className="w-2.5 h-2.5 rounded-full bg-slate-800" />
-                  )}
-                </div>
+                {hourOptions.map(value => (
+                  <option key={value} value={value} className="bg-slate-900">
+                    {String(value).padStart(2, "0")}
+                  </option>
+                ))}
+              </select>
 
-                <p className={`text-[1rem] ${
-                  selected ? "text-white/88" : "text-white/55"
-                }`}>
-                  {preset.label}
-                </p>
-              </button>
-            );
-          })}
+              <span className="text-white/32">:</span>
+
+              <select
+                value={minute}
+                onChange={event => setMinute(Number(event.target.value))}
+                aria-label="分"
+                className="bg-transparent text-right outline-none"
+              >
+                {minuteOptions.map(value => (
+                  <option key={value} value={value} className="bg-slate-900">
+                    {String(value).padStart(2, "0")}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         <div className="mt-8 text-center">
@@ -11096,7 +11492,7 @@ function Scene_NotificationSetup({ user, onComplete }) {
           </p>
 
           <p className="mt-3 text-white/28 text-xs leading-loose">
-            曜日や時間は、あとから変更できます
+            あとからいつでも変更できます
           </p>
         </div>
       </div>
