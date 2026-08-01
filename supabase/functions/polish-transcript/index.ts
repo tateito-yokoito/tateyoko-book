@@ -49,6 +49,7 @@ serve(async (req) => {
     const answerId = String(body.answerId || "");
     const transcriptRaw = String(body.transcriptRaw || "").trim();
     const questionText = String(body.questionText || "").trim();
+    const mode = body.mode === "life_outline" ? "life_outline" : "answer";
 
     if (!answerId) {
       throw new Error("answerId is required");
@@ -66,7 +67,35 @@ serve(async (req) => {
       });
     }
 
-const prompt = `
+const prompt = mode === "life_outline"
+  ? `
+あなたは、家族の語りを本に残す日本語編集者です。
+
+複数の語りを、後から読む人にその人の人生全体が伝わる人物紹介文へまとめてください。
+
+【最重要ルール】
+- 本人が話していない年代、地名、出来事、感情を足さない
+- 現在から話し始めていても、生まれ育ちから現在へ自然に並べ替える
+- 問いや見出しを本文に残さない
+- 同じ内容を繰り返さない
+- 各文章は1200字以内を目安にする
+- 必ずJSONのみで返す
+
+【編集の指示】
+${questionText}
+
+【複数の語り】
+${transcriptRaw}
+
+【返却形式】
+{
+  "transcript_readable": "本人の声を残した読みやすい人物紹介文",
+  "transcript_essay": "事実を変えずに読み物として整えた人物紹介文",
+  "ai_mirror_text": "語りを受け止める短い一文",
+  "extracted_snippet": "印象的な短い一文"
+}
+`.trim()
+  : `
 あなたは、家族の語りを本に残す編集者です。
 
 以下の「問い」と「文字起こし」をもとに、3種類の文章に整えてください。
@@ -123,8 +152,12 @@ ${transcriptRaw}
 }
 `.trim();
 
+    const requestController = new AbortController();
+    const timeoutId = setTimeout(() => requestController.abort(), 25000);
+
     const openaiRes = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
+      signal: requestController.signal,
       headers: {
         Authorization: `Bearer ${openaiApiKey}`,
         "Content-Type": "application/json"
@@ -141,9 +174,10 @@ ${transcriptRaw}
             content: prompt
           }
         ],
-        temperature: 0.4
+        temperature: 0.4,
+        max_output_tokens: mode === "life_outline" ? 2200 : 3000
       })
-    });
+    }).finally(() => clearTimeout(timeoutId));
 
     if (!openaiRes.ok) {
       const errorText = await openaiRes.text();
@@ -163,8 +197,9 @@ ${transcriptRaw}
       parsed = {};
     }
 
-    const transcriptClean =
-      String(parsed.transcript_clean || transcriptRaw).trim();
+    const transcriptClean = mode === "life_outline"
+      ? ""
+      : String(parsed.transcript_clean || transcriptRaw).trim();
 
     const transcriptReadable =
       String(parsed.transcript_readable || transcriptClean || transcriptRaw).trim();

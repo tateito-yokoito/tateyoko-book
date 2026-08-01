@@ -89,12 +89,18 @@ async function transcribeAudioOnServer({ answerId, audioPaths, fallbackTranscrip
   return data;
 }
 
-async function polishTranscriptOnServer({ answerId, transcriptRaw, questionText }) {
+async function polishTranscriptOnServer({
+  answerId,
+  transcriptRaw,
+  questionText,
+  mode = "answer"
+}) {
   const { data, error } = await supabaseClient.functions.invoke("polish-transcript", {
     body: {
       answerId,
       transcriptRaw,
-      questionText
+      questionText,
+      mode
     }
   });
 
@@ -1219,16 +1225,18 @@ function getInitialSceneForProject({
     project.onboarding_status !== "completed";
 
   /*
-   * 初回体験中で、まだ通知設定もない場合
+   * 通知設定とは切り離し、初回説明をまだ見ていない場合だけ
    * 全体説明から始める。
    */
-  if (onboardingIncomplete && !notificationPref) {
+  if (
+    onboardingIncomplete &&
+    !project?.onboarding_overview_completed_at
+  ) {
     return "onboarding_overview";
   }
 
   /*
-   * 全体説明と通知設定を終えた後、
-   * 初回の語りへ進む。
+   * 初回説明を終えた後は、通知設定を挟まず人生の輪郭へ進む。
    */
   if (onboardingIncomplete) {
     return 0;
@@ -2127,14 +2135,6 @@ let nextScene = getInitialSceneForProject({
 });
 
 const currentQuestion = questionSet[currentIndex] || null;
-
-if (
-  activeFoundationData?.project?.onboarding_status === "in_progress" &&
-  currentQuestion?.onboarding_group === "life_outline" &&
-  !sharingPreferenceData?.initial_setup_completed_at
-) {
-  nextScene = "sharing_setup";
-}
 
 if (deliveryToken) {
   try {
@@ -3079,10 +3079,39 @@ const normalizeLifeOutlineIntroduction = async (row, sourceAnswers = []) => {
   };
 };
 
+const buildLifeOutlineRecoveryDraft = ({
+  sourceAnswers = [],
+  additions = [],
+  editorialBase = ""
+}) => {
+  const currentAnswer = sourceAnswers[0] || null;
+  const chronologicalAnswers = [
+    ...sourceAnswers.slice(1),
+    currentAnswer
+  ].filter(Boolean);
+
+  const answerParagraphs = chronologicalAnswers
+    .map(answer => String(answer?.selectedText || "").trim())
+    .filter(Boolean);
+
+  const additionParagraphs = additions
+    .map(item => String(item?.transcript_raw || "").trim())
+    .filter(Boolean);
+
+  const editedParagraph = String(editorialBase || "").trim();
+
+  return [
+    ...answerParagraphs,
+    ...additionParagraphs,
+    ...(editedParagraph ? [editedParagraph] : [])
+  ].join("\n\n");
+};
+
 const generateLifeOutlineIntroduction = async ({
   existingIntroduction = null,
   additionsOverride = null,
-  editorialBase = ""
+  editorialBase = "",
+  useFallbackOnly = false
 } = {}) => {
   if (!user?.id || !foundation?.project?.id) {
     throw new Error("「私の歩み」の保存先が見つかりません");
@@ -3091,8 +3120,12 @@ const generateLifeOutlineIntroduction = async ({
   setLifeOutlineStatus("generating");
   setLifeOutlineError("");
 
+  let recoveryAnswers = [];
+  let recoveryDraft = "";
+
   try {
     const sourceAnswers = await getLifeOutlineSourceAnswers();
+    recoveryAnswers = sourceAnswers;
 
     if (sourceAnswers.length === 0) {
       throw new Error("人生の輪郭の回答が見つかりません");
@@ -3118,6 +3151,12 @@ const generateLifeOutlineIntroduction = async ({
         ? currentMeta.additional_audio
         : []
     );
+
+    recoveryDraft = buildLifeOutlineRecoveryDraft({
+      sourceAnswers,
+      additions,
+      editorialBase
+    });
 
     const sourceSections = sourceAnswers
       .filter(answer => answer.selectedText)
@@ -3145,12 +3184,19 @@ const generateLifeOutlineIntroduction = async ({
     ].join("\n\n");
 
     const generationId = introduction?.id || crypto.randomUUID();
-    const generated = await polishTranscriptOnServer({
-      answerId: generationId,
-      transcriptRaw: sourceText,
-      questionText:
-        "複数の語りを重複なく一つにつなぎ、後から読む人に、その人の生まれ育ち、家族、学校生活、仕事や役割、暮らしの大きな変化、現在の生活が自然に伝わる人物紹介文「私の歩み」にまとめてください。語った順番が現在から始まっていても、文章は生まれ育ちから現在へ自然に並べ替えてください。本人が話していない年代や事実は推測せず、問いや見出しは本文に残さないでください。"
-    });
+    const generated = useFallbackOnly
+      ? {
+          transcript_clean: recoveryDraft,
+          transcript_readable: recoveryDraft,
+          transcript_essay: recoveryDraft
+        }
+      : await polishTranscriptOnServer({
+          answerId: generationId,
+          transcriptRaw: sourceText,
+          questionText:
+            "複数の語りを重複なく一つにつなぎ、後から読む人に、その人の生まれ育ち、家族、学校生活、仕事や役割、暮らしの大きな変化、現在の生活が自然に伝わる人物紹介文「私の歩み」にまとめてください。語った順番が現在から始まっていても、文章は生まれ育ちから現在へ自然に並べ替えてください。本人が話していない年代や事実は推測せず、問いや見出しは本文に残さないでください。",
+          mode: "life_outline"
+        });
 
     const readable = String(
       generated.transcript_readable ||
@@ -3189,7 +3235,8 @@ const generateLifeOutlineIntroduction = async ({
         title: "私の歩み",
         body_text: selectedBody,
         generation_status: "generated",
-        generation_version: "polish-transcript-v1",
+        generation_version:
+          useFallbackOnly ? "recovery-draft-v1" : "polish-transcript-v1",
         is_user_edited: false,
         generated_at: new Date().toISOString(),
         edited_at: null,
@@ -3234,11 +3281,22 @@ const generateLifeOutlineIntroduction = async ({
     return normalized;
   } catch (error) {
     console.error("life outline generation error", error);
+
+    if (recoveryAnswers.length > 0) {
+      setLifeOutlineIntroduction(prev => ({
+        ...(prev || {}),
+        transcriptReadable: recoveryDraft,
+        transcriptEssay: recoveryDraft,
+        selectedStyle: "readable",
+        selectedText: recoveryDraft,
+        sourceAnswers: recoveryAnswers,
+        recoveryDraft: true
+      }));
+    }
+
     setLifeOutlineStatus("error");
     setLifeOutlineError(
-      error instanceof Error
-        ? error.message
-        : "「私の歩み」をまとめられませんでした"
+      "録音が短い、音声が不鮮明、または通信が混み合っている可能性があります。"
     );
     throw error;
   }
@@ -3593,6 +3651,11 @@ const leaveLifeOutlineMilestone = async ({ continueNow }) => {
         .eq("id", user.id);
 
       resetVoiceData();
+
+      if (!notificationPref) {
+        setScene("notification_setup");
+        return;
+      }
 
       if (!sharingPreference?.initial_setup_completed_at) {
         setScene("sharing_setup");
@@ -4191,7 +4254,33 @@ let sceneAfterInvite = nextScene;
 
       {scene === "onboarding_pace" && (
         <Scene_OnboardingPace
-          onNext={() => setScene("notification_setup")}
+          onNext={async () => {
+            try {
+              setIsInitializing(true);
+
+              const { data: updatedProject, error } = await supabaseClient
+                .from("book_projects")
+                .update({
+                  onboarding_overview_completed_at: new Date().toISOString()
+                })
+                .eq("id", foundation?.project?.id)
+                .select()
+                .single();
+
+              if (error) throw error;
+
+              setFoundation(prev => ({
+                ...prev,
+                project: updatedProject
+              }));
+              setScene(0);
+            } catch (error) {
+              console.error("onboarding overview completion error", error);
+              alert("初回の準備を完了できませんでした。");
+            } finally {
+              setIsInitializing(false);
+            }
+          }}
         />
       )}
 
@@ -4349,8 +4438,10 @@ let sceneAfterInvite = nextScene;
           refreshedFoundationData?.project?.onboarding_status !== "completed"
         ) {
           setScene(0);
+        } else if (!sharingPreference?.initial_setup_completed_at) {
+          setScene("sharing_setup");
         } else {
-          setScene("home");
+          setScene(1);
         }
       } finally {
         setIsInitializing(false);
@@ -4372,6 +4463,16 @@ let sceneAfterInvite = nextScene;
           lifeOutlineIntroduction?.is_user_edited
             ? lifeOutlineIntroduction.body_text
             : ""
+      }).catch(() => {});
+    }}
+    onUseDraft={() => {
+      generateLifeOutlineIntroduction({
+        existingIntroduction: lifeOutlineIntroduction,
+        editorialBase:
+          lifeOutlineIntroduction?.is_user_edited
+            ? lifeOutlineIntroduction.body_text
+            : "",
+        useFallbackOnly: true
       }).catch(() => {});
     }}
     onSelectStyle={(style) => {
@@ -4420,6 +4521,7 @@ let sceneAfterInvite = nextScene;
 {scene === "life_outline_complete" && (
   <Scene_LifeOutlineComplete
     notificationLabel={formatNextNotificationLabel(notificationPref)}
+    needsNotificationSetup={!notificationPref}
     needsSharingSetup={!sharingPreference?.initial_setup_completed_at}
     onContinue={() => leaveLifeOutlineMilestone({ continueNow: true })}
     onEndToday={() => leaveLifeOutlineMilestone({ continueNow: false })}
@@ -5768,7 +5870,7 @@ function Scene_OnboardingPace({ onNext }) {
         onClick={onNext}
         className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
       >
-        問いが届く時間を決める
+        人生の輪郭を始める
       </button>
     </div>
   );
@@ -5780,6 +5882,7 @@ function Scene_LifeOutlineSummary({
   error,
   isRevisit = false,
   onRetry,
+  onUseDraft,
   onSelectStyle,
   onUpdateText,
   onAddMore,
@@ -5900,20 +6003,63 @@ function Scene_LifeOutlineSummary({
         {!isBusy && status === "error" && (
           <div className="glass-card p-6 text-center">
             <p className="text-white/72 text-sm leading-loose mb-3">
-              「私の歩み」をまとめられませんでした
+              うまくまとめられませんでした
             </p>
 
             <p className="text-white/42 text-xs leading-loose mb-6">
               {error || "通信を確認して、もう一度お試しください。"}
             </p>
 
-            <button
-              type="button"
-              onClick={onRetry}
-              className="btn-quiet bg-white/10 w-full py-3 rounded-full text-white text-sm"
-            >
-              もう一度まとめる
-            </button>
+            {(data?.sourceAnswers || []).length > 0 && (
+              <div className="mb-6 rounded-2xl border border-white/[0.07] px-4 text-left">
+                {(data.sourceAnswers || []).map((answer, index) => (
+                  <div
+                    key={answer.id}
+                    className={`py-4 ${
+                      index > 0 ? "border-t border-white/[0.07]" : ""
+                    }`}
+                  >
+                    <p className="text-white/55 text-xs leading-relaxed mb-3">
+                      {answer.questionText}
+                    </p>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-white/28 text-[0.68rem]">
+                        {String(answer.selectedText || "").trim().length > 20
+                          ? "語りがあります"
+                          : "短い、または不鮮明な可能性があります"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onRetakeAnswer?.(answer)}
+                        className="shrink-0 text-white/48 text-xs underline underline-offset-4"
+                      >
+                        語り直す
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {String(data?.transcriptReadable || "").trim() && (
+                <button
+                  type="button"
+                  onClick={onUseDraft}
+                  className="btn-quiet bg-white/10 w-full py-3 rounded-full text-white text-sm"
+                >
+                  今ある内容で仮の輪郭を作る
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={onRetry}
+                className="w-full py-3 text-white/42 text-sm underline underline-offset-4"
+              >
+                生成だけ、もう一度試す
+              </button>
+            </div>
           </div>
         )}
 
@@ -6189,6 +6335,7 @@ function MemoryJourneyVisual() {
 
 function Scene_LifeOutlineComplete({
   notificationLabel,
+  needsNotificationSetup = false,
   needsSharingSetup = false,
   onContinue,
   onEndToday
@@ -6243,7 +6390,9 @@ function Scene_LifeOutlineComplete({
           onClick={onContinue}
           className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
         >
-          {needsSharingSetup ? "このまま進む" : "最初の問いをひらく"}
+          {needsNotificationSetup || needsSharingSetup
+            ? "このまま進む"
+            : "最初の問いをひらく"}
         </button>
 
         <button
@@ -6255,6 +6404,11 @@ function Scene_LifeOutlineComplete({
           {notificationLabel && (
             <span className="block mt-1.5 text-[0.72rem] text-white/32">
               {notificationLabel}
+            </span>
+          )}
+          {!notificationLabel && (
+            <span className="block mt-1.5 text-[0.72rem] text-white/32">
+              次の問いの時間は、次回決められます
             </span>
           )}
         </button>
@@ -11444,7 +11598,7 @@ function Scene_NotificationSetup({ user, onComplete }) {
 
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8">
-      <OnboardingProgress current="entry" />
+      <OnboardingProgress current="weekly" outlineComplete />
 
       <div className="flex-1 flex flex-col justify-center">
         <div className="text-center mb-10">
