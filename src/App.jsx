@@ -1509,16 +1509,35 @@ async function respondToSupporterInvite(inviteId, accept) {
   return Array.isArray(data) ? data[0] : data;
 }
 
-async function loadSupporterBookData(bookProjectId) {
-  const [storiesResult, photosResult] = await Promise.all([
-    supabaseClient.rpc("get_supporter_book_stories", {
+async function loadSupporterBookData(supportedProject) {
+  const bookProjectId = supportedProject?.book_project_id;
+
+  if (!bookProjectId) {
+    throw new Error("お手伝いする物語が見つかりません");
+  }
+
+  const canReadStories =
+    supportedProject?.can_edit_book_text || supportedProject?.can_build_book;
+  const canReadPhotos =
+    supportedProject?.can_manage_photos || canReadStories;
+
+  const [questionsResult, storiesResult, photosResult] = await Promise.all([
+    supabaseClient.rpc("get_supporter_questions", {
       input_book_project_id: bookProjectId
     }),
-    supabaseClient.rpc("get_supporter_book_photos", {
-      input_book_project_id: bookProjectId
-    })
+    canReadStories
+      ? supabaseClient.rpc("get_supporter_book_stories", {
+          input_book_project_id: bookProjectId
+        })
+      : Promise.resolve({ data: [], error: null }),
+    canReadPhotos
+      ? supabaseClient.rpc("get_supporter_book_photos", {
+          input_book_project_id: bookProjectId
+        })
+      : Promise.resolve({ data: [], error: null })
   ]);
 
+  if (questionsResult.error) throw questionsResult.error;
   if (storiesResult.error) throw storiesResult.error;
   if (photosResult.error) throw photosResult.error;
 
@@ -1537,14 +1556,28 @@ async function loadSupporterBookData(bookProjectId) {
     created_at: row.created_at
   }));
 
-  const questionSet = (storiesResult.data || []).map(row => ({
+  const questionSet = (questionsResult.data || []).map(row => ({
+    user_question_id: row.user_question_id,
+    owner_user_id: row.owner_user_id,
+    subject_person_id: row.subject_person_id,
+    family_id: row.family_id,
     sequence_order: row.sequence_order,
     question_id: row.question_id,
     content: row.question_text || "",
     chapter: row.chapter_title || "その他",
     chapter_label: row.chapter_title || "その他",
     chapter_description: row.chapter_title || "その他",
-    include_in_story_list: true
+    status: row.status || "pending",
+    prompt_style: row.prompt_style || null,
+    prompt_hint: row.prompt_hint || "",
+    reassurance_text: row.reassurance_text || "",
+    followup_hint: row.followup_hint || "",
+    min_duration_seconds: row.min_duration_seconds || 25,
+    min_transcript_chars: row.min_transcript_chars || 80,
+    flow_type: row.flow_type || null,
+    onboarding_group: row.onboarding_group || null,
+    answer_id: row.answer_id || null,
+    include_in_story_list: row.flow_type === "story"
   }));
 
   const groupedMedia = {};
@@ -2348,9 +2381,7 @@ const openSupportedProject = async (supportedProject) => {
   try {
     setIsInitializing(true);
 
-    const bookData = await loadSupporterBookData(
-      supportedProject.book_project_id
-    );
+    const bookData = await loadSupporterBookData(supportedProject);
 
     setSupportContext({
       project: supportedProject,
@@ -2363,6 +2394,17 @@ const openSupportedProject = async (supportedProject) => {
   } finally {
     setIsInitializing(false);
   }
+};
+
+const refreshSupportedProject = async () => {
+  if (!supportContext?.project) return;
+
+  const bookData = await loadSupporterBookData(supportContext.project);
+
+  setSupportContext(prev => ({
+    ...prev,
+    ...bookData
+  }));
 };
 
 const handleSupporterInviteResponse = async (invite, accept) => {
@@ -4568,11 +4610,33 @@ let sceneAfterInvite = nextScene;
       {scene === "support_project_home" && supportContext && (
         <Scene_SupportProjectHome
           project={supportContext.project}
+          onOpenQuestions={() => setScene("support_recording_assist")}
+          onOpenStories={() => setScene("support_story_pages")}
           onOpenBookBuilder={() => setScene("support_book_builder")}
           onBack={() => {
             setSupportContext(null);
             setScene("home");
           }}
+        />
+      )}
+
+      {scene === "support_recording_assist" && supportContext && (
+        <Scene_SupportRecordingAssist
+          user={user}
+          project={supportContext.project}
+          questionSet={supportContext.questionSet}
+          onSaved={refreshSupportedProject}
+          onBack={() => setScene("support_project_home")}
+        />
+      )}
+
+      {scene === "support_story_pages" && supportContext && (
+        <Scene_SupportedStoryPages
+          project={supportContext.project}
+          questionSet={supportContext.questionSet}
+          storyRows={supportContext.storyRows}
+          mediaByAnswerId={supportContext.mediaByAnswerId}
+          onBack={() => setScene("support_project_home")}
         />
       )}
 
@@ -5328,11 +5392,11 @@ if (isNewMode) {
         <div className="w-full max-w-[320px] space-y-8 py-10 fade-enter">
           <div className="space-y-5 text-narrative">
             <p className="text-white/40 text-xs tracking-[0.18em]">
-              サポーターのお願い
+              お手伝いの依頼
             </p>
 
             <p className="text-[1.1rem] text-white/90 leading-loose">
-              お手伝いのお願いを開く
+              お手伝いの依頼を開く
             </p>
 
             <p className="ui-small leading-loose">
@@ -5541,7 +5605,7 @@ if (isNewMode) {
 
             <p className="ui-small">
               {authMode === "supporter"
-                ? "お手伝いのお願いのメールに記載された6桁コードを入力してください"
+                ? "お手伝いの依頼メールに記載された6桁コードを入力してください"
                 : "メールのボタンを押すか、記載された6桁コードを入力してください"}
             </p>
           </div>
@@ -5566,7 +5630,7 @@ if (isNewMode) {
             {loading
               ? "確認中..."
               : authMode === "supporter"
-                ? "お願いを確認する"
+                ? "依頼を確認する"
                 : authMode === "returning"
                   ? "続きを開く"
                   : "物語をはじめる"}
@@ -5653,8 +5717,13 @@ function OnboardingProgress({ current = "entry", outlineComplete = false }) {
   const activeIndex = steps.findIndex(step => step.key === current);
 
   return (
-    <div className="w-full mb-7" aria-label="初回体験の進み具合">
-      <div className="flex items-start">
+    <>
+      <div className="h-[54px] shrink-0" aria-hidden="true" />
+      <div
+        className="fixed top-0 left-1/2 z-40 w-full max-w-[600px] -translate-x-1/2 bg-[#0f172a]/95 px-6 pb-2 pt-[calc(env(safe-area-inset-top)+0.55rem)] backdrop-blur-md"
+        aria-label="初回体験の進み具合"
+      >
+      <div className="flex items-start opacity-75">
         {steps.map((step, index) => {
           const completed = outlineComplete
             ? index <= 2
@@ -5663,37 +5732,38 @@ function OnboardingProgress({ current = "entry", outlineComplete = false }) {
 
           return (
             <React.Fragment key={step.key}>
-              <div className="w-12 shrink-0 flex flex-col items-center gap-2">
+              <div className="w-10 shrink-0 flex flex-col items-center gap-1.5">
                 <div
-                  className={`w-6 h-6 rounded-full border flex items-center justify-center text-[0.62rem] ${
+                  className={`w-5 h-5 rounded-full border flex items-center justify-center text-[0.54rem] ${
                     completed
-                      ? "bg-white/75 border-white/75 text-slate-900"
+                      ? "bg-white/45 border-white/45 text-slate-900"
                       : active
-                        ? "bg-amber-200/15 border-amber-100/65 text-amber-50"
-                        : "border-white/12 text-white/22"
+                        ? "bg-amber-200/10 border-amber-100/45 text-amber-50"
+                        : "border-white/10 text-white/18"
                   }`}
                 >
                   {completed ? "✓" : active ? "●" : ""}
                 </div>
-                <span className={`text-[0.62rem] tracking-wider ${
-                  completed || active ? "text-white/55" : "text-white/22"
+                <span className={`text-[0.56rem] tracking-wider ${
+                  completed || active ? "text-white/45" : "text-white/18"
                 }`}>
                   {step.label}
                 </span>
               </div>
 
               {index < steps.length - 1 && (
-                <div className={`mt-3 h-px flex-1 ${
+                <div className={`mt-2.5 h-px flex-1 ${
                   outlineComplete
-                    ? index < 2 ? "bg-white/45" : "bg-white/10"
-                    : index < activeIndex ? "bg-white/45" : "bg-white/10"
+                    ? index < 2 ? "bg-white/25" : "bg-white/[0.07]"
+                    : index < activeIndex ? "bg-white/25" : "bg-white/[0.07]"
                 }`} />
               )}
             </React.Fragment>
           );
         })}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -6726,7 +6796,7 @@ function Scene_SupporterInvite({
       if (sendError || sendResult?.success === false) {
         console.error("supporter invite email send error", sendError || sendResult);
         alert(
-          "お願いは保存しましたが、メールを送信できませんでした。もう一度お試しください。"
+          "依頼は保存しましたが、メールを送信できませんでした。もう一度お試しください。"
         );
         return;
       }
@@ -6734,7 +6804,7 @@ function Scene_SupporterInvite({
       onComplete();
     } catch (e) {
       console.error("supporter invite save error", e);
-      alert("サポーター招待の保存に失敗しました。");
+      alert("お手伝いの依頼を保存できませんでした。");
     } finally {
       setLoading(false);
     }
@@ -6761,7 +6831,7 @@ function Scene_SupporterInvite({
         {confirmPrivateChange && (
           <div className="glass-card p-5 text-left space-y-3">
             <p className="text-white/82 text-sm leading-loose">
-              この方をサポーターにすると、共有範囲が「選んだ人」に変わり、共有相手にも追加されます。
+              この方にお手伝いを依頼すると、共有範囲が「選んだ人」に変わり、共有相手にも追加されます。
             </p>
 
             <p className="text-white/45 text-xs leading-loose">
@@ -6787,9 +6857,9 @@ function Scene_SupporterInvite({
             className="btn-quiet bg-white/10 w-full py-4 rounded-full text-sm text-white"
           >
             {loading
-              ? "お願いを送っています..."
+              ? "依頼を送っています..."
               : confirmPrivateChange
-                ? "内容を確認してお願いする"
+                ? "内容を確認して依頼する"
                 : "手伝ってもらう方を招待する"}
           </button>
 
@@ -6815,11 +6885,11 @@ function Scene_SupporterInviteAccountMismatch({
       <div className="w-full max-w-[340px] space-y-9">
         <div className="space-y-5 text-narrative">
           <p className="text-white/40 text-xs tracking-[0.18em]">
-            サポーターのお願い
+            お手伝いの依頼
           </p>
 
           <p className="text-[1.1rem] text-white/90 leading-loose">
-            このお願いは、<br />
+            この依頼は、<br />
             別のメールアドレスに届いています。
           </p>
 
@@ -6856,6 +6926,11 @@ function Scene_SupporterInviteReceived({
 }) {
   const [loadingAction, setLoadingAction] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const subjectName = withHonorific(invite?.subject_name || "ご家族");
+  const inviterName = withHonorific(invite?.inviter_name || "");
+  const isSelfRequest =
+    !inviterName ||
+    inviterName.replace(/さん$/, "") === subjectName.replace(/さん$/, "");
 
   const respond = async action => {
     try {
@@ -6880,17 +6955,22 @@ function Scene_SupporterInviteReceived({
       <div className="w-full max-w-[340px] space-y-9">
         <div className="space-y-5 text-narrative">
           <p className="text-white/40 text-xs tracking-[0.18em]">
-            サポーターのお願い
+            お手伝いの依頼
           </p>
 
           <p className="text-[1.1rem] text-white/90 leading-loose">
-            {withHonorific(invite?.inviter_name || invite?.subject_name)}から、<br />
-            物語づくりを手伝ってほしいという<br />
-            お願いが届いています。
+            {subjectName}の物語づくりを、<br />
+            お手伝いしませんか。
           </p>
 
+          {!isSelfRequest && (
+            <p className="text-white/48 text-xs leading-loose">
+              依頼者：{inviterName}
+            </p>
+          )}
+
           <p className="text-white/58 text-sm leading-loose">
-            {withHonorific(invite?.subject_name || "ご家族")}の写真や文章、<br />
+            録音の操作や写真の追加、文章や<br />
             本の形を整える作業をお手伝いできます。
           </p>
         </div>
@@ -6901,7 +6981,7 @@ function Scene_SupporterInviteReceived({
           </p>
 
           <p className="text-white/42 text-xs leading-loose">
-            「ずっと自分だけ」にした語りは、サポーターにも表示されません。
+            「ずっと自分だけ」にした語りは、お手伝いする方にも表示されません。
           </p>
         </div>
 
@@ -6935,7 +7015,7 @@ function Scene_SupporterInviteReceived({
 
         {remainingCount > 1 && (
           <p className="text-white/30 text-xs">
-            このほかに {remainingCount - 1} 件のお願いがあります
+            このほかに {remainingCount - 1} 件の依頼があります
           </p>
         )}
       </div>
@@ -7200,7 +7280,7 @@ function Scene_Home({
       <div className="flex-1 flex flex-col justify-center min-h-fit">
         <div className="text-center mb-12">
           <p className="text-white/35 text-xs tracking-[0.22em] mb-3">
-            tateyoko BOOK
+            縦糸横糸ブック
           </p>
 
           <p className="text-white/82 text-[1.05rem] text-narrative">
@@ -7260,7 +7340,13 @@ function Scene_Home({
   );
 }
 
-function Scene_SupportProjectHome({ project, onOpenBookBuilder, onBack }) {
+function Scene_SupportProjectHome({
+  project,
+  onOpenQuestions,
+  onOpenStories,
+  onOpenBookBuilder,
+  onBack
+}) {
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8">
       <div className="shrink-0">
@@ -7286,6 +7372,22 @@ function Scene_SupportProjectHome({ project, onOpenBookBuilder, onBack }) {
         </div>
 
         <div className="space-y-4">
+          {project?.can_operate_recording && (
+            <HomeMenuButton
+              icon={Mic}
+              label="問いの録音を手伝う"
+              onClick={onOpenQuestions}
+            />
+          )}
+
+          {(project?.can_edit_book_text || project?.can_build_book) && (
+            <HomeMenuButton
+              icon={Files}
+              label="語りを見る"
+              onClick={onOpenStories}
+            />
+          )}
+
           {project?.can_build_book && (
             <HomeMenuButton
               icon={BookOpen}
@@ -7294,6 +7396,388 @@ function Scene_SupportProjectHome({ project, onOpenBookBuilder, onBack }) {
             />
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function Scene_SupportedStoryPages({
+  project,
+  questionSet = [],
+  storyRows = [],
+  mediaByAnswerId = {},
+  onBack
+}) {
+  const questionBySequence = new Map(
+    (questionSet || []).map(question => [
+      Number(question.sequence_order),
+      question
+    ])
+  );
+
+  const visibleStories = [...(storyRows || [])]
+    .filter(story => String(story.transcript_edited || story.transcript_readable || "").trim())
+    .sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0));
+
+  return (
+    <div className="fixed inset-0 min-h-0 flex flex-col fade-enter px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+      <div className="shrink-0 relative flex items-center justify-center h-11 mb-5">
+        <button
+          type="button"
+          onClick={onBack}
+          className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"
+          aria-label="お手伝い中のホームへ戻る"
+        >
+          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+        </button>
+
+        <p className="text-white/84 text-[1.02rem] text-narrative">
+          語りを見る
+        </p>
+      </div>
+
+      <div className="shrink-0 text-center mb-7">
+        <p className="text-white/38 text-xs tracking-[0.16em] mb-2">
+          物語づくりをお手伝い中
+        </p>
+        <p className="text-white/72 text-sm">
+          {withHonorific(project?.subject_name || "ご家族")}の物語
+        </p>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-8 space-y-5">
+        {visibleStories.length === 0 && (
+          <div className="glass-card p-7 text-center">
+            <p className="text-white/55 text-sm leading-loose">
+              共有されている語りは、まだありません。
+            </p>
+          </div>
+        )}
+
+        {visibleStories.map(story => {
+          const question = questionBySequence.get(Number(story.sequence_order));
+          const photos = (mediaByAnswerId?.[story.id] || [])
+            .filter(item => item.asset_type === "photo" && item.url);
+
+          return (
+            <article key={story.id} className="glass-card p-5 space-y-4">
+              <div className="space-y-2">
+                <p className="text-white/35 text-[0.68rem] tracking-[0.14em]">
+                  {question?.chapter_label || question?.chapter || "物語"}
+                </p>
+                <p className="text-white/62 text-sm leading-loose">
+                  {question?.content || "残された語り"}
+                </p>
+              </div>
+
+              <p className="text-white/86 text-[0.98rem] leading-[2.05] whitespace-pre-wrap text-narrative">
+                {story.transcript_edited || story.transcript_readable}
+              </p>
+
+              {photos.length > 0 && (
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  {photos.map(photo => (
+                    <img
+                      key={photo.id}
+                      src={photo.url}
+                      alt="語りに添えられた写真"
+                      className="w-full aspect-square rounded-xl object-cover border border-white/[0.06]"
+                    />
+                  ))}
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Scene_SupportRecordingAssist({
+  user,
+  project,
+  questionSet = [],
+  onSaved,
+  onBack
+}) {
+  const storyQuestions = (questionSet || []).filter(question =>
+    question?.flow_type === "story" ||
+    question?.onboarding_group === "first_story"
+  );
+  const nextQuestion =
+    storyQuestions.find(question => !question.answer_id && question.status !== "answered") ||
+    null;
+  const questionIndex = Math.max(
+    storyQuestions.findIndex(question => question.user_question_id === nextQuestion?.user_question_id),
+    0
+  );
+
+  const [phase, setPhase] = useState("question");
+  const [recordingData, setRecordingData] = useState(null);
+  const [reviewText, setReviewText] = useState("");
+  const [essayText, setEssayText] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const processRecording = async (transcript, duration, audioUrl, audioBlob) => {
+    const answerId = crypto.randomUUID();
+
+    setRecordingData({
+      answerId,
+      transcript: transcript || "",
+      duration,
+      audioUrl,
+      audioBlob,
+      storagePaths: []
+    });
+    setErrorMessage("");
+    setPhase("processing");
+
+    try {
+      const contentType = audioBlob?.type || "audio/mp4";
+      const ext = contentType.includes("mp4")
+        ? "mp4"
+        : contentType.includes("aac")
+          ? "aac"
+          : "webm";
+      const storagePath = `${user.id}/${answerId}/part-01.${ext}`;
+
+      const { error: uploadError } = await supabaseClient.storage
+        .from("audio")
+        .upload(storagePath, audioBlob, {
+          contentType,
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      const transcription = await transcribeAudioOnServer({
+        answerId,
+        audioPaths: [storagePath],
+        fallbackTranscript: transcript || ""
+      });
+      const transcriptRaw = String(
+        transcription?.transcript_raw || transcription?.transcript || transcript || ""
+      ).trim();
+
+      let readable = transcriptRaw;
+      let essay = "";
+
+      try {
+        const polished = await polishTranscriptOnServer({
+          answerId,
+          transcriptRaw,
+          questionText: nextQuestion?.content || ""
+        });
+
+        readable = String(
+          polished?.transcript_readable || polished?.transcript_clean || transcriptRaw
+        ).trim();
+        essay = String(polished?.transcript_essay || "").trim();
+      } catch (polishError) {
+        console.warn("supporter recording polish fallback", polishError);
+      }
+
+      setRecordingData(prev => ({
+        ...prev,
+        transcript: transcriptRaw,
+        storagePaths: [storagePath]
+      }));
+      setReviewText(readable);
+      setEssayText(essay);
+      setPhase("review");
+    } catch (error) {
+      console.error("supporter recording processing error", error);
+      setErrorMessage("音声を保存できませんでした。通信を確認して、もう一度お試しください。");
+      setPhase("error");
+    }
+  };
+
+  const saveRecording = async () => {
+    if (!nextQuestion?.user_question_id || !recordingData?.answerId) return;
+
+    try {
+      setPhase("saving");
+      setErrorMessage("");
+
+      const { error } = await supabaseClient.rpc("save_supporter_recording", {
+        input_book_project_id: project.book_project_id,
+        input_user_question_id: nextQuestion.user_question_id,
+        input_answer_id: recordingData.answerId,
+        input_transcript_raw: recordingData.transcript || reviewText,
+        input_transcript_readable: reviewText,
+        input_transcript_essay: essayText,
+        input_selected_style: "readable",
+        input_storage_paths: recordingData.storagePaths || [],
+        input_duration_seconds: Number(recordingData.duration || 0)
+      });
+
+      if (error) throw error;
+
+      await onSaved?.();
+      setPhase("success");
+    } catch (error) {
+      console.error("supporter recording save error", error);
+      setErrorMessage("語りを保存できませんでした。もう一度お試しください。");
+      setPhase("review");
+    }
+  };
+
+  if (phase === "recording" && nextQuestion) {
+    return (
+      <Scene_Recording
+        question={nextQuestion}
+        progress={{ currentIndex: questionIndex, total: storyQuestions.length }}
+        userName={project?.subject_name || "ご家族"}
+        onComplete={processRecording}
+      />
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+      <div className="shrink-0">
+        <button
+          type="button"
+          onClick={onBack}
+          className="w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"
+          aria-label="お手伝い中のホームへ戻る"
+        >
+          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+        </button>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center py-8">
+        {phase === "question" && nextQuestion && (
+          <div className="space-y-8 text-center">
+            <div className="space-y-3">
+              <p className="text-white/38 text-xs tracking-[0.18em]">
+                問いの録音を手伝う
+              </p>
+              <p className="text-white/78 text-sm">
+                {withHonorific(project?.subject_name || "ご家族")}の次の問い
+              </p>
+            </div>
+
+            <div className="glass-card p-7 space-y-5">
+              <p className="text-white/88 text-[1.08rem] leading-[2] text-narrative">
+                {nextQuestion.content}
+              </p>
+              {nextQuestion.reassurance_text && (
+                <p className="text-white/42 text-sm leading-loose">
+                  {nextQuestion.reassurance_text}
+                </p>
+              )}
+            </div>
+
+            <p className="text-white/38 text-xs leading-loose">
+              語り手ご本人のそばで、録音の開始と終了をお手伝いしてください。
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setPhase("recording")}
+              className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+            >
+              録音を始める
+            </button>
+          </div>
+        )}
+
+        {phase === "question" && !nextQuestion && (
+          <div className="glass-card p-7 text-center space-y-3">
+            <p className="text-white/75 text-[1rem] text-narrative">
+              すべての問いに語りがあります
+            </p>
+            <p className="text-white/42 text-sm leading-loose">
+              語り直しは、語り手ご本人の画面から行えます。
+            </p>
+          </div>
+        )}
+
+        {(phase === "processing" || phase === "saving") && (
+          <div className="text-center space-y-6">
+            <div className="mx-auto w-8 h-8 rounded-full border-2 border-white/15 border-t-white/55 animate-spin" />
+            <p className="text-white/58 text-sm tracking-wider">
+              {phase === "saving" ? "語りを保存しています" : "声を文字にしています"}
+            </p>
+          </div>
+        )}
+
+        {phase === "review" && (
+          <div className="space-y-6">
+            <div className="text-center space-y-2">
+              <p className="text-white/38 text-xs tracking-[0.18em]">語りを確認</p>
+              <p className="text-white/78 text-sm leading-loose">
+                語り手ご本人と一緒に、内容をご確認ください。
+              </p>
+            </div>
+
+            {recordingData?.audioUrl && (
+              <audio controls src={recordingData.audioUrl} className="w-full h-10 opacity-60" />
+            )}
+
+            <textarea
+              value={reviewText}
+              onChange={event => setReviewText(event.target.value)}
+              className="quiet-input min-h-[220px] resize-y leading-[2]"
+            />
+
+            {errorMessage && (
+              <p className="text-rose-200/75 text-sm leading-loose text-center">
+                {errorMessage}
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={saveRecording}
+              disabled={!reviewText.trim()}
+              className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white disabled:opacity-40"
+            >
+              この内容で保存する
+            </button>
+          </div>
+        )}
+
+        {phase === "error" && (
+          <div className="glass-card p-7 text-center space-y-6">
+            <p className="text-white/62 text-sm leading-loose">
+              {errorMessage}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setRecordingData(null);
+                setErrorMessage("");
+                setPhase("recording");
+              }}
+              className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+            >
+              もう一度録音する
+            </button>
+          </div>
+        )}
+
+        {phase === "success" && (
+          <div className="text-center space-y-8">
+            <div className="space-y-4">
+              <p className="text-white/88 text-[1.12rem] text-narrative">
+                声を保存しました
+              </p>
+              <p className="text-white/48 text-sm leading-loose">
+                語り手ご本人の物語に加わりました。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onBack}
+              className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+            >
+              お手伝い中のホームへ
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

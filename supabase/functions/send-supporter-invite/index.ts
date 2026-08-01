@@ -41,7 +41,7 @@ function buildInvitationUrl(inviteId: string) {
 
 function getInvitationFromAddress() {
   return Deno.env.get("SUPPORTER_INVITE_FROM") ||
-    "tateyoko BOOK <hello@tateito-yokoito.jp>";
+    "縦糸横糸ブック <hello@tateito-yokoito.jp>";
 }
 
 serve(async (request) => {
@@ -209,8 +209,15 @@ serve(async (request) => {
     const safeLoginUrl = escapeHtml(loginUrl);
     const safeInvitationUrl = escapeHtml(invitationUrl);
     const safeEmailOtp = escapeHtml(emailOtp);
-    const safeInviterName = escapeHtml(withHonorific(inviterName));
-    const safeSubjectName = escapeHtml(withHonorific(subjectName));
+    const inviterDisplayName = withHonorific(inviterName);
+    const subjectDisplayName = withHonorific(subjectName);
+    const isSelfRequest =
+      inviterDisplayName.replace(/さん$/, "") ===
+      subjectDisplayName.replace(/さん$/, "");
+    const requestLeadText = isSelfRequest
+      ? `${subjectDisplayName}から、物語づくりのお手伝いの依頼が届いています。`
+      : `${inviterDisplayName}から、${subjectDisplayName}の物語づくりのお手伝いの依頼が届いています。`;
+    const safeRequestLeadText = escapeHtml(requestLeadText);
 
     const resendResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -221,23 +228,20 @@ serve(async (request) => {
       body: JSON.stringify({
         from: getInvitationFromAddress(),
         to: normalizedInviteeEmail,
-        subject: "【縦糸横糸ブック】お手伝いのお願いが届いています",
+        subject: "【縦糸横糸ブック】お手伝いの依頼が届いています",
         text:
-          `${withHonorific(inviterName)}から、${withHonorific(subjectName)}の物語づくりを手伝ってほしいというお願いが届いています。\n\n` +
+          `${requestLeadText}\n\n` +
           `録音の操作や写真の追加、文章や本の形を整える作業をお手伝いできます。\n` +
           `共有範囲や将来の手渡し方は、物語のご本人だけが変更できます。\n\n` +
-          `お願いを確認する：${loginUrl}\n\n` +
+          `依頼を確認する：${loginUrl}\n\n` +
           `このリンクを開いただけでは、お手伝いは確定しません。内容を確認したあとで、引き受けるかどうかを選べます。\n\n` +
           `ボタンで開けない場合は、次のページでメールアドレスと認証コードを入力してください。\n` +
           `認証コードで開く：${invitationUrl}\n` +
           `認証コード：${emailOtp}`,
         html: `
           <div style="font-family: serif; padding: 40px; line-height: 1.9; color: #1f2937;">
-            <p>${safeInviterName}から、</p>
-
             <p style="font-size: 20px; margin: 28px 0;">
-              ${safeSubjectName}の物語づくりを<br />
-              手伝ってほしいというお願いが届いています。
+              ${safeRequestLeadText}
             </p>
 
             <p>
@@ -253,7 +257,7 @@ serve(async (request) => {
                 href="${safeLoginUrl}"
                 style="display: inline-block; padding: 12px 20px; border-radius: 999px; background: #111827; color: #ffffff; text-decoration: none;"
               >
-                お願いを確認する
+                依頼を確認する
               </a>
             </p>
 
@@ -275,7 +279,7 @@ serve(async (request) => {
             </div>
 
             <p style="margin-top: 56px; color: #999999; font-size: 13px;">
-              tateito yokoito / tateyoko BOOK
+              tateito yokoito
             </p>
           </div>
         `

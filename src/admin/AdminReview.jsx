@@ -34,7 +34,7 @@ export default function AdminReview({ supabaseClient }) {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-xl mb-6">tateyoko BOOK Admin Review</h1>
+        <h1 className="text-xl mb-6">縦糸横糸ブック 管理画面</h1>
 
         <div className="space-y-4">
           {answers.map((answer) => (
