@@ -1,0 +1,37 @@
+<div style="font-family: serif; padding: 40px; line-height: 1.9; color: #1f2937;">
+  <p style="font-size: 20px; margin: 0 0 24px;">
+    縦糸横糸ブックを開くためのご案内です。
+  </p>
+
+  <p style="color: #4b5563;">
+    ご自身の物語と、お手伝いしている物語を確認できます。
+  </p>
+
+  <p style="margin-top: 32px;">
+    <a
+      href="{{ .ConfirmationURL }}"
+      style="display: inline-block; padding: 12px 20px; border-radius: 999px; background: #111827; color: #ffffff; text-decoration: none;"
+    >
+      縦糸横糸ブックを開く
+    </a>
+  </p>
+
+  <p style="margin-top: 32px; color: #6b7280; font-size: 14px;">
+    ボタンで開けない場合は、画面でメールアドレスと次の認証コードを入力してください。
+  </p>
+
+  <div style="margin-top: 16px; padding: 18px 20px; border: 1px solid #d1d5db; border-radius: 12px;">
+    <p style="margin: 0; color: #6b7280; font-size: 13px;">認証コード</p>
+    <p style="margin: 6px 0 0; font-family: sans-serif; font-size: 24px; letter-spacing: 0.2em; color: #111827;">
+      {{ .Token }}
+    </p>
+  </div>
+
+  <p style="margin-top: 56px; color: #9ca3af; font-size: 13px;">
+    このメールに心当たりがない場合は、そのまま破棄してください。
+  </p>
+
+  <p style="margin-top: 24px; color: #9ca3af; font-size: 13px;">
+    tateito yokoito / tateyoko BOOK
+  </p>
+</div>

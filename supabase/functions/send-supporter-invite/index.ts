@@ -177,7 +177,38 @@ serve(async (request) => {
       subjectName;
 
     const invitationUrl = buildInvitationUrl(invite.id);
+    const normalizedInviteeEmail = String(invite.invitee_email || "")
+      .trim()
+      .toLowerCase();
+
+    if (!normalizedInviteeEmail) {
+      throw new Error("The invitation email address is missing");
+    }
+
+    const { data: authLinkData, error: authLinkError } =
+      await adminClient.auth.admin.generateLink({
+        type: "magiclink",
+        email: normalizedInviteeEmail,
+        options: {
+          redirectTo: invitationUrl
+        }
+      });
+
+    if (
+      authLinkError ||
+      !authLinkData?.properties?.action_link ||
+      !authLinkData?.properties?.email_otp
+    ) {
+      throw new Error(
+        authLinkError?.message || "The supporter authentication link could not be created"
+      );
+    }
+
+    const loginUrl = authLinkData.properties.action_link;
+    const emailOtp = authLinkData.properties.email_otp;
+    const safeLoginUrl = escapeHtml(loginUrl);
     const safeInvitationUrl = escapeHtml(invitationUrl);
+    const safeEmailOtp = escapeHtml(emailOtp);
     const safeInviterName = escapeHtml(withHonorific(inviterName));
     const safeSubjectName = escapeHtml(withHonorific(subjectName));
 
@@ -189,13 +220,17 @@ serve(async (request) => {
       },
       body: JSON.stringify({
         from: getInvitationFromAddress(),
-        to: invite.invitee_email,
-        subject: `tateyoko BOOK｜${withHonorific(inviterName)}からお手伝いのお願いが届きました`,
+        to: normalizedInviteeEmail,
+        subject: "【縦糸横糸ブック】お手伝いのお願いが届いています",
         text:
           `${withHonorific(inviterName)}から、${withHonorific(subjectName)}の物語づくりを手伝ってほしいというお願いが届いています。\n\n` +
           `録音の操作や写真の追加、文章や本の形を整える作業をお手伝いできます。\n` +
           `共有範囲や将来の手渡し方は、物語のご本人だけが変更できます。\n\n` +
-          `お願いを確認する：${invitationUrl}`,
+          `お願いを確認する：${loginUrl}\n\n` +
+          `このリンクを開いただけでは、お手伝いは確定しません。内容を確認したあとで、引き受けるかどうかを選べます。\n\n` +
+          `ボタンで開けない場合は、次のページでメールアドレスと認証コードを入力してください。\n` +
+          `認証コードで開く：${invitationUrl}\n` +
+          `認証コード：${emailOtp}`,
         html: `
           <div style="font-family: serif; padding: 40px; line-height: 1.9; color: #1f2937;">
             <p>${safeInviterName}から、</p>
@@ -215,17 +250,29 @@ serve(async (request) => {
 
             <p style="margin-top: 32px;">
               <a
-                href="${safeInvitationUrl}"
+                href="${safeLoginUrl}"
                 style="display: inline-block; padding: 12px 20px; border-radius: 999px; background: #111827; color: #ffffff; text-decoration: none;"
               >
                 お願いを確認する
               </a>
             </p>
 
-            <p style="margin-top: 32px; color: #666666; font-size: 14px;">
-              ボタンが開けない場合はこちら：<br />
-              <a href="${safeInvitationUrl}">${safeInvitationUrl}</a>
+            <p style="margin-top: 22px; color: #6b7280; font-size: 14px;">
+              このボタンを押しただけでは、お手伝いは確定しません。<br />
+              内容を確認したあとで、引き受けるかどうかを選べます。
             </p>
+
+            <p style="margin-top: 32px; color: #666666; font-size: 14px;">
+              ボタンで開けない場合は、次のページでメールアドレスと認証コードを入力してください。<br />
+              <a href="${safeInvitationUrl}" style="color: #374151;">認証コードで開く</a>
+            </p>
+
+            <div style="margin-top: 16px; padding: 18px 20px; border: 1px solid #d1d5db; border-radius: 12px;">
+              <p style="margin: 0; color: #6b7280; font-size: 13px;">認証コード</p>
+              <p style="margin: 6px 0 0; font-family: sans-serif; font-size: 24px; letter-spacing: 0.2em; color: #111827;">
+                ${safeEmailOtp}
+              </p>
+            </div>
 
             <p style="margin-top: 56px; color: #999999; font-size: 13px;">
               tateito yokoito / tateyoko BOOK

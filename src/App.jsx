@@ -25,6 +25,35 @@ function getSupporterInviteReferenceFromUrl() {
   return params.get("supporter_invite") || null;
 }
 
+function getSupporterInvitationUrlFromCurrentLocation() {
+  const params = new URLSearchParams(window.location.search);
+  const inviteReference = params.get("supporter_invite");
+
+  if (!inviteReference || inviteReference === "1") return null;
+
+  const url = new URL(window.location.origin + window.location.pathname);
+  const betaMode = params.get("beta");
+
+  if (betaMode) {
+    url.searchParams.set("beta", betaMode);
+  }
+
+  url.searchParams.set("supporter_invite", inviteReference);
+  return url.toString();
+}
+
+function getAuthReturnUrlFromCurrentLocation() {
+  const params = new URLSearchParams(window.location.search);
+  const url = new URL(window.location.origin + window.location.pathname);
+  const betaMode = params.get("beta");
+
+  if (betaMode) {
+    url.searchParams.set("beta", betaMode);
+  }
+
+  return url.toString();
+}
+
 async function resolveDeliveryToken(token) {
   const { data, error } = await supabaseClient.rpc("resolve_delivery_token", {
     input_token: token
@@ -265,16 +294,23 @@ async function ensureProfileExists(sessionUser, registrationData = {}) {
   const userId = sessionUser.id;
   const email = sessionUser.email || registrationData.email || "";
 
-  const familyName = registrationData.familyName || null;
-  const givenName = registrationData.givenName || null;
+  const userMetadata = sessionUser.user_metadata || {};
+
+  const familyName =
+    registrationData.familyName || userMetadata.family_name || null;
+  const givenName =
+    registrationData.givenName || userMetadata.given_name || null;
 
   const fullName =
     registrationData.fullName ||
+    userMetadata.display_name ||
+    userMetadata.full_name ||
     [familyName, givenName].filter(Boolean).join(" ") ||
     "あなた";
 
   const preferredName =
     registrationData.preferredName ||
+    userMetadata.preferred_name ||
     (givenName ? `${givenName}さん` : fullName);
 
   const { data: existingProfile, error: existingError } = await supabaseClient
@@ -4723,8 +4759,13 @@ function Scene_TokenInvalid({ onBack }) {
 
 
 function Scene_Login({ onLogin }) {
-  const [mode, setMode] = useState("entry"); // entry | new | returning | pin
-  const [authMode, setAuthMode] = useState(null); // new | returning
+  const supporterInvitationUrl = getSupporterInvitationUrlFromCurrentLocation();
+  const authReturnUrl = getAuthReturnUrlFromCurrentLocation();
+  const isSupporterInviteLogin = Boolean(supporterInvitationUrl);
+  const [mode, setMode] = useState(
+    isSupporterInviteLogin ? "supporter" : "entry"
+  ); // entry | new | returning | supporter | pin
+  const [authMode, setAuthMode] = useState(null); // new | returning | supporter
   const [email, setEmail] = useState("");
   const [familyName, setFamilyName] = useState("");
   const [givenName, setGivenName] = useState("");
@@ -4808,7 +4849,8 @@ const checkExistingProfileByEmail = async (targetEmail) => {
   const handleSendPin = async (targetMode = mode) => {
     const normalizedEmail = String(email || "").trim().toLowerCase();
     const isNewMode = targetMode === "new";
-    const isReturningMode = targetMode === "returning";
+    const isSupporterMode = targetMode === "supporter";
+    const isReturningMode = targetMode === "returning" || isSupporterMode;
 
     if (!normalizedEmail) {
       alert("メールアドレスを入力してください。");
@@ -4842,11 +4884,25 @@ if (isNewMode) {
 
     const { error } = await supabaseClient.auth.signInWithOtp({
       email: normalizedEmail,
-      options: isReturningMode
+      options: isNewMode
         ? {
-            shouldCreateUser: false
+            emailRedirectTo: authReturnUrl,
+            data: {
+              family_name: familyName.trim(),
+              given_name: givenName.trim(),
+              display_name: `${familyName.trim()} ${givenName.trim()}`.trim(),
+              preferred_name: `${givenName.trim()}さん`
+            }
           }
-        : undefined
+        : isReturningMode
+          ? {
+            shouldCreateUser: false,
+            emailRedirectTo:
+              isSupporterMode && supporterInvitationUrl
+                ? supporterInvitationUrl
+                : authReturnUrl
+            }
+          : undefined
     });
 
     setLoading(false);
@@ -4884,6 +4940,20 @@ if (isNewMode) {
 
     setEmail(normalizedEmail);
     setAuthMode(targetMode);
+    setPin("");
+    setMode("pin");
+  };
+
+  const handleUseSupporterCode = () => {
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      alert("メールアドレスを入力してください。");
+      return;
+    }
+
+    setEmail(normalizedEmail);
+    setAuthMode("supporter");
     setPin("");
     setMode("pin");
   };
@@ -4963,13 +5033,64 @@ if (isNewMode) {
   };
 
   const goEntry = () => {
-    setMode("entry");
+    setMode(isSupporterInviteLogin ? "supporter" : "entry");
     setAuthMode(null);
     setPin("");
   };
 
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center overflow-y-auto">
+      {mode === "supporter" && (
+        <div className="w-full max-w-[320px] space-y-8 py-10 fade-enter">
+          <div className="space-y-5 text-narrative">
+            <p className="text-white/40 text-xs tracking-[0.18em]">
+              サポーターのお願い
+            </p>
+
+            <p className="text-[1.1rem] text-white/90 leading-loose">
+              お手伝いのお願いを開く
+            </p>
+
+            <p className="ui-small leading-loose">
+              メールを受け取ったアドレスと、<br />
+              メールに記載された認証コードを使います。
+            </p>
+          </div>
+
+          <div>
+            <p className="ui-label mb-2">メールアドレス</p>
+            <input
+              type="email"
+              className="quiet-input"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-4">
+            <button
+              type="button"
+              onClick={handleUseSupporterCode}
+              disabled={!email || loading}
+              className={`btn-quiet w-full py-4 rounded-full text-sm ${
+                !email || loading ? "opacity-40" : ""
+              }`}
+            >
+              認証コードを入力する
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSendPin("supporter")}
+              disabled={!email || loading}
+              className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
+            >
+              {loading ? "送信中..." : "認証メールを送り直す"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {mode === "entry" && (
         <div className="w-full max-w-[320px] space-y-8 py-10">
           <div className="space-y-5 text-narrative">
@@ -5068,7 +5189,7 @@ if (isNewMode) {
               !email || !familyName || !givenName || loading ? "opacity-40" : ""
             }`}
           >
-            {loading ? "送信中..." : "認証コードを送る"}
+            {loading ? "送信中..." : "ログイン用メールを送る"}
           </button>
 
           <button
@@ -5113,7 +5234,7 @@ if (isNewMode) {
               !email || loading ? "opacity-40" : ""
             }`}
           >
-            {loading ? "送信中..." : "認証コードを送る"}
+            {loading ? "送信中..." : "ログイン用メールを送る"}
           </button>
 
           <button
@@ -5135,7 +5256,9 @@ if (isNewMode) {
             </p>
 
             <p className="ui-small">
-              メールに届いた6桁のコードを入力してください
+              {authMode === "supporter"
+                ? "お手伝いのお願いのメールに記載された6桁コードを入力してください"
+                : "メールのボタンを押すか、記載された6桁コードを入力してください"}
             </p>
           </div>
 
@@ -5156,12 +5279,26 @@ if (isNewMode) {
               pin.length !== 6 || loading ? "opacity-40" : ""
             }`}
           >
-            {loading ? "確認中..." : authMode === "returning" ? "続きを開く" : "物語をはじめる"}
+            {loading
+              ? "確認中..."
+              : authMode === "supporter"
+                ? "お願いを確認する"
+                : authMode === "returning"
+                  ? "続きを開く"
+                  : "物語をはじめる"}
           </button>
 
           <button
             type="button"
-            onClick={() => setMode(authMode === "returning" ? "returning" : "new")}
+            onClick={() =>
+              setMode(
+                authMode === "supporter"
+                  ? "supporter"
+                  : authMode === "returning"
+                    ? "returning"
+                    : "new"
+              )
+            }
             disabled={loading}
             className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
           >
