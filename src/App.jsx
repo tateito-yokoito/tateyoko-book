@@ -3149,7 +3149,7 @@ const generateLifeOutlineIntroduction = async ({
       answerId: generationId,
       transcriptRaw: sourceText,
       questionText:
-        "複数の語りを重複なく一つにつなぎ、その人の生い立ち、担ってきた役割、現在の暮らしが自然に伝わる人物紹介文「私の歩み」にまとめてください。問いや見出しは本文に残さないでください。"
+        "複数の語りを重複なく一つにつなぎ、後から読む人に、その人の生まれ育ち、家族、学校生活、仕事や役割、暮らしの大きな変化、現在の生活が自然に伝わる人物紹介文「私の歩み」にまとめてください。語った順番が現在から始まっていても、文章は生まれ育ちから現在へ自然に並べ替えてください。本人が話していない年代や事実は推測せず、問いや見出しは本文に残さないでください。"
     });
 
     const readable = String(
@@ -3593,6 +3593,12 @@ const leaveLifeOutlineMilestone = async ({ continueNow }) => {
         .eq("id", user.id);
 
       resetVoiceData();
+
+      if (!sharingPreference?.initial_setup_completed_at) {
+        setScene("sharing_setup");
+        return;
+      }
+
       setScene(1);
       return;
     }
@@ -3951,9 +3957,6 @@ const completedLifeOutline =
     questionsDB[progress.currentIndex + 1]?.onboarding_group !== "life_outline"
   );
 
-const completedVoiceIntro =
-  currentQ?.onboarding_group === "voice_intro";
-
 const betaSurvey = isBetaMode()
   ? getBetaSurveyForSequence(currentSeq)
   : null;
@@ -3986,15 +3989,6 @@ if (completedLifeOutline) {
     // まとめ画面側で再試行できるため、回答の保存自体は完了扱いにする。
   }
 
-  return;
-}
-
-if (
-  completedVoiceIntro &&
-  !sharingPreference?.initial_setup_completed_at
-) {
-  resetVoiceData();
-  setScene("sharing_setup");
   return;
 }
 
@@ -4426,6 +4420,7 @@ let sceneAfterInvite = nextScene;
 {scene === "life_outline_complete" && (
   <Scene_LifeOutlineComplete
     notificationLabel={formatNextNotificationLabel(notificationPref)}
+    needsSharingSetup={!sharingPreference?.initial_setup_completed_at}
     onContinue={() => leaveLifeOutlineMilestone({ continueNow: true })}
     onEndToday={() => leaveLifeOutlineMilestone({ continueNow: false })}
   />
@@ -4450,7 +4445,17 @@ let sceneAfterInvite = nextScene;
        <Scene_Home
          userName={user?.name || "あなた"}
          supportedProjects={supportedProjects}
-         onStartTalking={() => setScene(0)}
+         onStartTalking={() => {
+           if (
+             foundation?.project?.life_outline_completed_at &&
+             !sharingPreference?.initial_setup_completed_at
+           ) {
+             setScene("sharing_setup");
+             return;
+           }
+
+           setScene(0);
+         }}
          onOpenStoryPages={() => setScene("story_pages")}
          onOpenBookBuilder={() => setScene("book_builder")}
          onOpenSupportedProject={openSupportedProject}
@@ -4544,6 +4549,11 @@ onComplete={(t, d, u, b) => {
 
 <Scene3_5_VoiceCheck
   data={voiceData}
+  isLifeOutline={currentQ?.onboarding_group === "life_outline"}
+  isLastLifeOutline={
+    currentQ?.onboarding_group === "life_outline" &&
+    questionsDB[progress.currentIndex + 1]?.onboarding_group !== "life_outline"
+  }
   onAddMore={() => {
     const audioPartCount = (voiceData.audioSegments || []).length;
     const totalDuration = Number(voiceData.duration || 0);
@@ -5614,7 +5624,7 @@ function Scene_OnboardingOverview({ onNext }) {
 
               <p className="text-white/48 text-sm leading-loose">
                 目安 10〜15分<br />
-                3つの問いから、人生の輪郭をまとめます
+                4つの問いから、人生の輪郭をまとめます
               </p>
             </div>
           </div>
@@ -5670,7 +5680,7 @@ function Scene_OnboardingOverview({ onNext }) {
         onClick={onNext}
         className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
       >
-        物語の入口へ
+        進め方を見る
       </button>
     </div>
   );
@@ -6001,7 +6011,7 @@ function Scene_LifeOutlineSummary({
             {(data.sourceAnswers || []).length > 0 && (
               <div className="glass-card px-5 py-2 mb-5">
                 <p className="text-white/34 text-xs tracking-widest py-3">
-                  3つの語りを見直す
+                  {(data.sourceAnswers || []).length}つの語りを見直す
                 </p>
 
                 {(data.sourceAnswers || []).map((answer, index) => (
@@ -6179,6 +6189,7 @@ function MemoryJourneyVisual() {
 
 function Scene_LifeOutlineComplete({
   notificationLabel,
+  needsSharingSetup = false,
   onContinue,
   onEndToday
 }) {
@@ -6205,17 +6216,18 @@ function Scene_LifeOutlineComplete({
 
         <div className="glass-card px-5 py-6 text-left">
           <p className="text-center text-white/82 text-[1rem] leading-loose text-narrative mb-5">
-            ここから、記憶をひらく時間が始まります
+            ここから、輪郭の内側へ
           </p>
 
           <p className="text-white/58 text-sm leading-[2]">
-            まずは、幼い頃の風景や、<br />
-            ご家族と過ごした時間から。
+            ここまでで、人生全体の歩みが<br />
+            ひとつの輪郭になりました。
           </p>
 
           <p className="mt-4 text-white/50 text-sm leading-[2]">
             毎週届く問いとともに、<br />
-            少しずつ記憶の扉を開いていきます。
+            一つひとつの出来事にある記憶や思いを、<br />
+            少しずつ残していきます。
           </p>
 
           <p className="mt-4 text-white/36 text-xs leading-[2]">
@@ -6231,7 +6243,7 @@ function Scene_LifeOutlineComplete({
           onClick={onContinue}
           className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
         >
-          最初の問いをひらく
+          {needsSharingSetup ? "このまま進む" : "最初の問いをひらく"}
         </button>
 
         <button
@@ -6407,7 +6419,7 @@ function Scene_SharingSetup({ initialScope = "family", onComplete }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
       <div className="w-full max-w-[340px] space-y-9">
-        <OnboardingProgress current="entry" />
+        <OnboardingProgress current="weekly" outlineComplete />
 
         <div className="space-y-5 text-narrative">
           <p className="text-[1.1rem] text-white/90 leading-loose">
@@ -6577,7 +6589,9 @@ function Scene_SupporterInvite({
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
       <div className="w-full max-w-[320px] space-y-9">
-        {isInitialSetup && <OnboardingProgress current="entry" />}
+        {isInitialSetup && (
+          <OnboardingProgress current="weekly" outlineComplete />
+        )}
 
         <div className="space-y-5 text-narrative">
           <p className="text-[1.1rem] text-white/90 leading-loose">
@@ -8849,6 +8863,8 @@ return (
 
 function Scene3_5_VoiceCheck({
   data,
+  isLifeOutline = false,
+  isLastLifeOutline = false,
   onAddMore,
   onRetry,
   onRetryTranscription,
@@ -8961,7 +8977,7 @@ return (
 
     <div className="text-center mb-4">
       <p className="text-white/86 text-[1.02rem] text-narrative">
-        語りを確認します
+        {isLifeOutline ? "声が届きました" : "語りを確認します"}
       </p>
     </div>
 
@@ -8998,6 +9014,7 @@ return (
           />
         )}
 
+        {!isLifeOutline && (
         <div className="flex gap-2 mb-5">
           <button
             type="button"
@@ -9038,6 +9055,7 @@ return (
             作品調
           </button>
         </div>
+        )}
 
          {isProcessing ? (
            <div className="flex items-center gap-3 text-white/45 text-sm leading-loose">
@@ -9173,7 +9191,11 @@ return (
             isProcessing || !displayText ? "opacity-40" : ""
           }`}
         >
-          この内容で進む
+          {isLifeOutline
+            ? isLastLifeOutline
+              ? "人生の輪郭をまとめる"
+              : "次の問いへ"
+            : "この内容で進む"}
         </button>
 
         <button
