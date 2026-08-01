@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bell, BookOpen, ChevronLeft, ChevronRight, Files, Home, Lock, Mic, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings, Square, UserCircle, UserCog, Users } from "lucide-react";
+import { Bell, BookOpen, ChevronLeft, ChevronRight, Files, Home, Image as ImageIcon, Lock, Mic, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings, Square, UserCircle, UserCog, Users } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumossjxehdop.supabase.co";
@@ -50,6 +50,9 @@ function getAuthReturnUrlFromCurrentLocation() {
   if (betaMode) {
     url.searchParams.set("beta", betaMode);
   }
+
+  const sharingInvite = params.get("sharing_invite");
+  if (sharingInvite) url.searchParams.set("sharing_invite", sharingInvite);
 
   return url.toString();
 }
@@ -1082,6 +1085,7 @@ function normalizeUserQuestions(rows) {
       id: row.questions?.id || row.question_id,
       question_id: row.question_id,
       sequence_order: row.sequence_order,
+      is_active: row.is_active !== false,
       status: row.status || "pending",
       answered_at: row.answered_at || null,
       content,
@@ -1540,6 +1544,43 @@ async function respondToSupporterInvite(inviteId, accept) {
   }
 
   return Array.isArray(data) ? data[0] : data;
+}
+
+async function loadOwnedStoryRelationships(bookProjectId) {
+  if (!bookProjectId) return [];
+  const { data, error } = await supabaseClient.rpc("list_owned_story_relationships", {
+    input_book_project_id: bookProjectId
+  });
+  if (error) throw error;
+  return data || [];
+}
+
+async function loadPendingStoryRelationshipInvites() {
+  const { data, error } = await supabaseClient.rpc("list_pending_story_relationship_invites");
+  if (error) {
+    console.warn("pending story relationship invites load error", error);
+    return [];
+  }
+  return data || [];
+}
+
+async function respondToStoryRelationshipInvite(inviteId, accept) {
+  const { error } = await supabaseClient.rpc("respond_to_story_relationship_invite", {
+    input_invite_id: inviteId,
+    input_accept: accept
+  });
+  if (error) throw error;
+}
+
+function derivePhotoStoryTitle(text) {
+  const normalized = String(text || "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/^(えー|えっと|あの|まあ)[、,\s]*/g, "")
+    .trim();
+  if (normalized.length < 12) return "この一枚のこと";
+  const first = normalized.split(/[。！？!?]/)[0].trim();
+  if (first.length < 15) return "この一枚のこと";
+  return first.length > 24 ? `${first.slice(0, 23)}…` : first;
 }
 
 async function loadSupporterBookData(supportedProject) {
@@ -2057,6 +2098,7 @@ function App() {
   const [supportedProjects, setSupportedProjects] = useState([]);
   const [supportContext, setSupportContext] = useState(null);
   const [pendingSupporterInvites, setPendingSupporterInvites] = useState([]);
+  const [pendingStoryRelationshipInvites, setPendingStoryRelationshipInvites] = useState([]);
   const [postSupporterInviteScene, setPostSupporterInviteScene] = useState("home");
   const [hasAcceptedSupporterInvite, setHasAcceptedSupporterInvite] = useState(false);
   const [endTodayHasSavedAnswer, setEndTodayHasSavedAnswer] = useState(false);
@@ -2080,6 +2122,10 @@ function App() {
     audioBlob: null,
     audioSegments: [],
     photoItems: [],
+    storyOrigin: "question",
+    photoStoryTitle: "",
+    photoStoryTitleSource: null,
+    photoStoryCaption: "",
     editedText: "",
     aiMirror: "",
     extractedSnippet: "",
@@ -2225,9 +2271,10 @@ if (deliveryToken) {
 
 setUser(currentUser);
 setQuestionsDB(questionSet);
-const [supportedStoryProjects, pendingInvites] = await Promise.all([
+const [supportedStoryProjects, pendingInvites, pendingRelationshipInvites] = await Promise.all([
   loadSupportedStoryProjects(),
-  loadPendingSupporterInvites()
+  loadPendingSupporterInvites(),
+  loadPendingStoryRelationshipInvites()
 ]);
 
 const supporterInviteReference = getSupporterInviteReferenceFromUrl();
@@ -2244,6 +2291,7 @@ const orderedPendingInvites = targetedSupporterInviteId
 
 setSupportedProjects(supportedStoryProjects);
 setPendingSupporterInvites(orderedPendingInvites);
+setPendingStoryRelationshipInvites(pendingRelationshipInvites);
 setProgress({
   currentIndex,
   total: questionSet.length
@@ -2268,6 +2316,12 @@ if (
 ) {
   setPostSupporterInviteScene(sceneAfterInvite);
   setScene("supporter_invite_account_mismatch");
+  return;
+}
+
+if (pendingRelationshipInvites.length > 0 && !deliveryToken) {
+  setPostSupporterInviteScene(sceneAfterInvite);
+  setScene("story_relationship_invite_received");
   return;
 }
 
@@ -2301,6 +2355,10 @@ if (orderedPendingInvites.length > 0 && !deliveryToken) {
     audioBlob: null,
     audioSegments: [],
     photoItems: [],
+    storyOrigin: "question",
+    photoStoryTitle: "",
+    photoStoryTitleSource: null,
+    photoStoryCaption: "",
     editedText: "",
     aiMirror: "",
     extractedSnippet: "",
@@ -2468,6 +2526,22 @@ const handleSupporterInviteResponse = async (invite, accept) => {
       ? "home"
       : postSupporterInviteScene || "home"
   );
+};
+
+const handleStoryRelationshipInviteResponse = async (invite, accept) => {
+  if (!invite?.invite_id) return;
+  try {
+    setIsInitializing(true);
+    await respondToStoryRelationshipInvite(invite.invite_id, accept);
+    const remaining = pendingStoryRelationshipInvites.filter(item => item.invite_id !== invite.invite_id);
+    setPendingStoryRelationshipInvites(remaining);
+    setScene(remaining.length > 0 ? "story_relationship_invite_received" : (postSupporterInviteScene || "home"));
+  } catch (error) {
+    console.error("story relationship invite response error", error);
+    alert("依頼への回答を保存できませんでした。");
+  } finally {
+    setIsInitializing(false);
+  }
 };
 
 const continueAfterTokenAuth = async () => {
@@ -2641,7 +2715,7 @@ const handleRecordComplete = (txt, dur, url, blob) => {
 };
 
 
-  const handlePhotoSelect = (files) => {
+const handlePhotoSelect = (files) => {
     const selectedFiles = Array.from(files || [])
       .filter(file => file && file.type && file.type.startsWith("image/"));
 
@@ -2663,6 +2737,37 @@ const handleRecordComplete = (txt, dur, url, blob) => {
         photoItems: [...existing, ...additions]
       };
     });
+  };
+
+  const startPhotoStory = async photo => {
+    if (!photo?.file) return;
+    try {
+      setIsInitializing(true);
+      const prompt = "この写真について、覚えていることをお話しください。";
+      const { data: newUserQuestionId, error } = await supabaseClient.rpc("add_custom_story_question", {
+        input_book_project_id: foundation?.project?.id,
+        input_question_text: prompt,
+        input_chapter_title: "写真から残した記憶",
+        input_position: "next"
+      });
+      if (error) throw error;
+      const refreshed = await loadUserQuestionSet(user.id, foundation);
+      const nextIndex = refreshed.findIndex(item => item.user_question_id === newUserQuestionId);
+      setQuestionsDB(refreshed);
+      setProgress({ currentIndex: nextIndex >= 0 ? nextIndex : 0, total: refreshed.length });
+      resetVoiceData();
+      setVoiceData(prev => ({
+        ...prev,
+        photoItems: [photo],
+        storyOrigin: "photo",
+        photoStoryTitle: "この一枚のこと",
+        photoStoryTitleSource: "fallback"
+      }));
+      setScene(3);
+    } catch (error) {
+      console.error("photo story start error", error);
+      alert("写真から語る準備ができませんでした。");
+    } finally { setIsInitializing(false); }
   };
 
   const handleRemovePhoto = (createdAt) => {
@@ -2751,6 +2856,10 @@ const startEditRecording = (
     audioBlob: null,
     audioSegments: [],
     photoItems: [],
+    storyOrigin: "question",
+    photoStoryTitle: "",
+    photoStoryTitleSource: null,
+    photoStoryCaption: "",
     editedText: "",
     aiMirror: "",
     extractedSnippet: "",
@@ -2928,6 +3037,11 @@ const firstData = {
   polishError: ""
 };
 
+if (sourceVoiceData.storyOrigin === "photo" && sourceVoiceData.photoStoryTitleSource !== "user") {
+  firstData.photoStoryTitle = derivePhotoStoryTitle(transcriptRaw);
+  firstData.photoStoryTitleSource = firstData.photoStoryTitle === "この一枚のこと" ? "fallback" : "generated";
+}
+
 setVoiceData(firstData);
 setScene(3.5);
 
@@ -2969,6 +3083,12 @@ try {
       polishStatus: "done",
       polishError: ""
     };
+
+    if (next.storyOrigin === "photo" && next.photoStoryTitleSource !== "user") {
+      const titleBase = polishResult.transcript_readable || polishResult.transcript_clean || transcriptRaw;
+      next.photoStoryTitle = derivePhotoStoryTitle(titleBase);
+      next.photoStoryTitleSource = next.photoStoryTitle === "この一枚のこと" ? "fallback" : "generated";
+    }
 
     return {
       ...next,
@@ -3811,6 +3931,11 @@ const handleSaveAnswer = async (tag = null) => {
           snippet: voiceData.extractedSnippet,
           meta_json: {
             meaning_tag: tag,
+            story_origin: voiceData.storyOrigin || "question",
+            print_title: voiceData.storyOrigin === "photo" ? (voiceData.photoStoryTitle || "この一枚のこと") : null,
+            title_source: voiceData.storyOrigin === "photo" ? (voiceData.photoStoryTitleSource || "fallback") : null,
+            photo_caption: voiceData.storyOrigin === "photo" ? (voiceData.photoStoryCaption || null) : null,
+            hide_prompt_in_book: voiceData.storyOrigin === "photo",
 
             duration_seconds: voiceData.duration,
             transcript_chars: String(voiceData.transcript || "").trim().length,
@@ -3973,6 +4098,9 @@ if (mediaStoragePaths.length > 0) {
             meta_json: {
               part: i + 1,
               total_parts: photoItems.length,
+              is_primary: i === 0,
+              story_origin: voiceData.storyOrigin || "question",
+              caption: i === 0 ? (voiceData.photoStoryCaption || null) : null,
               file_name: photo.name || null,
               content_type: contentType
             }
@@ -4181,6 +4309,7 @@ setScene(6);
     scene !== "home" &&
     scene !== -1 &&
     scene !== "supporter_invite_received" &&
+    scene !== "story_relationship_invite_received" &&
     scene !== "supporter_invite_account_mismatch";
 
   const returnToHome = () => {
@@ -4269,9 +4398,10 @@ const nextScene = getInitialSceneForProject({
   notificationPref: notificationData || null
 });
 
-const [supportedStoryProjects, pendingInvites] = await Promise.all([
+const [supportedStoryProjects, pendingInvites, pendingRelationshipInvites] = await Promise.all([
   loadSupportedStoryProjects(),
-  loadPendingSupporterInvites()
+  loadPendingSupporterInvites(),
+  loadPendingStoryRelationshipInvites()
 ]);
 
 const supporterInviteReference = getSupporterInviteReferenceFromUrl();
@@ -4288,6 +4418,7 @@ const orderedPendingInvites = targetedSupporterInviteId
 
 setSupportedProjects(supportedStoryProjects);
 setPendingSupporterInvites(orderedPendingInvites);
+setPendingStoryRelationshipInvites(pendingRelationshipInvites);
 
 let sceneAfterInvite = nextScene;
 
@@ -4307,6 +4438,12 @@ let sceneAfterInvite = nextScene;
             ) {
               setPostSupporterInviteScene(sceneAfterInvite);
               setScene("supporter_invite_account_mismatch");
+              return;
+            }
+
+            if (pendingRelationshipInvites.length > 0) {
+              setPostSupporterInviteScene(sceneAfterInvite);
+              setScene("story_relationship_invite_received");
               return;
             }
 
@@ -4505,6 +4642,15 @@ let sceneAfterInvite = nextScene;
         />
       )}
 
+      {scene === "story_relationship_invite_received" && pendingStoryRelationshipInvites[0] && (
+        <Scene_StoryRelationshipInviteReceived
+          invite={pendingStoryRelationshipInvites[0]}
+          remainingCount={pendingStoryRelationshipInvites.length}
+          onAccept={() => handleStoryRelationshipInviteResponse(pendingStoryRelationshipInvites[0], true)}
+          onDecline={() => handleStoryRelationshipInviteResponse(pendingStoryRelationshipInvites[0], false)}
+        />
+      )}
+
       {scene === "supporter_invite_account_mismatch" && (
         <Scene_SupporterInviteAccountMismatch
           currentEmail={user?.email}
@@ -4689,12 +4835,17 @@ let sceneAfterInvite = nextScene;
            setScene(0);
          }}
          onOpenStoryPages={() => setScene("story_pages")}
+         onStartPhotoStory={() => setScene("photo_story_start")}
          onOpenBookBuilder={() => setScene("book_builder")}
          onOpenQuestionLibrary={() => setScene("question_library")}
          onOpenSettings={() => setScene("settings")}
          onOpenSupportedProject={openSupportedProject}
          onDevLogout={isDevMode() ? handleDevLogout : null}
-       />
+      />
+      )}
+
+      {scene === "photo_story_start" && (
+        <Scene_PhotoStoryStart onStart={startPhotoStory} onBack={() => setScene("home")} />
       )}
 
       {scene === "settings" && (
@@ -4714,6 +4865,7 @@ let sceneAfterInvite = nextScene;
 
       {scene === "sharing_privacy" && (
         <Scene_SharingPrivacySettings
+          foundation={foundation}
           initialPreference={sharingPreference}
           onSavePreference={async ({ familyEnabled, selectedEnabled }) => {
             try {
@@ -4786,6 +4938,7 @@ let sceneAfterInvite = nextScene;
       {scene === "question_library" && (
         <Scene_QuestionLibrary
           foundation={foundation}
+          questionSet={questionsDB}
           onAdded={async () => {
             const refreshedQuestionSet = await loadUserQuestionSet(
               user.id,
@@ -5024,6 +5177,8 @@ onRetry={() => {
         <Scene4_AIMirror
           data={voiceData}
           onEditedTextChange={handleEditedTextChange}
+          onPhotoStoryTitleChange={title => setVoiceData(prev => ({ ...prev, photoStoryTitle: title, photoStoryTitleSource: "user" }))}
+          onPhotoStoryCaptionChange={caption => setVoiceData(prev => ({ ...prev, photoStoryCaption: caption }))}
           onAddPhotos={handlePhotoSelect}
           onRemovePhoto={handleRemovePhoto}
           onNext={() => handleSaveAnswer(null)}
@@ -7339,7 +7494,10 @@ function BookPagePreview({
   questionText = "",
   bodyParagraphs = [],
   headingPhoto = null,
-  photo = null
+  photo = null,
+  isPhotoStory = false,
+  photoSequence = null,
+  photoCaption = ""
 }) {
   if (type === "right") {
     return (
@@ -7399,8 +7557,8 @@ function BookPagePreview({
       <div className="h-full flex flex-col">
         <div className="text-left">
           <p className="text-[0.68rem] leading-tight text-slate-500">
-            Story<br />
-            {sequenceOrder || pageNumber}
+            {isPhotoStory ? "Photo" : "Story"}<br />
+            {isPhotoStory ? String(photoSequence || 1).padStart(2, "0") : (sequenceOrder || pageNumber)}
           </p>
 
           <div className="mt-2">
@@ -7409,22 +7567,23 @@ function BookPagePreview({
         </div>
 
         <div className="flex-1 flex flex-col min-h-0">
-          <div className="h-[42%] flex items-center justify-center text-center px-2">
+          <div className={`${isPhotoStory ? "h-[27%]" : "h-[42%]"} flex items-center justify-center text-center px-2`}>
             <p className="text-[0.82rem] leading-loose text-slate-700 whitespace-pre-wrap">
               {questionText || "問い"}
             </p>
           </div>
 
-          <div className="h-[46%] mt-auto overflow-hidden flex items-center justify-center">
+          <div className={`${isPhotoStory ? "h-[58%]" : "h-[46%]"} mt-auto overflow-hidden flex flex-col items-center justify-center`}>
             {headingPhoto?.url ? (
               <img
                 src={headingPhoto.url}
                 alt=""
-                className="w-full h-full object-cover"
+                className={`w-full ${isPhotoStory ? "max-h-[92%] object-contain" : "h-full object-cover"}`}
               />
             ) : (
               <div className="w-full h-full" />
             )}
+            {isPhotoStory && photoCaption && <p className="text-[0.52rem] text-slate-500 mt-2 text-center">{photoCaption}</p>}
           </div>
         </div>
 
@@ -7536,11 +7695,74 @@ function BookCoverPreview({
   );
 }
 
+function Scene_PhotoStoryStart({ onStart, onBack }) {
+  const inputRef = useRef(null);
+  const [photo, setPhoto] = useState(null);
+  const choosePhoto = files => {
+    const file = Array.from(files || []).find(item => item?.type?.startsWith("image/"));
+    if (!file) return;
+    if (photo?.url) { try { URL.revokeObjectURL(photo.url); } catch (_error) {} }
+    setPhoto({ file, url: URL.createObjectURL(file), name: file.name || "photo", type: file.type || "image/jpeg", createdAt: Date.now() });
+  };
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+      <div className="relative flex items-center justify-center h-10 mb-8 shrink-0">
+        <button type="button" onClick={onBack} className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"><ChevronLeft size={20} className="text-white/55" /></button>
+        <p className="text-white/88 text-[1.02rem] text-narrative">写真から語る</p>
+      </div>
+      <div className="text-center mb-7">
+        <p className="text-white/72 text-sm leading-loose">残したい一枚を選んでください。</p>
+        <p className="text-white/34 text-xs leading-loose mt-2">写真を見ながら、覚えていることをそのままお話しいただけます。</p>
+      </div>
+      <input ref={inputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={event => { choosePhoto(event.target.files); event.target.value = ""; }} />
+      <button type="button" onClick={() => inputRef.current?.click()} className="glass-card min-h-[310px] w-full overflow-hidden flex items-center justify-center mb-7">
+        {photo?.url ? <img src={photo.url} alt="選んだ写真" className="w-full max-h-[430px] object-contain" /> : (
+          <div className="text-center"><ImageIcon size={38} className="text-white/25 mx-auto mb-4" strokeWidth={1.4} /><p className="text-white/52 text-sm">写真を選ぶ・撮影する</p></div>
+        )}
+      </button>
+      <button type="button" onClick={() => onStart(photo)} disabled={!photo} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white disabled:opacity-35">この写真について語る</button>
+    </div>
+  );
+}
+
+function Scene_StoryRelationshipInviteReceived({ invite, remainingCount, onAccept, onDecline }) {
+  const isFamily = invite?.invite_type === "family";
+  const relationLabels = { child: "子", parent: "親", spouse: "配偶者", sibling: "きょうだい", grandchild: "孫", other: "その他" };
+  return (
+    <div className="h-full flex flex-col justify-center fade-enter px-6 py-10 text-center">
+      <p className="text-white/36 text-xs tracking-[0.2em] mb-8">
+        {isFamily ? "ファミリーとしてつながる依頼" : "物語を共有する依頼"}
+      </p>
+      <h1 className="text-white/90 text-[1.3rem] leading-loose text-narrative mb-7">
+        {invite?.owner_name || "ご家族"}の物語から、<br />依頼が届いています。
+      </h1>
+      <div className="glass-card p-6 text-left mb-9">
+        <p className="text-white/66 text-sm leading-loose">
+          {isFamily
+            ? "承認すると、ファミリーとしてのつながりが確認され、共有されている物語を受け取れるようになります。"
+            : "承認すると、この物語の共有相手として登録されます。"}
+        </p>
+        {isFamily && invite?.relationship_label && (
+          <p className="text-white/36 text-xs mt-4">関係：{relationLabels[invite.relationship_label] || "その他"}</p>
+        )}
+      </div>
+      <button type="button" onClick={onAccept} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white mb-4">
+        依頼を受ける
+      </button>
+      <button type="button" onClick={onDecline} className="w-full py-3 text-white/38 text-sm underline underline-offset-4">
+        今回は辞退する
+      </button>
+      {remainingCount > 1 && <p className="text-white/28 text-xs mt-5">ほかに {remainingCount - 1} 件の依頼があります</p>}
+    </div>
+  );
+}
+
 function Scene_Home({
   userName,
   supportedProjects = [],
   onStartTalking,
   onOpenStoryPages,
+  onStartPhotoStory,
   onOpenBookBuilder,
   onOpenQuestionLibrary,
   onOpenSettings,
@@ -7571,6 +7793,12 @@ function Scene_Home({
             icon={Files}
             label="語りを見る"
             onClick={onOpenStoryPages}
+          />
+
+          <HomeMenuButton
+            icon={ImageIcon}
+            label="写真から語る"
+            onClick={onStartPhotoStory}
           />
 
           <HomeMenuButton
@@ -7711,7 +7939,7 @@ function Scene_SettingsHome({
         <SettingsMenuButton
           icon={UserCircle}
           label="プロフィール・アカウント"
-          detail="表示するお名前とメールアドレス"
+          detail="登録氏名とメールアドレス"
           onClick={onOpenProfile}
         />
       </div>
@@ -7720,6 +7948,7 @@ function Scene_SettingsHome({
 }
 
 function Scene_SharingPrivacySettings({
+  foundation,
   initialPreference,
   onSavePreference,
   onOpenPrivateStories,
@@ -7729,6 +7958,13 @@ function Scene_SharingPrivacySettings({
   const [familyEnabled, setFamilyEnabled] = useState(initialFlags.familyEnabled);
   const [selectedEnabled, setSelectedEnabled] = useState(initialFlags.selectedEnabled);
   const [saving, setSaving] = useState(false);
+  const [relationships, setRelationships] = useState([]);
+  const [supporters, setSupporters] = useState([]);
+  const [loadingPeople, setLoadingPeople] = useState(true);
+  const [addType, setAddType] = useState(null);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [relationshipLabel, setRelationshipLabel] = useState("child");
   const isPrivate = !familyEnabled && !selectedEnabled;
 
   useEffect(() => {
@@ -7741,6 +7977,24 @@ function Scene_SharingPrivacySettings({
     initialPreference?.selected_sharing_enabled,
     initialPreference?.live_scope
   ]);
+
+  const loadPeople = async () => {
+    try {
+      setLoadingPeople(true);
+      const [relationshipRows, supporterResult] = await Promise.all([
+        loadOwnedStoryRelationships(foundation?.project?.id),
+        supabaseClient.rpc("list_owned_project_supporters", { input_book_project_id: foundation?.project?.id })
+      ]);
+      setRelationships(relationshipRows);
+      setSupporters((supporterResult.data || []).filter(item => ["active", "pending"].includes(item.relationship_status)));
+    } catch (error) {
+      console.error("story relationships load error", error);
+    } finally {
+      setLoadingPeople(false);
+    }
+  };
+
+  useEffect(() => { loadPeople(); }, [foundation?.project?.id]);
 
   const saveImmediately = async nextFlags => {
     const previousFlags = { familyEnabled, selectedEnabled };
@@ -7758,34 +8012,159 @@ function Scene_SharingPrivacySettings({
     }
   };
 
+  const toggleScope = async type => {
+    const turningOff = type === "family" ? familyEnabled : selectedEnabled;
+    if (turningOff) {
+      if (type === "selected" && supporters.length > 0) {
+        const ok = window.confirm(
+          "「選んだ人へ共有」を外すと、サポーターのお手伝い設定も終了します。\n\nファミリーとしてつながっている方は、ファミリー共有が有効なら引き続き物語を見られます。共有とお手伝いを終了しますか？"
+        );
+        if (!ok) return;
+      } else if (type === "family" && relationships.some(item => item.invite_type === "family" && item.relationship_status === "accepted")) {
+        const ok = window.confirm(
+          "ファミリーへの共有を停止します。\nつながりの確認は残りますが、物語は表示されなくなります。よろしいですか？"
+        );
+        if (!ok) return;
+      }
+      try {
+        setSaving(true);
+        const { error } = await supabaseClient.rpc("disable_story_sharing_scope", {
+          input_book_project_id: foundation?.project?.id,
+          input_scope: type
+        });
+        if (error) throw error;
+        await saveImmediately({
+          familyEnabled: type === "family" ? false : familyEnabled,
+          selectedEnabled: type === "selected" ? false : selectedEnabled
+        });
+        await loadPeople();
+      } catch (error) {
+        console.error("sharing scope disable error", error);
+        alert("共有範囲を変更できませんでした。");
+      } finally { setSaving(false); }
+      return;
+    }
+    await saveImmediately({
+      familyEnabled: type === "family" ? true : familyEnabled,
+      selectedEnabled: type === "selected" ? true : selectedEnabled
+    });
+  };
+
+  const choosePrivate = async () => {
+    if (selectedEnabled && supporters.length > 0) {
+      const ok = window.confirm("自分だけで残すと、サポーターのお手伝い設定も終了します。共有とお手伝いを終了しますか？");
+      if (!ok) return;
+    }
+    if (familyEnabled && relationships.some(item => item.invite_type === "family" && item.relationship_status === "accepted")) {
+      const ok = window.confirm("ファミリーとのつながりの確認は残りますが、物語は表示されなくなります。自分だけで残しますか？");
+      if (!ok) return;
+    }
+    try {
+      setSaving(true);
+      if (selectedEnabled) await supabaseClient.rpc("disable_story_sharing_scope", { input_book_project_id: foundation?.project?.id, input_scope: "selected" });
+      if (familyEnabled) await supabaseClient.rpc("disable_story_sharing_scope", { input_book_project_id: foundation?.project?.id, input_scope: "family" });
+      await onSavePreference({ familyEnabled: false, selectedEnabled: false });
+      setFamilyEnabled(false);
+      setSelectedEnabled(false);
+      await loadPeople();
+    } catch (error) {
+      console.error("private sharing selection error", error);
+      alert("共有範囲を変更できませんでした。");
+    } finally { setSaving(false); }
+  };
+
+  const sendRelationshipInvite = async () => {
+    if (!addType || !inviteEmail.trim()) return;
+    try {
+      setSaving(true);
+      const { data: inviteId, error } = await supabaseClient.rpc("create_story_relationship_invite", {
+        input_book_project_id: foundation?.project?.id,
+        input_email: inviteEmail.trim(),
+        input_invite_type: addType,
+        input_invitee_name: inviteName.trim() || null,
+        input_relationship_label: addType === "family" ? relationshipLabel : null
+      });
+      if (error) throw error;
+      const { data: sendResult, error: sendError } = await supabaseClient.functions.invoke("send-sharing-invite", {
+        body: { inviteId }
+      });
+      if (sendError || sendResult?.success === false) throw sendError || new Error(sendResult?.error || "send failed");
+      const nextFlags = { familyEnabled: familyEnabled || addType === "family", selectedEnabled: selectedEnabled || addType === "selected" };
+      setFamilyEnabled(nextFlags.familyEnabled);
+      setSelectedEnabled(nextFlags.selectedEnabled);
+      setInviteName(""); setInviteEmail(""); setAddType(null);
+      await loadPeople();
+      alert("依頼メールを送りました。");
+    } catch (error) {
+      console.error("relationship invitation error", error);
+      alert("依頼を送信できませんでした。");
+    } finally { setSaving(false); }
+  };
+
+  const removeRelationship = async item => {
+    if (!window.confirm(`${item.display_name || item.invitee_email}との共有を終了しますか？`)) return;
+    try {
+      setSaving(true);
+      const { error } = await supabaseClient.rpc("revoke_story_relationship", {
+        input_book_project_id: foundation?.project?.id,
+        input_relationship_id: item.relationship_id
+      });
+      if (error) throw error;
+      await loadPeople();
+    } catch (error) {
+      console.error("relationship revoke error", error);
+      alert("共有相手を解除できませんでした。");
+    } finally { setSaving(false); }
+  };
+
+  const resendRelationship = async item => {
+    try {
+      setSaving(true);
+      const { data, error } = await supabaseClient.functions.invoke("send-sharing-invite", { body: { inviteId: item.relationship_id } });
+      if (error || data?.success === false) throw error || new Error(data?.error || "send failed");
+      alert("依頼メールを再送しました。");
+    } catch (error) {
+      console.error("relationship invitation resend error", error);
+      alert("依頼メールを再送できませんでした。");
+    } finally { setSaving(false); }
+  };
+
+  const toggleRelationshipPause = async item => {
+    const nextPaused = item.relationship_status !== "paused";
+    try {
+      setSaving(true);
+      const { error } = await supabaseClient.rpc("set_story_relationship_paused", {
+        input_book_project_id: foundation?.project?.id,
+        input_relationship_id: item.relationship_id,
+        input_paused: nextPaused
+      });
+      if (error) throw error;
+      await loadPeople();
+    } catch (error) {
+      console.error("relationship pause error", error);
+      alert("共有状態を変更できませんでした。");
+    } finally { setSaving(false); }
+  };
+
   const options = [
     {
       value: "family",
       label: "ファミリーへ共有",
       note: "おすすめ",
       selected: familyEnabled,
-      onSelect: () => saveImmediately({
-        familyEnabled: !familyEnabled,
-        selectedEnabled
-      })
+      onSelect: () => toggleScope("family")
     },
     {
       value: "selected",
       label: "選んだ人へ共有",
       selected: selectedEnabled,
-      onSelect: () => saveImmediately({
-        familyEnabled,
-        selectedEnabled: !selectedEnabled
-      })
+      onSelect: () => toggleScope("selected")
     },
     {
       value: "private",
       label: "自分だけで残す",
       selected: isPrivate,
-      onSelect: () => saveImmediately({
-        familyEnabled: false,
-        selectedEnabled: false
-      })
+      onSelect: choosePrivate
     }
   ];
 
@@ -7826,6 +8205,82 @@ function Scene_SharingPrivacySettings({
             {saving ? "保存しています..." : "選ぶと自動で保存されます"}
           </p>
         </section>
+
+        {[
+          { type: "family", label: "ファミリー", enabled: familyEnabled },
+          { type: "selected", label: "選んだ人", enabled: selectedEnabled }
+        ].map(section => {
+          const relationshipPeople = relationships.filter(item => item.invite_type === section.type);
+          const supporterPeople = section.type === "selected"
+            ? supporters
+                .filter(supporter => !relationshipPeople.some(item => String(item.invitee_email).toLowerCase() === String(supporter.invitee_email).toLowerCase()))
+                .map(supporter => ({
+                  relationship_id: `supporter-${supporter.invite_id}`,
+                  invite_type: "selected",
+                  invitee_email: supporter.invitee_email,
+                  display_name: supporter.display_name || supporter.invitee_email,
+                  relationship_status: supporter.relationship_status === "active" ? "accepted" : "pending",
+                  is_supporter: true,
+                  supporter_only: true
+                }))
+            : [];
+          const people = [...relationshipPeople, ...supporterPeople];
+          const shown = people.slice(0, 2);
+          return (
+            <section key={section.type} className="pt-7 border-t border-white/[0.08]">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-white/70 text-sm">{section.label}</p>
+                  <p className="text-white/30 text-xs mt-1">{section.enabled ? "共有中" : "共有を停止中"}・{people.length}人</p>
+                </div>
+                <button type="button" onClick={() => setAddType(section.type)} className="w-9 h-9 rounded-full border border-white/12 flex items-center justify-center" aria-label={`${section.label}を追加`}>
+                  <Plus size={17} className="text-white/62" />
+                </button>
+              </div>
+              {loadingPeople ? <p className="text-white/28 text-xs">読み込んでいます...</p> : (
+                <div className="space-y-2">
+                  {shown.map(item => (
+                    <div key={item.relationship_id} className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-white/68 text-sm truncate">{item.display_name || item.invitee_email}</p>
+                        <p className="text-white/28 text-xs mt-1">{item.relationship_status === "accepted" ? (section.enabled ? "共有中" : "一時停止") : item.relationship_status === "paused" ? "個別に一時停止" : "依頼中"}{item.is_supporter ? "・サポーター" : ""}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        {!item.supporter_only && item.relationship_status === "pending" && <button type="button" onClick={() => resendRelationship(item)} className="text-white/42 text-xs underline underline-offset-4">再送</button>}
+                        {!item.supporter_only && ["accepted", "paused"].includes(item.relationship_status) && <button type="button" onClick={() => toggleRelationshipPause(item)} className="text-white/42 text-xs underline underline-offset-4">{item.relationship_status === "paused" ? "再開" : "一時停止"}</button>}
+                        {!item.supporter_only && <button type="button" onClick={() => removeRelationship(item)} className="text-white/26 text-xs underline underline-offset-4">解除</button>}
+                        {item.supporter_only && <span className="text-white/26 text-[0.65rem]">お手伝い設定で管理</span>}
+                      </div>
+                    </div>
+                  ))}
+                  {people.length > 2 && <p className="text-white/30 text-xs px-1">ほか {people.length - 2}人</p>}
+                  {people.length === 0 && <p className="text-white/28 text-xs">つながっている方はまだいません。</p>}
+                </div>
+              )}
+            </section>
+          );
+        })}
+
+        {addType && (
+          <section className="glass-card p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-white/78 text-sm">{addType === "family" ? "ファミリーを追加" : "共有する人を追加"}</p>
+              <button type="button" onClick={() => setAddType(null)} className="text-white/35 text-sm">×</button>
+            </div>
+            <input value={inviteName} onChange={event => setInviteName(event.target.value)} className="quiet-input" placeholder="お名前（任意）" />
+            <input type="email" value={inviteEmail} onChange={event => setInviteEmail(event.target.value)} className="quiet-input" placeholder="メールアドレス" />
+            {addType === "family" && (
+              <select value={relationshipLabel} onChange={event => setRelationshipLabel(event.target.value)} className="quiet-input">
+                <option value="child">子</option><option value="parent">親</option><option value="spouse">配偶者</option>
+                <option value="sibling">きょうだい</option><option value="grandchild">孫</option><option value="other">その他</option>
+              </select>
+            )}
+            <button type="button" onClick={sendRelationshipInvite} disabled={saving || !inviteEmail.trim()} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm disabled:opacity-35">
+              依頼を送る
+            </button>
+            <p className="text-white/28 text-xs leading-loose">メールを受け取った方が承認すると、つながりが確認済みになります。</p>
+          </section>
+        )}
 
         <section className="pt-7 border-t border-white/[0.08]">
           <SettingsMenuButton
@@ -8069,22 +8524,23 @@ function Scene_SupporterManagement({
 }
 
 function Scene_ProfileSettings({ user, onSaved, onBack }) {
-  const [name, setName] = useState(user?.name || user?.preferred_name || "");
+  const [familyName, setFamilyName] = useState(user?.family_name || "");
+  const [givenName, setGivenName] = useState(user?.given_name || "");
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
-    const normalized = name.trim();
-    if (!normalized) return;
+    const normalizedFamily = familyName.trim();
+    const normalizedGiven = givenName.trim();
+    if (!normalizedFamily || !normalizedGiven) return;
     try {
       setSaving(true);
-      const { data, error } = await supabaseClient
-        .from("profiles")
-        .update({ preferred_name: normalized, display_name: normalized })
-        .eq("id", user.id)
-        .select()
-        .single();
+      const { data, error } = await supabaseClient.rpc("update_own_profile_name", {
+        input_family_name: normalizedFamily,
+        input_given_name: normalizedGiven
+      });
       if (error) throw error;
-      onSaved?.({ ...user, ...data, name: normalized });
+      const saved = Array.isArray(data) ? data[0] : data;
+      onSaved?.({ ...user, ...saved, name: saved?.display_name || `${normalizedFamily} ${normalizedGiven}` });
     } catch (error) {
       console.error("profile settings save error", error);
       alert("プロフィールを保存できませんでした。");
@@ -8103,14 +8559,18 @@ function Scene_ProfileSettings({ user, onSaved, onBack }) {
       </div>
       <div className="space-y-6">
         <div>
-          <p className="ui-label mb-2">表示するお名前</p>
-          <input type="text" value={name} onChange={event => setName(event.target.value)} className="quiet-input" />
+          <p className="ui-label mb-2">登録氏名</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div><p className="text-white/28 text-xs mb-2">姓</p><input type="text" value={familyName} onChange={event => setFamilyName(event.target.value)} className="quiet-input" /></div>
+            <div><p className="text-white/28 text-xs mb-2">名</p><input type="text" value={givenName} onChange={event => setGivenName(event.target.value)} className="quiet-input" /></div>
+          </div>
+          <p className="text-white/28 text-xs leading-loose mt-3">本や共有の案内に使うため、正確なお名前を登録してください。</p>
         </div>
         <div>
           <p className="ui-label mb-2">メールアドレス</p>
           <div className="quiet-input text-white/42">{user?.email || ""}</div>
         </div>
-        <button type="button" onClick={save} disabled={saving || !name.trim()} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm">
+        <button type="button" onClick={save} disabled={saving || !familyName.trim() || !givenName.trim()} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm disabled:opacity-35">
           {saving ? "保存中..." : "プロフィールを保存"}
         </button>
       </div>
@@ -8124,11 +8584,32 @@ function Scene_QuestionLibrary({ foundation, questionSet = [], onAdded, onBack }
   const [chapter, setChapter] = useState("追加した問い");
   const [position, setPosition] = useState("end");
   const [saving, setSaving] = useState(false);
-  const suggestions = [
-    { chapter: "家族と大切な人", text: "家族と過ごした時間の中で、今も心に残っている場面はありますか。" },
-    { chapter: "仕事と担ってきた役割", text: "仕事をするうえで、大切にしてきた姿勢を教えてください。" },
-    { chapter: "大切にしてきたこと", text: "これまでの人生で、変わらず大切にしてきたことは何ですか。" }
-  ];
+  const [libraryQuestions, setLibraryQuestions] = useState(questionSet);
+  const loadLibraryQuestions = async () => {
+    if (!foundation?.project?.id) return;
+    const { data, error } = await supabaseClient.from("user_questions").select(`
+      id, book_project_id, participant_id, sequence_order, chapter,
+      chapter_title_snapshot, chapter_subtitle_snapshot, question_text_snapshot,
+      custom_question_text, question_id, is_active, status, answered_at, meta_json,
+      questions (id, content, chapter, chapter_id, chapters (id, label, description, display_order))
+    `).eq("book_project_id", foundation.project.id).order("sequence_order", { ascending: true });
+    if (error) throw error;
+    setLibraryQuestions(normalizeUserQuestions(data || []));
+  };
+  useEffect(() => { loadLibraryQuestions().catch(error => console.error("question library load error", error)); }, [foundation?.project?.id]);
+  const visibleQuestions = (libraryQuestions || []).filter(item => item.include_in_story_list !== false);
+  const groupedQuestions = visibleQuestions.reduce((groups, item) => {
+    const key = item.chapter_label || item.chapter || "これからの問い";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(item);
+    return groups;
+  }, {});
+  const questionStatus = item => {
+    if (item.status === "answered" || item.answered_at) return "回答済み";
+    if (String(item.question_id || "").startsWith("CUSTOM_")) return "追加した問い";
+    if (item.is_active === false) return "停止中";
+    return "これから";
+  };
 
   const addQuestion = async (textValue = questionText, chapterValue = chapter) => {
     if (String(textValue || "").trim().length < 4) return;
@@ -8142,6 +8623,7 @@ function Scene_QuestionLibrary({ foundation, questionSet = [], onAdded, onBack }
       });
       if (error) throw error;
       await onAdded?.();
+      await loadLibraryQuestions();
       setQuestionText("");
       setMode("success");
     } catch (error) {
@@ -8170,20 +8652,30 @@ function Scene_QuestionLibrary({ foundation, questionSet = [], onAdded, onBack }
       ) : (
         <div className="space-y-8">
           <section>
-            <p className="text-white/38 text-xs tracking-[0.18em] mb-4">用意された問い</p>
-            <div className="space-y-3">
-              {suggestions.map(item => (
-                <button key={item.text} type="button" onClick={() => addQuestion(item.text, item.chapter)} disabled={saving} className="glass-card w-full p-5 text-left">
-                  <p className="text-white/32 text-[0.66rem] tracking-[0.12em] mb-2">{item.chapter}</p>
-                  <p className="text-white/72 text-sm leading-loose">{item.text}</p>
-                </button>
+            <p className="text-white/55 text-sm leading-loose mb-6">ここでは、これから届く問いも含めて確認できます。</p>
+            <div className="space-y-7">
+              {Object.entries(groupedQuestions).map(([chapterName, items]) => (
+                <div key={chapterName}>
+                  <p className="text-white/35 text-xs tracking-[0.14em] mb-3">{chapterName}</p>
+                  <div className="space-y-2">
+                    {items.map(item => (
+                      <div key={item.user_question_id || item.id} className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5">
+                        <div className="flex justify-between gap-4 mb-2">
+                          <span className="text-white/28 text-[0.65rem]">{questionStatus(item)}</span>
+                          <span className="text-white/22 text-[0.65rem]">{item.sequence_order}</span>
+                        </div>
+                        <p className="text-white/72 text-sm leading-loose">{item.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </section>
 
           <section className="pt-7 border-t border-white/[0.08] space-y-4">
             <p className="text-white/38 text-xs tracking-[0.18em]">自分で問いを書く</p>
-            <textarea value={questionText} onChange={event => setQuestionText(event.target.value)} placeholder="残しておきたい問いを書いてください" className="quiet-input min-h-[120px] resize-y leading-loose" />
+            <textarea value={questionText} onChange={event => setQuestionText(event.target.value)} placeholder="残しておきたい問いを書いてください" className="quiet-input !bg-white/[0.025] !text-white/80 min-h-[120px] resize-y leading-loose" />
             <input type="text" value={chapter} onChange={event => setChapter(event.target.value)} className="quiet-input" placeholder="章・テーマ" />
           </section>
 
@@ -8732,6 +9224,7 @@ function Scene_BookBuilder({
             selected_style,
             ai_mirror,
             snippet,
+            meta_json,
             created_at
           `)
           .eq("user_id", user.id)
@@ -8821,6 +9314,7 @@ function Scene_BookBuilder({
 
   let previewPageNumber = 1;
 
+  let photoStoryCounter = 0;
   const previewPageGroups = includedStories.map(answer => {
     const question = getQuestionForAnswer(answer);
     const media = bookMediaByAnswerId[answer.id] || [];
@@ -8829,6 +9323,8 @@ function Scene_BookBuilder({
     const additionalPhotos = photos.slice(1);
     const body = getStoryBody(answer);
     const bodyParagraphs = formatBodyForPagePreview(body);
+    const isPhotoStory = answer.meta_json?.story_origin === "photo";
+    const photoSequence = isPhotoStory ? ++photoStoryCounter : null;
 
     const leftPageNumber = previewPageNumber;
     const rightPageNumber = previewPageNumber + 1;
@@ -8852,7 +9348,11 @@ function Scene_BookBuilder({
       bodyParagraphs,
       leftPageNumber,
       rightPageNumber,
-      photoPages
+      photoPages,
+      isPhotoStory,
+      photoSequence,
+      photoTitle: answer.meta_json?.print_title || "この一枚のこと",
+      photoCaption: answer.meta_json?.photo_caption || ""
     };
   });
 
@@ -9172,6 +9672,10 @@ function Scene_BookBuilder({
                       sequenceOrder={group.answer.sequence_order}
                       questionText={group.question?.content || ""}
                       headingPhoto={group.headingPhoto}
+                      isPhotoStory={group.isPhotoStory}
+                      photoSequence={group.photoSequence}
+                      photoCaption={group.photoCaption}
+                      {...(group.isPhotoStory ? { questionText: group.photoTitle } : {})}
                     />
 
                     <BookPagePreview
@@ -10750,7 +11254,7 @@ return (
 }
 
 
-function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto, onNext }) {
+function Scene4_AIMirror({ data, onEditedTextChange, onPhotoStoryTitleChange, onPhotoStoryCaptionChange, onAddPhotos, onRemovePhoto, onNext }) {
   const photoInputRef = useRef(null);
   const [isEditingText, setIsEditingText] = useState(false);
   const [draftText, setDraftText] = useState(data.editedText || "");
@@ -10767,6 +11271,19 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
   return (
     <div className="h-full flex flex-col fade-enter">
       <div className="flex-1 overflow-y-auto pb-10">
+        {data.storyOrigin === "photo" && (
+          <div className="glass-card p-5 mb-8 space-y-5">
+            <div>
+              <p className="text-white/38 text-xs tracking-widest mb-2">本に載せるタイトル</p>
+              <input value={data.photoStoryTitle || "この一枚のこと"} onChange={event => onPhotoStoryTitleChange?.(event.target.value)} className="quiet-input" maxLength={40} />
+              <p className="text-white/27 text-xs leading-loose mt-2">語りから仮のタイトルをつけました。変更しなくても進めます。</p>
+            </div>
+            <div>
+              <p className="text-white/38 text-xs tracking-widest mb-2">日付・場所など（任意）</p>
+              <input value={data.photoStoryCaption || ""} onChange={event => onPhotoStoryCaptionChange?.(event.target.value)} className="quiet-input" placeholder="例：1998年ごろ・鎌倉" maxLength={60} />
+            </div>
+          </div>
+        )}
             <div className="mb-8 p-4 bg-white/5 border-l-2 border-amber-600/50 rounded-r-lg">
           <p className="text-amber-50/90 text-[0.95rem] tracking-widest leading-loose">
             {data.aiMirror}
@@ -10820,13 +11337,13 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
         <div className="glass-card p-5 mt-10">
           {data.photoItems && data.photoItems.length > 0 && (
 
-            <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className={`${data.storyOrigin === "photo" ? "grid grid-cols-1" : "grid grid-cols-2"} gap-3 mb-5`}>
               {data.photoItems.map((photo, index) => (
                 <div
                   key={photo.createdAt || index}
                   className="relative rounded-2xl overflow-hidden bg-white/5 border border-white/10"
                 >
-                  <img src={photo.url} alt={`写真 ${index + 1}`} className="w-full aspect-square object-cover" />
+                  <img src={photo.url} alt={`写真 ${index + 1}`} className={`w-full ${data.storyOrigin === "photo" ? "max-h-[420px] object-contain" : "aspect-square object-cover"}`} />
 
                   <button
                     type="button"
@@ -10840,7 +11357,7 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
             </div>
           )}
 
-          <input
+          {data.storyOrigin !== "photo" && <input
             ref={photoInputRef}
             type="file"
             accept="image/*"
@@ -10850,9 +11367,9 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
               onAddPhotos(e.target.files);
               e.target.value = "";
             }}
-          />
+          />}
 
-           <div className="flex items-center gap-3">
+           {data.storyOrigin !== "photo" && <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => photoInputRef.current?.click()}
@@ -10864,7 +11381,7 @@ function Scene4_AIMirror({ data, onEditedTextChange, onAddPhotos, onRemovePhoto,
             <p className="text-white/32 text-xs whitespace-nowrap">
               後でもできます
             </p>
-          </div>
+          </div>}
         </div>
 
         {data.audioSegments && data.audioSegments.length > 0 && (
