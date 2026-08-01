@@ -7385,6 +7385,11 @@ function BookCoverPreview({
 }) {
   const isPhoto = coverStyle === "photo";
   const isMinimal = coverStyle === "minimal";
+  const usesDarkInk =
+    isMinimal ||
+    ["#c6d7e9", "#e7d3dc", "#d9cdbd"].includes(
+      String(coverColor || "").toLowerCase()
+    );
   const coverTexture = isMinimal
     ? {
         backgroundColor: "#eee8dc",
@@ -7434,19 +7439,19 @@ function BookCoverPreview({
 
           {!isMinimal && !isPhoto && (
             <svg className="absolute inset-x-[35px] top-[36px] w-[146px] h-[34px] opacity-45" viewBox="0 0 146 34" aria-hidden="true">
-              <path d="M2 23 C 30 8, 48 31, 74 17 S 118 7, 144 19" fill="none" stroke="rgba(230,207,137,.75)" strokeWidth="1.2" strokeDasharray="3 5" />
-              <circle cx="74" cy="17" r="2.4" fill="rgba(241,220,153,.85)" />
+              <path d="M2 23 C 30 8, 48 31, 74 17 S 118 7, 144 19" fill="none" stroke={usesDarkInk ? "rgba(100,76,35,.7)" : "rgba(230,207,137,.75)"} strokeWidth="1.2" strokeDasharray="3 5" />
+              <circle cx="74" cy="17" r="2.4" fill={usesDarkInk ? "rgba(107,78,31,.8)" : "rgba(241,220,153,.85)"} />
             </svg>
           )}
 
           <div className={`absolute inset-x-[38px] ${isPhoto ? "top-[184px]" : isMinimal ? "top-[72px]" : "top-[98px]"} text-center`}>
-            <p className={`${isMinimal ? "text-stone-800/90" : "text-white/90"} text-[1.1rem] leading-[1.75] text-narrative tracking-[0.11em] whitespace-pre-wrap`}>
+            <p className={`${usesDarkInk ? "text-stone-800/90" : "text-white/90"} text-[1.02rem] leading-[1.8] text-narrative tracking-[0.07em] whitespace-pre-wrap`}>
               {title || "わたしの物語"}
             </p>
 
-            <div className={`mx-auto my-5 w-9 h-px ${isMinimal ? "bg-stone-700/25" : "bg-white/26"}`} />
+            <div className={`mx-auto my-5 w-9 h-px ${usesDarkInk ? "bg-stone-700/25" : "bg-white/26"}`} />
 
-            <p className={`${isMinimal ? "text-stone-700/58" : "text-white/55"} text-[0.68rem] leading-loose tracking-[0.14em] whitespace-pre-wrap`}>
+            <p className={`${usesDarkInk ? "text-stone-700/58" : "text-white/55"} text-[0.68rem] leading-loose tracking-[0.14em] whitespace-pre-wrap`}>
               {subtitle || "これまでの時間を、家族へ"}
             </p>
           </div>
@@ -7459,7 +7464,7 @@ function BookCoverPreview({
             </div>
           )}
 
-          <p className={`absolute inset-x-[38px] bottom-8 text-center ${isMinimal ? "text-stone-700/48" : "text-white/48"} text-[0.65rem] tracking-[0.18em]`}>
+          <p className={`absolute inset-x-[38px] bottom-8 text-center ${usesDarkInk ? "text-stone-700/48" : "text-white/48"} text-[0.65rem] tracking-[0.18em]`}>
             {authorName || ""}
           </p>
         </div>
@@ -8534,9 +8539,9 @@ function Scene_BookBuilder({
   const steps = ["表紙", "収録", "紙面", "注文", "完了"];
   const [stepIndex, setStepIndex] = useState(0);
   const [coverPhoto, setCoverPhoto] = useState(null);
-  const [coverColor, setCoverColor] = useState("#d9cdbd");
+  const [coverColor, setCoverColor] = useState("#1f3a36");
   const [coverStyle, setCoverStyle] = useState("cloth");
-  const [bookTitle, setBookTitle] = useState(`${withHonorific(userName)}の物語`);
+  const [bookTitle, setBookTitle] = useState("わたしの物語");
   const [bookSubtitle, setBookSubtitle] = useState("これまでの時間を、家族へ");
   const coverInputRef = useRef(null);
 
@@ -8733,7 +8738,7 @@ function Scene_BookBuilder({
   });
 
   return (
-    <div className="fixed inset-0 min-h-0 flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
+    <div className="fixed inset-0 max-w-[760px] mx-auto min-h-0 flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
       <div className="shrink-0 pb-3">
         <div className="relative flex items-center justify-center mb-3 h-10">
           <button
