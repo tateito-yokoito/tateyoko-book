@@ -12,3 +12,12 @@ Apply these files in **Authentication → Email Templates** in the hosted Supaba
 Both templates intentionally contain `{{ .ConfirmationURL }}` and `{{ .Token }}`. The link is the primary path; the one-time code remains available when the mail app cannot open the link.
 
 Keep authentication-email link tracking disabled so the provider does not rewrite the one-time URL.
+
+## Authentication URL configuration
+
+Use the production deployment as the default destination for authentication links.
+
+- Site URL: `https://tateyoko-book.vercel.app`
+- Redirect URL: `https://tateyoko-book.vercel.app/**`
+
+The legacy `https://koe-project.github.io` redirect may remain in the allow list for old links, but it must not be the Site URL.
