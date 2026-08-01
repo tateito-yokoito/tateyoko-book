@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronLeft, ChevronRight, Files, Mic, Pause, Pencil, Play, RotateCw, ScanLine, Square, Users } from "lucide-react";
+import { Bell, BookOpen, ChevronLeft, ChevronRight, Files, Home, Lock, Mic, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings, Square, UserCircle, UserCog, Users } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumossjxehdop.supabase.co";
@@ -2031,6 +2031,8 @@ function App() {
   const [lifeOutlineStatus, setLifeOutlineStatus] = useState("idle");
   const [lifeOutlineError, setLifeOutlineError] = useState("");
   const [lifeOutlineReturnScene, setLifeOutlineReturnScene] = useState(null);
+  const [notificationSetupReturnScene, setNotificationSetupReturnScene] = useState(null);
+  const [supporterInviteInitialEmail, setSupporterInviteInitialEmail] = useState("");
 
   const [pendingBetaSurvey, setPendingBetaSurvey] = useState(null);
   const [accessMode, setAccessMode] = useState("session");
@@ -4138,9 +4140,47 @@ setScene(6);
     chapter_description: "...",
     content: "問いを取得できませんでした"
   };
+  const showGlobalHome =
+    Boolean(user?.id) &&
+    foundation?.project?.onboarding_status === "completed" &&
+    scene !== "home" &&
+    scene !== -1 &&
+    scene !== "supporter_invite_received" &&
+    scene !== "supporter_invite_account_mismatch";
+
+  const returnToHome = () => {
+    const hasUnsavedVoice =
+      [2, 3, 4].includes(scene) &&
+      (
+        voiceData.hasAudio ||
+        voiceData.audioBlob ||
+        String(voiceData.transcript || "").trim()
+      );
+
+    if (
+      hasUnsavedVoice &&
+      !window.confirm("まだ保存していない録音があります。内容を破棄してホームへ戻りますか？")
+    ) {
+      return;
+    }
+
+    resetVoiceData();
+    setSupportContext(null);
+    setScene("home");
+  };
 
   return (
     <div className="app-container">
+      {showGlobalHome && (
+        <button
+          type="button"
+          onClick={returnToHome}
+          className="fixed right-[max(1rem,calc((100vw-600px)/2+1rem))] top-[calc(env(safe-area-inset-top)+0.75rem)] z-[70] w-10 h-10 rounded-full border border-white/10 bg-[#0f172a]/80 backdrop-blur-md flex items-center justify-center"
+          aria-label="ホームへ戻る"
+        >
+          <Home size={18} className="text-white/62" strokeWidth={1.7} />
+        </button>
+      )}
       {scene === -1 && (
         <Scene_Login
           onLogin={async (u) => {
@@ -4476,6 +4516,13 @@ let sceneAfterInvite = nextScene;
           total: questionSet.length
         });
 
+        if (notificationSetupReturnScene) {
+          const returnScene = notificationSetupReturnScene;
+          setNotificationSetupReturnScene(null);
+          setScene(returnScene);
+          return;
+        }
+
         if (
           refreshedFoundationData?.project?.onboarding_status !== "completed"
         ) {
@@ -4602,9 +4649,122 @@ let sceneAfterInvite = nextScene;
          }}
          onOpenStoryPages={() => setScene("story_pages")}
          onOpenBookBuilder={() => setScene("book_builder")}
+         onOpenQuestionLibrary={() => setScene("question_library")}
+         onOpenSettings={() => setScene("settings")}
          onOpenSupportedProject={openSupportedProject}
          onDevLogout={isDevMode() ? handleDevLogout : null}
        />
+      )}
+
+      {scene === "settings" && (
+        <Scene_SettingsHome
+          notificationPref={notificationPref}
+          sharingPreference={sharingPreference}
+          onOpenDelivery={() => {
+            setNotificationSetupReturnScene("settings");
+            setScene("notification_setup");
+          }}
+          onOpenPrivacy={() => setScene("sharing_privacy")}
+          onOpenSupporters={() => setScene("supporter_management")}
+          onOpenProfile={() => setScene("profile_settings")}
+          onBack={() => setScene("home")}
+        />
+      )}
+
+      {scene === "sharing_privacy" && (
+        <Scene_SharingPrivacySettings
+          initialScope={sharingPreference?.live_scope || "family"}
+          onSaveScope={async (liveScope) => {
+            try {
+              const savedPreference = await upsertStorySharingPreference({
+                bookProjectId: foundation?.project?.id,
+                ownerPersonId:
+                  foundation?.project?.subject_person_id ||
+                  foundation?.person?.id,
+                liveScope,
+                markInitialSetupComplete: true
+              });
+
+              setSharingPreference(savedPreference);
+              setScene("settings");
+            } catch (error) {
+              console.error("sharing preference update error", error);
+              alert("共有範囲を保存できませんでした。");
+              throw error;
+            }
+          }}
+          onOpenPrivateStories={() => setScene("private_story_settings")}
+          onBack={() => setScene("settings")}
+        />
+      )}
+
+      {scene === "private_story_settings" && (
+        <Scene_PrivateStorySettings
+          user={user}
+          questionSet={questionsDB}
+          onBack={() => setScene("sharing_privacy")}
+        />
+      )}
+
+      {scene === "supporter_management" && (
+        <Scene_SupporterManagement
+          foundation={foundation}
+          onInvite={(email = "") => {
+            setSupporterInviteInitialEmail(email);
+            setScene("supporter_invite_management");
+          }}
+          onBack={() => setScene("settings")}
+        />
+      )}
+
+      {scene === "supporter_invite_management" && (
+        <Scene_SupporterInvite
+          user={user}
+          foundation={foundation}
+          sharingPreference={sharingPreference}
+          initialEmail={supporterInviteInitialEmail}
+          onSharingPreferenceChange={setSharingPreference}
+          onComplete={() => {
+            setSupporterInviteInitialEmail("");
+            setScene("supporter_management");
+          }}
+        />
+      )}
+
+      {scene === "profile_settings" && (
+        <Scene_ProfileSettings
+          user={user}
+          onSaved={(updatedUser) => {
+            setUser(updatedUser);
+            setScene("settings");
+          }}
+          onBack={() => setScene("settings")}
+        />
+      )}
+
+      {scene === "question_library" && (
+        <Scene_QuestionLibrary
+          foundation={foundation}
+          onAdded={async () => {
+            const refreshedQuestionSet = await loadUserQuestionSet(
+              user.id,
+              foundation
+            );
+            setQuestionsDB(refreshedQuestionSet);
+            setProgress(prev => ({
+              currentIndex: Math.min(
+                getProjectQuestionIndex(
+                  refreshedQuestionSet,
+                  foundation?.project,
+                  user
+                ),
+                Math.max(refreshedQuestionSet.length - 1, 0)
+              ),
+              total: refreshedQuestionSet.length
+            }));
+          }}
+          onBack={() => setScene("home")}
+        />
       )}
 
       {scene === "support_project_home" && supportContext && (
@@ -6701,10 +6861,11 @@ function Scene_SupporterInvite({
   foundation,
   sharingPreference,
   isInitialSetup = false,
+  initialEmail = "",
   onSharingPreferenceChange,
   onComplete
 }) {
-  const [supporterEmail, setSupporterEmail] = useState("");
+  const [supporterEmail, setSupporterEmail] = useState(initialEmail);
   const [loading, setLoading] = useState(false);
   const [confirmPrivateChange, setConfirmPrivateChange] = useState(false);
 
@@ -7214,53 +7375,94 @@ function BookPagePreview({
   );
 }
 
-function BookCoverPreview({ title, subtitle, authorName, coverPhoto, coverColor = "#26382f" }) {
+function BookCoverPreview({
+  title,
+  subtitle,
+  authorName,
+  coverPhoto,
+  coverColor = "#26382f",
+  coverStyle = "cloth"
+}) {
+  const isPhoto = coverStyle === "photo";
+  const isMinimal = coverStyle === "minimal";
+  const coverTexture = isMinimal
+    ? {
+        backgroundColor: "#eee8dc",
+        backgroundImage:
+          "radial-gradient(circle at 20% 15%, rgba(255,255,255,.7), transparent 32%), repeating-linear-gradient(0deg, rgba(82,65,45,.025) 0 1px, transparent 1px 4px)"
+      }
+    : {
+        backgroundColor: coverColor,
+        backgroundImage:
+          "repeating-linear-gradient(0deg, rgba(255,255,255,.028) 0 1px, transparent 1px 4px), repeating-linear-gradient(90deg, rgba(0,0,0,.035) 0 1px, transparent 1px 5px), radial-gradient(circle at 72% 18%, rgba(255,255,255,.08), transparent 35%)"
+      };
+
   return (
-    <div className="flex justify-center py-3">
-      <div className="relative w-[230px] h-[330px]">
-        <div className="absolute left-4 top-5 w-[218px] h-[310px] rounded-r-[10px] bg-black/30 blur-xl" />
+    <div className="flex justify-center py-5" aria-label="表紙プレビュー">
+      <div className="relative w-[254px] h-[356px] [perspective:900px]">
+        <div className="absolute left-[30px] top-[33px] w-[218px] h-[310px] rounded-r-[12px] bg-black/50 blur-2xl" />
 
-          <div
-            className="absolute left-0 top-0 w-[214px] h-[318px] rounded-r-[10px] shadow-2xl overflow-hidden border border-white/10"
-            style={{ backgroundColor: coverColor }}
-          >
+        <div className="absolute left-[215px] top-[11px] w-[24px] h-[318px] rounded-r-[9px] bg-[#f3eee3] shadow-[8px_9px_20px_rgba(0,0,0,.28)] overflow-hidden">
+          <div className="absolute inset-y-3 left-[6px] w-px bg-[#cfc7b8]" />
+          <div className="absolute inset-y-4 left-[11px] w-px bg-[#ddd5c7]" />
+          <div className="absolute inset-y-5 left-[16px] w-px bg-[#e4ddd2]" />
+        </div>
 
-          <div className="absolute left-0 top-0 h-full w-[18px] bg-black/18 border-r border-white/10" />
-          <div className="absolute left-[28px] top-0 h-full w-px bg-white/10" />
+        <div
+          className="absolute left-[8px] top-0 w-[216px] h-[326px] rounded-r-[10px] overflow-hidden border border-black/15 shadow-[0_24px_45px_rgba(0,0,0,.42)]"
+          style={coverTexture}
+        >
+          <div className="absolute inset-y-0 left-0 w-[22px] bg-black/[0.13] border-r border-black/10 shadow-[inset_-4px_0_10px_rgba(0,0,0,.12)]" />
+          <div className={`absolute inset-y-0 left-[31px] w-px ${isMinimal ? "bg-stone-600/12" : "bg-white/12"}`} />
 
-          {coverPhoto?.url && (
-            <div className="absolute inset-x-[34px] top-[34px] h-[104px] overflow-hidden rounded-[2px] border border-white/10">
-              <img
-                src={coverPhoto.url}
-                alt=""
-                className="w-full h-full object-cover opacity-85"
-              />
+          {isPhoto && (
+            <div className="absolute inset-x-[38px] top-[36px] h-[126px] overflow-hidden border border-white/20 bg-black/10 shadow-[0_9px_22px_rgba(0,0,0,.16)]">
+              {coverPhoto?.url ? (
+                <img
+                  src={coverPhoto.url}
+                  alt="表紙に添えた写真"
+                  className="w-full h-full object-cover saturate-[0.72] contrast-[0.92]"
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center">
+                  <ScanLine size={25} className="text-white/24" strokeWidth={1.3} />
+                </div>
+              )}
+              <div className="absolute inset-0 bg-[#1c1a18]/10 mix-blend-multiply" />
             </div>
           )}
 
-          <div className={`absolute inset-x-[34px] ${coverPhoto?.url ? "top-[162px]" : "top-[82px]"} text-center`}>
-            <p className="text-white/90 text-[1.18rem] leading-relaxed text-narrative tracking-[0.08em] whitespace-pre-wrap">
+          {!isMinimal && !isPhoto && (
+            <svg className="absolute inset-x-[35px] top-[36px] w-[146px] h-[34px] opacity-45" viewBox="0 0 146 34" aria-hidden="true">
+              <path d="M2 23 C 30 8, 48 31, 74 17 S 118 7, 144 19" fill="none" stroke="rgba(230,207,137,.75)" strokeWidth="1.2" strokeDasharray="3 5" />
+              <circle cx="74" cy="17" r="2.4" fill="rgba(241,220,153,.85)" />
+            </svg>
+          )}
+
+          <div className={`absolute inset-x-[38px] ${isPhoto ? "top-[184px]" : isMinimal ? "top-[72px]" : "top-[98px]"} text-center`}>
+            <p className={`${isMinimal ? "text-stone-800/90" : "text-white/90"} text-[1.1rem] leading-[1.75] text-narrative tracking-[0.11em] whitespace-pre-wrap`}>
               {title || "わたしの物語"}
             </p>
 
-            <div className="mx-auto my-5 w-10 h-px bg-white/24" />
+            <div className={`mx-auto my-5 w-9 h-px ${isMinimal ? "bg-stone-700/25" : "bg-white/26"}`} />
 
-            <p className="text-white/58 text-[0.72rem] leading-loose tracking-[0.14em] whitespace-pre-wrap">
+            <p className={`${isMinimal ? "text-stone-700/58" : "text-white/55"} text-[0.68rem] leading-loose tracking-[0.14em] whitespace-pre-wrap`}>
               {subtitle || "これまでの時間を、家族へ"}
             </p>
           </div>
 
-          <p className="absolute inset-x-[34px] bottom-9 text-center text-white/50 text-[0.68rem] tracking-[0.18em]">
+          {isMinimal && (
+            <div className="absolute inset-x-[44px] bottom-[62px] flex items-center gap-3 opacity-50" aria-hidden="true">
+              <span className="h-px flex-1 bg-stone-600/30" />
+              <span className="w-1.5 h-1.5 rounded-full border border-stone-600/40" />
+              <span className="h-px flex-1 bg-stone-600/30" />
+            </div>
+          )}
+
+          <p className={`absolute inset-x-[38px] bottom-8 text-center ${isMinimal ? "text-stone-700/48" : "text-white/48"} text-[0.65rem] tracking-[0.18em]`}>
             {authorName || ""}
           </p>
         </div>
-
-        <div className="absolute left-[214px] top-[8px] w-[14px] h-[302px] rounded-r-[8px] bg-[#f5f1e8] shadow-lg">
-          <div className="absolute left-1 top-4 bottom-4 w-px bg-slate-300/70" />
-          <div className="absolute left-2 top-5 bottom-5 w-px bg-slate-200/80" />
-        </div>
-
-        <div className="absolute left-[206px] top-[14px] w-[12px] h-[290px] rounded-r-[6px] bg-black/12" />
       </div>
     </div>
   );
@@ -7272,6 +7474,8 @@ function Scene_Home({
   onStartTalking,
   onOpenStoryPages,
   onOpenBookBuilder,
+  onOpenQuestionLibrary,
+  onOpenSettings,
   onOpenSupportedProject,
   onDevLogout
 }) {
@@ -7307,6 +7511,19 @@ function Scene_Home({
             onClick={onOpenBookBuilder}
           />
 
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <HomeUtilityButton
+              icon={Plus}
+              label="問いを追加"
+              onClick={onOpenQuestionLibrary}
+            />
+            <HomeUtilityButton
+              icon={Settings}
+              label="設定"
+              onClick={onOpenSettings}
+            />
+          </div>
+
           {supportedProjects.length > 0 && (
             <div className="pt-8 mt-8 border-t border-white/10 space-y-4">
               <p className="text-white/45 text-xs tracking-[0.18em] px-1">
@@ -7336,6 +7553,529 @@ function Scene_Home({
 
         </div>
       </div>
+    </div>
+  );
+}
+
+function HomeUtilityButton({ icon: Icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-4 flex items-center justify-center gap-3 text-white/58"
+    >
+      <Icon size={17} strokeWidth={1.7} />
+      <span className="text-sm">{label}</span>
+    </button>
+  );
+}
+
+function SettingsMenuButton({ icon: Icon, label, detail, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="glass-card w-full px-5 py-4 flex items-center gap-4 text-left"
+    >
+      <div className="w-10 h-10 rounded-full bg-white/[0.07] flex items-center justify-center shrink-0">
+        <Icon size={19} className="text-white/62" strokeWidth={1.7} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-white/82 text-[0.98rem] text-narrative">{label}</p>
+        {detail && <p className="mt-1 text-white/34 text-xs truncate">{detail}</p>}
+      </div>
+      <ChevronRight size={18} className="text-white/25" strokeWidth={1.7} />
+    </button>
+  );
+}
+
+function Scene_SettingsHome({
+  notificationPref,
+  sharingPreference,
+  onOpenDelivery,
+  onOpenPrivacy,
+  onOpenSupporters,
+  onOpenProfile,
+  onBack
+}) {
+  const sharingLabels = {
+    family: "ファミリーへ共有",
+    selected: "選んだ人へ共有",
+    private: "自分だけ"
+  };
+
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+      <div className="relative flex items-center justify-center h-10 mb-10 shrink-0">
+        <button
+          type="button"
+          onClick={onBack}
+          className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"
+          aria-label="ホームへ戻る"
+        >
+          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+        </button>
+        <p className="text-white/88 text-[1.05rem] text-narrative">設定</p>
+      </div>
+
+      <div className="space-y-4">
+        <SettingsMenuButton
+          icon={Bell}
+          label="問いの届け方"
+          detail={notificationPref ? formatNextNotificationLabel(notificationPref) : "未設定"}
+          onClick={onOpenDelivery}
+        />
+        <SettingsMenuButton
+          icon={Lock}
+          label="共有とプライバシー"
+          detail={sharingLabels[sharingPreference?.live_scope] || "未設定"}
+          onClick={onOpenPrivacy}
+        />
+        <SettingsMenuButton
+          icon={UserCog}
+          label="お手伝いする人"
+          detail="依頼中・お手伝い中の方を確認"
+          onClick={onOpenSupporters}
+        />
+        <SettingsMenuButton
+          icon={UserCircle}
+          label="プロフィール・アカウント"
+          detail="表示するお名前とメールアドレス"
+          onClick={onOpenProfile}
+        />
+      </div>
+    </div>
+  );
+}
+
+function Scene_SharingPrivacySettings({
+  initialScope = "family",
+  onSaveScope,
+  onOpenPrivateStories,
+  onBack
+}) {
+  const [scope, setScope] = useState(initialScope);
+  const [saving, setSaving] = useState(false);
+  const options = [
+    { value: "family", label: "ファミリーへ共有", note: "おすすめ" },
+    { value: "selected", label: "選んだ人へ共有" },
+    { value: "private", label: "自分だけで残す" }
+  ];
+
+  const save = async () => {
+    try {
+      setSaving(true);
+      await onSaveScope(scope);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+      <div className="relative flex items-center justify-center h-10 mb-9 shrink-0">
+        <button type="button" onClick={onBack} className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center">
+          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+        </button>
+        <p className="text-white/88 text-[1.02rem] text-narrative">共有とプライバシー</p>
+      </div>
+
+      <div className="space-y-8">
+        <section>
+          <p className="text-white/38 text-xs tracking-[0.18em] mb-4">物語全体</p>
+          <div className="space-y-3">
+            {options.map(option => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setScope(option.value)}
+                className={`w-full rounded-2xl border px-5 py-4 text-left ${scope === option.value ? "border-white/35 bg-white/[0.1]" : "border-white/[0.08] bg-white/[0.025]"}`}
+              >
+                <span className="flex justify-between gap-3">
+                  <span className="text-white/78 text-sm">{option.label}</span>
+                  {option.note && <span className="text-white/32 text-xs">{option.note}</span>}
+                </span>
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={save} disabled={saving} className="btn-quiet bg-white/10 w-full py-3.5 rounded-full text-white text-sm mt-4">
+            {saving ? "保存中..." : "共有範囲を保存"}
+          </button>
+        </section>
+
+        <section className="pt-7 border-t border-white/[0.08]">
+          <SettingsMenuButton
+            icon={Lock}
+            label="語りごとの非公開設定"
+            detail="自分だけにする語りを選びます"
+            onClick={onOpenPrivateStories}
+          />
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Scene_PrivateStorySettings({ user, questionSet = [], onBack }) {
+  const [stories, setStories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data, error } = await supabaseClient
+          .from("answers")
+          .select("id, sequence_order, transcript_edited, transcript_readable, transcript_clean, access_override, created_at")
+          .eq("user_id", user.id)
+          .order("sequence_order", { ascending: true });
+        if (error) throw error;
+        setStories(data || []);
+      } catch (error) {
+        console.error("private story settings load error", error);
+        alert("語りの公開設定を読み込めませんでした。");
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [user?.id]);
+
+  const togglePrivate = async story => {
+    const nextValue = story.access_override === "private_forever" ? "inherit" : "private_forever";
+    try {
+      setSavingId(story.id);
+      const { error } = await supabaseClient
+        .from("answers")
+        .update({ access_override: nextValue })
+        .eq("id", story.id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+      setStories(prev => prev.map(item => item.id === story.id ? { ...item, access_override: nextValue } : item));
+    } catch (error) {
+      console.error("private story setting save error", error);
+      alert("非公開設定を保存できませんでした。");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const visibleStories = stories.filter(story => {
+    const question = (questionSet || []).find(item => Number(item.sequence_order) === Number(story.sequence_order));
+    return question?.include_in_story_list !== false && question?.flow_type !== "onboarding";
+  });
+  const privateCount = visibleStories.filter(story => story.access_override === "private_forever").length;
+
+  return (
+    <div className="fixed inset-0 min-h-0 flex flex-col fade-enter px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4">
+      <div className="relative flex items-center justify-center h-10 mb-5 shrink-0">
+        <button type="button" onClick={onBack} className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center">
+          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+        </button>
+        <p className="text-white/88 text-[1rem] text-narrative">語りごとの非公開設定</p>
+      </div>
+      <div className="shrink-0 glass-card px-5 py-4 mb-4 flex items-center justify-between">
+        <p className="text-white/58 text-sm">自分だけの語り</p>
+        <p className="text-white/86 text-lg text-narrative">{privateCount}件</p>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pb-8">
+        {loading && <p className="text-center text-white/38 text-sm py-10">読み込んでいます...</p>}
+        {!loading && visibleStories.length === 0 && <p className="text-center text-white/42 text-sm py-10">設定できる語りはまだありません。</p>}
+        {visibleStories.map(story => {
+          const question = (questionSet || []).find(item => Number(item.sequence_order) === Number(story.sequence_order));
+          const isPrivate = story.access_override === "private_forever";
+          const body = story.transcript_edited || story.transcript_readable || story.transcript_clean || "";
+          return (
+            <div key={story.id} className="glass-card p-5">
+              <p className="text-white/42 text-xs leading-relaxed mb-3">{question?.content || "残された語り"}</p>
+              <p className="text-white/72 text-sm leading-loose line-clamp-3 mb-4">{body}</p>
+              <button
+                type="button"
+                onClick={() => togglePrivate(story)}
+                disabled={savingId === story.id}
+                className="w-full flex items-center justify-between rounded-xl border border-white/[0.08] px-4 py-3"
+              >
+                <span className="text-white/58 text-sm">この語りは自分だけ</span>
+                <span className={`relative w-11 h-6 rounded-full transition ${isPrivate ? "bg-amber-100/45" : "bg-white/10"}`}>
+                  <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition ${isPrivate ? "left-6" : "left-1"}`} />
+                </span>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Scene_SupporterManagement({
+  foundation,
+  onInvite,
+  onBack
+}) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+
+  const loadItems = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabaseClient.rpc("list_owned_project_supporters", {
+        input_book_project_id: foundation?.project?.id
+      });
+      if (error) throw error;
+      setItems(data || []);
+    } catch (error) {
+      console.error("supporter management load error", error);
+      alert("お手伝いする方を読み込めませんでした。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadItems();
+  }, [foundation?.project?.id]);
+
+  const resendInvite = async item => {
+    try {
+      setBusyId(item.invite_id);
+      const { data, error } = await supabaseClient.functions.invoke("send-supporter-invite", {
+        body: { inviteId: item.invite_id }
+      });
+      if (error || data?.success === false) throw error || new Error(data?.error || "send failed");
+      await loadItems();
+      alert("依頼メールを再送しました。");
+    } catch (error) {
+      console.error("supporter invitation resend error", error);
+      alert("依頼メールを再送できませんでした。");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const endSupport = async item => {
+    if (!window.confirm("この方のお手伝いを終了しますか？\nこれ以降、共有中の語りも開けなくなります。")) return;
+    try {
+      setBusyId(item.supporter_id);
+      const { error } = await supabaseClient.rpc("end_project_supporter", {
+        input_book_project_id: foundation?.project?.id,
+        input_supporter_id: item.supporter_id
+      });
+      if (error) throw error;
+      await loadItems();
+    } catch (error) {
+      console.error("supporter end error", error);
+      alert("お手伝いを終了できませんでした。");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const cancelInvite = async item => {
+    if (!window.confirm("この依頼を取り消しますか？")) return;
+    try {
+      setBusyId(item.invite_id);
+      const { error } = await supabaseClient.rpc("cancel_supporter_invite", {
+        input_book_project_id: foundation?.project?.id,
+        input_invite_id: item.invite_id
+      });
+      if (error) throw error;
+      await loadItems();
+    } catch (error) {
+      console.error("supporter invite cancel error", error);
+      alert("依頼を取り消せませんでした。");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const statusLabel = { pending: "依頼中", active: "お手伝い中", ended: "終了" };
+
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+      <div className="relative flex items-center justify-center h-10 mb-8 shrink-0">
+        <button type="button" onClick={onBack} className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center">
+          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+        </button>
+        <p className="text-white/88 text-[1.02rem] text-narrative">お手伝いする人</p>
+      </div>
+
+      <div className="glass-card p-5 mb-6">
+        <p className="text-white/56 text-xs leading-[1.9]">
+          録音の操作、写真の追加、文章の整理、本づくりをお手伝いできます。共有設定の変更や、非公開の語りの閲覧はできません。
+        </p>
+      </div>
+
+      <div className="space-y-3 mb-6">
+        {loading && <p className="text-center text-white/35 text-sm py-8">読み込んでいます...</p>}
+        {!loading && items.length === 0 && <p className="text-center text-white/38 text-sm py-8">お手伝いを依頼した方はまだいません。</p>}
+        {items.map(item => (
+          <div key={item.invite_id} className="glass-card p-5">
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <div className="min-w-0">
+                <p className="text-white/80 text-sm truncate">{item.display_name || item.invitee_email}</p>
+                <p className="text-white/32 text-xs truncate mt-1">{item.invitee_email}</p>
+              </div>
+              <span className={`shrink-0 rounded-full px-3 py-1 text-[0.68rem] ${item.relationship_status === "active" ? "bg-emerald-100/10 text-emerald-100/65" : "bg-white/[0.06] text-white/42"}`}>
+                {statusLabel[item.relationship_status] || item.relationship_status}
+              </span>
+            </div>
+            {item.relationship_status === "pending" && (
+              <div className="flex gap-4 pt-3 border-t border-white/[0.07]">
+                <button type="button" disabled={busyId === item.invite_id} onClick={() => resendInvite(item)} className="text-white/55 text-xs underline underline-offset-4">メールを再送</button>
+                <button type="button" disabled={busyId === item.invite_id} onClick={() => cancelInvite(item)} className="text-white/35 text-xs underline underline-offset-4">依頼を取り消す</button>
+              </div>
+            )}
+            {item.relationship_status === "active" && (
+              <button type="button" disabled={busyId === item.supporter_id} onClick={() => endSupport(item)} className="mt-3 pt-3 w-full text-left border-t border-white/[0.07] text-white/38 text-xs underline underline-offset-4">お手伝いを終了する</button>
+            )}
+            {item.relationship_status === "ended" && (
+              <button type="button" onClick={() => onInvite(item.invitee_email)} className="mt-3 pt-3 w-full text-left border-t border-white/[0.07] text-white/52 text-xs underline underline-offset-4">もう一度依頼する</button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button type="button" onClick={onInvite} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm">
+        新しくお手伝いを依頼する
+      </button>
+    </div>
+  );
+}
+
+function Scene_ProfileSettings({ user, onSaved, onBack }) {
+  const [name, setName] = useState(user?.name || user?.preferred_name || "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const normalized = name.trim();
+    if (!normalized) return;
+    try {
+      setSaving(true);
+      const { data, error } = await supabaseClient
+        .from("profiles")
+        .update({ preferred_name: normalized, display_name: normalized })
+        .eq("id", user.id)
+        .select()
+        .single();
+      if (error) throw error;
+      onSaved?.({ ...user, ...data, name: normalized });
+    } catch (error) {
+      console.error("profile settings save error", error);
+      alert("プロフィールを保存できませんでした。");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+      <div className="relative flex items-center justify-center h-10 mb-10 shrink-0">
+        <button type="button" onClick={onBack} className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center">
+          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+        </button>
+        <p className="text-white/88 text-[1.02rem] text-narrative">プロフィール</p>
+      </div>
+      <div className="space-y-6">
+        <div>
+          <p className="ui-label mb-2">表示するお名前</p>
+          <input type="text" value={name} onChange={event => setName(event.target.value)} className="quiet-input" />
+        </div>
+        <div>
+          <p className="ui-label mb-2">メールアドレス</p>
+          <div className="quiet-input text-white/42">{user?.email || ""}</div>
+        </div>
+        <button type="button" onClick={save} disabled={saving || !name.trim()} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm">
+          {saving ? "保存中..." : "プロフィールを保存"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Scene_QuestionLibrary({ foundation, questionSet = [], onAdded, onBack }) {
+  const [mode, setMode] = useState("library");
+  const [questionText, setQuestionText] = useState("");
+  const [chapter, setChapter] = useState("追加した問い");
+  const [position, setPosition] = useState("end");
+  const [saving, setSaving] = useState(false);
+  const suggestions = [
+    { chapter: "家族と大切な人", text: "家族と過ごした時間の中で、今も心に残っている場面はありますか。" },
+    { chapter: "仕事と担ってきた役割", text: "仕事をするうえで、大切にしてきた姿勢を教えてください。" },
+    { chapter: "大切にしてきたこと", text: "これまでの人生で、変わらず大切にしてきたことは何ですか。" }
+  ];
+
+  const addQuestion = async (textValue = questionText, chapterValue = chapter) => {
+    if (String(textValue || "").trim().length < 4) return;
+    try {
+      setSaving(true);
+      const { error } = await supabaseClient.rpc("add_custom_story_question", {
+        input_book_project_id: foundation?.project?.id,
+        input_question_text: String(textValue).trim(),
+        input_chapter_title: chapterValue,
+        input_position: position
+      });
+      if (error) throw error;
+      await onAdded?.();
+      setQuestionText("");
+      setMode("success");
+    } catch (error) {
+      console.error("custom question add error", error);
+      alert("問いを追加できませんでした。");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+      <div className="relative flex items-center justify-center h-10 mb-8 shrink-0">
+        <button type="button" onClick={onBack} className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center">
+          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+        </button>
+        <p className="text-white/88 text-[1.02rem] text-narrative">問いを選ぶ・追加する</p>
+      </div>
+
+      {mode === "success" ? (
+        <div className="flex-1 flex flex-col justify-center text-center space-y-7">
+          <p className="text-white/88 text-[1.12rem] text-narrative">問いを追加しました</p>
+          <p className="text-white/45 text-sm leading-loose">追加した問いは、これから語る問いの中に並びます。</p>
+          <button type="button" onClick={() => setMode("library")} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white">別の問いも追加する</button>
+        </div>
+      ) : (
+        <div className="space-y-8">
+          <section>
+            <p className="text-white/38 text-xs tracking-[0.18em] mb-4">用意された問い</p>
+            <div className="space-y-3">
+              {suggestions.map(item => (
+                <button key={item.text} type="button" onClick={() => addQuestion(item.text, item.chapter)} disabled={saving} className="glass-card w-full p-5 text-left">
+                  <p className="text-white/32 text-[0.66rem] tracking-[0.12em] mb-2">{item.chapter}</p>
+                  <p className="text-white/72 text-sm leading-loose">{item.text}</p>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="pt-7 border-t border-white/[0.08] space-y-4">
+            <p className="text-white/38 text-xs tracking-[0.18em]">自分で問いを書く</p>
+            <textarea value={questionText} onChange={event => setQuestionText(event.target.value)} placeholder="残しておきたい問いを書いてください" className="quiet-input min-h-[120px] resize-y leading-loose" />
+            <input type="text" value={chapter} onChange={event => setChapter(event.target.value)} className="quiet-input" placeholder="章・テーマ" />
+          </section>
+
+          <section>
+            <p className="text-white/38 text-xs tracking-[0.18em] mb-3">語る順番</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button type="button" onClick={() => setPosition("next")} className={`rounded-xl border px-4 py-3 text-sm ${position === "next" ? "border-white/35 bg-white/[0.1] text-white/78" : "border-white/[0.08] text-white/42"}`}>次の問いにする</button>
+              <button type="button" onClick={() => setPosition("end")} className={`rounded-xl border px-4 py-3 text-sm ${position === "end" ? "border-white/35 bg-white/[0.1] text-white/78" : "border-white/[0.08] text-white/42"}`}>今後に追加する</button>
+            </div>
+          </section>
+
+          <button type="button" onClick={() => addQuestion()} disabled={saving || questionText.trim().length < 4} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white disabled:opacity-35">
+            {saving ? "追加しています..." : "この問いを追加する"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -7795,6 +8535,7 @@ function Scene_BookBuilder({
   const [stepIndex, setStepIndex] = useState(0);
   const [coverPhoto, setCoverPhoto] = useState(null);
   const [coverColor, setCoverColor] = useState("#d9cdbd");
+  const [coverStyle, setCoverStyle] = useState("cloth");
   const [bookTitle, setBookTitle] = useState(`${withHonorific(userName)}の物語`);
   const [bookSubtitle, setBookSubtitle] = useState("これまでの時間を、家族へ");
   const coverInputRef = useRef(null);
@@ -7947,6 +8688,7 @@ function Scene_BookBuilder({
       url: URL.createObjectURL(file),
       name: file.name || "cover-photo"
     });
+    setCoverStyle("photo");
   };
 
   const includedStories = [...bookStories]
@@ -8040,19 +8782,21 @@ function Scene_BookBuilder({
 
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pb-6">
         {stepIndex === 0 && (
-          <div className="space-y-5">
+          <div className="space-y-7">
 
-            <div className="glass-card p-5">
-              <p className="text-white/40 text-xs tracking-widest mb-5">
-                PREVIEW
+            <div className="relative overflow-hidden rounded-[28px] border border-white/[0.07] bg-gradient-to-b from-white/[0.045] to-transparent px-5 py-6">
+              <div className="absolute inset-x-[18%] bottom-7 h-20 bg-amber-100/[0.035] blur-3xl" />
+              <p className="relative text-center text-white/28 text-[0.62rem] tracking-[0.25em] mb-1">
+                COVER PREVIEW
               </p>
 
             <BookCoverPreview
               title={bookTitle}
               subtitle={bookSubtitle}
-              authorName=""
+              authorName={withHonorific(userName)}
               coverPhoto={coverPhoto}
               coverColor={coverColor}
+              coverStyle={coverStyle}
             />
             </div>
 
@@ -8060,6 +8804,33 @@ function Scene_BookBuilder({
               <p className="text-white/82 text-[1.05rem] text-narrative mb-5">
                 表紙デザイン
               </p>
+
+              <div className="mb-7">
+                <p className="text-white/40 text-xs tracking-widest mb-3">
+                  仕立て
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: "cloth", label: "布張り", detail: "静かな質感" },
+                    { value: "photo", label: "写真", detail: "一枚を添える" },
+                    { value: "minimal", label: "余白", detail: "生成りの紙" }
+                  ].map(style => (
+                    <button
+                      key={style.value}
+                      type="button"
+                      onClick={() => setCoverStyle(style.value)}
+                      className={`rounded-2xl border px-2 py-4 text-center transition ${
+                        coverStyle === style.value
+                          ? "border-amber-100/35 bg-amber-50/[0.08]"
+                          : "border-white/[0.08] bg-white/[0.018]"
+                      }`}
+                    >
+                      <span className="block text-white/72 text-sm mb-1">{style.label}</span>
+                      <span className="block text-white/30 text-[0.62rem] leading-relaxed">{style.detail}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <input
                 ref={coverInputRef}
@@ -8072,17 +8843,20 @@ function Scene_BookBuilder({
                 }}
               />
 
-              <button
-                type="button"
-                onClick={() => coverInputRef.current?.click()}
-                className="btn-quiet w-full py-4 rounded-full text-white/80 mb-6"
-              >
-                表紙に写真を添える
-              </button>
+              {coverStyle === "photo" && (
+                <button
+                  type="button"
+                  onClick={() => coverInputRef.current?.click()}
+                  className="btn-quiet w-full py-4 rounded-full text-white/80 mb-6"
+                >
+                  {coverPhoto ? "表紙の写真を変える" : "表紙に写真を添える"}
+                </button>
+              )}
 
+              {coverStyle !== "minimal" && (
               <div className="mb-6">
                 <p className="text-white/40 text-xs tracking-widest mb-3">
-                  冊子の色
+                  表紙の色
                 </p>
 
                 <div className="flex gap-3">
@@ -8102,6 +8876,7 @@ function Scene_BookBuilder({
                   ))}
                 </div>
               </div>
+              )}
 
               <div className="mb-5">
                 <p className="text-white/40 text-xs tracking-widest mb-2">
