@@ -1427,20 +1427,53 @@ async function loadStorySharingPreference(bookProjectId) {
   return data || null;
 }
 
+function getStorySharingFlags(preference, fallbackScope = "private") {
+  const liveScope = preference?.live_scope || fallbackScope;
+
+  return {
+    familyEnabled:
+      typeof preference?.family_sharing_enabled === "boolean"
+        ? preference.family_sharing_enabled
+        : liveScope === "family",
+    selectedEnabled:
+      typeof preference?.selected_sharing_enabled === "boolean"
+        ? preference.selected_sharing_enabled
+        : liveScope === "selected"
+  };
+}
+
+function getStorySharingLiveScope({ familyEnabled, selectedEnabled }) {
+  if (selectedEnabled) return "selected";
+  if (familyEnabled) return "family";
+  return "private";
+}
+
 async function upsertStorySharingPreference({
   bookProjectId,
   ownerPersonId,
   liveScope,
+  familyEnabled,
+  selectedEnabled,
   markInitialSetupComplete = false
 }) {
   if (!bookProjectId) {
     throw new Error("物語の情報が見つかりません");
   }
 
+  const resolvedFlags =
+    typeof familyEnabled === "boolean" || typeof selectedEnabled === "boolean"
+      ? {
+          familyEnabled: Boolean(familyEnabled),
+          selectedEnabled: Boolean(selectedEnabled)
+        }
+      : getStorySharingFlags({ live_scope: liveScope || "private" });
+
   const payload = {
     book_project_id: bookProjectId,
     owner_person_id: ownerPersonId || null,
-    live_scope: liveScope,
+    live_scope: getStorySharingLiveScope(resolvedFlags),
+    family_sharing_enabled: resolvedFlags.familyEnabled,
+    selected_sharing_enabled: resolvedFlags.selectedEnabled,
     updated_at: new Date().toISOString()
   };
 
@@ -3049,6 +3082,7 @@ const loadLifeOutlineAudioItems = async (sourceAnswerIds, additions = []) => {
     } else {
       audioRows.push(...(data || []).map(row => ({
         id: row.id,
+        answerId: row.answer_id,
         storagePath: row.storage_path,
         duration: Number(row.meta_json?.duration_seconds || 0),
         createdAt: row.created_at,
@@ -3062,6 +3096,7 @@ const loadLifeOutlineAudioItems = async (sourceAnswerIds, additions = []) => {
       .filter(item => item?.storage_path)
       .map(item => ({
         id: item.id || item.storage_path,
+        answerId: null,
         storagePath: item.storage_path,
         duration: Number(item.duration_seconds || 0),
         createdAt: item.created_at || null,
@@ -4480,6 +4515,12 @@ let sceneAfterInvite = nextScene;
  {scene === "notification_setup" && (
   <Scene_NotificationSetup
     user={user}
+    initialPreference={notificationPref}
+    onBack={notificationSetupReturnScene ? () => {
+      const returnScene = notificationSetupReturnScene;
+      setNotificationSetupReturnScene(null);
+      setScene(returnScene);
+    } : null}
     onComplete={async () => {
       setIsInitializing(true);
 
@@ -4673,20 +4714,20 @@ let sceneAfterInvite = nextScene;
 
       {scene === "sharing_privacy" && (
         <Scene_SharingPrivacySettings
-          initialScope={sharingPreference?.live_scope || "family"}
-          onSaveScope={async (liveScope) => {
+          initialPreference={sharingPreference}
+          onSavePreference={async ({ familyEnabled, selectedEnabled }) => {
             try {
               const savedPreference = await upsertStorySharingPreference({
                 bookProjectId: foundation?.project?.id,
                 ownerPersonId:
                   foundation?.project?.subject_person_id ||
                   foundation?.person?.id,
-                liveScope,
+                familyEnabled,
+                selectedEnabled,
                 markInitialSetupComplete: true
               });
 
               setSharingPreference(savedPreference);
-              setScene("settings");
             } catch (error) {
               console.error("sharing preference update error", error);
               alert("共有範囲を保存できませんでした。");
@@ -6202,6 +6243,56 @@ function Scene_LifeOutlineSummary({
     return `${minutes}:${remaining}`;
   };
 
+  const getAnswerAudioItems = answerId =>
+    (data?.audioItems || []).filter(
+      item => item.source === "answer" && item.answerId === answerId
+    );
+
+  const additionalAudioItems = (data?.audioItems || []).filter(
+    item => item.source === "addition"
+  );
+
+  const renderAudioButton = (item, label = "録音") => {
+    const audioId = item.id || item.storagePath;
+    const isPlaying = playingAudioId === audioId;
+
+    return (
+      <React.Fragment key={audioId}>
+        <audio
+          ref={node => {
+            if (node) {
+              audioRefs.current.set(audioId, node);
+            } else {
+              audioRefs.current.delete(audioId);
+            }
+          }}
+          src={item.url}
+          className="hidden"
+          onEnded={() => setPlayingAudioId(null)}
+        />
+        <button
+          type="button"
+          onClick={() => toggleAudio(audioId)}
+          className={`h-8 min-w-8 px-2 rounded-full border flex items-center justify-center gap-1.5 transition ${
+            isPlaying
+              ? "border-white/28 bg-white/[0.1] text-white/70"
+              : "border-white/[0.08] text-white/38"
+          }`}
+          aria-label={isPlaying ? `${label}の再生を止める` : `${label}を再生する`}
+        >
+          <span className="text-[0.65rem]" aria-hidden="true">
+            {isPlaying ? "Ⅱ" : "▶"}
+          </span>
+          {item.duration > 0 && (
+            <span className="text-[0.62rem] tabular-nums">
+              {formatDuration(item.duration)}
+            </span>
+          )}
+        </button>
+      </React.Fragment>
+    );
+  };
+
   return (
     <div className="h-full flex flex-col fade-enter px-4 pt-3 pb-8 overflow-hidden">
       {!isRevisit && <OnboardingProgress current="outline" />}
@@ -6401,7 +6492,17 @@ function Scene_LifeOutlineSummary({
                       {answer.questionText}
                     </p>
 
-                    <div className="flex justify-end">
+                    <div className="flex items-center justify-end gap-2">
+                      {getAnswerAudioItems(answer.id).map((item, audioIndex) =>
+                        renderAudioButton(
+                          item,
+                          `${answer.questionText || "この語り"}の録音${
+                            getAnswerAudioItems(answer.id).length > 1
+                              ? ` ${audioIndex + 1}`
+                              : ""
+                          }`
+                        )
+                      )}
                       <button
                         type="button"
                         onClick={() => onRetakeAnswer?.(answer)}
@@ -6415,62 +6516,14 @@ function Scene_LifeOutlineSummary({
               </div>
             )}
 
-            {(data.audioItems || []).length > 0 && (
-              <div className="glass-card px-5 py-2 mb-5">
-                {(data.audioItems || []).map((item, index) => (
-                  <div
-                    key={item.id || item.storagePath}
-                    className={`flex items-center justify-between py-3 ${
-                      index > 0 ? "border-t border-white/[0.07]" : ""
-                    }`}
-                  >
-                    <audio
-                      ref={node => {
-                        const key = item.id || item.storagePath;
-                        if (node) {
-                          audioRefs.current.set(key, node);
-                        } else {
-                          audioRefs.current.delete(key);
-                        }
-                      }}
-                      src={item.url}
-                      className="hidden"
-                      onEnded={() => setPlayingAudioId(null)}
-                    />
-
-                    <span className="text-white/42 text-xs tracking-widest">
-                      声 {index + 1}
-                    </span>
-
-                    <div className="flex items-center gap-3">
-                      {item.duration > 0 && (
-                        <span className="text-white/25 text-xs tabular-nums">
-                          {formatDuration(item.duration)}
-                        </span>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => toggleAudio(item.id || item.storagePath)}
-                        className="w-8 h-8 flex items-center justify-center rounded-full"
-                        aria-label={
-                          playingAudioId === (item.id || item.storagePath)
-                            ? `声 ${index + 1} の再生を止める`
-                            : `声 ${index + 1} を再生する`
-                        }
-                      >
-                        <span
-                          className="text-white/35 text-xs"
-                          aria-hidden="true"
-                        >
-                          {playingAudioId === (item.id || item.storagePath)
-                            ? "Ⅱ"
-                            : "▶"}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
+            {additionalAudioItems.length > 0 && (
+              <div className="flex items-center justify-between gap-3 px-2 mb-5">
+                <span className="text-white/30 text-xs">語り足した内容</span>
+                <div className="flex items-center justify-end gap-2 flex-wrap">
+                  {additionalAudioItems.map((item, index) =>
+                    renderAudioButton(item, `語り足した録音 ${index + 1}`)
+                  )}
+                </div>
               </div>
             )}
 
@@ -6865,9 +6918,18 @@ function Scene_SupporterInvite({
   onSharingPreferenceChange,
   onComplete
 }) {
-  const [supporterEmail, setSupporterEmail] = useState(initialEmail);
+  const normalizedInitialEmail =
+    typeof initialEmail === "string" ? initialEmail : "";
+  const [supporterEmail, setSupporterEmail] = useState(normalizedInitialEmail);
   const [loading, setLoading] = useState(false);
   const [confirmPrivateChange, setConfirmPrivateChange] = useState(false);
+  const sharingFlags = getStorySharingFlags(sharingPreference);
+  const isPrivateSharing =
+    !sharingFlags.familyEnabled && !sharingFlags.selectedEnabled;
+
+  useEffect(() => {
+    setSupporterEmail(normalizedInitialEmail);
+  }, [normalizedInitialEmail]);
 
   const saveInvite = async () => {
     const inviteeEmail = supporterEmail.trim().toLowerCase();
@@ -6888,7 +6950,7 @@ function Scene_SupporterInvite({
     }
 
     if (
-      sharingPreference?.live_scope === "private" &&
+      isPrivateSharing &&
       !confirmPrivateChange
     ) {
       setConfirmPrivateChange(true);
@@ -6935,13 +6997,14 @@ function Scene_SupporterInvite({
         invite = createdInvite;
       }
 
-      if (sharingPreference?.live_scope === "private") {
+      if (!sharingFlags.selectedEnabled) {
         const updatedPreference = await upsertStorySharingPreference({
           bookProjectId: foundation?.project?.id,
           ownerPersonId:
             foundation?.project?.subject_person_id ||
             foundation?.person?.id,
-          liveScope: "selected"
+          familyEnabled: sharingFlags.familyEnabled,
+          selectedEnabled: true
         });
 
         onSharingPreferenceChange?.(updatedPreference);
@@ -6992,7 +7055,7 @@ function Scene_SupporterInvite({
         {confirmPrivateChange && (
           <div className="glass-card p-5 text-left space-y-3">
             <p className="text-white/82 text-sm leading-loose">
-              この方にお手伝いを依頼すると、共有範囲が「選んだ人」に変わり、共有相手にも追加されます。
+              この方にお手伝いを依頼すると、「自分だけ」の設定から「選んだ人へ共有」に変わります。よろしいですか？
             </p>
 
             <p className="text-white/45 text-xs leading-loose">
@@ -7603,11 +7666,14 @@ function Scene_SettingsHome({
   onOpenProfile,
   onBack
 }) {
-  const sharingLabels = {
-    family: "ファミリーへ共有",
-    selected: "選んだ人へ共有",
-    private: "自分だけ"
-  };
+  const sharingFlags = getStorySharingFlags(sharingPreference);
+  const sharingLabel = sharingFlags.familyEnabled && sharingFlags.selectedEnabled
+    ? "ファミリー＋選んだ人へ共有"
+    : sharingFlags.familyEnabled
+      ? "ファミリーへ共有"
+      : sharingFlags.selectedEnabled
+        ? "選んだ人へ共有"
+        : "自分だけ";
 
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
@@ -7633,7 +7699,7 @@ function Scene_SettingsHome({
         <SettingsMenuButton
           icon={Lock}
           label="共有とプライバシー"
-          detail={sharingLabels[sharingPreference?.live_scope] || "未設定"}
+          detail={sharingPreference ? sharingLabel : "未設定"}
           onClick={onOpenPrivacy}
         />
         <SettingsMenuButton
@@ -7654,27 +7720,74 @@ function Scene_SettingsHome({
 }
 
 function Scene_SharingPrivacySettings({
-  initialScope = "family",
-  onSaveScope,
+  initialPreference,
+  onSavePreference,
   onOpenPrivateStories,
   onBack
 }) {
-  const [scope, setScope] = useState(initialScope);
+  const initialFlags = getStorySharingFlags(initialPreference, "family");
+  const [familyEnabled, setFamilyEnabled] = useState(initialFlags.familyEnabled);
+  const [selectedEnabled, setSelectedEnabled] = useState(initialFlags.selectedEnabled);
   const [saving, setSaving] = useState(false);
-  const options = [
-    { value: "family", label: "ファミリーへ共有", note: "おすすめ" },
-    { value: "selected", label: "選んだ人へ共有" },
-    { value: "private", label: "自分だけで残す" }
-  ];
+  const isPrivate = !familyEnabled && !selectedEnabled;
 
-  const save = async () => {
+  useEffect(() => {
+    const nextFlags = getStorySharingFlags(initialPreference, "family");
+    setFamilyEnabled(nextFlags.familyEnabled);
+    setSelectedEnabled(nextFlags.selectedEnabled);
+  }, [
+    initialPreference?.id,
+    initialPreference?.family_sharing_enabled,
+    initialPreference?.selected_sharing_enabled,
+    initialPreference?.live_scope
+  ]);
+
+  const saveImmediately = async nextFlags => {
+    const previousFlags = { familyEnabled, selectedEnabled };
+    setFamilyEnabled(nextFlags.familyEnabled);
+    setSelectedEnabled(nextFlags.selectedEnabled);
+
     try {
       setSaving(true);
-      await onSaveScope(scope);
+      await onSavePreference(nextFlags);
+    } catch (error) {
+      setFamilyEnabled(previousFlags.familyEnabled);
+      setSelectedEnabled(previousFlags.selectedEnabled);
     } finally {
       setSaving(false);
     }
   };
+
+  const options = [
+    {
+      value: "family",
+      label: "ファミリーへ共有",
+      note: "おすすめ",
+      selected: familyEnabled,
+      onSelect: () => saveImmediately({
+        familyEnabled: !familyEnabled,
+        selectedEnabled
+      })
+    },
+    {
+      value: "selected",
+      label: "選んだ人へ共有",
+      selected: selectedEnabled,
+      onSelect: () => saveImmediately({
+        familyEnabled,
+        selectedEnabled: !selectedEnabled
+      })
+    },
+    {
+      value: "private",
+      label: "自分だけで残す",
+      selected: isPrivate,
+      onSelect: () => saveImmediately({
+        familyEnabled: false,
+        selectedEnabled: false
+      })
+    }
+  ];
 
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
@@ -7693,19 +7806,25 @@ function Scene_SharingPrivacySettings({
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setScope(option.value)}
-                className={`w-full rounded-2xl border px-5 py-4 text-left ${scope === option.value ? "border-white/35 bg-white/[0.1]" : "border-white/[0.08] bg-white/[0.025]"}`}
+                onClick={option.onSelect}
+                disabled={saving}
+                className={`w-full rounded-2xl border px-5 py-4 text-left transition ${option.selected ? "border-white/35 bg-white/[0.1]" : "border-white/[0.08] bg-white/[0.025]"}`}
               >
-                <span className="flex justify-between gap-3">
-                  <span className="text-white/78 text-sm">{option.label}</span>
+                <span className="flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-3 text-white/78 text-sm">
+                    <span className={`w-5 text-center ${option.selected ? "text-white/82" : "text-white/18"}`} aria-hidden="true">
+                      {option.selected ? "✓" : ""}
+                    </span>
+                    {option.label}
+                  </span>
                   {option.note && <span className="text-white/32 text-xs">{option.note}</span>}
                 </span>
               </button>
             ))}
           </div>
-          <button type="button" onClick={save} disabled={saving} className="btn-quiet bg-white/10 w-full py-3.5 rounded-full text-white text-sm mt-4">
-            {saving ? "保存中..." : "共有範囲を保存"}
-          </button>
+          <p className="h-5 mt-3 text-center text-white/28 text-xs">
+            {saving ? "保存しています..." : "選ぶと自動で保存されます"}
+          </p>
         </section>
 
         <section className="pt-7 border-t border-white/[0.08]">
@@ -7942,7 +8061,7 @@ function Scene_SupporterManagement({
         ))}
       </div>
 
-      <button type="button" onClick={onInvite} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm">
+      <button type="button" onClick={() => onInvite()} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm">
         新しくお手伝いを依頼する
       </button>
     </div>
@@ -12795,7 +12914,12 @@ return (
     </div>
   );
 }
-function Scene_NotificationSetup({ user, onComplete }) {
+function Scene_NotificationSetup({
+  user,
+  initialPreference,
+  onBack,
+  onComplete
+}) {
   const weekdayOptions = [
     "日曜日",
     "月曜日",
@@ -12807,9 +12931,21 @@ function Scene_NotificationSetup({ user, onComplete }) {
   ];
   const hourOptions = Array.from({ length: 24 }, (_, index) => index);
   const minuteOptions = [0, 15, 30, 45];
-  const [weekday, setWeekday] = useState(0);
-  const [hour, setHour] = useState(20);
-  const [minute, setMinute] = useState(0);
+  const [weekday, setWeekday] = useState(
+    Number.isFinite(Number(initialPreference?.weekday))
+      ? Number(initialPreference.weekday)
+      : 0
+  );
+  const [hour, setHour] = useState(
+    Number.isFinite(Number(initialPreference?.hour))
+      ? Number(initialPreference.hour)
+      : 20
+  );
+  const [minute, setMinute] = useState(
+    Number.isFinite(Number(initialPreference?.minute))
+      ? Number(initialPreference.minute)
+      : 0
+  );
   const [loading, setLoading] = useState(false);
 
   async function savePreference() {
@@ -12862,7 +12998,21 @@ function Scene_NotificationSetup({ user, onComplete }) {
 
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8">
-      <OnboardingProgress current="weekly" outlineComplete />
+      {onBack ? (
+        <div className="relative flex items-center justify-center h-10 mb-8 shrink-0">
+          <button
+            type="button"
+            onClick={onBack}
+            className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"
+            aria-label="設定へ戻る"
+          >
+            <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+          </button>
+          <p className="text-white/88 text-[1.02rem] text-narrative">問いの届け方</p>
+        </div>
+      ) : (
+        <OnboardingProgress current="weekly" outlineComplete />
+      )}
 
       <div className="flex-1 flex flex-col justify-center">
         <div className="text-center mb-10">
