@@ -9,6 +9,15 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+const STORY_RELATIONSHIP_LABELS = {
+  child: "子",
+  parent: "親",
+  spouse: "配偶者",
+  sibling: "きょうだい",
+  grandchild: "孫",
+  other: "その他"
+};
+
 function getSequenceFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const seq = parseInt(params.get("sequence"), 10);
@@ -1596,20 +1605,70 @@ async function respondToSupporterInvite(inviteId, accept) {
     throw new Error("招待の情報が見つかりません");
   }
 
-  const { data, error } = await supabaseClient.rpc(
-    "respond_to_supporter_invite",
-    {
-      input_invite_id: inviteId,
-      input_accept: accept
-    }
-  );
+  let lastError = null;
 
-  if (error) {
-    console.error("supporter invite response error", error);
-    throw error;
+  // 承諾処理はDB側で冪等にしている。応答タイムアウト時にも一度だけ
+  // 再照合することで、保存済みなのに失敗表示になる状態を避ける。
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const { data, error } = await supabaseClient.rpc(
+      "respond_to_supporter_invite_resilient",
+      {
+        input_invite_id: inviteId,
+        input_accept: accept
+      }
+    );
+
+    if (!error) {
+      return Array.isArray(data) ? data[0] : data;
+    }
+
+    lastError = error;
+    console.warn("supporter invite response retry", { attempt, error });
+    if (attempt === 0) {
+      await new Promise(resolve => window.setTimeout(resolve, 650));
+    }
   }
 
-  return Array.isArray(data) ? data[0] : data;
+  console.error("supporter invite response error", lastError);
+  throw lastError;
+}
+
+async function loadReceivedStoryProjects() {
+  const { data, error } = await supabaseClient.rpc("list_received_story_projects");
+  if (error) {
+    console.warn("received story projects load error", error);
+    return [];
+  }
+  return data || [];
+}
+
+async function loadReceivedStoryData(project) {
+  if (!project?.book_project_id) {
+    throw new Error("共有された物語が見つかりません");
+  }
+
+  const { data, error } = await supabaseClient.rpc("get_received_story_stories", {
+    input_book_project_id: project.book_project_id
+  });
+  if (error) throw error;
+
+  const rows = data || [];
+  return {
+    questionSet: rows.map(row => ({
+      sequence_order: row.sequence_order,
+      chapter: row.chapter_title || "物語",
+      chapter_label: row.chapter_title || "物語",
+      content: row.question_text || "残された語り"
+    })),
+    storyRows: rows.map(row => ({
+      id: row.answer_id,
+      sequence_order: row.sequence_order,
+      transcript_edited: row.book_text,
+      transcript_readable: row.book_text,
+      created_at: row.created_at
+    })),
+    mediaByAnswerId: {}
+  };
 }
 
 async function loadOwnedStoryRelationships(bookProjectId) {
@@ -2140,7 +2199,10 @@ function App() {
   const [foundation, setFoundation] = useState(null);
   const [sharingPreference, setSharingPreference] = useState(null);
   const [supportedProjects, setSupportedProjects] = useState([]);
+  const [receivedProjects, setReceivedProjects] = useState([]);
   const [supportContext, setSupportContext] = useState(null);
+  const [receivedContext, setReceivedContext] = useState(null);
+  const [acceptedConnection, setAcceptedConnection] = useState(null);
   const [pendingSupporterInvites, setPendingSupporterInvites] = useState([]);
   const [pendingStoryRelationshipInvites, setPendingStoryRelationshipInvites] = useState([]);
   const [postSupporterInviteScene, setPostSupporterInviteScene] = useState("home");
@@ -2309,8 +2371,9 @@ if (deliveryToken) {
 
 setUser(currentUser);
 setQuestionsDB(questionSet);
-const [supportedStoryProjects, pendingInvites, pendingRelationshipInvites] = await Promise.all([
+const [supportedStoryProjects, receivedStoryProjects, pendingInvites, pendingRelationshipInvites] = await Promise.all([
   loadSupportedStoryProjects(),
+  loadReceivedStoryProjects(),
   loadPendingSupporterInvites(),
   loadPendingStoryRelationshipInvites()
 ]);
@@ -2328,6 +2391,7 @@ const orderedPendingInvites = targetedSupporterInviteId
   : pendingInvites;
 
 setSupportedProjects(supportedStoryProjects);
+setReceivedProjects(receivedStoryProjects);
 setPendingSupporterInvites(orderedPendingInvites);
 setPendingStoryRelationshipInvites(pendingRelationshipInvites);
 setProgress({
@@ -2337,7 +2401,23 @@ setProgress({
 
 let sceneAfterInvite = nextScene;
 
-if (isBetaMode() && currentUser?.__isNewProfile && session.user?.id) {
+const ownStoryStartedKey = `tateyoko:own-story-started:${session.user.id}`;
+if (
+  !deliveryToken &&
+  (supportedStoryProjects.length > 0 || receivedStoryProjects.length > 0) &&
+  nextScene !== "home" &&
+  localStorage.getItem(ownStoryStartedKey) !== "1"
+) {
+  sceneAfterInvite = "connections_home";
+}
+
+if (
+  isBetaMode() &&
+  currentUser?.__isNewProfile &&
+  session.user?.id &&
+  supportedStoryProjects.length === 0 &&
+  receivedStoryProjects.length === 0
+) {
   const betaIntroSeenKey = getBetaIntroSeenKey(session.user.id);
 
   if (localStorage.getItem(betaIntroSeenKey) !== "1") {
@@ -2527,6 +2607,22 @@ const openSupportedProject = async (supportedProject) => {
   }
 };
 
+const openReceivedProject = async (receivedProject) => {
+  if (!receivedProject?.book_project_id) return;
+
+  try {
+    setIsInitializing(true);
+    const storyData = await loadReceivedStoryData(receivedProject);
+    setReceivedContext({ project: receivedProject, ...storyData });
+    setScene("received_story_pages");
+  } catch (error) {
+    console.error("received project open error", error);
+    alert("共有された物語を開けませんでした。");
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
 const refreshSupportedProject = async () => {
   if (!supportContext?.project) return;
 
@@ -2552,7 +2648,15 @@ const handleSupporterInviteResponse = async (invite, accept) => {
   setHasAcceptedSupporterInvite(acceptedAfterResponse);
 
   if (accept) {
-    setSupportedProjects(await loadSupportedStoryProjects());
+    const refreshedSupportedProjects = await loadSupportedStoryProjects();
+    setSupportedProjects(refreshedSupportedProjects);
+    setAcceptedConnection({
+      type: "supporter",
+      ownerName: invite.subject_name || "ご家族",
+      project: refreshedSupportedProjects.find(
+        project => project.book_project_id === invite.book_project_id
+      ) || null
+    });
   }
 
   if (remainingInvites.length > 0) {
@@ -2561,7 +2665,7 @@ const handleSupporterInviteResponse = async (invite, accept) => {
 
   setScene(
     acceptedAfterResponse
-      ? "home"
+      ? "connection_complete"
       : postSupporterInviteScene || "home"
   );
 };
@@ -2573,7 +2677,25 @@ const handleStoryRelationshipInviteResponse = async (invite, accept) => {
     await respondToStoryRelationshipInvite(invite.invite_id, accept);
     const remaining = pendingStoryRelationshipInvites.filter(item => item.invite_id !== invite.invite_id);
     setPendingStoryRelationshipInvites(remaining);
-    setScene(remaining.length > 0 ? "story_relationship_invite_received" : (postSupporterInviteScene || "home"));
+    if (accept) {
+      const refreshedReceivedProjects = await loadReceivedStoryProjects();
+      setReceivedProjects(refreshedReceivedProjects);
+      setAcceptedConnection({
+        type: invite.invite_type,
+        ownerName: invite.owner_name || "ご家族",
+        relationshipLabel: invite.relationship_label || null,
+        project: refreshedReceivedProjects.find(
+          project => project.book_project_id === invite.book_project_id
+        ) || refreshedReceivedProjects[0] || null
+      });
+    }
+    setScene(
+      remaining.length > 0
+        ? "story_relationship_invite_received"
+        : accept
+          ? "connection_complete"
+          : (postSupporterInviteScene || "home")
+    );
   } catch (error) {
     console.error("story relationship invite response error", error);
     alert("依頼への回答を保存できませんでした。");
@@ -4850,6 +4972,7 @@ let sceneAfterInvite = nextScene;
        <Scene_Home
          userName={user?.name || "あなた"}
          supportedProjects={supportedProjects}
+         receivedProjects={receivedProjects}
          onStartTalking={() => {
            if (
              foundation?.project?.life_outline_completed_at &&
@@ -4867,8 +4990,43 @@ let sceneAfterInvite = nextScene;
          onOpenQuestionLibrary={() => setScene("question_library")}
          onOpenSettings={() => setScene("settings")}
          onOpenSupportedProject={openSupportedProject}
+         onOpenReceivedProject={openReceivedProject}
          onDevLogout={isDevMode() ? handleDevLogout : null}
       />
+      )}
+
+      {scene === "connections_home" && (
+        <Scene_ConnectionsHome
+          userName={user?.name || "あなた"}
+          receivedProjects={receivedProjects}
+          supportedProjects={supportedProjects}
+          onOpenReceivedProject={openReceivedProject}
+          onOpenSupportedProject={openSupportedProject}
+          onStartOwnStory={() => {
+            if (user?.id) {
+              localStorage.setItem(`tateyoko:own-story-started:${user.id}`, "1");
+            }
+            setScene(postSupporterInviteScene || "beta_intro");
+          }}
+        />
+      )}
+
+      {scene === "connection_complete" && acceptedConnection && (
+        <Scene_ConnectionComplete
+          connection={acceptedConnection}
+          onOpen={() => {
+            if (acceptedConnection.type === "supporter" && acceptedConnection.project) {
+              openSupportedProject(acceptedConnection.project);
+              return;
+            }
+            if (acceptedConnection.project) {
+              openReceivedProject(acceptedConnection.project);
+              return;
+            }
+            setScene("connections_home");
+          }}
+          onConnectionsHome={() => setScene("connections_home")}
+        />
       )}
 
       {scene === "photo_story_start" && (
@@ -4982,6 +5140,20 @@ let sceneAfterInvite = nextScene;
           onBack={() => {
             setSupportContext(null);
             setScene("home");
+          }}
+        />
+      )}
+
+      {scene === "received_story_pages" && receivedContext && (
+        <Scene_SupportedStoryPages
+          project={receivedContext.project}
+          questionSet={receivedContext.questionSet}
+          storyRows={receivedContext.storyRows}
+          mediaByAnswerId={receivedContext.mediaByAnswerId}
+          mode="received"
+          onBack={() => {
+            setReceivedContext(null);
+            setScene("connections_home");
           }}
         />
       )}
@@ -7766,7 +7938,20 @@ function Scene_PhotoStoryStart({ onStart, onBack }) {
 
 function Scene_StoryRelationshipInviteReceived({ invite, remainingCount, onAccept, onDecline }) {
   const isFamily = invite?.invite_type === "family";
-  const relationLabels = { child: "子", parent: "親", spouse: "配偶者", sibling: "きょうだい", grandchild: "孫", other: "その他" };
+  const [loadingAction, setLoadingAction] = useState(null);
+  const [errorMessage, setErrorMessage] = useState("");
+  const respond = async action => {
+    try {
+      setLoadingAction(action);
+      setErrorMessage("");
+      await (action === "accept" ? onAccept() : onDecline());
+    } catch (error) {
+      console.error("story relationship response error", error);
+      setErrorMessage("回答を保存できませんでした。通信を確認して、もう一度お試しください。");
+    } finally {
+      setLoadingAction(null);
+    }
+  };
   return (
     <div className="h-full flex flex-col justify-center fade-enter px-6 py-10 text-center">
       <p className="text-white/36 text-xs tracking-[0.2em] mb-8">
@@ -7782,16 +7967,104 @@ function Scene_StoryRelationshipInviteReceived({ invite, remainingCount, onAccep
             : "承認すると、この物語の共有相手として登録されます。"}
         </p>
         {isFamily && invite?.relationship_label && (
-          <p className="text-white/36 text-xs mt-4">関係：{relationLabels[invite.relationship_label] || "その他"}</p>
+          <p className="text-white/36 text-xs mt-4">関係：{STORY_RELATIONSHIP_LABELS[invite.relationship_label] || "その他"}</p>
         )}
       </div>
-      <button type="button" onClick={onAccept} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white mb-4">
-        依頼を受ける
+      {errorMessage && <p className="text-rose-200/80 text-sm leading-relaxed mb-5">{errorMessage}</p>}
+      <button type="button" onClick={() => respond("accept")} disabled={Boolean(loadingAction)} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white mb-4">
+        {loadingAction === "accept" ? "つないでいます..." : "依頼を受ける"}
       </button>
-      <button type="button" onClick={onDecline} className="w-full py-3 text-white/38 text-sm underline underline-offset-4">
-        今回は辞退する
+      <button type="button" onClick={() => respond("decline")} disabled={Boolean(loadingAction)} className="w-full py-3 text-white/38 text-sm underline underline-offset-4">
+        {loadingAction === "decline" ? "保存しています..." : "今回は辞退する"}
       </button>
       {remainingCount > 1 && <p className="text-white/28 text-xs mt-5">ほかに {remainingCount - 1} 件の依頼があります</p>}
+    </div>
+  );
+}
+
+function Scene_ConnectionComplete({ connection, onOpen, onConnectionsHome }) {
+  const ownerName = withHonorific(connection?.ownerName || "ご家族");
+  const isSupporter = connection?.type === "supporter";
+  const relationship = STORY_RELATIONSHIP_LABELS[connection?.relationshipLabel];
+
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-5 text-center">
+      <div className="w-full max-w-[360px] space-y-9">
+        <div className="space-y-5 text-narrative">
+          <p className="text-white/38 text-xs tracking-[0.2em]">つながりました</p>
+          <h1 className="text-white/92 text-[1.35rem] leading-loose">
+            {ownerName}の物語に、<br />つながりました。
+          </h1>
+          <p className="text-white/54 text-sm leading-loose">
+            {isSupporter
+              ? "これから、物語づくりをお手伝いできます。"
+              : "共有されている語りを、ここから受け取れます。"}
+          </p>
+          {relationship && <p className="text-white/34 text-xs">関係：{relationship}</p>}
+        </div>
+
+        <button type="button" onClick={onOpen} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white">
+          {isSupporter ? "お手伝いする物語を開く" : "共有された物語を見る"}
+        </button>
+        <button type="button" onClick={onConnectionsHome} className="w-full py-3 text-white/42 text-sm underline underline-offset-4">
+          つながっている物語の一覧へ
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Scene_ConnectionsHome({
+  userName,
+  receivedProjects = [],
+  supportedProjects = [],
+  onOpenReceivedProject,
+  onOpenSupportedProject,
+  onStartOwnStory
+}) {
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+      <div className="text-center mb-10">
+        <p className="text-white/35 text-xs tracking-[0.22em] mb-3">縦糸横糸ブック</p>
+        <p className="text-white/82 text-[1.05rem] text-narrative">{withHonorific(userName)}</p>
+      </div>
+
+      <div className="space-y-7">
+        {receivedProjects.length > 0 && (
+          <section className="space-y-3">
+            <p className="text-white/38 text-xs tracking-[0.18em] px-1">受け取っている物語</p>
+            {receivedProjects.map(project => (
+              <HomeMenuButton
+                key={`received-${project.book_project_id}`}
+                icon={Files}
+                label={`${project.subject_name || "ご家族"}の物語`}
+                onClick={() => onOpenReceivedProject?.(project)}
+              />
+            ))}
+          </section>
+        )}
+
+        {supportedProjects.length > 0 && (
+          <section className="space-y-3">
+            <p className="text-white/38 text-xs tracking-[0.18em] px-1">お手伝いしている物語</p>
+            {supportedProjects.map(project => (
+              <HomeMenuButton
+                key={`supported-${project.supporter_id}`}
+                icon={Users}
+                label={`${project.subject_name || "ご家族"}の物語`}
+                onClick={() => onOpenSupportedProject?.(project)}
+              />
+            ))}
+          </section>
+        )}
+
+        <section className="pt-7 border-t border-white/[0.08] text-center space-y-4">
+          <p className="text-white/38 text-xs leading-loose">ご自身の物語も、いつでも始められます。</p>
+          <button type="button" onClick={onStartOwnStory} className="w-full py-3 text-white/50 text-sm underline underline-offset-4">
+            自分の物語を始める
+          </button>
+        </section>
+      </div>
     </div>
   );
 }
@@ -7799,6 +8072,7 @@ function Scene_StoryRelationshipInviteReceived({ invite, remainingCount, onAccep
 function Scene_Home({
   userName,
   supportedProjects = [],
+  receivedProjects = [],
   onStartTalking,
   onOpenStoryPages,
   onStartPhotoStory,
@@ -7806,6 +8080,7 @@ function Scene_Home({
   onOpenQuestionLibrary,
   onOpenSettings,
   onOpenSupportedProject,
+  onOpenReceivedProject,
   onDevLogout
 }) {
   return (
@@ -7891,6 +8166,20 @@ function Scene_Home({
                   icon={Users}
                   label={`${project.subject_name || "ご家族"}の物語`}
                   onClick={() => onOpenSupportedProject?.(project)}
+                />
+              ))}
+            </div>
+          )}
+
+          {receivedProjects.length > 0 && (
+            <div className="pt-7 border-t border-white/10 space-y-4">
+              <p className="text-white/45 text-xs tracking-[0.18em] px-1">受け取っている物語</p>
+              {receivedProjects.map(project => (
+                <HomeMenuButton
+                  key={`received-${project.book_project_id}`}
+                  icon={Files}
+                  label={`${project.subject_name || "ご家族"}の物語`}
+                  onClick={() => onOpenReceivedProject?.(project)}
                 />
               ))}
             </div>
@@ -8305,7 +8594,13 @@ function Scene_SharingPrivacySettings({
                     <div key={item.relationship_id} className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-white/68 text-sm truncate">{item.display_name || item.invitee_email}</p>
-                        <p className="text-white/28 text-xs mt-1">{item.relationship_status === "accepted" ? (section.enabled ? "共有中" : "一時停止") : item.relationship_status === "paused" ? "個別に一時停止" : "依頼中"}{item.is_supporter ? "・サポーター" : ""}</p>
+                        <p className="text-white/34 text-xs mt-1">
+                          {item.invite_type === "family" && item.relationship_label
+                            ? `${STORY_RELATIONSHIP_LABELS[item.relationship_label] || "その他"}・`
+                            : ""}
+                          {item.relationship_status === "accepted" ? (section.enabled ? "共有中" : "一時停止") : item.relationship_status === "paused" ? "個別に一時停止" : "依頼中"}{item.is_supporter ? "・サポーター" : ""}
+                        </p>
+                        <p className="text-white/24 text-[0.68rem] mt-1 truncate">{item.invitee_email}</p>
                       </div>
                       <div className="flex flex-col items-end gap-2 shrink-0">
                         {!item.supporter_only && item.relationship_status === "pending" && <button type="button" onClick={() => resendRelationship(item)} className="text-white/42 text-xs underline underline-offset-4">再送</button>}
@@ -8335,7 +8630,7 @@ function Scene_SharingPrivacySettings({
             </div>
             <input type="email" value={inviteEmail} onChange={event => setInviteEmail(event.target.value)} className="quiet-input" placeholder="メールアドレス" />
             {addType === "family" && (
-              <select value={relationshipLabel} onChange={event => setRelationshipLabel(event.target.value)} className="quiet-input">
+              <select value={relationshipLabel} onChange={event => setRelationshipLabel(event.target.value)} className="quiet-select">
                 <option value="child">子</option><option value="parent">親</option><option value="spouse">配偶者</option>
                 <option value="sibling">きょうだい</option><option value="grandchild">孫</option><option value="other">その他</option>
               </select>
@@ -8343,7 +8638,7 @@ function Scene_SharingPrivacySettings({
             <button type="button" onClick={sendRelationshipInvite} disabled={saving || !inviteFamilyName.trim() || !inviteGivenName.trim() || !inviteEmail.trim()} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm disabled:opacity-35">
               依頼を送る
             </button>
-            <p className="text-white/28 text-xs leading-loose">承認後は、ご本人が登録した氏名を表示します。</p>
+            <p className="text-white/28 text-xs leading-loose">承認後も、氏名・関係・メールアドレスを確認できます。</p>
           </section>
         )}
 
@@ -8984,8 +9279,10 @@ function Scene_SupportedStoryPages({
   questionSet = [],
   storyRows = [],
   mediaByAnswerId = {},
+  mode = "supporter",
   onBack
 }) {
+  const isReceived = mode === "received";
   const questionBySequence = new Map(
     (questionSet || []).map(question => [
       Number(question.sequence_order),
@@ -9004,7 +9301,7 @@ function Scene_SupportedStoryPages({
           type="button"
           onClick={onBack}
           className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"
-          aria-label="お手伝い中のホームへ戻る"
+          aria-label={isReceived ? "つながっている物語へ戻る" : "お手伝い中のホームへ戻る"}
         >
           <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
         </button>
@@ -9016,7 +9313,7 @@ function Scene_SupportedStoryPages({
 
       <div className="shrink-0 text-center mb-7">
         <p className="text-white/38 text-xs tracking-[0.16em] mb-2">
-          物語づくりをお手伝い中
+          {isReceived ? "共有された物語" : "物語づくりをお手伝い中"}
         </p>
         <p className="text-white/72 text-sm">
           {withHonorific(project?.subject_name || "ご家族")}の物語

@@ -80,6 +80,25 @@ body {
     input.quiet-input:focus {
       border-bottom-color: rgba(255,255,255,0.6);
     }
+    select.quiet-select {
+      width: 100%;
+      min-height: 48px;
+      padding: 10px 42px 10px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      background-color: #162037;
+      color: rgba(255, 255, 255, 0.9);
+      color-scheme: dark;
+      font: inherit;
+      outline: none;
+    }
+    select.quiet-select:focus {
+      border-color: rgba(255, 255, 255, 0.34);
+    }
+    select.quiet-select option {
+      background-color: #162037;
+      color: #f8fafc;
+    }
     audio {
       width: 100%;
       height: 36px;
@@ -165,4 +184,3 @@ input.quiet-input:-webkit-autofill:active {
 .quiet-recording-progress {
   transition: background 1.6s ease-out;
 }
-
