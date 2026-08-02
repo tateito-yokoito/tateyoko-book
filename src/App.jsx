@@ -7774,8 +7774,8 @@ function BookPagePreview({
         className="h-full grid min-h-0"
         style={{
           gridTemplateRows: isPhotoStory
-            ? "17% 19% minmax(0, 1fr) auto"
-            : "18% 26% minmax(0, 1fr) auto"
+            ? "17% 19% 56% 8%"
+            : "18% 26% 48% 8%"
         }}
       >
         <div className="self-end text-left">
@@ -7797,13 +7797,13 @@ function BookPagePreview({
           </p>
         </div>
 
-        <figure className="min-h-0 overflow-hidden pt-[3%] pb-[6%] flex flex-col justify-end">
+        <figure className="min-h-0 overflow-hidden pt-[3%] pb-[7%] flex flex-col justify-end">
           <div className="min-h-0 flex-1 flex items-end justify-center overflow-hidden">
             {headingPhoto?.url ? (
               <img
                 src={headingPhoto.url}
                 alt=""
-                className="w-full h-full min-h-0 object-contain object-center"
+                className="w-auto h-auto max-w-full max-h-full object-contain object-center"
               />
             ) : (
               <div className="w-full h-full" />
@@ -7817,7 +7817,7 @@ function BookPagePreview({
           )}
         </figure>
 
-        <p className="text-[0.56rem] text-slate-400 text-left">
+        <p className="self-end text-[0.56rem] text-slate-400 text-left">
           {pageNumber}
         </p>
       </div>
@@ -13938,7 +13938,7 @@ return (
             type="button"
             onClick={() => openExistingPhotoEditor(photo, answer.id)}
             disabled={preparingPhotoPath === photo.storage_path || replacingPhotoPath === photo.storage_path}
-            className="absolute left-3 bottom-3 rounded-full border border-white/15 bg-slate-950/78 px-3 py-2 text-white/82 text-xs flex items-center gap-2 backdrop-blur"
+            className="absolute z-10 left-3 bottom-3 rounded-full border border-white/30 bg-slate-950/95 px-3 py-2 text-white text-xs flex items-center gap-2 shadow-xl backdrop-blur"
           >
             <Pencil size={13} strokeWidth={1.8} />
             {preparingPhotoPath === photo.storage_path ? "読み込み中" : "切り抜き・補正"}
