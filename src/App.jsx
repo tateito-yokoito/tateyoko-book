@@ -7709,7 +7709,7 @@ function BookPagePreview({
   if (type === "right") {
     return (
       <div
-        className="mx-auto w-full min-w-0 min-h-0 max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[12%] pt-[11%] pb-[6.5%]"
+        className="relative mx-auto w-full min-w-0 min-h-0 max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[12%] pt-[11%] pb-[6.5%]"
         aria-label={`B5 右ページ ${pageNumber}`}
       >
         <div className="h-full min-h-0 flex flex-col overflow-hidden">
@@ -7730,7 +7730,7 @@ function BookPagePreview({
             )}
           </div>
 
-          <p className="text-[0.56rem] text-slate-400 text-right">
+          <p className="absolute right-[10.5%] bottom-[4.2%] text-[0.58rem] tabular-nums text-slate-500 text-right">
             {pageNumber}
           </p>
         </div>
@@ -7741,7 +7741,7 @@ function BookPagePreview({
   if (type === "photo") {
     return (
       <div
-        className="mx-auto w-full min-w-0 min-h-0 max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10.5%] pt-[10%] pb-[6.5%]"
+        className="relative mx-auto w-full min-w-0 min-h-0 max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10.5%] pt-[10%] pb-[6.5%]"
         aria-label={`B5 写真ページ ${pageNumber}`}
       >
         <div className="h-full flex flex-col">
@@ -7757,7 +7757,11 @@ function BookPagePreview({
             )}
           </div>
 
-          <p className="text-[0.56rem] text-slate-400 text-right">
+          <p className={`absolute bottom-[4.2%] text-[0.58rem] tabular-nums text-slate-500 ${
+            Number(pageNumber) % 2 === 0
+              ? "left-[10.5%] text-left"
+              : "right-[10.5%] text-right"
+          }`}>
             {pageNumber}
           </p>
         </div>
@@ -7767,7 +7771,7 @@ function BookPagePreview({
 
   return (
     <div
-      className="mx-auto w-full min-w-0 min-h-0 max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10.5%] pt-[9.5%] pb-[6.5%]"
+      className="relative mx-auto w-full min-w-0 min-h-0 max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10.5%] pt-[9.5%] pb-[6.5%]"
       aria-label={`B5 左ページ ${pageNumber}`}
     >
       <div
@@ -7817,7 +7821,7 @@ function BookPagePreview({
           )}
         </figure>
 
-        <p className="self-end text-[0.56rem] text-slate-400 text-left">
+        <p className="absolute left-[10.5%] bottom-[4.2%] text-[0.58rem] tabular-nums text-slate-500 text-left">
           {pageNumber}
         </p>
       </div>
@@ -9848,7 +9852,9 @@ function Scene_BookBuilder({
     .filter(answer => includedStoryIds.includes(answer.id))
     .sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0));
 
-  let previewPageNumber = 1;
+  // 横組みの冊子では、右ページを奇数、左ページを偶数にします。
+  // 扉を1ページ目とし、最初の見開きは左2・右3から始めます。
+  let previewPageNumber = 2;
 
   let photoStoryCounter = 0;
   const previewPageGroups = includedStories.map(answer => {
@@ -9876,6 +9882,12 @@ function Scene_BookBuilder({
         pageNumber
       };
     });
+
+    // 写真ページが奇数枚増えた場合は、次の語りが左（偶数）ページから
+    // 始まるよう、右ページ分を空けます。
+    if (previewPageNumber % 2 !== 0) {
+      previewPageNumber += 1;
+    }
 
     return {
       answer,
