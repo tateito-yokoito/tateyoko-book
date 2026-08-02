@@ -7725,16 +7725,21 @@ function BookCoverPreview({
 }
 
 function Scene_PhotoStoryStart({ onStart, onBack }) {
-  const inputRef = useRef(null);
   const [photo, setPhoto] = useState(null);
-  const choosePhoto = files => {
-    const file = Array.from(files || []).find(item => item?.type?.startsWith("image/"));
-    if (!file) return;
+  const [photoCorrectionOpen, setPhotoCorrectionOpen] = useState(false);
+  const choosePhoto = file => {
+    if (!file?.type?.startsWith("image/")) return;
     if (photo?.url) { try { URL.revokeObjectURL(photo.url); } catch (_error) {} }
     setPhoto({ file, url: URL.createObjectURL(file), name: file.name || "photo", type: file.type || "image/jpeg", createdAt: Date.now() });
   };
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+      <PhotoCorrectionFlow
+        open={photoCorrectionOpen}
+        title="写真から語る"
+        onClose={() => setPhotoCorrectionOpen(false)}
+        onComplete={choosePhoto}
+      />
       <div className="relative flex items-center justify-center h-10 mb-8 shrink-0">
         <button type="button" onClick={onBack} className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"><ChevronLeft size={20} className="text-white/55" /></button>
         <p className="text-white/88 text-[1.02rem] text-narrative">写真から語る</p>
@@ -7743,10 +7748,9 @@ function Scene_PhotoStoryStart({ onStart, onBack }) {
         <p className="text-white/72 text-sm leading-loose">残したい一枚を選んでください。</p>
         <p className="text-white/34 text-xs leading-loose mt-2">写真を見ながら、覚えていることをそのままお話しいただけます。</p>
       </div>
-      <input ref={inputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={event => { choosePhoto(event.target.files); event.target.value = ""; }} />
-      <button type="button" onClick={() => inputRef.current?.click()} className="glass-card min-h-[310px] w-full overflow-hidden flex items-center justify-center mb-7">
+      <button type="button" onClick={() => setPhotoCorrectionOpen(true)} className="glass-card min-h-[310px] w-full overflow-hidden flex items-center justify-center mb-7">
         {photo?.url ? <img src={photo.url} alt="選んだ写真" className="w-full max-h-[430px] object-contain" /> : (
-          <div className="text-center"><ImageIcon size={38} className="text-white/25 mx-auto mb-4" strokeWidth={1.4} /><p className="text-white/52 text-sm">写真を選ぶ・撮影する</p></div>
+          <div className="text-center"><ImageIcon size={38} className="text-white/25 mx-auto mb-4" strokeWidth={1.4} /><p className="text-white/52 text-sm">写真を選ぶ</p><p className="text-white/28 text-xs mt-2">切り抜きや傾きを整えられます</p></div>
         )}
       </button>
       <button type="button" onClick={() => onStart(photo)} disabled={!photo} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white disabled:opacity-35">この写真について語る</button>
@@ -9230,7 +9234,7 @@ function Scene_BookBuilder({
   const [coverStyle, setCoverStyle] = useState("cloth");
   const [bookTitle, setBookTitle] = useState("わたしの物語");
   const [bookSubtitle, setBookSubtitle] = useState("これまでの時間を、家族へ");
-  const coverInputRef = useRef(null);
+  const [coverPhotoCorrectionOpen, setCoverPhotoCorrectionOpen] = useState(false);
 
   const [bookStories, setBookStories] = useState([]);
   const [bookMediaByAnswerId, setBookMediaByAnswerId] = useState({});
@@ -9365,12 +9369,8 @@ function Scene_BookBuilder({
     loadBookStories();
   }, [user?.id, initialBookStories, initialBookMediaByAnswerId]);
 
-  const handleCoverPhotoSelect = (files) => {
-    const file = Array.from(files || []).find(item =>
-      item && item.type && item.type.startsWith("image/")
-    );
-
-    if (!file) return;
+  const handleCoverPhotoSelect = (file) => {
+    if (!file?.type?.startsWith("image/")) return;
 
     if (coverPhoto?.url) {
       try { URL.revokeObjectURL(coverPhoto.url); } catch (e) {}
@@ -9434,6 +9434,12 @@ function Scene_BookBuilder({
 
   return (
     <div className="fixed inset-0 max-w-[760px] mx-auto min-h-0 flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
+      <PhotoCorrectionFlow
+        open={coverPhotoCorrectionOpen}
+        title="表紙の写真"
+        onClose={() => setCoverPhotoCorrectionOpen(false)}
+        onComplete={handleCoverPhotoSelect}
+      />
       <div className="shrink-0 pb-3">
         <div className="relative flex items-center justify-center mb-3 h-10">
           <button
@@ -9532,21 +9538,10 @@ function Scene_BookBuilder({
                 </div>
               </div>
 
-              <input
-                ref={coverInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  handleCoverPhotoSelect(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-
               {coverStyle === "photo" && (
                 <button
                   type="button"
-                  onClick={() => coverInputRef.current?.click()}
+                  onClick={() => setCoverPhotoCorrectionOpen(true)}
                   className="btn-quiet w-full py-4 rounded-full text-white/80 mb-6"
                 >
                   {coverPhoto ? "表紙の写真を変える" : "表紙に写真を添える"}
@@ -11331,9 +11326,9 @@ return (
 
 
 function Scene4_AIMirror({ data, onEditedTextChange, onPhotoStoryTitleChange, onPhotoStoryCaptionChange, onAddPhotos, onRemovePhoto, onNext }) {
-  const photoInputRef = useRef(null);
   const [isEditingText, setIsEditingText] = useState(false);
   const [draftText, setDraftText] = useState(data.editedText || "");
+  const [photoCorrectionOpen, setPhotoCorrectionOpen] = useState(false);
 
   useEffect(() => {
     setDraftText(data.editedText || "");
@@ -11346,6 +11341,11 @@ function Scene4_AIMirror({ data, onEditedTextChange, onPhotoStoryTitleChange, on
 
   return (
     <div className="h-full flex flex-col fade-enter">
+      <PhotoCorrectionFlow
+        open={photoCorrectionOpen}
+        onClose={() => setPhotoCorrectionOpen(false)}
+        onComplete={(file) => onAddPhotos([file])}
+      />
       <div className="flex-1 overflow-y-auto pb-10">
         {data.storyOrigin === "photo" && (
           <div className="glass-card p-5 mb-8 space-y-5">
@@ -11433,22 +11433,10 @@ function Scene4_AIMirror({ data, onEditedTextChange, onPhotoStoryTitleChange, on
             </div>
           )}
 
-          {data.storyOrigin !== "photo" && <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              onAddPhotos(e.target.files);
-              e.target.value = "";
-            }}
-          />}
-
            {data.storyOrigin !== "photo" && <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => photoInputRef.current?.click()}
+              onClick={() => setPhotoCorrectionOpen(true)}
               className="btn-quiet flex-1 py-4 rounded-full text-white/80"
             >
               写真を添える
@@ -12109,6 +12097,530 @@ handles.map(handle => (
 }
 
 
+function PhotoCorrectionFlow({ open, title = "写真を添える", onClose, onComplete }) {
+  const libraryInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const [scanPreview, setScanPreview] = useState(null);
+
+  const isDesktopBrowser =
+    typeof window !== "undefined" &&
+    window.matchMedia &&
+    window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+  const releasePreviewUrls = (preview) => {
+    if (preview?.url) {
+      try { URL.revokeObjectURL(preview.url); } catch (e) {}
+    }
+
+    if (preview?.originalUrl) {
+      try { URL.revokeObjectURL(preview.originalUrl); } catch (e) {}
+    }
+
+    if (preview?.cropPreviewUrl) {
+      try { URL.revokeObjectURL(preview.cropPreviewUrl); } catch (e) {}
+    }
+  };
+
+  const closeFlow = () => {
+    releasePreviewUrls(scanPreview);
+    setScanPreview(null);
+    onClose?.();
+  };
+
+  useEffect(() => {
+    if (!open) {
+      setScanPreview(prev => {
+        releasePreviewUrls(prev);
+        return null;
+      });
+      return;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [open]);
+
+  const handleSourceSelect = async (files, inputRef) => {
+    const originalFile = Array.from(files || []).find(file =>
+      file && file.type && file.type.startsWith("image/")
+    );
+
+    if (!originalFile) {
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+
+    try {
+      const brightness = 8;
+      const contrast = 1.1;
+      const rotationDegrees = 0;
+      const cropMode = "original";
+
+      const cropPreviewFile = await processScannedPhotoFile(originalFile, {
+        brightness: 0,
+        contrast: 1,
+        maxWidth: 2200,
+        cropMode,
+        rotationDegrees
+      });
+
+      const cropPreviewUrl = URL.createObjectURL(cropPreviewFile);
+      const originalUrl = URL.createObjectURL(originalFile);
+
+      setScanPreview(prev => {
+        releasePreviewUrls(prev);
+
+        return {
+          originalFile,
+          file: null,
+          url: null,
+          originalUrl,
+          cropPreviewUrl,
+          brightness,
+          contrast,
+          cropMode: "original",
+          cropRect: {
+            left: 0,
+            top: 0,
+            right: 1,
+            bottom: 1
+          },
+          perspectiveEnabled: false,
+          perspectivePoints: {
+            topLeft: { x: 0, y: 0 },
+            topRight: { x: 1, y: 0 },
+            bottomRight: { x: 1, y: 1 },
+            bottomLeft: { x: 0, y: 1 }
+          },
+          rotationDegrees,
+          step: "crop",
+          processing: false
+        };
+      });
+    } catch (e) {
+      console.error(e);
+      alert(e.message || "写真の読み込みに失敗しました。");
+    } finally {
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  const updateScanPreview = async (nextValues = {}) => {
+    const current = scanPreview;
+    if (!current?.originalFile) return;
+
+    const nextBrightness =
+      nextValues.brightness !== undefined
+        ? nextValues.brightness
+        : current.brightness;
+
+    const nextContrast =
+      nextValues.contrast !== undefined
+        ? nextValues.contrast
+        : current.contrast;
+
+    const nextCropMode =
+      nextValues.cropMode !== undefined
+        ? nextValues.cropMode
+        : current.cropMode || "original";
+
+    const nextRotationDegrees =
+      nextValues.rotationDegrees !== undefined
+        ? nextValues.rotationDegrees
+        : current.rotationDegrees || 0;
+
+    const nextCropRect = {
+      left: current.cropRect?.left ?? 0,
+      top: current.cropRect?.top ?? 0,
+      right: current.cropRect?.right ?? 1,
+      bottom: current.cropRect?.bottom ?? 1,
+      ...(nextValues.cropRect || {})
+    };
+
+    const nextPerspectivePoints =
+      nextValues.perspectivePoints !== undefined
+        ? nextValues.perspectivePoints
+        : current.perspectivePoints || null;
+
+    const shouldBuildProcessedFile =
+      nextValues.buildProcessedFile === true || current.step === "adjust";
+
+    setScanPreview(prev =>
+      prev
+        ? {
+            ...prev,
+            brightness: nextBrightness,
+            contrast: nextContrast,
+            cropMode: nextCropMode,
+            cropRect: nextCropRect,
+            rotationDegrees: nextRotationDegrees,
+            processing: true,
+            perspectivePoints: nextPerspectivePoints
+          }
+        : prev
+    );
+
+    try {
+      let cropPreviewUrl = current.cropPreviewUrl || null;
+
+      if (!cropPreviewUrl || nextValues.rotationDegrees !== undefined) {
+        const cropPreviewFile = await processScannedPhotoFile(current.originalFile, {
+          brightness: 0,
+          contrast: 1,
+          maxWidth: 2200,
+          cropMode: "original",
+          rotationDegrees: nextRotationDegrees
+        });
+
+        cropPreviewUrl = URL.createObjectURL(cropPreviewFile);
+      }
+
+      let processedFile = current.file || null;
+      let previewUrl = current.url || null;
+
+      if (shouldBuildProcessedFile) {
+        processedFile = await processScannedPhotoFile(current.originalFile, {
+          brightness: nextBrightness,
+          contrast: nextContrast,
+          maxWidth: 2200,
+          cropMode: nextCropMode,
+          cropRect: current.perspectiveEnabled ? null : nextCropRect,
+          perspectivePoints: current.perspectiveEnabled ? nextPerspectivePoints : null,
+          rotationDegrees: nextRotationDegrees
+        });
+
+        previewUrl = URL.createObjectURL(processedFile);
+      }
+
+      setScanPreview(prev => {
+        if (cropPreviewUrl !== prev?.cropPreviewUrl && prev?.cropPreviewUrl) {
+          try { URL.revokeObjectURL(prev.cropPreviewUrl); } catch (e) {}
+        }
+
+        if (shouldBuildProcessedFile && prev?.url && prev.url !== previewUrl) {
+          try { URL.revokeObjectURL(prev.url); } catch (e) {}
+        }
+
+        return prev
+          ? {
+              ...prev,
+              file: processedFile,
+              url: previewUrl,
+              cropPreviewUrl,
+              brightness: nextBrightness,
+              contrast: nextContrast,
+              cropMode: nextCropMode,
+              cropRect: nextCropRect,
+              perspectivePoints: nextPerspectivePoints,
+              rotationDegrees: nextRotationDegrees,
+              processing: false,
+              step: nextValues.nextStep || prev.step
+            }
+          : prev;
+      });
+    } catch (e) {
+      console.error(e);
+      alert(e.message || "補正に失敗しました。");
+
+      setScanPreview(prev =>
+        prev
+          ? {
+              ...prev,
+              processing: false
+            }
+          : prev
+      );
+    }
+  };
+
+  const rotateScanPreview = async () => {
+    if (!scanPreview) return;
+
+    await updateScanPreview({
+      rotationDegrees: ((scanPreview.rotationDegrees || 0) + 90) % 360,
+      cropRect: {
+        left: 0,
+        top: 0,
+        right: 1,
+        bottom: 1
+      },
+      perspectivePoints: {
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 }
+      }
+    });
+  };
+
+  const completeCropStep = async () => {
+    if (!scanPreview) return;
+
+    await updateScanPreview({
+      cropRect: scanPreview.cropRect,
+      perspectivePoints: scanPreview.perspectivePoints || null,
+      rotationDegrees: scanPreview.rotationDegrees || 0,
+      buildProcessedFile: true,
+      nextStep: "adjust"
+    });
+  };
+
+  const confirmPhoto = () => {
+    if (!scanPreview?.file) return;
+
+    const file = scanPreview.file;
+    releasePreviewUrls(scanPreview);
+    setScanPreview(null);
+    onClose?.();
+    onComplete?.(file);
+  };
+
+  if (!open) return null;
+
+  return createPortal((
+    <>
+      <input
+        ref={libraryInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => handleSourceSelect(event.target.files, libraryInputRef)}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(event) => handleSourceSelect(event.target.files, cameraInputRef)}
+      />
+
+      {!scanPreview ? (
+        <div className="fixed inset-0 z-[9998] bg-black/45 flex items-end px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          <div className="w-full rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl fade-enter">
+            <p className="text-white/72 text-center text-narrative mb-5">
+              {title}
+            </p>
+
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => libraryInputRef.current?.click()}
+                className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+              >
+                画像を選んで補正する
+              </button>
+
+              {!isDesktopBrowser && (
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+                >
+                  その場で撮る
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={closeFlow}
+                className="w-full py-3 text-white/42 text-sm underline underline-offset-4"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="fixed inset-0 z-[9999] w-[100dvw] h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden overscroll-none">
+          {scanPreview.step === "crop" ? (
+            <>
+              <CropPreview
+                scanPreview={scanPreview}
+                setScanPreview={setScanPreview}
+                updateScanPreview={updateScanPreview}
+              />
+
+              {scanPreview.processing && (
+                <p className="text-white/35 text-xs text-center animate-pulse mb-4">
+                  補正しています...
+                </p>
+              )}
+
+              <div className="mt-5 flex items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={closeFlow}
+                  disabled={scanPreview.processing}
+                  className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-sm"
+                >
+                  戻る
+                </button>
+
+                <button
+                  type="button"
+                  onClick={rotateScanPreview}
+                  disabled={scanPreview.processing}
+                  aria-label="右に回転"
+                  title="右に回転"
+                  className="w-12 h-12 rounded-full border border-white/10 text-white/70 flex items-center justify-center"
+                >
+                  <RotateCw size={20} strokeWidth={1.8} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScanPreview(prev =>
+                      prev
+                        ? {
+                            ...prev,
+                            perspectiveEnabled: !prev.perspectiveEnabled
+                          }
+                        : prev
+                    );
+                  }}
+                  disabled={scanPreview.processing}
+                  aria-label="台形補正"
+                  aria-pressed={!!scanPreview.perspectiveEnabled}
+                  className={`h-12 px-4 rounded-full border flex items-center justify-center gap-2 shrink-0 ${
+                    scanPreview.perspectiveEnabled
+                      ? "bg-white/15 border-white/30 text-white"
+                      : "border-white/10 text-white/55"
+                  }`}
+                >
+                  <ScanLine size={18} strokeWidth={1.8} />
+                  <span className="text-xs tracking-widest">台形補正</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={completeCropStep}
+                disabled={scanPreview.processing}
+                className={`mt-4 btn-quiet bg-white/10 w-full py-3 rounded-full text-white text-sm ${
+                  scanPreview.processing ? "opacity-40" : ""
+                }`}
+              >
+                切り抜きを完了
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/25 mb-4 shrink min-h-0 flex items-center justify-center">
+                <img
+                  src={scanPreview.url}
+                  alt="補正後のプレビュー"
+                  className="w-full max-h-[38dvh] object-contain"
+                />
+              </div>
+
+              <div className="glass-card p-5 space-y-5 shrink-0">
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <p className="text-white/45 text-xs tracking-widest">明るさ</p>
+                    <p className="text-white/35 text-xs">{scanPreview.brightness}</p>
+                  </div>
+
+                  <input
+                    type="range"
+                    min="-24"
+                    max="32"
+                    step="4"
+                    value={scanPreview.brightness}
+                    disabled={scanPreview.processing}
+                    onChange={(event) => {
+                      const brightness = Number(event.target.value);
+                      setScanPreview(prev => prev ? { ...prev, brightness } : prev);
+                    }}
+                    onPointerUp={(event) => {
+                      updateScanPreview({ brightness: Number(event.currentTarget.value) });
+                    }}
+                    className="w-full"
+                  />
+
+                  <div className="mt-2 flex justify-between text-[10px] text-white/25">
+                    <span>暗め</span>
+                    <span>標準</span>
+                    <span>明るめ</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <p className="text-white/45 text-xs tracking-widest">コントラスト</p>
+                    <p className="text-white/35 text-xs">{scanPreview.contrast.toFixed(1)}</p>
+                  </div>
+
+                  <input
+                    type="range"
+                    min="0.9"
+                    max="1.3"
+                    step="0.05"
+                    value={scanPreview.contrast}
+                    disabled={scanPreview.processing}
+                    onChange={(event) => {
+                      const contrast = Number(event.target.value);
+                      setScanPreview(prev => prev ? { ...prev, contrast } : prev);
+                    }}
+                    onPointerUp={(event) => {
+                      updateScanPreview({ contrast: Number(event.currentTarget.value) });
+                    }}
+                    className="w-full"
+                  />
+
+                  <div className="mt-2 flex justify-between text-[10px] text-white/25">
+                    <span>淡め</span>
+                    <span>標準</span>
+                    <span>濃いめ</span>
+                  </div>
+                </div>
+
+                {scanPreview.processing && (
+                  <p className="text-white/35 text-xs text-center animate-pulse">
+                    補正しています...
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-5 flex gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setScanPreview(prev => prev ? { ...prev, step: "crop" } : prev)}
+                  disabled={scanPreview.processing}
+                  className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-sm"
+                >
+                  切り抜きに戻る
+                </button>
+
+                <button
+                  type="button"
+                  onClick={confirmPhoto}
+                  disabled={scanPreview.processing}
+                  className={`flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm ${
+                    scanPreview.processing ? "opacity-40" : ""
+                  }`}
+                >
+                  この写真を使う
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  ), document.body);
+}
+
+
 function Scene_StoryPages({
   user,
   foundation,
@@ -12230,11 +12742,6 @@ function Scene_StoryPages({
   const [deletingPhotoPath, setDeletingPhotoPath] = useState(null);
   const [uploadingPhotoAnswerId, setUploadingPhotoAnswerId] = useState(null);
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
-  const storyPhotoInputRef = useRef(null);
-  const pendingPhotoAnswerIdRef = useRef(null);
-  const storyScanInputRef = useRef(null);
-  const pendingScanAnswerIdRef = useRef(null);
-  const [scanPreview, setScanPreview] = useState(null);
   const [editingAnswer, setEditingAnswer] = useState(null);
   const [photoActionAnswerId, setPhotoActionAnswerId] = useState(null);
 
@@ -12242,14 +12749,8 @@ function Scene_StoryPages({
   const [editDraftText, setEditDraftText] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
-  const isDesktopBrowser =
-    typeof window !== "undefined" &&
-    window.matchMedia &&
-    window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-
-
   useEffect(() => {
-    if (!scanPreview && !editingAnswer) return;
+    if (!editingAnswer) return;
 
   const previousBodyOverflow = document.body.style.overflow;
   const previousHtmlOverflow = document.documentElement.style.overflow;
@@ -12261,7 +12762,7 @@ function Scene_StoryPages({
     document.body.style.overflow = previousBodyOverflow;
     document.documentElement.style.overflow = previousHtmlOverflow;
   };
-}, [scanPreview, editingAnswer]);
+}, [editingAnswer]);
 
 const loadAnswers = async (options = {}) => {
   const { showLoading = true } = options;
@@ -12491,328 +12992,14 @@ const startEditRecordFromModal = (mode) => {
     }
   };
 
-  const openPhotoPickerForAnswer = (answerId) => {
-    pendingPhotoAnswerIdRef.current = answerId;
-    storyPhotoInputRef.current?.click();
-  };
-
 const openPhotoActionSheet = (answerId) => {
   setPhotoActionAnswerId(answerId);
 };
 
-const choosePhotoFromLibrary = () => {
-  if (!photoActionAnswerId) return;
-
-  pendingPhotoAnswerIdRef.current = photoActionAnswerId;
-  setPhotoActionAnswerId(null);
-  storyPhotoInputRef.current?.click();
-};
-
-const choosePhotoScan = () => {
-  if (!photoActionAnswerId) return;
-
-  pendingScanAnswerIdRef.current = photoActionAnswerId;
-  setPhotoActionAnswerId(null);
-  storyScanInputRef.current?.click();
-};
-
-const openScannerForAnswer = (answerId) => {
-  pendingScanAnswerIdRef.current = answerId;
-  storyScanInputRef.current?.click();
-};
-
-const handleStoryScanSelect = async (files) => {
-  const answerId = pendingScanAnswerIdRef.current;
-  const originalFile = Array.from(files || []).find(file =>
-    file && file.type && file.type.startsWith("image/")
-  );
-
-  if (!answerId || !originalFile) {
-    pendingScanAnswerIdRef.current = null;
-
-    if (storyScanInputRef.current) {
-      storyScanInputRef.current.value = "";
-    }
-
-    return;
-  }
-
-  try {
-    const brightness = 8;
-    const contrast = 1.1;
-    const rotationDegrees = 0;
-    const cropMode = "original";
-
-    const cropPreviewFile = await processScannedPhotoFile(originalFile, {
-      brightness: 0,
-      contrast: 1,
-      maxWidth: 2200,
-      cropMode,
-      rotationDegrees
-    });
-
-    const cropPreviewUrl = URL.createObjectURL(cropPreviewFile);
-    const originalUrl = URL.createObjectURL(originalFile);
-
-    setScanPreview(prev => {
-      if (prev?.url) {
-        try { URL.revokeObjectURL(prev.url); } catch (e) {}
-      }
-
-      if (prev?.originalUrl) {
-        try { URL.revokeObjectURL(prev.originalUrl); } catch (e) {}
-      }
-
-      if (prev?.cropPreviewUrl) {
-        try { URL.revokeObjectURL(prev.cropPreviewUrl); } catch (e) {}
-      }
-
-      return {
-        answerId,
-        originalFile,
-        file: null,
-        url: null,
-        originalUrl,
-        cropPreviewUrl,
-        brightness,
-        contrast,
-        cropMode: "original",
-        cropRect: {
-          left: 0,
-          top: 0,
-          right: 1,
-          bottom: 1
-        },
-        perspectiveEnabled: false,
-        perspectivePoints: {
-          topLeft: { x: 0, y: 0 },
-          topRight: { x: 1, y: 0 },
-          bottomRight: { x: 1, y: 1 },
-          bottomLeft: { x: 0, y: 1 }
-        },
-        rotationDegrees,
-        step: "crop",
-        processing: false
-      };
-    });
-  } catch (e) {
-    console.error(e);
-    alert(e.message || "写真の読み込みに失敗しました。");
-  } finally {
-    pendingScanAnswerIdRef.current = null;
-
-    if (storyScanInputRef.current) {
-      storyScanInputRef.current.value = "";
-    }
-  }
-};
-
-const closeScanPreview = () => {
-  if (scanPreview?.url) {
-    try { URL.revokeObjectURL(scanPreview.url); } catch (e) {}
-  }
-
-  if (scanPreview?.originalUrl) {
-    try { URL.revokeObjectURL(scanPreview.originalUrl); } catch (e) {}
-  }
-
-  if (scanPreview?.cropPreviewUrl) {
-    try { URL.revokeObjectURL(scanPreview.cropPreviewUrl); } catch (e) {}
-  }
-
-  setScanPreview(null);
-};
-
-
-const updateScanPreview = async (nextValues = {}) => {
-  const current = scanPreview;
-  if (!current?.originalFile) return;
-
-  const nextBrightness =
-    nextValues.brightness !== undefined
-      ? nextValues.brightness
-      : current.brightness;
-
-  const nextContrast =
-    nextValues.contrast !== undefined
-      ? nextValues.contrast
-      : current.contrast;
-
-  const nextCropMode =
-    nextValues.cropMode !== undefined
-      ? nextValues.cropMode
-      : current.cropMode || "original";
-
-  const nextRotationDegrees =
-    nextValues.rotationDegrees !== undefined
-      ? nextValues.rotationDegrees
-      : current.rotationDegrees || 0;
-
-  const nextCropRect = {
-    left: current.cropRect?.left ?? 0,
-    top: current.cropRect?.top ?? 0,
-    right: current.cropRect?.right ?? 1,
-    bottom: current.cropRect?.bottom ?? 1,
-    ...(nextValues.cropRect || {})
-  };
-
-  const nextPerspectivePoints =
-    nextValues.perspectivePoints !== undefined
-      ? nextValues.perspectivePoints
-      : current.perspectivePoints || null;
-
-    const shouldBuildProcessedFile =
-      nextValues.buildProcessedFile === true || current.step === "adjust";
-
-  setScanPreview(prev =>
-    prev
-      ? {
-          ...prev,
-          brightness: nextBrightness,
-          contrast: nextContrast,
-          cropMode: nextCropMode,
-          cropRect: nextCropRect,
-          rotationDegrees: nextRotationDegrees,
-          processing: true,
-          perspectivePoints: nextPerspectivePoints
-        }
-      : prev
-  );
-
-  try {
-let cropPreviewUrl = current.cropPreviewUrl || null;
-
-if (!cropPreviewUrl || nextValues.rotationDegrees !== undefined) {
-  const cropPreviewFile = await processScannedPhotoFile(current.originalFile, {
-    brightness: 0,
-    contrast: 1,
-    maxWidth: 2200,
-    cropMode: "original",
-    rotationDegrees: nextRotationDegrees
-  });
-
-  cropPreviewUrl = URL.createObjectURL(cropPreviewFile);
-}
-
-    let processedFile = current.file || null;
-    let previewUrl = current.url || null;
-
-    if (shouldBuildProcessedFile) {
-      processedFile = await processScannedPhotoFile(current.originalFile, {
-        brightness: nextBrightness,
-        contrast: nextContrast,
-        maxWidth: 2200,
-        cropMode: nextCropMode,
-        cropRect: current.perspectiveEnabled ? null : nextCropRect,
-        perspectivePoints: current.perspectiveEnabled ? nextPerspectivePoints : null,
-        rotationDegrees: nextRotationDegrees
-      });
-
-      previewUrl = URL.createObjectURL(processedFile);
-    }
-
-setScanPreview(prev => {
-  if (cropPreviewUrl !== prev?.cropPreviewUrl && prev?.cropPreviewUrl) {
-    try { URL.revokeObjectURL(prev.cropPreviewUrl); } catch (e) {}
-  }
-
-  if (shouldBuildProcessedFile && prev?.url && prev.url !== previewUrl) {
-        try { URL.revokeObjectURL(prev.url); } catch (e) {}
-      }
-
-return prev
-  ? {
-      ...prev,
-      file: processedFile,
-      url: previewUrl,
-      cropPreviewUrl,
-      brightness: nextBrightness,
-      contrast: nextContrast,
-      cropMode: nextCropMode,
-      cropRect: nextCropRect,
-      perspectivePoints: nextPerspectivePoints,
-      rotationDegrees: nextRotationDegrees,
-      processing: false,
-      step: nextValues.nextStep || prev.step
-    }
-  : prev;
-
-    });
-  } catch (e) {
-    console.error(e);
-    alert(e.message || "補正に失敗しました。");
-
-    setScanPreview(prev =>
-      prev
-        ? {
-            ...prev,
-            processing: false
-          }
-        : prev
-    );
-  }
-};
-
-const rotateScanPreview = async () => {
-  if (!scanPreview) return;
-
-  await updateScanPreview({
-    rotationDegrees: ((scanPreview.rotationDegrees || 0) + 90) % 360,
-    cropRect: {
-      left: 0,
-      top: 0,
-      right: 1,
-      bottom: 1
-    },
-    perspectivePoints: {
-      topLeft: { x: 0, y: 0 },
-      topRight: { x: 1, y: 0 },
-      bottomRight: { x: 1, y: 1 },
-      bottomLeft: { x: 0, y: 1 }
-    }
-  });
-};
-
-const completeCropStep = async () => {
-  if (!scanPreview) return;
-
-  await updateScanPreview({
-    cropRect: scanPreview.cropRect,
-    perspectivePoints: scanPreview.perspectivePoints || null,
-    rotationDegrees: scanPreview.rotationDegrees || 0,
-    buildProcessedFile: true,
-    nextStep: "adjust"
-  });
-};
-
-const confirmScannedPhoto = async () => {
-  if (!scanPreview?.answerId || !scanPreview?.file) return;
-
-  const answerId = scanPreview.answerId;
-  const file = scanPreview.file;
-
-  closeScanPreview();
-
-  pendingPhotoAnswerIdRef.current = answerId;
-
-  await handleStoryPhotoSelect([file], {
-    shouldProcess: false
-  });
-};
-
-const handleStoryPhotoSelect = async (files, options = {}) => {
-  const { shouldProcess = false } = options;
-    const answerId = pendingPhotoAnswerIdRef.current;
-    const selectedFiles = Array.from(files || [])
-      .filter(file => file && file.type && file.type.startsWith("image/"));
+const handleStoryPhotoSelect = async (file, answerId) => {
+    const selectedFiles = file?.type?.startsWith("image/") ? [file] : [];
 
     if (!answerId || selectedFiles.length === 0 || !user?.id) {
-      pendingPhotoAnswerIdRef.current = null;
-
-      if (storyPhotoInputRef.current) {
-        storyPhotoInputRef.current.value = "";
-      }
-
       return;
     }
 
@@ -12826,21 +13013,11 @@ const handleStoryPhotoSelect = async (files, options = {}) => {
       const photoRows = [];
 
       for (let i = 0; i < selectedFiles.length; i++) {
-        const originalFile = selectedFiles[i];
-
-        const file = shouldProcess
-          ? await processScannedPhotoFile(originalFile, {
-              brightness: 8,
-              contrast: 1.1,
-              maxWidth: 2200
-            })
-          : originalFile;
+        const file = selectedFiles[i];
 
         const contentType = file.type || "image/jpeg";
 
-        const ext = shouldProcess
-          ? "jpg"
-          : contentType.includes("png")
+        const ext = contentType.includes("png")
             ? "png"
             : contentType.includes("webp")
               ? "webp"
@@ -12895,11 +13072,6 @@ const handleStoryPhotoSelect = async (files, options = {}) => {
       alert(e.message || "写真の追加に失敗しました。");
     } finally {
       setUploadingPhotoAnswerId(null);
-      pendingPhotoAnswerIdRef.current = null;
-
-      if (storyPhotoInputRef.current) {
-        storyPhotoInputRef.current.value = "";
-      }
     }
   };
 
@@ -12931,27 +13103,13 @@ useEffect(() => {
 
 return (
   <div className="h-full flex flex-col fade-enter px-4 pt-0 pb-4 -mt-8 overflow-hidden">
-    <input
-      ref={storyPhotoInputRef}
-      type="file"
-      accept="image/*"
-      multiple
-      className="hidden"
-      onChange={(e) => {
-        handleStoryPhotoSelect(e.target.files, {
-          shouldProcess: false
-        });
-        e.target.value = "";
-      }}
-    />
-    <input
-      ref={storyScanInputRef}
-      type="file"
-      accept="image/*"
-      capture="environment"
-      className="hidden"
-      onChange={(e) => {
-        handleStoryScanSelect(e.target.files);
+    <PhotoCorrectionFlow
+      open={!!photoActionAnswerId}
+      onClose={() => setPhotoActionAnswerId(null)}
+      onComplete={(file) => {
+        const answerId = photoActionAnswerId;
+        setPhotoActionAnswerId(null);
+        handleStoryPhotoSelect(file, answerId);
       }}
     />
 
@@ -12964,254 +13122,6 @@ return (
     </p>
   </div>
 )}
-
-{photoActionAnswerId && createPortal((
-  <div className="fixed inset-0 z-[9998] bg-black/45 flex items-end px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-    <div className="w-full rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl fade-enter">
-      <p className="text-white/72 text-center text-narrative mb-5">
-        写真を添える
-      </p>
-
-      <div className="space-y-3">
-        <button
-          type="button"
-          onClick={choosePhotoFromLibrary}
-          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
-        >
-          写真を選ぶ
-        </button>
-
-        <button
-          type="button"
-          onClick={choosePhotoScan}
-          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
-        >
-          {isDesktopBrowser ? "画像を選んで補正する" : "写真をスキャンする"}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setPhotoActionAnswerId(null)}
-          className="w-full py-3 text-white/42 text-sm underline underline-offset-4"
-        >
-          キャンセル
-        </button>
-      </div>
-    </div>
-  </div>
-), document.body)}
-
-{scanPreview && createPortal((
-  <div className="fixed inset-0 z-[9999] w-[100dvw] h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden overscroll-none">
-    {scanPreview.step === "crop" ? (
-      <>
-        <CropPreview
-          scanPreview={scanPreview}
-          setScanPreview={setScanPreview}
-          updateScanPreview={updateScanPreview}
-        />
-
-        {scanPreview.processing && (
-          <p className="text-white/35 text-xs text-center animate-pulse mb-4">
-            補正しています...
-          </p>
-        )}
-
-
-
-<div className="mt-5 flex items-center gap-3 shrink-0">
-  <button
-    type="button"
-    onClick={closeScanPreview}
-    disabled={scanPreview.processing}
-    className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-sm"
-  >
-    戻る
-  </button>
-
-  <button
-    type="button"
-    onClick={rotateScanPreview}
-    disabled={scanPreview.processing}
-    aria-label="右に回転"
-    title="右に回転"
-    className="w-12 h-12 rounded-full border border-white/10 text-white/70 flex items-center justify-center"
-  >
-    <RotateCw size={20} strokeWidth={1.8} />
-  </button>
-
-<button
-  type="button"
-  onClick={() => {
-    setScanPreview(prev =>
-      prev
-        ? {
-            ...prev,
-            perspectiveEnabled: !prev.perspectiveEnabled
-          }
-        : prev
-    );
-  }}
-  disabled={scanPreview.processing}
-  aria-label="台形補正"
-  aria-pressed={!!scanPreview.perspectiveEnabled}
-  className={`h-12 px-4 rounded-full border flex items-center justify-center gap-2 shrink-0 ${
-    scanPreview.perspectiveEnabled
-      ? "bg-white/15 border-white/30 text-white"
-      : "border-white/10 text-white/55"
-  }`}
->
-  <ScanLine size={18} strokeWidth={1.8} />
-  <span className="text-xs tracking-widest">台形補正</span>
-</button>
-
-
-</div>
-
-        <button
-          type="button"
-          onClick={completeCropStep}
-          disabled={scanPreview.processing}
-          className={`mt-4 btn-quiet bg-white/10 w-full py-3 rounded-full text-white text-sm ${
-            scanPreview.processing ? "opacity-40" : ""
-          }`}
-        >
-          切り抜きを完了
-        </button>
-      </>
-    ) : (
-      <>
-        <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/25 mb-4 shrink min-h-0 flex items-center justify-center">
-          <img
-            src={scanPreview.url}
-            alt="補正後のプレビュー"
-            className="w-full max-h-[38dvh] object-contain"
-          />
-        </div>
-
-<div className="glass-card p-5 space-y-5 shrink-0">
-  <div>
-    <div className="flex justify-between mb-2">
-      <p className="text-white/45 text-xs tracking-widest">
-        明るさ
-      </p>
-      <p className="text-white/35 text-xs">
-        {scanPreview.brightness}
-      </p>
-    </div>
-
-<input
-  type="range"
-  min="-24"
-  max="32"
-  step="4"
-  value={scanPreview.brightness}
-  disabled={scanPreview.processing}
-  onChange={(e) => {
-    const brightness = Number(e.target.value);
-
-    setScanPreview(prev =>
-      prev
-        ? {
-            ...prev,
-            brightness
-          }
-        : prev
-    );
-  }}
-  onPointerUp={(e) => {
-    updateScanPreview({
-      brightness: Number(e.currentTarget.value)
-    });
-  }}
-  className="w-full"
-/>
-
-    <div className="mt-2 flex justify-between text-[10px] text-white/25">
-      <span>暗め</span>
-      <span>標準</span>
-      <span>明るめ</span>
-    </div>
-  </div>
-
-  <div>
-    <div className="flex justify-between mb-2">
-      <p className="text-white/45 text-xs tracking-widest">
-        コントラスト
-      </p>
-      <p className="text-white/35 text-xs">
-        {scanPreview.contrast.toFixed(1)}
-      </p>
-    </div>
-
-<input
-  type="range"
-  min="0.9"
-  max="1.3"
-  step="0.05"
-  value={scanPreview.contrast}
-  disabled={scanPreview.processing}
-  onChange={(e) => {
-    const contrast = Number(e.target.value);
-
-    setScanPreview(prev =>
-      prev
-        ? {
-            ...prev,
-            contrast
-          }
-        : prev
-    );
-  }}
-  onPointerUp={(e) => {
-    updateScanPreview({
-      contrast: Number(e.currentTarget.value)
-    });
-  }}
-  className="w-full"
-/>
-
-
-    <div className="mt-2 flex justify-between text-[10px] text-white/25">
-      <span>淡め</span>
-      <span>標準</span>
-      <span>濃いめ</span>
-    </div>
-  </div>
-
-  {scanPreview.processing && (
-    <p className="text-white/35 text-xs text-center animate-pulse">
-      補正しています...
-    </p>
-  )}
-</div>
-
-        <div className="mt-5 flex gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={() => setScanPreview(prev => prev ? { ...prev, step: "crop" } : prev)}
-            disabled={scanPreview.processing}
-            className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-sm"
-          >
-            切り抜きに戻る
-          </button>
-
-          <button
-            type="button"
-            onClick={confirmScannedPhoto}
-            disabled={scanPreview.processing}
-            className={`flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm ${
-              scanPreview.processing ? "opacity-40" : ""
-            }`}
-          >
-            この写真を使う
-          </button>
-        </div>
-      </>
-    )}
-  </div>
-), document.body)}
-
 {editingAnswer && createPortal((
   <div className="fixed inset-0 z-[9999] w-[100dvw] h-[100dvh] bg-slate-950 px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden">
     <div className="shrink-0 text-center mb-4">
