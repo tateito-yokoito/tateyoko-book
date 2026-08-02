@@ -7709,11 +7709,11 @@ function BookPagePreview({
   if (type === "right") {
     return (
       <div
-        className="mx-auto w-full max-w-[360px] aspect-[182/257] bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[12%] pt-[11%] pb-[6.5%]"
+        className="mx-auto w-full min-w-0 min-h-0 max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[12%] pt-[11%] pb-[6.5%]"
         aria-label={`B5 右ページ ${pageNumber}`}
       >
-        <div className="h-full flex flex-col">
-          <div className="flex-1 overflow-hidden pt-[3%]">
+        <div className="h-full min-h-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden pt-[3%]">
             {bodyParagraphs.length > 0 ? (
               bodyParagraphs.slice(0, 10).map((paragraph, index) => (
                 <p
@@ -7741,7 +7741,7 @@ function BookPagePreview({
   if (type === "photo") {
     return (
       <div
-        className="mx-auto w-full max-w-[360px] aspect-[182/257] bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10.5%] pt-[10%] pb-[6.5%]"
+        className="mx-auto w-full min-w-0 min-h-0 max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10.5%] pt-[10%] pb-[6.5%]"
         aria-label={`B5 写真ページ ${pageNumber}`}
       >
         <div className="h-full flex flex-col">
@@ -7750,7 +7750,7 @@ function BookPagePreview({
               <img
                 src={photo.url}
                 alt=""
-                className="w-full max-h-full object-contain"
+                className="w-full h-full min-h-0 object-contain"
               />
             ) : (
               <div className="w-full h-[55%]" />
@@ -7767,7 +7767,7 @@ function BookPagePreview({
 
   return (
     <div
-      className="mx-auto w-full max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10.5%] pt-[9.5%] pb-[6.5%]"
+      className="mx-auto w-full min-w-0 min-h-0 max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10.5%] pt-[9.5%] pb-[6.5%]"
       aria-label={`B5 左ページ ${pageNumber}`}
     >
       <div
@@ -7797,13 +7797,13 @@ function BookPagePreview({
           </p>
         </div>
 
-        <figure className="min-h-0 pt-[3%] pb-[5%] flex flex-col justify-end">
+        <figure className="min-h-0 overflow-hidden pt-[3%] pb-[6%] flex flex-col justify-end">
           <div className="min-h-0 flex-1 flex items-end justify-center overflow-hidden">
             {headingPhoto?.url ? (
               <img
                 src={headingPhoto.url}
                 alt=""
-                className="w-full max-h-full object-contain object-center"
+                className="w-full h-full min-h-0 object-contain object-center"
               />
             ) : (
               <div className="w-full h-full" />
@@ -10198,15 +10198,6 @@ function Scene_BookBuilder({
                 {previewPageGroups.map(group => (
                   <div key={group.answer.id} className="space-y-5">
                     <div className="rounded-3xl border border-white/[0.07] bg-white/[0.018] p-3 sm:p-4">
-                      <div className="mb-3 flex items-center justify-between px-1">
-                        <p className="text-white/34 text-[0.65rem] tracking-[0.18em]">
-                          見開き
-                        </p>
-                        <p className="text-white/24 text-[0.62rem] tracking-widest">
-                          B5・182 × 257 mm
-                        </p>
-                      </div>
-
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-1 items-start">
                         <BookPagePreview
                           type="left"
