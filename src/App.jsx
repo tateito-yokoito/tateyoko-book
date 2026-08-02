@@ -7801,7 +7801,10 @@ function BookPagePreview({
           </p>
         </div>
 
-        <figure className="min-h-0 overflow-hidden pt-[3%] pb-[7%] flex flex-col justify-end">
+        <figure
+          className="absolute left-[10.5%] right-[10.5%] bottom-[11%] min-h-0 overflow-hidden flex flex-col justify-end"
+          style={{ top: isPhotoStory ? "39%" : "53%" }}
+        >
           <div className="min-h-0 flex-1 flex items-end justify-center overflow-hidden">
             {headingPhoto?.url ? (
               <img
