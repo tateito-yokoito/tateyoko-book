@@ -7708,14 +7708,17 @@ function BookPagePreview({
 }) {
   if (type === "right") {
     return (
-      <div className="mx-auto w-full max-w-[360px] aspect-[182/257] bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[11%] py-[13%]">
+      <div
+        className="mx-auto w-full max-w-[360px] aspect-[182/257] bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[12%] pt-[11%] pb-[6.5%]"
+        aria-label={`B5 右ページ ${pageNumber}`}
+      >
         <div className="h-full flex flex-col">
-          <div className="flex-1">
+          <div className="flex-1 overflow-hidden pt-[3%]">
             {bodyParagraphs.length > 0 ? (
               bodyParagraphs.slice(0, 10).map((paragraph, index) => (
                 <p
                   key={index}
-                  className="text-[0.72rem] leading-[2.05] text-slate-800 mb-5 whitespace-pre-wrap"
+                  className="text-[0.7rem] leading-[2.05] text-slate-800 mb-4 whitespace-pre-wrap"
                 >
                   {paragraph}
                 </p>
@@ -7737,14 +7740,17 @@ function BookPagePreview({
 
   if (type === "photo") {
     return (
-      <div className="mx-auto w-full max-w-[360px] aspect-[182/257] bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10%] py-[11%]">
+      <div
+        className="mx-auto w-full max-w-[360px] aspect-[182/257] bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10.5%] pt-[10%] pb-[6.5%]"
+        aria-label={`B5 写真ページ ${pageNumber}`}
+      >
         <div className="h-full flex flex-col">
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 min-h-0 flex items-center justify-center pb-[5%]">
             {photo?.url ? (
               <img
                 src={photo.url}
                 alt=""
-                className="w-full max-h-[72%] object-contain"
+                className="w-full max-h-full object-contain"
               />
             ) : (
               <div className="w-full h-[55%]" />
@@ -7760,43 +7766,58 @@ function BookPagePreview({
   }
 
   return (
-        <div className="mx-auto w-full max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10%] py-[10%]">
-      <div className="h-full flex flex-col">
-        <div className="text-left">
-          <p className="text-[0.68rem] leading-tight text-slate-500">
+    <div
+      className="mx-auto w-full max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10.5%] pt-[9.5%] pb-[6.5%]"
+      aria-label={`B5 左ページ ${pageNumber}`}
+    >
+      <div
+        className="h-full grid min-h-0"
+        style={{
+          gridTemplateRows: isPhotoStory
+            ? "17% 19% minmax(0, 1fr) auto"
+            : "18% 26% minmax(0, 1fr) auto"
+        }}
+      >
+        <div className="self-end text-left">
+          <p className="text-[0.62rem] leading-[1.15] tracking-[0.02em] text-slate-500">
             {isPhotoStory ? "Photo" : "Story"}<br />
-            {isPhotoStory ? String(photoSequence || 1).padStart(2, "0") : (sequenceOrder || pageNumber)}
+            {isPhotoStory
+              ? String(photoSequence || 1).padStart(2, "0")
+              : (sequenceOrder || pageNumber)}
           </p>
 
-          <div className="mt-2">
+          <div className="mt-1.5">
             <DummyQrCode />
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className={`${isPhotoStory ? "h-[27%]" : "h-[42%]"} flex items-center justify-center text-center px-2`}>
-            <p className="text-[0.82rem] leading-loose text-slate-700 whitespace-pre-wrap">
-              {questionText || "問い"}
-            </p>
-          </div>
+        <div className="flex items-center justify-center text-center px-[5%]">
+          <p className="text-[0.78rem] leading-[1.95] text-slate-700 whitespace-pre-wrap">
+            {questionText || "問い"}
+          </p>
+        </div>
 
-          <div className={`${isPhotoStory ? "h-[58%]" : "h-[46%]"} mt-auto overflow-hidden flex flex-col items-center justify-center`}>
+        <figure className="min-h-0 pt-[3%] pb-[5%] flex flex-col justify-end">
+          <div className="min-h-0 flex-1 flex items-end justify-center overflow-hidden">
             {headingPhoto?.url ? (
               <img
                 src={headingPhoto.url}
                 alt=""
-                className={`w-full ${isPhotoStory ? "max-h-[92%] object-contain" : "h-full object-cover"}`}
+                className="w-full max-h-full object-contain object-center"
               />
             ) : (
               <div className="w-full h-full" />
             )}
-            {isPhotoStory && photoCaption && <p className="text-[0.52rem] text-slate-500 mt-2 text-center">{photoCaption}</p>}
           </div>
-        </div>
 
+          {photoCaption && (
+            <figcaption className="mt-1.5 text-[0.48rem] leading-relaxed text-slate-500 text-left">
+              {photoCaption}
+            </figcaption>
+          )}
+        </figure>
 
-
-        <p className="text-[0.56rem] text-slate-400 text-right mt-4">
+        <p className="text-[0.56rem] text-slate-400 text-left">
           {pageNumber}
         </p>
       </div>
@@ -10176,23 +10197,36 @@ function Scene_BookBuilder({
               <div className="space-y-10">
                 {previewPageGroups.map(group => (
                   <div key={group.answer.id} className="space-y-5">
-                    <BookPagePreview
-                      type="left"
-                      pageNumber={group.leftPageNumber}
-                      sequenceOrder={group.answer.sequence_order}
-                      questionText={group.question?.content || ""}
-                      headingPhoto={group.headingPhoto}
-                      isPhotoStory={group.isPhotoStory}
-                      photoSequence={group.photoSequence}
-                      photoCaption={group.photoCaption}
-                      {...(group.isPhotoStory ? { questionText: group.photoTitle } : {})}
-                    />
+                    <div className="rounded-3xl border border-white/[0.07] bg-white/[0.018] p-3 sm:p-4">
+                      <div className="mb-3 flex items-center justify-between px-1">
+                        <p className="text-white/34 text-[0.65rem] tracking-[0.18em]">
+                          見開き
+                        </p>
+                        <p className="text-white/24 text-[0.62rem] tracking-widest">
+                          B5・182 × 257 mm
+                        </p>
+                      </div>
 
-                    <BookPagePreview
-                      type="right"
-                      pageNumber={group.rightPageNumber}
-                      bodyParagraphs={group.bodyParagraphs}
-                    />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-1 items-start">
+                        <BookPagePreview
+                          type="left"
+                          pageNumber={group.leftPageNumber}
+                          sequenceOrder={group.answer.sequence_order}
+                          questionText={group.question?.content || ""}
+                          headingPhoto={group.headingPhoto}
+                          isPhotoStory={group.isPhotoStory}
+                          photoSequence={group.photoSequence}
+                          photoCaption={group.photoCaption}
+                          {...(group.isPhotoStory ? { questionText: group.photoTitle } : {})}
+                        />
+
+                        <BookPagePreview
+                          type="right"
+                          pageNumber={group.rightPageNumber}
+                          bodyParagraphs={group.bodyParagraphs}
+                        />
+                      </div>
+                    </div>
 
                     {group.photoPages.map(photoPage => (
                       <BookPagePreview
@@ -12536,9 +12570,16 @@ handles.map(handle => (
 }
 
 
-function PhotoCorrectionFlow({ open, title = "写真を添える", onClose, onComplete }) {
+function PhotoCorrectionFlow({
+  open,
+  title = "写真を添える",
+  initialFile = null,
+  onClose,
+  onComplete
+}) {
   const libraryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const initializedFileRef = useRef(null);
   const [scanPreview, setScanPreview] = useState(null);
 
   const isDesktopBrowser =
@@ -12568,6 +12609,7 @@ function PhotoCorrectionFlow({ open, title = "写真を添える", onClose, onCo
 
   useEffect(() => {
     if (!open) {
+      initializedFileRef.current = null;
       setScanPreview(prev => {
         releasePreviewUrls(prev);
         return null;
@@ -12651,6 +12693,13 @@ function PhotoCorrectionFlow({ open, title = "写真を添える", onClose, onCo
       if (inputRef.current) inputRef.current.value = "";
     }
   };
+
+  useEffect(() => {
+    if (!open || !initialFile || initializedFileRef.current === initialFile) return;
+
+    initializedFileRef.current = initialFile;
+    handleSourceSelect([initialFile], { current: null });
+  }, [open, initialFile]);
 
   const updateScanPreview = async (nextValues = {}) => {
     const current = scanPreview;
@@ -13183,6 +13232,9 @@ function Scene_StoryPages({
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
   const [editingAnswer, setEditingAnswer] = useState(null);
   const [photoActionAnswerId, setPhotoActionAnswerId] = useState(null);
+  const [editingPhoto, setEditingPhoto] = useState(null);
+  const [preparingPhotoPath, setPreparingPhotoPath] = useState(null);
+  const [replacingPhotoPath, setReplacingPhotoPath] = useState(null);
 
   const [editSelectedStyle, setEditSelectedStyle] = useState("readable");
   const [editDraftText, setEditDraftText] = useState("");
@@ -13435,6 +13487,95 @@ const openPhotoActionSheet = (answerId) => {
   setPhotoActionAnswerId(answerId);
 };
 
+const openExistingPhotoEditor = async (photo, answerId) => {
+  if (!photo?.url || !photo?.storage_path) return;
+
+  try {
+    setPreparingPhotoPath(photo.storage_path);
+
+    const response = await fetch(photo.url);
+    if (!response.ok) throw new Error("写真を読み込めませんでした");
+
+    const blob = await response.blob();
+    const contentType = blob.type || photo.meta_json?.content_type || "image/jpeg";
+    const fallbackName = photo.storage_path.split("/").pop() || "photo.jpg";
+    const sourceFile = new File(
+      [blob],
+      photo.meta_json?.file_name || fallbackName,
+      { type: contentType }
+    );
+
+    setEditingPhoto({ photo, answerId, sourceFile });
+  } catch (e) {
+    console.error("existing photo load error", e);
+    alert(e.message || "写真の読み込みに失敗しました。");
+  } finally {
+    setPreparingPhotoPath(null);
+  }
+};
+
+const replaceStoryPhoto = async (file, target) => {
+  const photo = target?.photo;
+
+  if (!file?.type?.startsWith("image/") || !photo?.id || !user?.id) return;
+
+  const contentType = file.type || "image/jpeg";
+  const ext = contentType.includes("png")
+    ? "png"
+    : contentType.includes("webp")
+      ? "webp"
+      : "jpg";
+  const pathWithoutExtension = photo.storage_path.replace(/\.[^/.]+$/, "");
+  const nextPath = `${pathWithoutExtension}-edit-${Date.now()}.${ext}`;
+
+  try {
+    setReplacingPhotoPath(photo.storage_path);
+
+    const { error: uploadError } = await supabaseClient.storage
+      .from("photos")
+      .upload(nextPath, file, {
+        contentType,
+        upsert: false
+      });
+
+    if (uploadError) throw new Error("補正した写真の保存に失敗しました");
+
+    const { error: updateError } = await supabaseClient
+      .from("media_assets")
+      .update({
+        storage_path: nextPath,
+        meta_json: {
+          ...(photo.meta_json || {}),
+          file_name: file.name || photo.meta_json?.file_name || null,
+          content_type: contentType,
+          corrected_at: new Date().toISOString()
+        }
+      })
+      .eq("id", photo.id)
+      .eq("user_id", user.id);
+
+    if (updateError) {
+      await supabaseClient.storage.from("photos").remove([nextPath]);
+      throw new Error("補正した写真の情報を保存できませんでした");
+    }
+
+    const { error: removeError } = await supabaseClient.storage
+      .from("photos")
+      .remove([photo.storage_path]);
+
+    if (removeError) {
+      console.warn("old photo cleanup error", removeError);
+    }
+
+    await loadAnswers({ showLoading: false });
+  } catch (e) {
+    console.error("story photo replace error", e);
+    alert(e.message || "写真の差し替えに失敗しました。");
+  } finally {
+    setReplacingPhotoPath(null);
+  }
+};
+
 const handleStoryPhotoSelect = async (file, answerId) => {
     const selectedFiles = file?.type?.startsWith("image/") ? [file] : [];
 
@@ -13551,13 +13692,28 @@ return (
         handleStoryPhotoSelect(file, answerId);
       }}
     />
+    <PhotoCorrectionFlow
+      open={!!editingPhoto}
+      title="写真を切り抜き・補正"
+      initialFile={editingPhoto?.sourceFile || null}
+      onClose={() => setEditingPhoto(null)}
+      onComplete={(file) => {
+        const target = editingPhoto;
+        setEditingPhoto(null);
+        replaceStoryPhoto(file, target);
+      }}
+    />
 
-{uploadingPhotoAnswerId && (
+{(uploadingPhotoAnswerId || preparingPhotoPath || replacingPhotoPath) && (
   <div className="fixed left-4 right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-40 rounded-2xl border border-white/10 bg-slate-950/92 px-5 py-4 shadow-2xl flex items-center gap-3">
     <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white/75 animate-spin shrink-0" />
 
     <p className="text-white/70 text-sm tracking-widest">
-      写真を保存しています...
+      {preparingPhotoPath
+        ? "写真を読み込んでいます..."
+        : replacingPhotoPath
+          ? "補正した写真を保存しています..."
+          : "写真を保存しています..."}
     </p>
   </div>
 )}
@@ -13780,10 +13936,21 @@ return (
           <button
             type="button"
             onClick={() => deletePhoto(photo)}
-            disabled={deletingPhotoPath === photo.storage_path}
+            disabled={deletingPhotoPath === photo.storage_path || replacingPhotoPath === photo.storage_path}
             className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/55 text-white/85 text-sm"
+            aria-label="写真を削除"
           >
             {deletingPhotoPath === photo.storage_path ? "…" : "×"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openExistingPhotoEditor(photo, answer.id)}
+            disabled={preparingPhotoPath === photo.storage_path || replacingPhotoPath === photo.storage_path}
+            className="absolute left-3 bottom-3 rounded-full border border-white/15 bg-slate-950/78 px-3 py-2 text-white/82 text-xs flex items-center gap-2 backdrop-blur"
+          >
+            <Pencil size={13} strokeWidth={1.8} />
+            {preparingPhotoPath === photo.storage_path ? "読み込み中" : "切り抜き・補正"}
           </button>
         </div>
       ))}
