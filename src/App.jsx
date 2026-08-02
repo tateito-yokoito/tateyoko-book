@@ -487,20 +487,33 @@ function getFirstMainStoryIndex(questionSet) {
   );
 }
 
-function formatNextNotificationLabel(preference, now = new Date()) {
-  if (!preference || preference.is_active === false) return "";
+function getNotificationSchedules(preference) {
+  if (!preference || preference.is_active === false) return [];
 
-  const weekday = Number(preference.weekday);
-  const hour = Number(preference.hour);
-  const minute = Number(preference.minute || 0);
+  const source = Array.isArray(preference.schedules) && preference.schedules.length > 0
+    ? preference.schedules
+    : [preference];
 
-  if (
-    !Number.isInteger(weekday) || weekday < 0 || weekday > 6 ||
-    !Number.isInteger(hour) || hour < 0 || hour > 23 ||
-    !Number.isInteger(minute) || minute < 0 || minute > 59
-  ) {
-    return "";
-  }
+  return source
+    .map((schedule, index) => ({
+      ...schedule,
+      weekday: Number(schedule.weekday),
+      hour: Number(schedule.hour),
+      minute: Number(schedule.minute || 0),
+      sort_order: Number(schedule.sort_order || index + 1)
+    }))
+    .filter(schedule => (
+      schedule.is_active !== false && schedule.enabled !== false &&
+      Number.isInteger(schedule.weekday) && schedule.weekday >= 0 && schedule.weekday <= 6 &&
+      Number.isInteger(schedule.hour) && schedule.hour >= 0 && schedule.hour <= 23 &&
+      Number.isInteger(schedule.minute) && schedule.minute >= 0 && schedule.minute <= 59
+    ))
+    .sort((a, b) => a.sort_order - b.sort_order);
+}
+
+function getNextNotificationOccurrence(preference, now = new Date()) {
+  const schedules = getNotificationSchedules(preference);
+  if (schedules.length === 0) return null;
 
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tokyo",
@@ -526,18 +539,30 @@ function formatNextNotificationLabel(preference, now = new Date()) {
   ));
   const currentWeekday = currentDate.getUTCDay();
   const currentMinutes = parts.hour * 60 + parts.minute;
-  const targetMinutes = hour * 60 + minute;
-  let daysUntil = (weekday - currentWeekday + 7) % 7;
 
-  if (daysUntil === 0 && targetMinutes <= currentMinutes) {
-    daysUntil = 7;
-  }
+  const occurrences = schedules.map(schedule => {
+    const targetMinutes = schedule.hour * 60 + schedule.minute;
+    let daysUntil = (schedule.weekday - currentWeekday + 7) % 7;
+    if (daysUntil === 0 && targetMinutes <= currentMinutes) daysUntil = 7;
+    const targetDate = new Date(Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day + daysUntil
+    ));
+    return { ...schedule, daysUntil, targetMinutes, targetDate };
+  });
 
-  const targetDate = new Date(Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day + daysUntil
+  occurrences.sort((a, b) => (
+    a.daysUntil - b.daysUntil || a.targetMinutes - b.targetMinutes
   ));
+  return occurrences[0];
+}
+
+function formatNextNotificationLabel(preference, now = new Date()) {
+  const occurrence = getNextNotificationOccurrence(preference, now);
+  if (!occurrence) return "";
+
+  const { targetDate, hour, minute } = occurrence;
   const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
   const targetHour = String(hour).padStart(2, "0");
   const targetMinute = String(minute).padStart(2, "0");
@@ -546,6 +571,47 @@ function formatNextNotificationLabel(preference, now = new Date()) {
     `次の問い　${targetDate.getUTCMonth() + 1}/${targetDate.getUTCDate()}` +
     `（${weekdayLabels[targetDate.getUTCDay()]}）${targetHour}:${targetMinute}ごろ（メール）`
   );
+}
+
+async function loadNotificationPreference(userId) {
+  if (!userId) return null;
+
+  const [preferenceResult, schedulesResult] = await Promise.all([
+    supabaseClient
+      .from("notification_preferences")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabaseClient
+      .from("notification_schedules")
+      .select("id, weekday, hour, minute, delivery_channel, enabled, sort_order")
+      .eq("user_id", userId)
+      .eq("enabled", true)
+      .order("sort_order", { ascending: true })
+  ]);
+
+  if (preferenceResult.error) throw preferenceResult.error;
+  if (schedulesResult.error) throw schedulesResult.error;
+
+  const preference = preferenceResult.data || null;
+  const schedules = schedulesResult.data || [];
+
+  if (!preference && schedules.length === 0) return null;
+
+  const normalizedSchedules = schedules.map(schedule => ({
+    ...schedule,
+    is_active: schedule.enabled !== false,
+    timezone: preference?.timezone || "Asia/Tokyo"
+  }));
+  const first = normalizedSchedules[0] || preference || {};
+  return {
+    ...(preference || {}),
+    weekday: first.weekday,
+    hour: first.hour,
+    minute: first.minute || 0,
+    is_active: preference?.is_active !== false,
+    schedules: normalizedSchedules
+  };
 }
 
 function getMainStoryProgress(questionSet, currentIndex) {
@@ -1684,39 +1750,17 @@ async function loadSupporterBookData(supportedProject) {
 }
 
 function getNextDeliveryText(notificationPref) {
-  if (
-    !notificationPref ||
-    notificationPref.weekday === undefined ||
-    notificationPref.hour === undefined
-  ) {
+  const occurrence = getNextNotificationOccurrence(notificationPref);
+  if (!occurrence) {
     return "次の問いが届いたら、また続きを開いてください。";
   }
 
   const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
-  const now = new Date();
-
-  const target = new Date(now);
-  target.setHours(notificationPref.hour || 0);
-  target.setMinutes(notificationPref.minute || 0);
-  target.setSeconds(0);
-  target.setMilliseconds(0);
-
-  const currentWeekday = now.getDay();
-  const targetWeekday = Number(notificationPref.weekday);
-
-  let daysUntil = (targetWeekday - currentWeekday + 7) % 7;
-
-  if (daysUntil === 0 && target <= now) {
-    daysUntil = 7;
-  }
-
-  target.setDate(now.getDate() + daysUntil);
-
-  const month = target.getMonth() + 1;
-  const date = target.getDate();
-  const weekday = weekdays[target.getDay()];
-  const hour = String(target.getHours()).padStart(2, "0");
-  const minute = String(target.getMinutes()).padStart(2, "0");
+  const month = occurrence.targetDate.getUTCMonth() + 1;
+  const date = occurrence.targetDate.getUTCDate();
+  const weekday = weekdays[occurrence.targetDate.getUTCDay()];
+  const hour = String(occurrence.hour).padStart(2, "0");
+  const minute = String(occurrence.minute).padStart(2, "0");
 
   return `次の問いは、${month}月${date}日（${weekday}）${hour}:${minute}ごろに届きます。`;
 }
@@ -2186,11 +2230,7 @@ if (!session) {
 
         const profile = await ensureProfileExists(session.user);
 
-        const { data: notificationData } = await supabaseClient
-          .from("notification_preferences")
-          .select("*")
-          .eq("user_id", session.user.id)
-          .maybeSingle();
+        const notificationData = await loadNotificationPreference(session.user.id);
 
         setNotificationPref(notificationData || null);
 
@@ -2591,11 +2631,7 @@ const continueAfterTokenAuth = async () => {
       foundationData
     );
 
-    const { data: notificationData } = await supabaseClient
-      .from("notification_preferences")
-      .select("*")
-      .eq("user_id", session.user.id)
-      .maybeSingle();
+    const notificationData = await loadNotificationPreference(session.user.id);
 
     const resumeIndex = getResumeQuestionIndexFromToken(questionSet, tokenData);
 
@@ -4364,11 +4400,7 @@ const refreshedFoundationData = await ensureUserFoundation(
   u
 );
 
-const { data: notificationData } = await supabaseClient
-  .from("notification_preferences")
-  .select("*")
-  .eq("user_id", u.id)
-  .maybeSingle();
+const notificationData = await loadNotificationPreference(u.id);
 
 setNotificationPref(notificationData || null);
 
@@ -4662,6 +4694,7 @@ let sceneAfterInvite = nextScene;
   <Scene_NotificationSetup
     user={user}
     initialPreference={notificationPref}
+    onPreferenceSaved={setNotificationPref}
     onBack={notificationSetupReturnScene ? () => {
       const returnScene = notificationSetupReturnScene;
       setNotificationSetupReturnScene(null);
@@ -4682,11 +4715,7 @@ let sceneAfterInvite = nextScene;
         const refreshedFoundationData =
           await ensureUserFoundation(user.id, user);
 
-        const { data: notificationData } = await supabaseClient
-          .from("notification_preferences")
-          .select("*")
-          .eq("user_id", user.id)
-          .maybeSingle();
+        const notificationData = await loadNotificationPreference(user.id);
 
         setFoundation(refreshedFoundationData);
         setNotificationPref(notificationData || null);
@@ -7782,32 +7811,52 @@ function Scene_Home({
           </p>
         </div>
 
-        <div className="space-y-4">
-          <HomeMenuButton
-            icon={Mic}
-            label="問いに語る"
-            onClick={onStartTalking}
-          />
+        <div className="space-y-7">
+          <section>
+            <p className="text-white/34 text-xs tracking-[0.18em] px-1 mb-3">今日、語る</p>
+            <div className="glass-card overflow-hidden">
+              <button type="button" onClick={onStartTalking} className="w-full px-5 py-5 flex items-center gap-4 text-left">
+                <div className="w-11 h-11 rounded-full bg-white/[0.08] flex items-center justify-center shrink-0">
+                  <Mic size={21} className="text-white/70" strokeWidth={1.7} />
+                </div>
+                <p className="flex-1 text-white/86 text-[1rem] text-narrative">届いた問いから語る</p>
+                <ChevronRight size={19} className="text-white/25" strokeWidth={1.7} />
+              </button>
+              <div className="mx-5 border-t border-white/[0.08]" />
+              <button type="button" onClick={onStartPhotoStory} className="w-full px-5 py-5 flex items-center gap-4 text-left">
+                <div className="w-11 h-11 rounded-full bg-white/[0.08] flex items-center justify-center shrink-0">
+                  <ImageIcon size={21} className="text-white/70" strokeWidth={1.7} />
+                </div>
+                <p className="flex-1 text-white/86 text-[1rem] text-narrative">写真から語る</p>
+                <ChevronRight size={19} className="text-white/25" strokeWidth={1.7} />
+              </button>
+            </div>
+          </section>
 
-          <HomeMenuButton
-            icon={Files}
-            label="語りを見る"
-            onClick={onOpenStoryPages}
-          />
+          <section>
+            <p className="text-white/34 text-xs tracking-[0.18em] px-1 mb-3">これまで</p>
+            <HomeMenuButton
+              icon={Files}
+              label="語りを見る"
+              onClick={onOpenStoryPages}
+            />
+          </section>
 
-          <HomeMenuButton
-            icon={ImageIcon}
-            label="写真から語る"
-            onClick={onStartPhotoStory}
-          />
+          <section className="pt-6 border-t border-white/[0.08]">
+            <p className="text-white/34 text-xs tracking-[0.18em] px-1 mb-3">物語を一冊へ</p>
+            <button type="button" onClick={onOpenBookBuilder} className="glass-card w-full px-5 py-5 flex items-center gap-4 text-left">
+              <div className="w-11 h-11 rounded-full bg-white/[0.08] flex items-center justify-center shrink-0">
+                <BookOpen size={21} className="text-white/70" strokeWidth={1.7} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white/86 text-[1rem] text-narrative">本に仕上げる</p>
+                <p className="mt-1 text-white/32 text-xs">これまでの語りを、本の形に整えます</p>
+              </div>
+              <ChevronRight size={19} className="text-white/25" strokeWidth={1.7} />
+            </button>
+          </section>
 
-          <HomeMenuButton
-            icon={BookOpen}
-            label="本に仕上げる"
-            onClick={onOpenBookBuilder}
-          />
-
-          <div className="grid grid-cols-2 gap-3 pt-2">
+          <div className="grid grid-cols-2 gap-3">
             <HomeUtilityButton
               icon={Plus}
               label="問いを追加"
@@ -7821,7 +7870,7 @@ function Scene_Home({
           </div>
 
           {supportedProjects.length > 0 && (
-            <div className="pt-8 mt-8 border-t border-white/10 space-y-4">
+            <div className="pt-7 border-t border-white/10 space-y-4">
               <p className="text-white/45 text-xs tracking-[0.18em] px-1">
                 お手伝いしている物語
               </p>
@@ -7962,7 +8011,8 @@ function Scene_SharingPrivacySettings({
   const [supporters, setSupporters] = useState([]);
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [addType, setAddType] = useState(null);
-  const [inviteName, setInviteName] = useState("");
+  const [inviteFamilyName, setInviteFamilyName] = useState("");
+  const [inviteGivenName, setInviteGivenName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [relationshipLabel, setRelationshipLabel] = useState("child");
   const isPrivate = !familyEnabled && !selectedEnabled;
@@ -8074,14 +8124,16 @@ function Scene_SharingPrivacySettings({
   };
 
   const sendRelationshipInvite = async () => {
-    if (!addType || !inviteEmail.trim()) return;
+    const normalizedFamilyName = inviteFamilyName.trim();
+    const normalizedGivenName = inviteGivenName.trim();
+    if (!addType || !normalizedFamilyName || !normalizedGivenName || !inviteEmail.trim()) return;
     try {
       setSaving(true);
       const { data: inviteId, error } = await supabaseClient.rpc("create_story_relationship_invite", {
         input_book_project_id: foundation?.project?.id,
         input_email: inviteEmail.trim(),
         input_invite_type: addType,
-        input_invitee_name: inviteName.trim() || null,
+        input_invitee_name: `${normalizedFamilyName} ${normalizedGivenName}`,
         input_relationship_label: addType === "family" ? relationshipLabel : null
       });
       if (error) throw error;
@@ -8092,7 +8144,7 @@ function Scene_SharingPrivacySettings({
       const nextFlags = { familyEnabled: familyEnabled || addType === "family", selectedEnabled: selectedEnabled || addType === "selected" };
       setFamilyEnabled(nextFlags.familyEnabled);
       setSelectedEnabled(nextFlags.selectedEnabled);
-      setInviteName(""); setInviteEmail(""); setAddType(null);
+      setInviteFamilyName(""); setInviteGivenName(""); setInviteEmail(""); setAddType(null);
       await loadPeople();
       alert("依頼メールを送りました。");
     } catch (error) {
@@ -8267,7 +8319,10 @@ function Scene_SharingPrivacySettings({
               <p className="text-white/78 text-sm">{addType === "family" ? "ファミリーを追加" : "共有する人を追加"}</p>
               <button type="button" onClick={() => setAddType(null)} className="text-white/35 text-sm">×</button>
             </div>
-            <input value={inviteName} onChange={event => setInviteName(event.target.value)} className="quiet-input" placeholder="お名前（任意）" />
+            <div className="grid grid-cols-2 gap-3">
+              <input value={inviteFamilyName} onChange={event => setInviteFamilyName(event.target.value)} className="quiet-input" placeholder="姓" autoComplete="family-name" />
+              <input value={inviteGivenName} onChange={event => setInviteGivenName(event.target.value)} className="quiet-input" placeholder="名" autoComplete="given-name" />
+            </div>
             <input type="email" value={inviteEmail} onChange={event => setInviteEmail(event.target.value)} className="quiet-input" placeholder="メールアドレス" />
             {addType === "family" && (
               <select value={relationshipLabel} onChange={event => setRelationshipLabel(event.target.value)} className="quiet-input">
@@ -8275,10 +8330,10 @@ function Scene_SharingPrivacySettings({
                 <option value="sibling">きょうだい</option><option value="grandchild">孫</option><option value="other">その他</option>
               </select>
             )}
-            <button type="button" onClick={sendRelationshipInvite} disabled={saving || !inviteEmail.trim()} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm disabled:opacity-35">
+            <button type="button" onClick={sendRelationshipInvite} disabled={saving || !inviteFamilyName.trim() || !inviteGivenName.trim() || !inviteEmail.trim()} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm disabled:opacity-35">
               依頼を送る
             </button>
-            <p className="text-white/28 text-xs leading-loose">メールを受け取った方が承認すると、つながりが確認済みになります。</p>
+            <p className="text-white/28 text-xs leading-loose">承認後は、ご本人が登録した氏名を表示します。</p>
           </section>
         )}
 
@@ -8299,6 +8354,7 @@ function Scene_PrivateStorySettings({ user, questionSet = [], onBack }) {
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
+  const [expandedStoryIds, setExpandedStoryIds] = useState(() => new Set());
 
   useEffect(() => {
     const load = async () => {
@@ -8345,6 +8401,15 @@ function Scene_PrivateStorySettings({ user, questionSet = [], onBack }) {
   });
   const privateCount = visibleStories.filter(story => story.access_override === "private_forever").length;
 
+  const toggleExpanded = storyId => {
+    setExpandedStoryIds(previous => {
+      const next = new Set(previous);
+      if (next.has(storyId)) next.delete(storyId);
+      else next.add(storyId);
+      return next;
+    });
+  };
+
   return (
     <div className="fixed inset-0 min-h-0 flex flex-col fade-enter px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4">
       <div className="relative flex items-center justify-center h-10 mb-5 shrink-0">
@@ -8354,7 +8419,7 @@ function Scene_PrivateStorySettings({ user, questionSet = [], onBack }) {
         <p className="text-white/88 text-[1rem] text-narrative">語りごとの非公開設定</p>
       </div>
       <div className="shrink-0 glass-card px-5 py-4 mb-4 flex items-center justify-between">
-        <p className="text-white/58 text-sm">自分だけの語り</p>
+        <p className="text-white/58 text-sm">非公開中</p>
         <p className="text-white/86 text-lg text-narrative">{privateCount}件</p>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pb-8">
@@ -8364,10 +8429,21 @@ function Scene_PrivateStorySettings({ user, questionSet = [], onBack }) {
           const question = (questionSet || []).find(item => Number(item.sequence_order) === Number(story.sequence_order));
           const isPrivate = story.access_override === "private_forever";
           const body = story.transcript_edited || story.transcript_readable || story.transcript_clean || "";
+          const isExpanded = expandedStoryIds.has(story.id);
+          const canExpand = body.length > 90;
           return (
             <div key={story.id} className="glass-card p-5">
               <p className="text-white/42 text-xs leading-relaxed mb-3">{question?.content || "残された語り"}</p>
-              <p className="text-white/72 text-sm leading-loose line-clamp-3 mb-4">{body}</p>
+              <p className={`text-white/72 text-sm leading-loose whitespace-pre-wrap ${canExpand && !isExpanded ? "line-clamp-3" : ""} ${canExpand ? "" : "mb-4"}`}>{body}</p>
+              {canExpand && (
+                <button
+                  type="button"
+                  onClick={() => toggleExpanded(story.id)}
+                  className="mt-2 mb-4 text-white/34 text-xs underline underline-offset-4"
+                >
+                  {isExpanded ? "閉じる" : "全文を見る"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => togglePrivate(story)}
@@ -13434,6 +13510,7 @@ return (
 function Scene_NotificationSetup({
   user,
   initialPreference,
+  onPreferenceSaved,
   onBack,
   onComplete
 }) {
@@ -13448,70 +13525,163 @@ function Scene_NotificationSetup({
   ];
   const hourOptions = Array.from({ length: 24 }, (_, index) => index);
   const minuteOptions = [0, 15, 30, 45];
-  const [weekday, setWeekday] = useState(
-    Number.isFinite(Number(initialPreference?.weekday))
-      ? Number(initialPreference.weekday)
-      : 0
-  );
-  const [hour, setHour] = useState(
-    Number.isFinite(Number(initialPreference?.hour))
-      ? Number(initialPreference.hour)
-      : 20
-  );
-  const [minute, setMinute] = useState(
-    Number.isFinite(Number(initialPreference?.minute))
-      ? Number(initialPreference.minute)
-      : 0
-  );
-  const [loading, setLoading] = useState(false);
+  const initialSchedules = getNotificationSchedules(initialPreference);
+  const [schedules, setSchedules] = useState(() => (
+    initialSchedules.length > 0
+      ? initialSchedules.map((schedule, index) => ({ ...schedule, localId: schedule.id || `schedule-${index}` }))
+      : [{ localId: "schedule-initial", weekday: 0, hour: 20, minute: 0, sort_order: 1, is_active: true }]
+  ));
+  const [saveState, setSaveState] = useState("idle");
+  const [removedSchedule, setRemovedSchedule] = useState(null);
+  const saveQueueRef = useRef(Promise.resolve());
+  const latestSaveRef = useRef(Promise.resolve());
+  const saveRequestIdRef = useRef(0);
+  const initialSaveStartedRef = useRef(false);
+  const savedTimerRef = useRef(null);
+  const undoTimerRef = useRef(null);
 
-  async function savePreference() {
-    try {
-      setLoading(true);
+  const hasDuplicateSchedule = nextSchedules => {
+    const keys = nextSchedules.map(schedule => String(schedule.weekday));
+    return new Set(keys).size !== keys.length;
+  };
 
-      const {
-        data: { session },
-        error: sessionError
-      } = await supabaseClient.auth.getSession();
+  const persistSchedules = nextSchedules => {
+    const requestId = saveRequestIdRef.current + 1;
+    saveRequestIdRef.current = requestId;
+    setSaveState("saving");
+    if (savedTimerRef.current) window.clearTimeout(savedTimerRef.current);
 
-      if (sessionError || !session) {
-        throw new Error("ログイン情報が見つかりません");
-      }
+    const payload = nextSchedules.map(schedule => ({
+      weekday: Number(schedule.weekday),
+      hour: Number(schedule.hour),
+      minute: Number(schedule.minute || 0)
+    }));
 
-      await ensureProfileExists(session.user);
+    const request = saveQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const { data, error } = await supabaseClient.rpc("save_own_notification_schedules", {
+          input_schedules: payload
+        });
+        if (error) throw error;
 
-      const activeUserId = session.user.id;
-
-      const { error } = await supabaseClient
-        .from("notification_preferences")
-        .upsert({
-          user_id: activeUserId,
-          email_enabled: true,
-          sms_enabled: false,
-          phone_number: null,
-          line_enabled: false,
-          weekday,
-          hour,
-          minute,
+        const savedSchedules = (data || payload).map((schedule, index) => ({
+          ...schedule,
+          weekday: Number(schedule.weekday),
+          hour: Number(schedule.hour),
+          minute: Number(schedule.minute || 0),
+          sort_order: Number(schedule.sort_order || index + 1),
+          is_active: schedule.is_active !== false
+        }));
+        const first = savedSchedules[0];
+        onPreferenceSaved?.({
+          ...(initialPreference || {}),
+          user_id: user?.id,
+          weekday: first.weekday,
+          hour: first.hour,
+          minute: first.minute,
           timezone: "Asia/Tokyo",
           delivery_channel: "email",
-          is_active: true
-        }, {
-          onConflict: "user_id"
+          is_active: true,
+          schedules: savedSchedules
         });
+        return savedSchedules;
+      });
 
-      if (error) {
-        throw error;
-      }
+    saveQueueRef.current = request;
+    latestSaveRef.current = request;
+    request
+      .then(() => {
+        if (saveRequestIdRef.current !== requestId) return;
+        setSaveState("saved");
+        savedTimerRef.current = window.setTimeout(() => setSaveState("idle"), 2200);
+      })
+      .catch(error => {
+        console.error("notification schedules save error", error);
+        if (saveRequestIdRef.current === requestId) setSaveState("error");
+      });
+    return request;
+  };
 
-      await onComplete();
-    } catch (e) {
-      console.error("notification setting save error", e);
-      alert("通知時間を保存できませんでした。");
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (initialSaveStartedRef.current) return;
+    initialSaveStartedRef.current = true;
+    persistSchedules(schedules);
+    return () => {
+      if (savedTimerRef.current) window.clearTimeout(savedTimerRef.current);
+      if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+    };
+  }, []);
+
+  const applySchedules = nextSchedules => {
+    if (hasDuplicateSchedule(nextSchedules)) {
+      alert("同じ曜日は1件だけ登録できます。");
+      return;
     }
-  }
+    const ordered = nextSchedules.map((schedule, index) => ({ ...schedule, sort_order: index + 1 }));
+    setSchedules(ordered);
+    persistSchedules(ordered);
+  };
+
+  const updateSchedule = (index, patch) => {
+    applySchedules(schedules.map((schedule, scheduleIndex) => (
+      scheduleIndex === index ? { ...schedule, ...patch } : schedule
+    )));
+  };
+
+  const addSchedule = () => {
+    if (schedules.length >= 3) return;
+    const last = schedules[schedules.length - 1];
+    let weekday = (Number(last.weekday) + 3) % 7;
+    for (let offset = 0; offset < 7; offset += 1) {
+      const candidate = (weekday + offset) % 7;
+      const duplicated = schedules.some(schedule => Number(schedule.weekday) === candidate);
+      if (!duplicated) { weekday = candidate; break; }
+    }
+    applySchedules([...schedules, {
+      localId: `schedule-${Date.now()}`,
+      weekday,
+      hour: Number(last.hour),
+      minute: Number(last.minute),
+      is_active: true
+    }]);
+  };
+
+  const removeSchedule = index => {
+    if (index === 0 || schedules.length <= 1) return;
+    const removed = { schedule: schedules[index], index };
+    applySchedules(schedules.filter((_, scheduleIndex) => scheduleIndex !== index));
+    setRemovedSchedule(removed);
+    if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = window.setTimeout(() => setRemovedSchedule(null), 5000);
+  };
+
+  const undoRemove = () => {
+    if (!removedSchedule) return;
+    const next = [...schedules];
+    next.splice(Math.min(removedSchedule.index, next.length), 0, removedSchedule.schedule);
+    setRemovedSchedule(null);
+    if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current);
+    applySchedules(next);
+  };
+
+  const finishAndContinue = async () => {
+    try {
+      await latestSaveRef.current;
+      await onComplete?.();
+    } catch (_error) {
+      alert("配信日時を保存できませんでした。もう一度お試しください。");
+    }
+  };
+
+  const returnAfterSave = async () => {
+    try {
+      await latestSaveRef.current;
+      onBack?.();
+    } catch (_error) {
+      alert("配信日時を保存できませんでした。もう一度お試しください。");
+    }
+  };
 
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8">
@@ -13519,7 +13689,7 @@ function Scene_NotificationSetup({
         <div className="relative flex items-center justify-center h-10 mb-8 shrink-0">
           <button
             type="button"
-            onClick={onBack}
+            onClick={returnAfterSave}
             className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"
             aria-label="設定へ戻る"
           >
@@ -13534,86 +13704,70 @@ function Scene_NotificationSetup({
       <div className="flex-1 flex flex-col justify-center">
         <div className="text-center mb-10">
           <p className="text-white/90 text-[1.1rem] text-narrative mb-4">
-            毎週、問いをお届けします
+            選んだ曜日に、問いをお届けします
           </p>
 
           <p className="text-white/48 text-sm leading-loose">
-            受け取りやすい時間を選んでください
+            週1〜3回、受け取りやすい時間を選べます
           </p>
         </div>
 
-        <div className="space-y-4">
-          <label className="glass-card px-5 py-4 flex items-center justify-between gap-5">
-            <span className="text-white/45 text-sm">曜日</span>
-            <select
-              value={weekday}
-              onChange={event => setWeekday(Number(event.target.value))}
-              className="bg-transparent text-white/88 text-[1rem] text-right outline-none min-w-[130px]"
-            >
-              {weekdayOptions.map((label, index) => (
-                <option key={label} value={index} className="bg-slate-900">
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="glass-card px-5 py-4 flex items-center justify-between gap-5">
-            <span className="text-white/45 text-sm">時間</span>
-
-            <div className="flex items-center gap-2 text-white/88 text-[1rem]">
+        <div className="space-y-3">
+          {schedules.map((schedule, index) => (
+            <div key={schedule.localId || schedule.id || index} className="glass-card px-4 py-4 flex items-center gap-2">
               <select
-                value={hour}
-                onChange={event => setHour(Number(event.target.value))}
-                aria-label="時"
-                className="bg-transparent text-right outline-none"
+                value={schedule.weekday}
+                onChange={event => updateSchedule(index, { weekday: Number(event.target.value) })}
+                aria-label={`${index + 1}件目の曜日`}
+                className="bg-transparent text-white/88 text-[0.98rem] outline-none flex-1 min-w-0"
               >
-                {hourOptions.map(value => (
-                  <option key={value} value={value} className="bg-slate-900">
-                    {String(value).padStart(2, "0")}
+                {weekdayOptions.map((label, weekdayIndex) => (
+                  <option key={label} value={weekdayIndex} className="bg-slate-900">
+                    {label}
                   </option>
                 ))}
               </select>
-
-              <span className="text-white/32">:</span>
-
-              <select
-                value={minute}
-                onChange={event => setMinute(Number(event.target.value))}
-                aria-label="分"
-                className="bg-transparent text-right outline-none"
-              >
-                {minuteOptions.map(value => (
-                  <option key={value} value={value} className="bg-slate-900">
-                    {String(value).padStart(2, "0")}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-1 text-white/88 text-[0.98rem] shrink-0">
+                <select value={schedule.hour} onChange={event => updateSchedule(index, { hour: Number(event.target.value) })} aria-label={`${index + 1}件目の時`} className="bg-transparent text-right outline-none">
+                  {hourOptions.map(value => <option key={value} value={value} className="bg-slate-900">{String(value).padStart(2, "0")}</option>)}
+                </select>
+                <span className="text-white/30">:</span>
+                <select value={schedule.minute} onChange={event => updateSchedule(index, { minute: Number(event.target.value) })} aria-label={`${index + 1}件目の分`} className="bg-transparent text-right outline-none">
+                  {minuteOptions.map(value => <option key={value} value={value} className="bg-slate-900">{String(value).padStart(2, "0")}</option>)}
+                </select>
+              </div>
+              {index > 0 ? (
+                <button type="button" onClick={() => removeSchedule(index)} className="w-8 h-8 flex items-center justify-center text-white/30 text-lg" aria-label={`${index + 1}件目を削除`}>×</button>
+              ) : <span className="w-8" aria-hidden="true" />}
             </div>
-          </div>
+          ))}
+
+          {schedules.length < 3 && (
+            <button type="button" onClick={addSchedule} className="w-full py-3 flex items-center justify-center gap-2 text-white/48 text-sm">
+              <Plus size={16} strokeWidth={1.7} />
+              受け取り時間を追加
+            </button>
+          )}
         </div>
 
-        <div className="mt-8 text-center">
+        <div className="mt-6 text-center min-h-[70px]">
           <p className="text-white/40 text-sm leading-loose">
             登録したメールアドレスに届きます
           </p>
 
-          <p className="mt-3 text-white/28 text-xs leading-loose">
-            あとからいつでも変更できます
-          </p>
+          {saveState === "saving" && <p className="mt-3 text-white/28 text-xs">保存しています...</p>}
+          {saveState === "saved" && <p className="mt-3 text-white/42 text-xs">✓ 保存しました</p>}
+          {saveState === "error" && <button type="button" onClick={() => persistSchedules(schedules)} className="mt-3 text-rose-200/70 text-xs underline underline-offset-4">保存できませんでした。もう一度</button>}
+          {saveState === "idle" && <p className="mt-3 text-white/28 text-xs leading-loose">変更すると自動で保存されます</p>}
+          {removedSchedule && <button type="button" onClick={undoRemove} className="mt-3 ml-4 text-white/48 text-xs underline underline-offset-4">削除を元に戻す</button>}
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={savePreference}
-        disabled={loading}
-        className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${
-          loading ? "opacity-40" : ""
-        }`}
-      >
-        {loading ? "保存中..." : "この時間で受け取る"}
-      </button>
+      {!onBack && (
+        <button type="button" onClick={finishAndContinue} disabled={saveState === "saving"} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white disabled:opacity-40">
+          次へ
+        </button>
+      )}
     </div>
   );
 }
