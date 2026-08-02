@@ -2151,8 +2151,6 @@ function App() {
   const [lifeOutlineError, setLifeOutlineError] = useState("");
   const [lifeOutlineReturnScene, setLifeOutlineReturnScene] = useState(null);
   const [notificationSetupReturnScene, setNotificationSetupReturnScene] = useState(null);
-  const [supporterInviteInitialEmail, setSupporterInviteInitialEmail] = useState("");
-
   const [pendingBetaSurvey, setPendingBetaSurvey] = useState(null);
   const [accessMode, setAccessMode] = useState("session");
   const [deliveryToken, setDeliveryToken] = useState(null);
@@ -4930,26 +4928,11 @@ let sceneAfterInvite = nextScene;
 
       {scene === "supporter_management" && (
         <Scene_SupporterManagement
-          foundation={foundation}
-          onInvite={(email = "") => {
-            setSupporterInviteInitialEmail(email);
-            setScene("supporter_invite_management");
-          }}
-          onBack={() => setScene("settings")}
-        />
-      )}
-
-      {scene === "supporter_invite_management" && (
-        <Scene_SupporterInvite
           user={user}
           foundation={foundation}
           sharingPreference={sharingPreference}
-          initialEmail={supporterInviteInitialEmail}
           onSharingPreferenceChange={setSharingPreference}
-          onComplete={() => {
-            setSupporterInviteInitialEmail("");
-            setScene("supporter_management");
-          }}
+          onBack={() => setScene("settings")}
         />
       )}
 
@@ -7093,6 +7076,76 @@ function Scene_SharingSetup({ initialScope = "family", onComplete }) {
   );
 }
 
+async function createAndSendSupporterInvite({
+  user,
+  foundation,
+  inviteeEmail,
+  sharingFlags
+}) {
+  const { data: pendingInvites, error: existingInviteError } =
+    await supabaseClient
+      .from("project_invites")
+      .select("id, invitee_email, email_delivery_status")
+      .eq("book_project_id", foundation?.project?.id || null)
+      .eq("inviter_user_id", user.id)
+      .eq("role", "supporter")
+      .eq("status", "pending");
+
+  if (existingInviteError) throw existingInviteError;
+
+  const existingInvite = (pendingInvites || []).find(
+    item =>
+      String(item.invitee_email || "").trim().toLowerCase() === inviteeEmail
+  );
+
+  let invite = existingInvite;
+
+  if (!invite) {
+    const { data: createdInvite, error: inviteInsertError } =
+      await supabaseClient
+        .from("project_invites")
+        .insert({
+          book_project_id: foundation?.project?.id || null,
+          inviter_user_id: user.id,
+          invitee_email: inviteeEmail,
+          role: "supporter",
+          status: "pending",
+          auto_share_on_accept: true
+        })
+        .select("id, email_delivery_status")
+        .single();
+
+    if (inviteInsertError) throw inviteInsertError;
+    invite = createdInvite;
+  }
+
+  let updatedPreference = null;
+
+  if (!sharingFlags.selectedEnabled) {
+    updatedPreference = await upsertStorySharingPreference({
+      bookProjectId: foundation?.project?.id,
+      ownerPersonId:
+        foundation?.project?.subject_person_id ||
+        foundation?.person?.id,
+      familyEnabled: sharingFlags.familyEnabled,
+      selectedEnabled: true
+    });
+  }
+
+  const { data: sendResult, error: sendError } =
+    await supabaseClient.functions.invoke("send-supporter-invite", {
+      body: {
+        inviteId: invite.id
+      }
+    });
+
+  return {
+    emailDelivered: !sendError && sendResult?.success !== false,
+    sendError: sendError || (sendResult?.success === false ? sendResult : null),
+    updatedPreference
+  };
+}
+
 function Scene_SupporterInvite({
   user,
   foundation,
@@ -7143,66 +7196,19 @@ function Scene_SupporterInvite({
 
     try {
       setLoading(true);
+      const result = await createAndSendSupporterInvite({
+        user,
+        foundation,
+        inviteeEmail,
+        sharingFlags
+      });
 
-      const { data: pendingInvites, error: existingInviteError } =
-        await supabaseClient
-          .from("project_invites")
-          .select("id, invitee_email, email_delivery_status")
-          .eq("book_project_id", foundation?.project?.id || null)
-          .eq("inviter_user_id", user.id)
-          .eq("role", "supporter")
-          .eq("status", "pending");
-
-      if (existingInviteError) throw existingInviteError;
-
-      const existingInvite = (pendingInvites || []).find(
-        item =>
-          String(item.invitee_email || "").trim().toLowerCase() === inviteeEmail
-      );
-
-      let invite = existingInvite;
-
-      if (!invite) {
-        const { data: createdInvite, error: inviteInsertError } =
-          await supabaseClient
-        .from("project_invites")
-        .insert({
-          book_project_id: foundation?.project?.id || null,
-          inviter_user_id: user.id,
-          invitee_email: inviteeEmail,
-          role: "supporter",
-          status: "pending",
-          auto_share_on_accept: true
-        })
-        .select("id, email_delivery_status")
-        .single();
-
-        if (inviteInsertError) throw inviteInsertError;
-        invite = createdInvite;
+      if (result.updatedPreference) {
+        onSharingPreferenceChange?.(result.updatedPreference);
       }
 
-      if (!sharingFlags.selectedEnabled) {
-        const updatedPreference = await upsertStorySharingPreference({
-          bookProjectId: foundation?.project?.id,
-          ownerPersonId:
-            foundation?.project?.subject_person_id ||
-            foundation?.person?.id,
-          familyEnabled: sharingFlags.familyEnabled,
-          selectedEnabled: true
-        });
-
-        onSharingPreferenceChange?.(updatedPreference);
-      }
-
-      const { data: sendResult, error: sendError } =
-        await supabaseClient.functions.invoke("send-supporter-invite", {
-          body: {
-            inviteId: invite.id
-          }
-        });
-
-      if (sendError || sendResult?.success === false) {
-        console.error("supporter invite email send error", sendError || sendResult);
+      if (!result.emailDelivered) {
+        console.error("supporter invite email send error", result.sendError);
         alert(
           "依頼は保存しましたが、メールを送信できませんでした。もう一度お試しください。"
         );
@@ -8468,13 +8474,22 @@ function Scene_PrivateStorySettings({ user, questionSet = [], onBack }) {
 }
 
 function Scene_SupporterManagement({
+  user,
   foundation,
-  onInvite,
+  sharingPreference,
+  onSharingPreferenceChange,
   onBack
 }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [sendingInvite, setSendingInvite] = useState(false);
+  const [confirmPrivateChange, setConfirmPrivateChange] = useState(false);
+  const sharingFlags = getStorySharingFlags(sharingPreference);
+  const isPrivateSharing =
+    !sharingFlags.familyEnabled && !sharingFlags.selectedEnabled;
 
   const loadItems = async () => {
     try {
@@ -8495,6 +8510,74 @@ function Scene_SupporterManagement({
   useEffect(() => {
     loadItems();
   }, [foundation?.project?.id]);
+
+  const openInviteForm = (email = "") => {
+    setInviteEmail(typeof email === "string" ? email : "");
+    setConfirmPrivateChange(false);
+    setShowInviteForm(true);
+  };
+
+  const closeInviteForm = () => {
+    setShowInviteForm(false);
+    setInviteEmail("");
+    setConfirmPrivateChange(false);
+  };
+
+  const sendInvite = async () => {
+    const inviteeEmail = inviteEmail.trim().toLowerCase();
+
+    if (!inviteeEmail) {
+      alert("メールアドレスを入力してください。");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteeEmail)) {
+      alert("メールアドレスを確認してください。");
+      return;
+    }
+
+    if (inviteeEmail === String(user?.email || "").trim().toLowerCase()) {
+      alert("ご自身以外のメールアドレスを入力してください。");
+      return;
+    }
+
+    if (isPrivateSharing && !confirmPrivateChange) {
+      setConfirmPrivateChange(true);
+      return;
+    }
+
+    try {
+      setSendingInvite(true);
+      const result = await createAndSendSupporterInvite({
+        user,
+        foundation,
+        inviteeEmail,
+        sharingFlags
+      });
+
+      if (result.updatedPreference) {
+        onSharingPreferenceChange?.(result.updatedPreference);
+      }
+
+      await loadItems();
+
+      if (!result.emailDelivered) {
+        console.error("supporter invite email send error", result.sendError);
+        alert(
+          "依頼は保存しましたが、メールを送信できませんでした。入力欄からもう一度お試しください。"
+        );
+        return;
+      }
+
+      closeInviteForm();
+      alert("お手伝いの依頼メールを送りました。");
+    } catch (error) {
+      console.error("supporter invite save error", error);
+      alert("お手伝いの依頼を保存できませんでした。");
+    } finally {
+      setSendingInvite(false);
+    }
+  };
 
   const resendInvite = async item => {
     try {
@@ -8590,15 +8673,74 @@ function Scene_SupporterManagement({
               <button type="button" disabled={busyId === item.supporter_id} onClick={() => endSupport(item)} className="mt-3 pt-3 w-full text-left border-t border-white/[0.07] text-white/38 text-xs underline underline-offset-4">お手伝いを終了する</button>
             )}
             {item.relationship_status === "ended" && (
-              <button type="button" onClick={() => onInvite(item.invitee_email)} className="mt-3 pt-3 w-full text-left border-t border-white/[0.07] text-white/52 text-xs underline underline-offset-4">もう一度依頼する</button>
+              <button type="button" onClick={() => openInviteForm(item.invitee_email)} className="mt-3 pt-3 w-full text-left border-t border-white/[0.07] text-white/52 text-xs underline underline-offset-4">もう一度依頼する</button>
             )}
           </div>
         ))}
       </div>
 
-      <button type="button" onClick={() => onInvite()} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm">
-        新しくお手伝いを依頼する
-      </button>
+      {showInviteForm ? (
+        <section className="glass-card p-5 space-y-5">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-white/78 text-sm">お手伝いを依頼</p>
+            <button
+              type="button"
+              onClick={closeInviteForm}
+              disabled={sendingInvite}
+              aria-label="入力を閉じる"
+              className="w-8 h-8 rounded-full border border-white/10 text-white/45 disabled:opacity-35"
+            >
+              ×
+            </button>
+          </div>
+
+          {confirmPrivateChange && (
+            <div className="rounded-xl border border-amber-100/15 bg-amber-100/[0.04] p-4 space-y-2">
+              <p className="text-white/74 text-xs leading-loose">
+                この方にお手伝いを依頼すると、「自分だけ」の設定から「選んだ人へ共有」に変わります。よろしいですか？
+              </p>
+              <p className="text-white/38 text-[0.68rem] leading-loose">
+                「ずっと自分だけ」にした語りは表示されません。
+              </p>
+            </div>
+          )}
+
+          <div>
+            <p className="ui-label mb-2">メールアドレス</p>
+            <input
+              type="email"
+              autoFocus
+              className="quiet-input"
+              value={inviteEmail}
+              onChange={event => {
+                setInviteEmail(event.target.value);
+                setConfirmPrivateChange(false);
+              }}
+              onKeyDown={event => {
+                if (event.key === "Enter") sendInvite();
+              }}
+              placeholder="example@email.com"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={sendInvite}
+            disabled={sendingInvite}
+            className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm disabled:opacity-35"
+          >
+            {sendingInvite
+              ? "依頼を送っています..."
+              : confirmPrivateChange
+                ? "内容を確認して依頼する"
+                : "依頼を送る"}
+          </button>
+        </section>
+      ) : (
+        <button type="button" onClick={() => openInviteForm()} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm">
+          新しくお手伝いを依頼する
+        </button>
+      )}
     </div>
   );
 }
