@@ -9,6 +9,8 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+const FREE_TRIAL_QUESTION_COUNT = 3;
+
 const STORY_RELATIONSHIP_LABELS = {
   child: "子",
   parent: "親",
@@ -27,6 +29,86 @@ function getSequenceFromUrl() {
 function getDeliveryTokenFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return params.get("token") || null;
+}
+
+function getEntryModeFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("entry") || null;
+}
+
+function getCheckoutReturnFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    status: params.get("checkout") || null,
+    sessionId: params.get("session_id") || null
+  };
+}
+
+function hasFullProjectAccess(project) {
+  return ["paid", "gifted", "legacy"].includes(project?.access_status);
+}
+
+function hasRestrictedProjectAccess(project) {
+  if (hasFullProjectAccess(project)) return false;
+
+  if (["trial", "checkout_pending", "refunded"].includes(project?.access_status)) {
+    return true;
+  }
+
+  // Before the purchase migration is applied, only explicit commercial
+  // entry routes are restricted. This keeps existing beta users available.
+  return ["trial", "purchase"].includes(getEntryModeFromUrl());
+}
+
+function getFreeTrialQuestions(questionSet) {
+  return (questionSet || [])
+    .filter(question => isFormalOnboardingQuestion(question))
+    .slice(0, FREE_TRIAL_QUESTION_COUNT);
+}
+
+function hasCompletedFreeTrial(questionSet) {
+  const trialQuestions = getFreeTrialQuestions(questionSet);
+  return (
+    trialQuestions.length === FREE_TRIAL_QUESTION_COUNT &&
+    trialQuestions.every(question => question?.status === "answered")
+  );
+}
+
+function isLastFreeTrialQuestion(questionSet, currentQuestion) {
+  const trialQuestions = getFreeTrialQuestions(questionSet);
+  return (
+    trialQuestions.length === FREE_TRIAL_QUESTION_COUNT &&
+    trialQuestions[trialQuestions.length - 1]?.user_question_id ===
+      currentQuestion?.user_question_id
+  );
+}
+
+function getCommercialEntryScene({ project, questionSet, defaultScene }) {
+  if (!hasRestrictedProjectAccess(project)) return defaultScene;
+
+  const entryMode = getEntryModeFromUrl();
+  const checkoutReturn = getCheckoutReturnFromUrl();
+
+  if (entryMode === "purchase" || checkoutReturn.status) {
+    return "purchase_start";
+  }
+
+  if (hasCompletedFreeTrial(questionSet)) {
+    return "trial_complete";
+  }
+
+  // The free taste should open quickly, without the full 10–15 minute
+  // onboarding explanation that belongs to the purchased experience.
+  return 0;
+}
+
+function replaceCommercialEntryUrl(entry) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("app", "1");
+  url.searchParams.set("entry", entry);
+  url.searchParams.delete("checkout");
+  url.searchParams.delete("session_id");
+  window.history.replaceState({}, "", url.toString());
 }
 
 function getSupporterInviteReferenceFromUrl() {
@@ -62,6 +144,18 @@ function getAuthReturnUrlFromCurrentLocation() {
 
   const sharingInvite = params.get("sharing_invite");
   if (sharingInvite) url.searchParams.set("sharing_invite", sharingInvite);
+
+  const appMode = params.get("app");
+  if (appMode) url.searchParams.set("app", appMode);
+
+  const entryMode = params.get("entry");
+  if (entryMode) url.searchParams.set("entry", entryMode);
+
+  const checkoutStatus = params.get("checkout");
+  if (checkoutStatus) url.searchParams.set("checkout", checkoutStatus);
+
+  const checkoutSessionId = params.get("session_id");
+  if (checkoutSessionId) url.searchParams.set("session_id", checkoutSessionId);
 
   return url.toString();
 }
@@ -2217,6 +2311,9 @@ function App() {
   const [accessMode, setAccessMode] = useState("session");
   const [deliveryToken, setDeliveryToken] = useState(null);
   const [deliveryTokenData, setDeliveryTokenData] = useState(null);
+  const [purchaseStatus, setPurchaseStatus] = useState("idle");
+  const [purchaseError, setPurchaseError] = useState("");
+  const checkoutSyncAttemptedRef = useRef(false);
 
   const [voiceData, setVoiceData] = useState({
     duration: 0,
@@ -2346,6 +2443,12 @@ setSharingPreference(sharingPreferenceData);
 let nextScene = getInitialSceneForProject({
   project: activeFoundationData?.project,
   notificationPref: notificationData || null
+});
+
+nextScene = getCommercialEntryScene({
+  project: activeFoundationData?.project,
+  questionSet,
+  defaultScene: nextScene
 });
 
 const currentQuestion = questionSet[currentIndex] || null;
@@ -4051,6 +4154,100 @@ useEffect(() => {
   foundation?.project?.id
 ]);
 
+useEffect(() => {
+  const checkoutReturn = getCheckoutReturnFromUrl();
+
+  if (
+    checkoutReturn.status !== "success" ||
+    !checkoutReturn.sessionId ||
+    !user?.id ||
+    !foundation?.project?.id ||
+    checkoutSyncAttemptedRef.current
+  ) {
+    return;
+  }
+
+  checkoutSyncAttemptedRef.current = true;
+
+  const syncCheckout = async () => {
+    setPurchaseStatus("checking");
+    setPurchaseError("");
+
+    try {
+      const { data, error } = await supabaseClient.functions.invoke(
+        "sync-checkout-session",
+        { body: { sessionId: checkoutReturn.sessionId } }
+      );
+
+      if (error || !data?.success) {
+        throw new Error(data?.error || "購入状況を確認できませんでした");
+      }
+
+      if (!data.paid || !data.project) {
+        throw new Error("お支払いの完了をまだ確認できませんでした");
+      }
+
+      setFoundation(prev => ({ ...prev, project: data.project }));
+      setPurchaseStatus("paid");
+      replaceCommercialEntryUrl("purchased");
+      setScene("purchase_success");
+    } catch (error) {
+      console.error("checkout sync error", error);
+      setPurchaseStatus("error");
+      setPurchaseError(
+        error?.message ||
+          "購入状況を確認できませんでした。少し時間をおいて、もう一度お試しください。"
+      );
+      setScene("purchase_start");
+    }
+  };
+
+  syncCheckout();
+}, [user?.id, foundation?.project?.id]);
+
+const startSelfPurchase = async () => {
+  if (!foundation?.project?.id) {
+    setPurchaseError("物語の準備が完了していません。画面を再読み込みしてください。");
+    return;
+  }
+
+  setPurchaseStatus("starting");
+  setPurchaseError("");
+
+  try {
+    const { data, error } = await supabaseClient.functions.invoke(
+      "create-checkout-session",
+      { body: { projectId: foundation.project.id } }
+    );
+
+    if (error || !data?.success) {
+      throw new Error(data?.error || "購入画面を開けませんでした");
+    }
+
+    if (data.alreadyPurchased) {
+      const refreshedFoundation = await ensureUserFoundation(user.id, user);
+      setFoundation(refreshedFoundation);
+      setPurchaseStatus("paid");
+      replaceCommercialEntryUrl("purchased");
+      setScene("purchase_success");
+      return;
+    }
+
+    if (!data.checkoutUrl) {
+      throw new Error("購入画面を開けませんでした");
+    }
+
+    window.location.assign(data.checkoutUrl);
+  } catch (error) {
+    console.error("checkout start error", error);
+    setPurchaseStatus("error");
+    setPurchaseError(
+      error?.message ||
+        "購入手続きを開始できませんでした。少し時間をおいて、もう一度お試しください。"
+    );
+  }
+};
+
 const handleSaveAnswer = async (tag = null) => {
   setIsInitializing(true);
 
@@ -4376,6 +4573,17 @@ if (mediaStoragePaths.length > 0) {
 
 localStorage.setItem("koe_last_visit", Date.now().toString());
 
+const reachedFreeTrialLimit =
+  hasRestrictedProjectAccess(foundation?.project) &&
+  isLastFreeTrialQuestion(questionsDB, currentQ);
+
+if (reachedFreeTrialLimit) {
+  resetVoiceData();
+  replaceCommercialEntryUrl("trial");
+  setScene("trial_complete");
+  return;
+}
+
 const completedLifeOutline =
   currentQ?.onboarding_group === "life_outline" &&
   (
@@ -4545,9 +4753,15 @@ setProgress({
   total: questionSet.length
 });
 
-const nextScene = getInitialSceneForProject({
+let nextScene = getInitialSceneForProject({
   project: activeFoundationData?.project,
   notificationPref: notificationData || null
+});
+
+nextScene = getCommercialEntryScene({
+  project: activeFoundationData?.project,
+  questionSet,
+  defaultScene: nextScene
 });
 
 const [supportedStoryProjects, pendingInvites, pendingRelationshipInvites] = await Promise.all([
@@ -4611,6 +4825,44 @@ let sceneAfterInvite = nextScene;
             } finally {
               setIsInitializing(false);
             }
+          }}
+        />
+      )}
+
+      {scene === "purchase_start" && (
+        <Scene_PurchaseStart
+          checkoutWasCancelled={getCheckoutReturnFromUrl().status === "cancelled"}
+          status={purchaseStatus}
+          error={purchaseError}
+          onPurchase={startSelfPurchase}
+          onTryFree={() => {
+            setPurchaseStatus("idle");
+            setPurchaseError("");
+            replaceCommercialEntryUrl("trial");
+            setScene(hasCompletedFreeTrial(questionsDB) ? "trial_complete" : 0);
+          }}
+        />
+      )}
+
+      {scene === "trial_complete" && (
+        <Scene_TrialComplete
+          status={purchaseStatus}
+          error={purchaseError}
+          onPurchase={startSelfPurchase}
+          onFinish={() => window.location.assign("/")}
+        />
+      )}
+
+      {scene === "purchase_success" && (
+        <Scene_PurchaseSuccess
+          hasTrial={hasCompletedFreeTrial(questionsDB)}
+          onContinue={() => {
+            setPurchaseStatus("idle");
+            if (hasCompletedFreeTrial(questionsDB)) {
+              setScene(1);
+              return;
+            }
+            setScene("onboarding_overview");
           }}
         />
       )}
@@ -6209,6 +6461,164 @@ if (isNewMode) {
   );
 }
 
+
+function Scene_PurchaseStart({
+  checkoutWasCancelled,
+  status,
+  error,
+  onPurchase,
+  onTryFree
+}) {
+  const isWorking = status === "starting" || status === "checking";
+
+  return (
+    <div className="h-full overflow-y-auto fade-enter px-6 py-12 text-center">
+      <div className="mx-auto flex min-h-full w-full max-w-[440px] flex-col justify-center">
+        <p className="mb-5 text-[0.72rem] tracking-[0.3em] text-white/32">
+          縦糸横糸ブック
+        </p>
+        <h1 className="text-narrative text-[1.55rem] leading-[1.9] text-white/92">
+          声でたどる時間を、<br />
+          一冊の物語へ
+        </h1>
+
+        <p className="mx-auto mt-7 max-w-[340px] text-[0.92rem] leading-[2] text-white/52">
+          届いた問いに、ご自身のペースで語ります。<br />
+          声と文章、写真を整え、本に仕上げます。
+        </p>
+
+        <div className="my-9 border-y border-white/10 py-7">
+          <p className="text-[0.76rem] tracking-[0.18em] text-white/36">一冊</p>
+          <p className="mt-2 text-[1.55rem] tracking-[0.08em] text-white/90">
+            49,800円
+          </p>
+          <p className="mt-1 text-xs text-white/30">税込</p>
+        </div>
+
+        {checkoutWasCancelled && !error && (
+          <p className="mb-5 text-sm leading-relaxed text-white/48">
+            購入は確定していません。ここからいつでも再開できます。
+          </p>
+        )}
+
+        {error && (
+          <p className="mb-5 rounded-2xl border border-red-200/15 bg-red-200/[0.05] px-5 py-4 text-sm leading-relaxed text-red-100/75">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={onPurchase}
+          disabled={isWorking}
+          className="btn-quiet w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-45"
+        >
+          {isWorking ? "購入画面を準備しています…" : "購入してはじめる"}
+        </button>
+
+        <button
+          type="button"
+          onClick={onTryFree}
+          disabled={isWorking}
+          className="mt-4 w-full rounded-full border border-white/12 py-4 text-white/72 disabled:opacity-45"
+        >
+          まず3つの問いを試す
+        </button>
+
+        <p className="mt-5 text-xs leading-relaxed text-white/28">
+          お試しに料金はかかりません。<br />
+          録音と文章は、購入後もそのまま引き継がれます。
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function Scene_TrialComplete({ status, error, onPurchase, onFinish }) {
+  const isWorking = status === "starting" || status === "checking";
+
+  return (
+    <div className="h-full overflow-y-auto fade-enter px-6 py-12 text-center">
+      <div className="mx-auto flex min-h-full w-full max-w-[440px] flex-col justify-center">
+        <p className="text-[0.72rem] tracking-[0.3em] text-amber-100/42">
+          3つの問いを終えました
+        </p>
+        <h1 className="text-narrative mt-6 text-[1.55rem] leading-[1.9] text-white/92">
+          声にした時間が、<br />
+          物語のはじまりになりました
+        </h1>
+
+        <div className="mx-auto my-9 h-px w-14 bg-amber-100/25" />
+
+        <p className="mx-auto max-w-[350px] text-[0.94rem] leading-[2.1] text-white/56">
+          続きでは、幼少期から今までを少しずつたどります。<br />
+          語った声は文章になり、写真とともに一冊へ育っていきます。
+        </p>
+
+        <div className="my-8 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-6 py-5">
+          <p className="text-xs tracking-[0.16em] text-white/34">縦糸横糸ブック　一冊</p>
+          <p className="mt-2 text-[1.4rem] tracking-[0.06em] text-white/86">
+            49,800円 <span className="text-xs text-white/34">税込</span>
+          </p>
+        </div>
+
+        {error && (
+          <p className="mb-5 rounded-2xl border border-red-200/15 bg-red-200/[0.05] px-5 py-4 text-sm leading-relaxed text-red-100/75">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={onPurchase}
+          disabled={isWorking}
+          className="btn-quiet w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-45"
+        >
+          {isWorking ? "購入画面を準備しています…" : "この物語を続ける"}
+        </button>
+
+        <button
+          type="button"
+          onClick={onFinish}
+          disabled={isWorking}
+          className="mt-5 text-sm text-white/38 underline decoration-white/18 underline-offset-8 disabled:opacity-45"
+        >
+          今日はここまで
+        </button>
+
+        <p className="mt-5 text-xs leading-relaxed text-white/26">
+          ここまでの録音と文章は保存されています。
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function Scene_PurchaseSuccess({ hasTrial, onContinue }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
+      <p className="text-[0.72rem] tracking-[0.3em] text-amber-100/42">
+        お手続きが完了しました
+      </p>
+      <h1 className="text-narrative mt-7 text-[1.55rem] leading-[1.9] text-white/92">
+        あなたの物語づくりが、<br />
+        ここから始まります
+      </h1>
+      <p className="mt-7 text-[0.92rem] leading-[2] text-white/50">
+        {hasTrial
+          ? "お試しで残した声も、そのまま続きにつながっています。"
+          : "問いに答えながら、声と文章を少しずつ重ねていきます。"}
+      </p>
+      <button
+        type="button"
+        onClick={onContinue}
+        className="btn-quiet mt-12 w-full max-w-[300px] rounded-full bg-white py-4 text-slate-900"
+      >
+        続きをはじめる
+      </button>
+    </div>
+  );
+}
 
 function Scene_BetaIntro({ onNext }) {
   return (

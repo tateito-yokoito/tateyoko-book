@@ -1,0 +1,4 @@
+project_id = "tateyoko-book"
+
+[functions.stripe-webhook]
+verify_jwt = false
