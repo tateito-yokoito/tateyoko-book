@@ -4169,11 +4169,27 @@ useEffect(() => {
 
   checkoutSyncAttemptedRef.current = true;
 
+  const finishCheckoutAsPaid = project => {
+    setFoundation(prev => ({ ...prev, project }));
+    setPurchaseStatus("paid");
+    setPurchaseError("");
+    replaceCommercialEntryUrl("purchased");
+    setScene("purchase_success");
+  };
+
   const syncCheckout = async () => {
     setPurchaseStatus("checking");
     setPurchaseError("");
 
     try {
+      // The webhook can finish before this return page is opened. In that
+      // case the project already contains the authoritative paid state and
+      // there is no need to depend on a second Stripe lookup.
+      if (hasFullProjectAccess(foundation.project)) {
+        finishCheckoutAsPaid(foundation.project);
+        return;
+      }
+
       const { data, error } = await supabaseClient.functions.invoke(
         "sync-checkout-session",
         { body: { sessionId: checkoutReturn.sessionId } }
@@ -4187,12 +4203,29 @@ useEffect(() => {
         throw new Error("お支払いの完了をまだ確認できませんでした");
       }
 
-      setFoundation(prev => ({ ...prev, project: data.project }));
-      setPurchaseStatus("paid");
-      replaceCommercialEntryUrl("purchased");
-      setScene("purchase_success");
+      finishCheckoutAsPaid(data.project);
     } catch (error) {
       console.error("checkout sync error", error);
+
+      // A successful webhook is the source of truth. If the optional return
+      // page sync failed or timed out, read the project once more before
+      // showing an error so a completed purchase never looks unpaid.
+      const { data: refreshedProject, error: refreshError } =
+        await supabaseClient
+          .from("book_projects")
+          .select("*")
+          .eq("id", foundation.project.id)
+          .maybeSingle();
+
+      if (!refreshError && hasFullProjectAccess(refreshedProject)) {
+        finishCheckoutAsPaid(refreshedProject);
+        return;
+      }
+
+      if (refreshError) {
+        console.error("checkout project refresh error", refreshError);
+      }
+
       setPurchaseStatus("error");
       setPurchaseError(
         error?.message ||
@@ -4203,7 +4236,11 @@ useEffect(() => {
   };
 
   syncCheckout();
-}, [user?.id, foundation?.project?.id]);
+}, [
+  user?.id,
+  foundation?.project?.id,
+  foundation?.project?.access_status
+]);
 
 const startSelfPurchase = async () => {
   if (!foundation?.project?.id) {
