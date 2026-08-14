@@ -43,7 +43,10 @@ serve(async request => {
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  // Prefer the explicitly configured admin key. Some projects keep this as a
+  // custom secret, while Supabase also injects SUPABASE_SERVICE_ROLE_KEY.
+  const serviceRoleKey =
+    Deno.env.get("SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
   if (!supabaseUrl || !serviceRoleKey || !webhookSecret) {
     return new Response("Server configuration error", { status: 500 });

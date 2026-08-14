@@ -27,7 +27,8 @@ serve(async request => {
   if (request.method !== "POST") return json({ success: false, error: "Method not allowed" }, 405);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceRoleKey =
+    Deno.env.get("SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
   const stripePriceId = Deno.env.get("STRIPE_PRICE_SELF_BOOK");
 
