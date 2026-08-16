@@ -173,12 +173,22 @@ async function resolveDeliveryToken(token) {
   return Array.isArray(data) ? data[0] : data;
 }
 
-async function transcribeAudioOnServer({ answerId, audioPaths, fallbackTranscript }) {
+async function transcribeAudioOnServer({
+  answerId,
+  audioPaths,
+  fallbackTranscript,
+  bookProjectId,
+  questionText,
+  previousTranscript
+}) {
   const { data, error } = await supabaseClient.functions.invoke("transcribe-audio", {
     body: {
       answerId,
       audioPaths,
-      fallbackTranscript
+      fallbackTranscript,
+      bookProjectId,
+      questionText,
+      previousTranscript
     }
   });
 
@@ -199,6 +209,7 @@ async function polishTranscriptOnServer({
   answerId,
   transcriptRaw,
   questionText,
+  bookProjectId,
   mode = "answer"
 }) {
   const { data, error } = await supabaseClient.functions.invoke("polish-transcript", {
@@ -206,6 +217,7 @@ async function polishTranscriptOnServer({
       answerId,
       transcriptRaw,
       questionText,
+      bookProjectId,
       mode
     }
   });
@@ -3251,7 +3263,11 @@ setVoiceData(prev => ({
     const aiResult = await transcribeAudioOnServer({
       answerId: targetAnswerId,
       audioPaths: paths,
-      fallbackTranscript: sourceVoiceData.transcript
+      fallbackTranscript: sourceVoiceData.transcript,
+      bookProjectId: foundation?.project?.id || currentQ?.book_project_id || null,
+      questionText: currentQ?.content || "",
+      previousTranscript:
+        editMode === "append" ? sourceVoiceData.editBaseText || "" : ""
     });
 
 const newTranscriptRaw =
@@ -3308,7 +3324,8 @@ try {
   const polishResult = await polishTranscriptOnServer({
     answerId: targetAnswerId,
     transcriptRaw,
-    questionText: currentQ?.content || ""
+    questionText: currentQ?.content || "",
+    bookProjectId: foundation?.project?.id || currentQ?.book_project_id || null
   });
     setVoiceData(prev => {
      if (prev.answerId !== targetAnswerId) return prev;
@@ -3653,7 +3670,8 @@ const generateLifeOutlineIntroduction = async ({
           transcriptRaw: sourceText,
           questionText:
             "複数の語りを重複なく一つにつなぎ、後から読む人に、その人の生まれ育ち、家族、学校生活、仕事や役割、暮らしの大きな変化、現在の生活が自然に伝わる人物紹介文「私の歩み」にまとめてください。語った順番が現在から始まっていても、文章は生まれ育ちから現在へ自然に並べ替えてください。本人が話していない年代や事実は推測せず、問いや見出しは本文に残さないでください。",
-          mode: "life_outline"
+          mode: "life_outline",
+          bookProjectId: foundation.project.id
         });
 
     const readable = String(
@@ -3923,7 +3941,11 @@ const handleLifeOutlineAddRecording = async (txt, dur, _url, blob) => {
         const transcription = await transcribeAudioOnServer({
           answerId: introduction.id,
           audioPaths: [storagePath],
-          fallbackTranscript: transcriptRaw
+          fallbackTranscript: transcriptRaw,
+          bookProjectId: foundation.project.id,
+          questionText: "これまでの歩みを補足してください。",
+          previousTranscript:
+            introduction.body_text || introduction.selectedText || ""
         });
 
         transcriptRaw = String(
@@ -9930,7 +9952,10 @@ function Scene_SupportRecordingAssist({
       const transcription = await transcribeAudioOnServer({
         answerId,
         audioPaths: [storagePath],
-        fallbackTranscript: transcript || ""
+        fallbackTranscript: transcript || "",
+        bookProjectId: project.book_project_id,
+        questionText: nextQuestion?.content || "",
+        previousTranscript: ""
       });
       const transcriptRaw = String(
         transcription?.transcript_raw || transcription?.transcript || transcript || ""
@@ -9943,7 +9968,8 @@ function Scene_SupportRecordingAssist({
         const polished = await polishTranscriptOnServer({
           answerId,
           transcriptRaw,
-          questionText: nextQuestion?.content || ""
+          questionText: nextQuestion?.content || "",
+          bookProjectId: project.book_project_id
         });
 
         readable = String(
