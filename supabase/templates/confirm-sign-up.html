@@ -1,4 +1,23 @@
 <div style="font-family: serif; padding: 40px; line-height: 1.9; color: #1f2937;">
+  {{ if or (eq .RedirectTo "https://www.tateito-yokoito.jp/?app=1&entry=trial") (eq .RedirectTo "https://tateito-yokoito.jp/?app=1&entry=trial") }}
+  <p style="font-size: 20px; margin: 0 0 24px;">
+    無料体験を開くためのご案内です。
+  </p>
+
+  <p style="color: #4b5563;">
+    下のボタンから、無料体験を開けます。<br />
+    途中で画面を閉じた場合も、同じメールアドレスで続きを開けます。
+  </p>
+
+  <p style="margin-top: 32px;">
+    <a
+      href="{{ .ConfirmationURL }}"
+      style="display: inline-block; padding: 12px 20px; border-radius: 999px; background: #111827; color: #ffffff; text-decoration: none;"
+    >
+      無料体験を開く
+    </a>
+  </p>
+  {{ else }}
   <p style="font-size: 20px; margin: 0 0 24px;">
     縦糸横糸ブックをはじめるためのご案内です。
   </p>
@@ -15,6 +34,7 @@
       縦糸横糸ブックをはじめる
     </a>
   </p>
+  {{ end }}
 
   <p style="margin-top: 32px; color: #6b7280; font-size: 14px;">
     ボタンで開けない場合は、画面でメールアドレスと次の認証コードを入力してください。

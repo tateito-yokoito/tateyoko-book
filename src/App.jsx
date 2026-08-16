@@ -74,6 +74,36 @@ function hasCompletedFreeTrial(questionSet) {
   );
 }
 
+function getFreeTrialResumeQuestionIndex(questionSet) {
+  const trialQuestions = getFreeTrialQuestions(questionSet);
+  const nextUnansweredQuestion = trialQuestions.find(
+    question => question?.status !== "answered"
+  );
+
+  if (!nextUnansweredQuestion) {
+    return 0;
+  }
+
+  const nextIndex = (questionSet || []).findIndex(
+    question =>
+      question?.user_question_id === nextUnansweredQuestion.user_question_id
+  );
+
+  return nextIndex >= 0 ? nextIndex : 0;
+}
+
+function getAuthenticatedQuestionIndex(questionSet, project, profile) {
+  if (
+    getEntryModeFromUrl() === "trial" &&
+    hasRestrictedProjectAccess(project) &&
+    !hasCompletedFreeTrial(questionSet)
+  ) {
+    return getFreeTrialResumeQuestionIndex(questionSet);
+  }
+
+  return getProjectQuestionIndex(questionSet, project, profile);
+}
+
 function isLastFreeTrialQuestion(questionSet, currentQuestion) {
   const trialQuestions = getFreeTrialQuestions(questionSet);
   return (
@@ -84,6 +114,13 @@ function isLastFreeTrialQuestion(questionSet, currentQuestion) {
 }
 
 function getCommercialEntryScene({ project, questionSet, defaultScene }) {
+  if (
+    getEntryModeFromUrl() === "trial" &&
+    hasFullProjectAccess(project)
+  ) {
+    return "home";
+  }
+
   if (!hasRestrictedProjectAccess(project)) return defaultScene;
 
   const entryMode = getEntryModeFromUrl();
@@ -2432,7 +2469,7 @@ const refreshedFoundationData = await ensureUserFoundation(
 
 const deliveryToken = getDeliveryTokenFromUrl();
 
-let currentIndex = getProjectQuestionIndex(
+let currentIndex = getAuthenticatedQuestionIndex(
   questionSet,
   refreshedFoundationData?.project,
   profile
@@ -4793,7 +4830,7 @@ setNotificationPref(notificationData || null);
 
 setQuestionsDB(questionSet);
 
-const currentIndex = getProjectQuestionIndex(
+const currentIndex = getAuthenticatedQuestionIndex(
   questionSet,
   refreshedFoundationData?.project,
   u
