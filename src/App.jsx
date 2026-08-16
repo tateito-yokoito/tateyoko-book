@@ -5939,6 +5939,7 @@ function Scene_Login({ onLogin }) {
   const supporterInvitationUrl = getSupporterInvitationUrlFromCurrentLocation();
   const authReturnUrl = getAuthReturnUrlFromCurrentLocation();
   const isSupporterInviteLogin = Boolean(supporterInvitationUrl);
+  const isTrialEntry = getEntryModeFromUrl() === "trial";
   const [mode, setMode] = useState(
     isSupporterInviteLogin ? "supporter" : "entry"
   ); // entry | new | returning | supporter | pin
@@ -6271,14 +6272,35 @@ if (isNewMode) {
       {mode === "entry" && (
         <div className="w-full max-w-[320px] space-y-8 py-10">
           <div className="space-y-5 text-narrative">
-            <p className="text-[1.1rem] text-white/90">
-              この物語を開くために
-            </p>
+            {isTrialEntry ? (
+              <>
+                <p className="text-white/40 text-xs tracking-[0.18em]">
+                  無料体験・3つの問い
+                </p>
 
-            <p className="text-white/55 text-[0.95rem] leading-loose">
-              はじめて利用する方は、お名前とメールアドレスを登録します。<br />
-              以前に利用した方は、メールアドレスで前回の続きが開けます。
-            </p>
+                <p className="text-[1.1rem] text-white/90 leading-loose">
+                  まず、3つの問いを<br />
+                  試してみませんか
+                </p>
+
+                <p className="text-white/55 text-[0.95rem] leading-loose">
+                  声で答えながら、物語づくりを体験できます。<br />
+                  料金はかかりません。語った内容は、<br />
+                  購入後もそのまま引き継がれます。
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[1.1rem] text-white/90">
+                  この物語を開くために
+                </p>
+
+                <p className="text-white/55 text-[0.95rem] leading-loose">
+                  はじめて利用する方は、お名前とメールアドレスを登録します。<br />
+                  以前に利用した方は、メールアドレスで前回の続きが開けます。
+                </p>
+              </>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -6288,7 +6310,7 @@ if (isNewMode) {
               disabled={loading}
               className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
             >
-              はじめて利用する
+              {isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
             </button>
 
             <button
@@ -6297,7 +6319,7 @@ if (isNewMode) {
               disabled={loading}
               className="w-full py-4 rounded-full border border-white/10 text-white/65 text-sm"
             >
-              前回の続きを開く
+              {isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
             </button>
 
             {isDevMode() && (
@@ -6318,7 +6340,7 @@ if (isNewMode) {
         <div className="w-full max-w-[320px] space-y-8 py-10 fade-enter">
           <div className="space-y-4 text-narrative">
             <p className="text-[1.1rem] text-white/90">
-              はじめて利用する
+              {isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
             </p>
 
             <p className="ui-small">
@@ -6384,7 +6406,7 @@ if (isNewMode) {
         <div className="w-full max-w-[320px] space-y-8 py-10 fade-enter">
           <div className="space-y-4 text-narrative">
             <p className="text-[1.1rem] text-white/90">
-              前回の続きを開く
+              {isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
             </p>
 
             <p className="ui-small">
@@ -6461,8 +6483,12 @@ if (isNewMode) {
               : authMode === "supporter"
                 ? "依頼を確認する"
                 : authMode === "returning"
-                  ? "続きを開く"
-                  : "物語をはじめる"}
+                  ? isTrialEntry
+                    ? "体験の続きを開く"
+                    : "続きを開く"
+                  : isTrialEntry
+                    ? "無料体験をはじめる"
+                    : "物語をはじめる"}
           </button>
 
           <button
