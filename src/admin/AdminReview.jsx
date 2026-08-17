@@ -157,6 +157,28 @@ function SignInScreen({ supabaseClient }) {
       : "パスワードを設定・再設定するメールを送信しました。");
   }
 
+  async function handlePasswordSetupWithOtp() {
+    if (!email.trim()) {
+      setMessageTone("error");
+      setMessage("先にメールアドレスを入力してください。");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    const { error } = await supabaseClient.auth.signInWithOtp({
+      email: email.trim(),
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: adminRedirectUrl({ set_password: "1" })
+      }
+    });
+    setBusy(false);
+    setMessageTone(error ? "error" : "success");
+    setMessage(error
+      ? "認証メールを送信できませんでした。"
+      : "認証メールを送信しました。メール内のボタンからパスワードを設定できます。");
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f3f1ec] px-6 text-slate-900">
       <section className="w-full max-w-md rounded-3xl border border-black/5 bg-white p-9 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
@@ -211,14 +233,24 @@ function SignInScreen({ supabaseClient }) {
           </button>
         </form>
         {method === "password" && (
-          <button
-            type="button"
-            onClick={handlePasswordReset}
-            disabled={busy}
-            className="mt-5 text-sm text-slate-500 underline underline-offset-4 disabled:opacity-40"
-          >
-            パスワードを設定・再設定
-          </button>
+          <div className="mt-5 space-y-3 text-sm">
+            <button
+              type="button"
+              onClick={handlePasswordReset}
+              disabled={busy}
+              className="block text-slate-500 underline underline-offset-4 disabled:opacity-40"
+            >
+              パスワードを設定・再設定
+            </button>
+            <button
+              type="button"
+              onClick={handlePasswordSetupWithOtp}
+              disabled={busy}
+              className="block text-slate-500 underline underline-offset-4 disabled:opacity-40"
+            >
+              設定メールが届かない場合
+            </button>
+          </div>
         )}
         {message && <p className={`mt-5 text-sm leading-6 ${messageTone === "error" ? "text-rose-600" : messageTone === "success" ? "text-emerald-700" : "text-slate-600"}`}>{message}</p>}
       </section>
@@ -255,6 +287,7 @@ function PasswordSetupScreen({ supabaseClient, onComplete }) {
 
     const url = new URL(window.location.href);
     url.searchParams.delete("reset_password");
+    url.searchParams.delete("set_password");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     onComplete();
   }
@@ -435,7 +468,10 @@ function DetailPanel({ detail, loading, onClose }) {
 export default function AdminReview({ supabaseClient }) {
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
-  const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get("reset_password") === "1");
+  const [passwordRecovery, setPasswordRecovery] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("reset_password") === "1" || params.get("set_password") === "1";
+  });
   const [authorized, setAuthorized] = useState(false);
   const [authorizationReady, setAuthorizationReady] = useState(false);
   const [loading, setLoading] = useState(false);
