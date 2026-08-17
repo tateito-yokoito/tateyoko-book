@@ -89,22 +89,72 @@ function EmptyState({ children }) {
 }
 
 function SignInScreen({ supabaseClient }) {
+  const [method, setMethod] = useState("password");
   const [email, setEmail] = useState("");
-  const [sending, setSending] = useState(false);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState("neutral");
 
-  async function handleSubmit(event) {
+  function adminRedirectUrl(extraParams = {}) {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    url.searchParams.set("admin", "1");
+    Object.entries(extraParams).forEach(([key, value]) => url.searchParams.set(key, value));
+    return url.toString();
+  }
+
+  async function handlePasswordSignIn(event) {
+    event.preventDefault();
+    if (!email.trim() || !password) return;
+    setBusy(true);
+    setMessage("");
+    const { error } = await supabaseClient.auth.signInWithPassword({
+      email: email.trim(),
+      password
+    });
+    setBusy(false);
+    if (error) {
+      console.error("admin password sign in error", error);
+      setMessageTone("error");
+      setMessage("メールアドレスまたはパスワードを確認してください。");
+    }
+  }
+
+  async function handleOtpSignIn(event) {
     event.preventDefault();
     if (!email.trim()) return;
-    setSending(true);
+    setBusy(true);
     setMessage("");
-    const redirectTo = `${window.location.origin}${window.location.pathname}?admin=1`;
     const { error } = await supabaseClient.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: redirectTo }
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: adminRedirectUrl()
+      }
     });
-    setSending(false);
-    setMessage(error ? `送信できませんでした：${error.message}` : "管理者用の認証メールを送信しました。");
+    setBusy(false);
+    setMessageTone(error ? "error" : "success");
+    setMessage(error ? "認証メールを送信できませんでした。" : "管理者用の認証メールを送信しました。");
+  }
+
+  async function handlePasswordReset() {
+    if (!email.trim()) {
+      setMessageTone("error");
+      setMessage("先にメールアドレスを入力してください。");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: adminRedirectUrl({ reset_password: "1" })
+    });
+    setBusy(false);
+    setMessageTone(error ? "error" : "success");
+    setMessage(error
+      ? "パスワード設定メールを送信できませんでした。"
+      : "パスワードを設定・再設定するメールを送信しました。");
   }
 
   return (
@@ -115,25 +165,136 @@ function SignInScreen({ supabaseClient }) {
         </div>
         <p className="mb-2 text-xs tracking-[0.24em] text-slate-400">TATEITO YOKOITO</p>
         <h1 className="text-2xl font-medium">運営管理画面</h1>
-        <p className="mt-3 text-sm leading-7 text-slate-500">登録済みの管理者メールアドレスで認証します。</p>
-        <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+        <p className="mt-3 text-sm leading-7 text-slate-500">登録済みの管理者アカウントでログインします。</p>
+        <div className="mt-7 grid grid-cols-2 rounded-xl bg-slate-100 p-1 text-sm">
+          <button
+            type="button"
+            onClick={() => { setMethod("password"); setMessage(""); }}
+            className={`rounded-lg px-3 py-2.5 transition ${method === "password" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+          >
+            パスワード
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMethod("email"); setMessage(""); }}
+            className={`rounded-lg px-3 py-2.5 transition ${method === "email" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+          >
+            認証メール
+          </button>
+        </div>
+        <form onSubmit={method === "password" ? handlePasswordSignIn : handleOtpSignIn} className="mt-5 space-y-4">
           <input
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="メールアドレス"
+            autoComplete="email"
+            className="w-full rounded-xl border border-slate-200 px-4 py-3.5 text-sm outline-none transition focus:border-slate-500"
+          />
+          {method === "password" && (
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="パスワード"
+              autoComplete="current-password"
+              className="w-full rounded-xl border border-slate-200 px-4 py-3.5 text-sm outline-none transition focus:border-slate-500"
+            />
+          )}
+          <button
+            type="submit"
+            disabled={busy || !email.trim() || (method === "password" && !password)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#10203a] px-4 py-3.5 text-sm text-white disabled:opacity-40"
+          >
+            {busy && <LoaderCircle size={16} className="animate-spin" />}
+            {method === "password" ? "ログイン" : "認証メールを送る"}
+          </button>
+        </form>
+        {method === "password" && (
+          <button
+            type="button"
+            onClick={handlePasswordReset}
+            disabled={busy}
+            className="mt-5 text-sm text-slate-500 underline underline-offset-4 disabled:opacity-40"
+          >
+            パスワードを設定・再設定
+          </button>
+        )}
+        {message && <p className={`mt-5 text-sm leading-6 ${messageTone === "error" ? "text-rose-600" : messageTone === "success" ? "text-emerald-700" : "text-slate-600"}`}>{message}</p>}
+      </section>
+    </main>
+  );
+}
+
+function PasswordSetupScreen({ supabaseClient, onComplete }) {
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setMessage("");
+    if (password.length < 8) {
+      setMessage("パスワードは8文字以上で入力してください。");
+      return;
+    }
+    if (password !== confirmation) {
+      setMessage("確認用のパスワードが一致しません。");
+      return;
+    }
+
+    setSaving(true);
+    const { error } = await supabaseClient.auth.updateUser({ password });
+    setSaving(false);
+    if (error) {
+      console.error("admin password update error", error);
+      setMessage("パスワードを保存できませんでした。別のパスワードをお試しください。");
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("reset_password");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    onComplete();
+  }
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[#f3f1ec] px-6 text-slate-900">
+      <section className="w-full max-w-md rounded-3xl border border-black/5 bg-white p-9 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+        <div className="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#10203a] text-white">
+          <ShieldCheck size={23} />
+        </div>
+        <p className="mb-2 text-xs tracking-[0.24em] text-slate-400">TATEITO YOKOITO</p>
+        <h1 className="text-2xl font-medium">パスワードを設定</h1>
+        <p className="mt-3 text-sm leading-7 text-slate-500">次回から管理画面へ直接ログインできるパスワードを設定します。</p>
+        <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="新しいパスワード（8文字以上）"
+            autoComplete="new-password"
+            className="w-full rounded-xl border border-slate-200 px-4 py-3.5 text-sm outline-none transition focus:border-slate-500"
+          />
+          <input
+            type="password"
+            value={confirmation}
+            onChange={(event) => setConfirmation(event.target.value)}
+            placeholder="新しいパスワードをもう一度入力"
+            autoComplete="new-password"
             className="w-full rounded-xl border border-slate-200 px-4 py-3.5 text-sm outline-none transition focus:border-slate-500"
           />
           <button
             type="submit"
-            disabled={sending || !email.trim()}
+            disabled={saving || !password || !confirmation}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#10203a] px-4 py-3.5 text-sm text-white disabled:opacity-40"
           >
-            {sending && <LoaderCircle size={16} className="animate-spin" />}
-            認証メールを送る
+            {saving && <LoaderCircle size={16} className="animate-spin" />}
+            パスワードを保存
           </button>
         </form>
-        {message && <p className="mt-5 text-sm leading-6 text-slate-600">{message}</p>}
+        {message && <p className="mt-5 text-sm leading-6 text-rose-600">{message}</p>}
       </section>
     </main>
   );
@@ -274,7 +435,9 @@ function DetailPanel({ detail, loading, onClose }) {
 export default function AdminReview({ supabaseClient }) {
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get("reset_password") === "1");
   const [authorized, setAuthorized] = useState(false);
+  const [authorizationReady, setAuthorizationReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState(null);
   const [tab, setTab] = useState("attention");
@@ -287,16 +450,34 @@ export default function AdminReview({ supabaseClient }) {
 
   useEffect(() => {
     supabaseClient.auth.getSession().then(({ data }) => { setSession(data.session); setAuthReady(true); });
-    const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, nextSession) => { setSession(nextSession); setAuthReady(true); });
+    const { data: listener } = supabaseClient.auth.onAuthStateChange((event, nextSession) => {
+      if (event === "PASSWORD_RECOVERY") setPasswordRecovery(true);
+      setSession(nextSession);
+      setAuthReady(true);
+    });
     return () => listener.subscription.unsubscribe();
   }, [supabaseClient]);
 
   useEffect(() => {
-    if (!session) { setAuthorized(false); return; }
+    if (!session) {
+      setAuthorized(false);
+      setAuthorizationReady(false);
+      return;
+    }
+
+    let active = true;
+    setAuthorizationReady(false);
+
     supabaseClient.rpc("is_tateyoko_admin").then(({ data, error: adminError }) => {
+      if (!active) return;
       setAuthorized(!adminError && data === true);
       if (adminError) console.error("admin authorization error", adminError);
+      setAuthorizationReady(true);
     });
+
+    return () => {
+      active = false;
+    };
   }, [session, supabaseClient]);
 
   const loadDashboard = useCallback(async () => {
@@ -330,7 +511,9 @@ export default function AdminReview({ supabaseClient }) {
 
   if (!authReady) return <main className="flex min-h-screen items-center justify-center bg-[#f3f1ec]"><LoaderCircle className="animate-spin text-slate-400" /></main>;
   if (!session) return <SignInScreen supabaseClient={supabaseClient} />;
+  if (!authorizationReady) return <main className="flex min-h-screen items-center justify-center bg-[#f3f1ec]"><LoaderCircle className="animate-spin text-slate-400" /></main>;
   if (!authorized) return <UnauthorizedScreen session={session} supabaseClient={supabaseClient} />;
+  if (passwordRecovery) return <PasswordSetupScreen supabaseClient={supabaseClient} onComplete={() => setPasswordRecovery(false)} />;
 
   return (
     <div className="min-h-screen bg-[#f3f1ec] text-slate-900">
