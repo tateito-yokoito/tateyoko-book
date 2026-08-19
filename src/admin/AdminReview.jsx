@@ -1,16 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
+  Bell,
   BookOpen,
   CheckCircle2,
   ChevronRight,
   CreditCard,
+  Image as ImageIcon,
   LoaderCircle,
   LogOut,
+  Mail,
   RefreshCw,
   Search,
   ShieldCheck,
+  Smartphone,
   UsersRound,
+  Volume2,
   X
 } from "lucide-react";
 
@@ -63,6 +68,57 @@ function projectTypeLabel(value) {
     supported: "一緒につくる",
     memorial: "故人の記憶"
   }[value] || value || "未設定";
+}
+
+const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+
+function notificationChannelLabel(value) {
+  if (value === "sms") return "SMS";
+  if (value === "line") return "LINE";
+  if (value === "both") return "メール・SMS";
+  return "メール";
+}
+
+function formatNotificationSchedule(item) {
+  const weekday = WEEKDAY_LABELS[Number(item?.weekday)] ?? "—";
+  const hour = String(Number(item?.hour) || 0).padStart(2, "0");
+  const minute = String(Number(item?.minute) || 0).padStart(2, "0");
+  return `毎週 ${weekday}曜日 ${hour}:${minute}`;
+}
+
+async function attachAdminMediaUrls(supabaseClient, detail) {
+  if (!detail?.answers) return detail;
+
+  const answers = await Promise.all(
+    detail.answers.map(async (answer) => {
+      const media = await Promise.all(
+        (answer.media || []).map(async (item) => {
+          if (!item.storage_path || !["photo", "audio"].includes(item.asset_type)) {
+            return item;
+          }
+
+          const bucket = item.asset_type === "photo" ? "photos" : "audio";
+          const { data, error } = await supabaseClient.storage
+            .from(bucket)
+            .createSignedUrl(item.storage_path, 30 * 60);
+
+          if (error) {
+            console.warn("admin media signed URL error", error);
+          }
+
+          return {
+            ...item,
+            signed_url: data?.signedUrl || null,
+            media_error: error?.message || null
+          };
+        })
+      );
+
+      return { ...answer, media };
+    })
+  );
+
+  return { ...detail, answers };
 }
 
 function StatusPill({ tone = "neutral", children }) {
@@ -420,7 +476,42 @@ function PaymentTable({ rows }) {
   );
 }
 
-function DetailPanel({ detail, loading, onClose }) {
+function DetailPanel({ detail, loading, onClose, supabaseClient }) {
+  const [expandedPhoto, setExpandedPhoto] = useState(null);
+  const auditKeysRef = useRef(new Set());
+
+  useEffect(() => {
+    setExpandedPhoto(null);
+    auditKeysRef.current.clear();
+  }, [detail?.project?.id]);
+
+  const logMediaAccess = useCallback(async (media, action) => {
+    if (!detail?.project?.id || !media?.id) return;
+
+    const auditKey = `${action}:${media.id}`;
+    if (auditKeysRef.current.has(auditKey)) return;
+    auditKeysRef.current.add(auditKey);
+
+    const { error } = await supabaseClient.rpc("log_admin_media_access", {
+      input_project_id: detail.project.id,
+      input_media_id: media.id,
+      input_action: action
+    });
+
+    if (error) {
+      auditKeysRef.current.delete(auditKey);
+      console.warn("admin media access log error", error);
+    }
+  }, [detail?.project?.id, supabaseClient]);
+
+  const preference = detail?.notifications?.preference || null;
+  const enabledSchedules = (detail?.notifications?.schedules || []).filter((schedule) => schedule.enabled !== false);
+  const notificationRows = enabledSchedules.length
+    ? enabledSchedules
+    : preference && Number.isFinite(Number(preference.weekday)) && Number.isFinite(Number(preference.hour))
+      ? [preference]
+      : [];
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35 backdrop-blur-[2px]" onMouseDown={onClose}>
       <aside className="h-full w-full max-w-2xl overflow-y-auto bg-[#f8f7f4] shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
@@ -447,10 +538,100 @@ function DetailPanel({ detail, loading, onClose }) {
               </dl>
             </section>
 
-            <section><h3 className="mb-3 text-sm font-medium">語り <span className="ml-1 text-slate-400">{detail.answers?.length || 0}</span></h3><div className="space-y-3">
-              {(detail.answers || []).map((answer) => <article key={answer.id} className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex justify-between gap-3 text-xs text-slate-400"><span>問い {answer.sequence_order ?? "—"}</span><span>{formatDate(answer.created_at)}</span></div><p className="mt-3 line-clamp-4 whitespace-pre-wrap text-sm leading-7 text-slate-700">{answer.transcript || "文章なし"}</p></article>)}
-              {!detail.answers?.length && <EmptyState>まだ語りはありません。</EmptyState>}
-            </div></section>
+            <section className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="flex items-center gap-2 text-sm font-medium"><Bell size={16} className="text-slate-400" />問いの届け方</h3>
+                {!preference && !notificationRows.length ? (
+                  <StatusPill tone="neutral">未設定</StatusPill>
+                ) : preference?.is_active === false ? (
+                  <StatusPill tone="warning">停止中</StatusPill>
+                ) : (
+                  <StatusPill tone="success">配信中</StatusPill>
+                )}
+              </div>
+
+              {notificationRows.length ? (
+                <div className="mt-4 space-y-3">
+                  {notificationRows.map((schedule, index) => (
+                    <div key={schedule.id || `${schedule.weekday}-${schedule.hour}-${schedule.minute}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-4 py-3 text-sm">
+                      <span>{formatNotificationSchedule(schedule)}</span>
+                      <span className="text-xs text-slate-500">{notificationChannelLabel(schedule.delivery_channel || preference?.delivery_channel)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-400">配信日時はまだ設定されていません。</p>
+              )}
+
+              <div className="mt-4 grid gap-2 border-t border-slate-100 pt-4 text-xs text-slate-500 sm:grid-cols-2">
+                <span className="flex items-center gap-2"><Mail size={14} />{detail.project?.owner_email || "メール未登録"}</span>
+                {preference?.phone_configured && <span className="flex items-center gap-2"><Smartphone size={14} />SMS送信先 登録済み</span>}
+              </div>
+            </section>
+
+            <section>
+              <h3 className="mb-3 text-sm font-medium">語り <span className="ml-1 text-slate-400">{detail.answers?.length || 0}</span></h3>
+              <div className="space-y-3">
+                {(detail.answers || []).map((answer) => {
+                  const photos = (answer.media || []).filter((media) => media.asset_type === "photo");
+                  const audioItems = (answer.media || []).filter((media) => media.asset_type === "audio");
+
+                  return (
+                    <article key={answer.id} className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                        <span>問い {answer.sequence_order ?? "—"}</span>
+                        <div className="flex items-center gap-2">
+                          {answer.access_override === "private_forever" && <StatusPill tone="neutral">本人のみ</StatusPill>}
+                          <span>{formatDate(answer.created_at)}</span>
+                        </div>
+                      </div>
+                      <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700">{answer.transcript || "文章なし"}</p>
+
+                      {!!photos.length && (
+                        <div className="mt-4 border-t border-slate-100 pt-4">
+                          <p className="mb-3 flex items-center gap-2 text-xs text-slate-400"><ImageIcon size={14} />写真 {photos.length}枚</p>
+                          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                            {photos.map((media) => media.signed_url ? (
+                              <button
+                                key={media.id}
+                                type="button"
+                                onClick={() => {
+                                  setExpandedPhoto(media);
+                                  logMediaAccess(media, "view_photo");
+                                }}
+                                className="group aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
+                                aria-label="写真を拡大する"
+                              >
+                                <img src={media.signed_url} alt="語りに添付された写真" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" />
+                              </button>
+                            ) : (
+                              <div key={media.id} className="flex aspect-square items-center justify-center rounded-xl border border-dashed border-slate-200 text-xs text-slate-400">表示できません</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {!!audioItems.length && (
+                        <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                          <p className="flex items-center gap-2 text-xs text-slate-400"><Volume2 size={14} />音声 {audioItems.length}件</p>
+                          {audioItems.map((media, index) => media.signed_url ? (
+                            <div key={media.id} className="rounded-xl bg-slate-50 px-3 py-3">
+                              <p className="mb-2 text-xs text-slate-500">音声 {index + 1}</p>
+                              <audio controls preload="metadata" className="h-9 w-full" onPlay={() => logMediaAccess(media, "play_audio")}>
+                                <source src={media.signed_url} />
+                              </audio>
+                            </div>
+                          ) : (
+                            <p key={media.id} className="text-xs text-slate-400">音声 {index + 1} は再生できません。</p>
+                          ))}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+                {!detail.answers?.length && <EmptyState>まだ語りはありません。</EmptyState>}
+              </div>
+            </section>
 
             <section className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border border-slate-200 bg-white p-5"><h3 className="text-sm font-medium">お手伝いする人</h3><div className="mt-4 space-y-3">{(detail.supporters || []).map((item) => <div key={item.id} className="text-sm"><p>{item.name || item.email || "名称未登録"}</p><p className="mt-1 text-xs text-slate-400">{item.status} · {item.email}</p></div>)}{!detail.supporters?.length && <p className="text-sm text-slate-400">登録なし</p>}</div></div>
@@ -461,6 +642,13 @@ function DetailPanel({ detail, loading, onClose }) {
           </div>
         )}
       </aside>
+
+      {expandedPhoto?.signed_url && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/85 p-5" onMouseDown={() => setExpandedPhoto(null)}>
+          <button type="button" onClick={() => setExpandedPhoto(null)} className="absolute right-5 top-5 rounded-full bg-white/10 p-3 text-white backdrop-blur" aria-label="写真を閉じる"><X size={22} /></button>
+          <img src={expandedPhoto.signed_url} alt="語りに添付された写真" className="max-h-full max-w-full rounded-lg object-contain shadow-2xl" onMouseDown={(event) => event.stopPropagation()} />
+        </div>
+      )}
     </div>
   );
 }
@@ -527,10 +715,20 @@ export default function AdminReview({ supabaseClient }) {
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
   async function openDetail(projectId) {
-    setDetailId(projectId); setDetail(null); setDetailLoading(true);
-    const { data, error: detailError } = await supabaseClient.rpc("get_admin_project_detail", { input_project_id: projectId });
-    if (detailError) { setError(detailError.message); setDetail(null); } else setDetail(data);
-    setDetailLoading(false);
+    setDetailId(projectId);
+    setDetail(null);
+    setDetailLoading(true);
+
+    try {
+      const { data, error: detailError } = await supabaseClient.rpc("get_admin_project_detail", { input_project_id: projectId });
+      if (detailError) throw detailError;
+      setDetail(await attachAdminMediaUrls(supabaseClient, data));
+    } catch (detailError) {
+      setError(detailError?.message || "詳細を読み込めませんでした。");
+      setDetail(null);
+    } finally {
+      setDetailLoading(false);
+    }
   }
 
   const metrics = dashboard?.metrics || {};
@@ -584,7 +782,7 @@ export default function AdminReview({ supabaseClient }) {
         </div>
       </main>
 
-      {detailId && <DetailPanel detail={detail} loading={detailLoading} onClose={() => { setDetailId(null); setDetail(null); }} />}
+      {detailId && <DetailPanel detail={detail} loading={detailLoading} supabaseClient={supabaseClient} onClose={() => { setDetailId(null); setDetail(null); }} />}
     </div>
   );
 }
