@@ -15,6 +15,7 @@ import {
   Search,
   ShieldCheck,
   Smartphone,
+  Trash2,
   UsersRound,
   X
 } from "lucide-react";
@@ -691,7 +692,7 @@ function PaymentTable({ rows }) {
   );
 }
 
-function AccountDetailPanel({ detail, loading, onClose, onOpenProject }) {
+function AccountDetailPanel({ detail, loading, onClose, onOpenProject, onMoveToTrash, canTrash, trashLoading }) {
   const account = detail?.account || null;
   const projects = [
     ...(detail?.owned_projects || []).map(project => ({ ...project, relationship: "所有" })),
@@ -736,6 +737,19 @@ function AccountDetailPanel({ detail, loading, onClose, onOpenProject }) {
 
             <section><h3 className="mb-3 text-sm font-medium">利用履歴</h3><ActivityTimeline rows={detail.activities || []} /></section>
             <section><h3 className="mb-3 text-sm font-medium">配信履歴</h3><DeliveryHistoryList rows={detail.deliveries || []} /></section>
+            {canTrash && (
+              <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-5">
+                <button
+                  type="button"
+                  disabled={trashLoading}
+                  onClick={() => onMoveToTrash(account)}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-rose-700 disabled:opacity-40"
+                >
+                  <Trash2 size={16} />{trashLoading ? "移動中…" : "このアカウントをゴミ箱へ移動"}
+                </button>
+                <p className="mt-2 text-xs leading-5 text-rose-700/65">管理画面から非表示にします。所有する物語と元データは削除されません。</p>
+              </section>
+            )}
           </div>
         )}
       </aside>
@@ -748,6 +762,9 @@ function DetailPanel({
   loading,
   onClose,
   onOpenPurchaser,
+  onMoveToTrash,
+  canTrash,
+  trashLoading,
   onOpenStoryPreview,
   onOpenBookPreview,
   previewLoading
@@ -870,6 +887,19 @@ function DetailPanel({
 
             <section><h3 className="mb-3 text-sm font-medium">物語の利用履歴</h3><ActivityTimeline rows={detail.activities || []} /></section>
             <section><h3 className="mb-3 text-sm font-medium">配信履歴</h3><DeliveryHistoryList rows={detail.deliveries || []} /></section>
+            {canTrash && (
+              <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-5">
+                <button
+                  type="button"
+                  disabled={trashLoading}
+                  onClick={() => onMoveToTrash(detail.project)}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-rose-700 disabled:opacity-40"
+                >
+                  <Trash2 size={16} />{trashLoading ? "移動中…" : "この物語をゴミ箱へ移動"}
+                </button>
+                <p className="mt-2 text-xs leading-5 text-rose-700/65">管理画面から非表示にします。回答・音声・写真・購入情報は削除されません。</p>
+              </section>
+            )}
           </div>
         )}
       </aside>
@@ -886,6 +916,7 @@ export default function AdminReview({ supabaseClient }) {
     return params.get("reset_password") === "1" || params.get("set_password") === "1";
   });
   const [authorized, setAuthorized] = useState(false);
+  const [adminRole, setAdminRole] = useState(null);
   const [authorizationReady, setAuthorizationReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState(null);
@@ -895,6 +926,9 @@ export default function AdminReview({ supabaseClient }) {
   const [deliveryStatus, setDeliveryStatus] = useState("");
   const [deliveryHistory, setDeliveryHistory] = useState([]);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [trashTarget, setTrashTarget] = useState("");
+  const [trashEntries, setTrashEntries] = useState([]);
   const [detailId, setDetailId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -920,6 +954,7 @@ export default function AdminReview({ supabaseClient }) {
   useEffect(() => {
     if (!session) {
       setAuthorized(false);
+      setAdminRole(null);
       setAuthorizationReady(false);
       return;
     }
@@ -927,10 +962,15 @@ export default function AdminReview({ supabaseClient }) {
     let active = true;
     setAuthorizationReady(false);
 
-    supabaseClient.rpc("is_tateyoko_admin").then(({ data, error: adminError }) => {
+    Promise.all([
+      supabaseClient.rpc("is_tateyoko_admin"),
+      supabaseClient.rpc("get_admin_current_role")
+    ]).then(([{ data, error: adminError }, { data: role, error: roleError }]) => {
       if (!active) return;
       setAuthorized(!adminError && data === true);
+      setAdminRole(roleError ? null : role || null);
       if (adminError) console.error("admin authorization error", adminError);
+      if (roleError) console.error("admin role error", roleError);
       setAuthorizationReady(true);
     });
 
@@ -943,22 +983,51 @@ export default function AdminReview({ supabaseClient }) {
     if (!authorized) return;
     setLoading(true); setError("");
     try {
-      const [dashboardResult, deliveryResult] = await Promise.all([
+      const [dashboardResult, deliveryResult, trashResult] = await Promise.all([
         supabaseClient.rpc("get_admin_dashboard", { input_search: appliedSearch || null, input_limit: 250 }),
         supabaseClient.rpc("get_admin_delivery_history", {
           input_search: appliedSearch || null,
           input_status: deliveryStatus || null,
           input_limit: 250
-        })
+        }),
+        supabaseClient.rpc("get_admin_trash_index")
       ]);
       if (dashboardResult.error) throw dashboardResult.error;
       if (deliveryResult.error) throw deliveryResult.error;
+      if (trashResult.error) throw trashResult.error;
       const data = dashboardResult.data;
+      const nextTrashEntries = trashResult.data || [];
+      const trashedProjectIds = new Set(nextTrashEntries
+        .filter(item => item.entity_type === "book_project")
+        .map(item => item.entity_id));
+      const trashedAccountIds = new Set(nextTrashEntries
+        .filter(item => item.entity_type === "account")
+        .map(item => item.entity_id));
+      const visibleProjects = (data?.projects || []).filter(project => !trashedProjectIds.has(project.id));
+      const visibleAttention = (data?.attention || []).filter(project => !trashedProjectIds.has(project.id));
+      const visiblePayments = (data?.payments || []).filter(project => !trashedProjectIds.has(project.id));
+      const visibleAccounts = (data?.accounts || [])
+        .filter(account => !trashedAccountIds.has(account.id))
+        .map(account => ({
+          ...account,
+          owned_project_count: Math.max(
+            0,
+            Number(account.owned_project_count || 0) - nextTrashEntries.filter(item =>
+              item.entity_type === "book_project" && item.snapshot?.owner_user_id === account.id
+            ).length
+          )
+        }));
+      const hiddenPaidCount = nextTrashEntries.filter(item =>
+        item.entity_type === "book_project" && ["paid", "gifted", "legacy"].includes(item.snapshot?.access_status)
+      ).length;
+      const hiddenTrialCount = nextTrashEntries.filter(item =>
+        item.entity_type === "book_project" && item.snapshot?.access_status === "trial"
+      ).length;
 
       const projectIds = [...new Set([
-        ...(data?.projects || []).map(project => project.id),
-        ...(data?.attention || []).map(project => project.id),
-        ...(data?.payments || []).map(project => project.id)
+        ...visibleProjects.map(project => project.id),
+        ...visibleAttention.map(project => project.id),
+        ...visiblePayments.map(project => project.id)
       ].filter(Boolean))];
 
       let displayNames = {};
@@ -977,14 +1046,27 @@ export default function AdminReview({ supabaseClient }) {
 
       setDashboard({
         ...data,
-        projects: (data?.projects || []).map(withDisplayName),
-        attention: (data?.attention || []).map(withDisplayName),
-        payments: (data?.payments || []).map(withDisplayName)
+        metrics: {
+          ...(data?.metrics || {}),
+          project_count: Math.max(0, Number(data?.metrics?.project_count || 0) - trashedProjectIds.size),
+          account_count: Math.max(0, Number(data?.metrics?.account_count || 0) - trashedAccountIds.size),
+          paid_project_count: Math.max(0, Number(data?.metrics?.paid_project_count || 0) - hiddenPaidCount),
+          trial_project_count: Math.max(0, Number(data?.metrics?.trial_project_count || 0) - hiddenTrialCount),
+          attention_count: visibleAttention.length
+        },
+        projects: visibleProjects.map(withDisplayName),
+        attention: visibleAttention.map(withDisplayName),
+        accounts: visibleAccounts,
+        payments: visiblePayments.map(withDisplayName)
       });
-      setDeliveryHistory((deliveryResult.data || []).map(item => ({
-        ...item,
-        project_name: displayNames[item.book_project_id] || withoutHonorific(item.project_name)
-      })));
+      setTrashEntries(nextTrashEntries);
+      setDeliveryHistory((deliveryResult.data || [])
+        .filter(item => !trashedProjectIds.has(item.book_project_id))
+        .filter(item => !trashedAccountIds.has(item.actor_user_id) && !trashedAccountIds.has(item.recipient_user_id))
+        .map(item => ({
+          ...item,
+          project_name: displayNames[item.book_project_id] || withoutHonorific(item.project_name)
+        })));
     } catch (loadError) {
       setError(loadError?.message || "管理情報を読み込めませんでした。");
     } finally {
@@ -994,7 +1076,47 @@ export default function AdminReview({ supabaseClient }) {
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
+  async function moveToTrash(entityType, entity) {
+    const entityId = entity?.id;
+    if (!entityId) return;
+
+    const isAccount = entityType === "account";
+    const label = isAccount
+      ? withoutHonorific(entity.display_name) || entity.email || "このアカウント"
+      : projectDisplayName(entity);
+    const message = isAccount
+      ? `「${label}」を管理画面のゴミ箱へ移動します。\n\n所有する物語と元データは削除されません。続けますか？`
+      : `「${label}」を管理画面のゴミ箱へ移動します。\n\n回答・音声・写真・購入情報は削除されません。続けますか？`;
+
+    if (!window.confirm(message)) return;
+
+    const targetKey = `${entityType}:${entityId}`;
+    setTrashTarget(targetKey);
+    setError("");
+    setNotice("");
+    try {
+      const { error: trashError } = await supabaseClient.rpc("move_admin_entity_to_trash", {
+        input_entity_type: entityType,
+        input_entity_id: entityId
+      });
+      if (trashError) throw trashError;
+
+      closePreview();
+      setDetailId(null);
+      setDetail(null);
+      setAccountDetailId(null);
+      setAccountDetail(null);
+      setNotice(`${label}をゴミ箱へ移動しました。元データは保持されています。`);
+      await loadDashboard();
+    } catch (trashError) {
+      setError(trashError?.message || "ゴミ箱へ移動できませんでした。");
+    } finally {
+      setTrashTarget("");
+    }
+  }
+
   async function openDetail(projectId) {
+    if (trashEntries.some(item => item.entity_type === "book_project" && item.entity_id === projectId)) return;
     setAccountDetailId(null);
     setAccountDetail(null);
     setDetailId(projectId);
@@ -1042,6 +1164,7 @@ export default function AdminReview({ supabaseClient }) {
   }
 
   async function openAccountDetail(accountId) {
+    if (trashEntries.some(item => item.entity_type === "account" && item.entity_id === accountId)) return;
     setDetailId(null);
     setDetail(null);
     setAccountDetailId(accountId);
@@ -1058,11 +1181,14 @@ export default function AdminReview({ supabaseClient }) {
       if (activityResult.error) throw activityResult.error;
       if (deliveryResult.error) throw deliveryResult.error;
       const rawDetail = detailResult.data || {};
+      const trashedProjectIds = new Set(trashEntries
+        .filter(item => item.entity_type === "book_project")
+        .map(item => item.entity_id));
       const projectIds = [...new Set([
-        ...(rawDetail.owned_projects || []).map(project => project.id),
-        ...(rawDetail.supporting_projects || []).map(project => project.id),
-        ...(activityResult.data || []).map(activity => activity.book_project_id),
-        ...(deliveryResult.data || []).map(item => item.book_project_id)
+        ...(rawDetail.owned_projects || []).filter(project => !trashedProjectIds.has(project.id)).map(project => project.id),
+        ...(rawDetail.supporting_projects || []).filter(project => !trashedProjectIds.has(project.id)).map(project => project.id),
+        ...(activityResult.data || []).filter(activity => !trashedProjectIds.has(activity.book_project_id)).map(activity => activity.book_project_id),
+        ...(deliveryResult.data || []).filter(item => !trashedProjectIds.has(item.book_project_id)).map(item => item.book_project_id)
       ].filter(Boolean))];
       let projectNames = {};
       if (projectIds.length) {
@@ -1074,19 +1200,19 @@ export default function AdminReview({ supabaseClient }) {
       }
       setAccountDetail({
         ...rawDetail,
-        owned_projects: (rawDetail.owned_projects || []).map(project => ({
+        owned_projects: (rawDetail.owned_projects || []).filter(project => !trashedProjectIds.has(project.id)).map(project => ({
           ...project,
           name: projectNames[project.id] || withoutHonorific(project.name)
         })),
-        supporting_projects: (rawDetail.supporting_projects || []).map(project => ({
+        supporting_projects: (rawDetail.supporting_projects || []).filter(project => !trashedProjectIds.has(project.id)).map(project => ({
           ...project,
           name: projectNames[project.id] || withoutHonorific(project.name)
         })),
-        activities: (activityResult.data || []).map(activity => ({
+        activities: (activityResult.data || []).filter(activity => !trashedProjectIds.has(activity.book_project_id)).map(activity => ({
           ...activity,
           project_name: projectNames[activity.book_project_id] || withoutHonorific(activity.project_name)
         })),
-        deliveries: (deliveryResult.data || []).map(item => ({
+        deliveries: (deliveryResult.data || []).filter(item => !trashedProjectIds.has(item.book_project_id)).map(item => ({
           ...item,
           project_name: projectNames[item.book_project_id] || withoutHonorific(item.project_name)
         }))
@@ -1188,6 +1314,7 @@ export default function AdminReview({ supabaseClient }) {
               </div>
             </div>
 
+            {notice && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notice}</div>}
             {error && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
             {loading && !dashboard ? <div className="flex h-64 items-center justify-center"><LoaderCircle className="animate-spin text-slate-400" /></div> : null}
             {(tab === "attention" || tab === "projects") && (activeRows.length ? <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">{activeRows.map((project) => <ProjectRow key={project.id} project={project} onOpen={openDetail} />)}</div> : <EmptyState>{tab === "attention" ? <span className="inline-flex items-center gap-2"><CheckCircle2 size={17} className="text-emerald-600" />現在、要対応の物語はありません。</span> : "該当する物語はありません。"}</EmptyState>)}
@@ -1204,6 +1331,9 @@ export default function AdminReview({ supabaseClient }) {
           loading={detailLoading}
           previewLoading={previewLoading}
           onOpenPurchaser={openAccountDetail}
+          canTrash={["owner", "operator"].includes(adminRole)}
+          trashLoading={trashTarget === `book_project:${detailId}`}
+          onMoveToTrash={(project) => moveToTrash("book_project", project)}
           onOpenStoryPreview={() => openPreview("stories")}
           onOpenBookPreview={() => openPreview("book")}
           onClose={() => { closePreview(); setDetailId(null); setDetail(null); }}
@@ -1215,6 +1345,9 @@ export default function AdminReview({ supabaseClient }) {
           detail={accountDetail}
           loading={accountDetailLoading}
           onOpenProject={openDetail}
+          canTrash={["owner", "operator"].includes(adminRole)}
+          trashLoading={trashTarget === `account:${accountDetailId}`}
+          onMoveToTrash={(account) => moveToTrash("account", account)}
           onClose={() => { setAccountDetailId(null); setAccountDetail(null); }}
         />
       )}
