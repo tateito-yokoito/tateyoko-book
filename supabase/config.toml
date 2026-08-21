@@ -1,4 +1,23 @@
 project_id = "tateyoko-book"
 
+[auth]
+site_url = "https://www.tateito-yokoito.jp"
+additional_redirect_urls = [
+  "https://tateyoko-book.vercel.app/**",
+  "https://www.tateito-yokoito.jp/**",
+  "https://tateito-yokoito.jp/**",
+]
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+enable_confirmations = true
+max_frequency = "1m0s"
+
+[storage.vector]
+enabled = false
+
 [functions.stripe-webhook]
 verify_jwt = false
