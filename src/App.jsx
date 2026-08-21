@@ -7,7 +7,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumoss
 
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
-const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const FREE_TRIAL_QUESTION_COUNT = 3;
 
