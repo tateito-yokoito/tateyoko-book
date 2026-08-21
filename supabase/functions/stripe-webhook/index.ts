@@ -75,6 +75,7 @@ serve(async request => {
           .update({
             access_status: "paid",
             purchased_at: new Date().toISOString(),
+            purchaser_user_id: userId,
             stripe_checkout_session_id: checkout.id,
             stripe_customer_id: typeof checkout.customer === "string" ? checkout.customer : null,
             stripe_payment_intent_id:

@@ -747,10 +747,12 @@ function DetailPanel({
   detail,
   loading,
   onClose,
+  onOpenPurchaser,
   onOpenStoryPreview,
   onOpenBookPreview,
   previewLoading
 }) {
+  const purchase = detail?.purchase || {};
   const preference = detail?.notifications?.preference || null;
   const enabledSchedules = (detail?.notifications?.schedules || []).filter((schedule) => schedule.enabled !== false);
   const notificationRows = enabledSchedules.length
@@ -791,7 +793,22 @@ function DetailPanel({
                 <div><dt className="text-xs text-slate-400">利用パターン</dt><dd className="mt-1">{projectTypeLabel(detail.project?.project_type)}</dd></div>
                 <div><dt className="text-xs text-slate-400">初回体験</dt><dd className="mt-1">{detail.project?.onboarding_status || "未設定"}</dd></div>
                 <div><dt className="text-xs text-slate-400">作成日</dt><dd className="mt-1">{formatDate(detail.project?.created_at)}</dd></div>
-                <div><dt className="text-xs text-slate-400">購入日</dt><dd className="mt-1">{formatDate(detail.project?.purchased_at)}</dd></div>
+                <div><dt className="text-xs text-slate-400">購入日</dt><dd className="mt-1">{formatDate(purchase.purchased_at || detail.project?.purchased_at)}</dd></div>
+                <div className="sm:col-span-2">
+                  <dt className="text-xs text-slate-400">購入者</dt>
+                  <dd className="mt-1">
+                    {purchase.purchaser_user_id ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenPurchaser(purchase.purchaser_user_id)}
+                        className="inline-flex items-center gap-1.5 text-left text-slate-700 underline decoration-slate-300 underline-offset-4 transition hover:text-slate-950"
+                      >
+                        {uniqueIdentityLine(withoutHonorific(purchase.purchaser_name), purchase.purchaser_email) || "名称未登録"}
+                        <ChevronRight size={14} className="shrink-0 text-slate-400" />
+                      </button>
+                    ) : "—"}
+                  </dd>
+                </div>
               </dl>
               <div className="mt-6 grid gap-3 border-t border-slate-100 pt-5 sm:grid-cols-2">
                 <button
@@ -985,12 +1002,14 @@ export default function AdminReview({ supabaseClient }) {
     setDetailLoading(true);
 
     try {
-      const [detailResult, activityResult, deliveryResult] = await Promise.all([
+      const [detailResult, purchaseResult, activityResult, deliveryResult] = await Promise.all([
         supabaseClient.rpc("get_admin_project_detail", { input_project_id: projectId }),
+        supabaseClient.rpc("get_admin_project_purchase", { input_project_id: projectId }),
         supabaseClient.rpc("get_admin_usage_history", { input_project_id: projectId, input_limit: 100 }),
         supabaseClient.rpc("get_admin_delivery_history", { input_project_id: projectId, input_limit: 100 })
       ]);
       if (detailResult.error) throw detailResult.error;
+      if (purchaseResult.error) throw purchaseResult.error;
       if (activityResult.error) throw activityResult.error;
       if (deliveryResult.error) throw deliveryResult.error;
       const data = detailResult.data;
@@ -998,6 +1017,7 @@ export default function AdminReview({ supabaseClient }) {
       const resolvedProjectName = dashboardProject?.subject_name || data?.project?.subject_name || data?.project?.title;
       setDetail({
         ...data,
+        purchase: purchaseResult.data || {},
         activities: (activityResult.data || []).map(activity => ({
           ...activity,
           project_name: resolvedProjectName || withoutHonorific(activity.project_name)
@@ -1183,6 +1203,7 @@ export default function AdminReview({ supabaseClient }) {
           detail={detail}
           loading={detailLoading}
           previewLoading={previewLoading}
+          onOpenPurchaser={openAccountDetail}
           onOpenStoryPreview={() => openPreview("stories")}
           onOpenBookPreview={() => openPreview("book")}
           onClose={() => { closePreview(); setDetailId(null); setDetail(null); }}

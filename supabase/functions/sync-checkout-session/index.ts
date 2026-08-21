@@ -61,12 +61,17 @@ serve(async request => {
       ? {
           access_status: "paid",
           purchased_at: new Date().toISOString(),
+          purchaser_user_id: authData.user.id,
           stripe_checkout_session_id: checkout.id,
           stripe_customer_id: typeof checkout.customer === "string" ? checkout.customer : null,
           stripe_payment_intent_id:
             typeof checkout.payment_intent === "string" ? checkout.payment_intent : null
         }
-      : { access_status: "checkout_pending", stripe_checkout_session_id: checkout.id };
+      : {
+          access_status: "checkout_pending",
+          purchaser_user_id: authData.user.id,
+          stripe_checkout_session_id: checkout.id
+        };
 
     const { data: project, error: projectError } = await admin
       .from("book_projects")

@@ -118,7 +118,8 @@ serve(async request => {
       .from("book_projects")
       .update({
         access_status: "checkout_pending",
-        stripe_checkout_session_id: checkout.id
+        stripe_checkout_session_id: checkout.id,
+        purchaser_user_id: authData.user.id
       })
       .eq("id", project.id)
       .eq("owner_user_id", authData.user.id);
