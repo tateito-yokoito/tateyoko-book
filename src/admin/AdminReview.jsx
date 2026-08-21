@@ -71,6 +71,12 @@ function deliveryKindLabel(value) {
   return DELIVERY_KIND_LABELS[value] || value || "配信";
 }
 
+function deliverySummary(item) {
+  const kind = deliveryKindLabel(item?.delivery_kind);
+  const subject = String(item?.subject || "").trim();
+  return !subject || identityKey(subject) === identityKey(kind) ? kind : `${kind} · ${subject}`;
+}
+
 function deliveryStatusLabel(value) {
   return DELIVERY_STATUS_LABELS[value] || value || "未設定";
 }
@@ -623,7 +629,7 @@ function ActivityTimeline({ rows, emptyText = "利用履歴はまだありませ
           <div className="min-w-0">
             <p className="text-slate-700">{activityLabel(activity)}</p>
             {(activity.project_name || activity.actor_name) && (
-              <p className="mt-1 truncate text-xs text-slate-400">{uniqueIdentityLine(activity.project_name, activity.actor_name)}</p>
+              <p className="mt-1 truncate text-xs text-slate-400">{uniqueIdentityLine(withoutHonorific(activity.project_name), activity.actor_name)}</p>
             )}
           </div>
           <span className="shrink-0 text-xs text-slate-400">{formatDate(activity.created_at)}</span>
@@ -644,7 +650,7 @@ function DeliveryHistoryList({ rows, emptyText = "配信履歴はまだありま
               <p className="text-sm text-slate-700">{deliveryKindLabel(item.delivery_kind)}</p>
               <StatusPill tone={deliveryStatusTone(item.delivery_status)}>{deliveryStatusLabel(item.delivery_status)}</StatusPill>
             </div>
-            <p className="mt-1 truncate text-xs text-slate-400">{uniqueIdentityLine(item.project_name, item.resolved_recipient_email || item.recipient_email, item.subject)}</p>
+            <p className="mt-1 truncate text-xs text-slate-400">{uniqueIdentityLine(withoutHonorific(item.project_name), item.resolved_recipient_email || item.recipient_email, item.subject)}</p>
             {item.error_message && <p className="mt-2 text-xs leading-5 text-rose-600">{item.error_message}</p>}
           </div>
           <span className="text-xs text-slate-400">{formatDate(deliveryEventAt(item))}</span>
@@ -660,7 +666,7 @@ function DeliveryTable({ rows, onOpenProject }) {
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       {rows.map((item) => (
         <button type="button" onClick={() => item.book_project_id && onOpenProject(item.book_project_id)} key={`${item.delivery_kind}-${item.id}`} className="grid w-full gap-3 border-b border-slate-100 px-5 py-4 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_24px] md:items-center">
-          <div className="min-w-0"><p className="truncate text-sm font-medium">{item.project_name || "名称未登録"}</p><p className="mt-1 truncate text-xs text-slate-400">{deliveryKindLabel(item.delivery_kind)} · {item.subject || "内容未登録"}</p></div>
+          <div className="min-w-0"><p className="truncate text-sm font-medium">{withoutHonorific(item.project_name) || "名称未登録"}</p><p className="mt-1 truncate text-xs text-slate-400">{deliverySummary(item)}</p></div>
           <p className="truncate text-xs text-slate-500">{item.resolved_recipient_email || item.recipient_email || "送信先未登録"}</p>
           <div className="flex items-center gap-3"><StatusPill tone={deliveryStatusTone(item.delivery_status)}>{deliveryStatusLabel(item.delivery_status)}</StatusPill><span className="hidden text-xs text-slate-400 lg:block">{formatDate(deliveryEventAt(item))}</span></div>
           <ChevronRight size={18} className="hidden text-slate-300 md:block" />
@@ -720,7 +726,7 @@ function AccountDetailPanel({ detail, loading, onClose, onOpenProject }) {
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                   {projects.map((project) => (
                     <button type="button" key={`${project.relationship}-${project.id}`} onClick={() => onOpenProject(project.id)} className="flex w-full items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 text-left last:border-b-0 hover:bg-slate-50">
-                      <div className="min-w-0"><p className="truncate text-sm">{project.name || "名称未登録"}</p><p className="mt-1 text-xs text-slate-400">{project.relationship}{project.access_status ? ` · ${accessLabel(project.access_status)}` : ""}</p></div>
+                      <div className="min-w-0"><p className="truncate text-sm">{withoutHonorific(project.name) || "名称未登録"}</p><p className="mt-1 text-xs text-slate-400">{project.relationship}{project.access_status ? ` · ${accessLabel(project.access_status)}` : ""}</p></div>
                       <ChevronRight size={17} className="shrink-0 text-slate-300" />
                     </button>
                   ))}
@@ -958,7 +964,10 @@ export default function AdminReview({ supabaseClient }) {
         attention: (data?.attention || []).map(withDisplayName),
         payments: (data?.payments || []).map(withDisplayName)
       });
-      setDeliveryHistory(deliveryResult.data || []);
+      setDeliveryHistory((deliveryResult.data || []).map(item => ({
+        ...item,
+        project_name: displayNames[item.book_project_id] || withoutHonorific(item.project_name)
+      })));
     } catch (loadError) {
       setError(loadError?.message || "管理情報を読み込めませんでした。");
     } finally {
@@ -986,10 +995,17 @@ export default function AdminReview({ supabaseClient }) {
       if (deliveryResult.error) throw deliveryResult.error;
       const data = detailResult.data;
       const dashboardProject = (dashboard?.projects || []).find(project => project.id === projectId);
+      const resolvedProjectName = dashboardProject?.subject_name || data?.project?.subject_name || data?.project?.title;
       setDetail({
         ...data,
-        activities: activityResult.data || [],
-        deliveries: deliveryResult.data || [],
+        activities: (activityResult.data || []).map(activity => ({
+          ...activity,
+          project_name: resolvedProjectName || withoutHonorific(activity.project_name)
+        })),
+        deliveries: (deliveryResult.data || []).map(item => ({
+          ...item,
+          project_name: resolvedProjectName || withoutHonorific(item.project_name)
+        })),
         project: data?.project
           ? {
             ...data.project,
@@ -1021,10 +1037,39 @@ export default function AdminReview({ supabaseClient }) {
       if (detailResult.error) throw detailResult.error;
       if (activityResult.error) throw activityResult.error;
       if (deliveryResult.error) throw deliveryResult.error;
+      const rawDetail = detailResult.data || {};
+      const projectIds = [...new Set([
+        ...(rawDetail.owned_projects || []).map(project => project.id),
+        ...(rawDetail.supporting_projects || []).map(project => project.id),
+        ...(activityResult.data || []).map(activity => activity.book_project_id),
+        ...(deliveryResult.data || []).map(item => item.book_project_id)
+      ].filter(Boolean))];
+      let projectNames = {};
+      if (projectIds.length) {
+        const { data: nameData, error: nameError } = await supabaseClient.rpc("get_admin_project_display_names", {
+          input_project_ids: projectIds
+        });
+        if (nameError) throw nameError;
+        projectNames = nameData || {};
+      }
       setAccountDetail({
-        ...(detailResult.data || {}),
-        activities: activityResult.data || [],
-        deliveries: deliveryResult.data || []
+        ...rawDetail,
+        owned_projects: (rawDetail.owned_projects || []).map(project => ({
+          ...project,
+          name: projectNames[project.id] || withoutHonorific(project.name)
+        })),
+        supporting_projects: (rawDetail.supporting_projects || []).map(project => ({
+          ...project,
+          name: projectNames[project.id] || withoutHonorific(project.name)
+        })),
+        activities: (activityResult.data || []).map(activity => ({
+          ...activity,
+          project_name: projectNames[activity.book_project_id] || withoutHonorific(activity.project_name)
+        })),
+        deliveries: (deliveryResult.data || []).map(item => ({
+          ...item,
+          project_name: projectNames[item.book_project_id] || withoutHonorific(item.project_name)
+        }))
       });
     } catch (detailError) {
       setError(detailError?.message || "アカウント詳細を読み込めませんでした。");
