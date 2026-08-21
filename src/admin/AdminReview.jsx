@@ -24,8 +24,68 @@ const TAB_ITEMS = [
   { id: "attention", label: "要対応", icon: AlertCircle },
   { id: "projects", label: "物語", icon: BookOpen },
   { id: "accounts", label: "アカウント", icon: UsersRound },
+  { id: "deliveries", label: "配信", icon: Mail },
   { id: "payments", label: "決済", icon: CreditCard }
 ];
+
+const ACTIVITY_LABELS = {
+  account_registered: "アカウントを登録",
+  app_opened: "縦糸横糸ブックを開いた",
+  delivery_link_opened: "配信された問いを開いた",
+  project_created: "物語を作成",
+  project_access_changed: "利用状態を変更",
+  answer_created: "回答を保存",
+  answer_updated: "回答を更新",
+  question_answered: "問いへの回答を完了",
+  question_skipped: "問いをスキップ",
+  delivery_settings_changed: "問いの配信設定を変更"
+};
+
+const DELIVERY_KIND_LABELS = {
+  question: "問いの配信",
+  supporter_invite: "お手伝いする人への招待",
+  relationship_invite: "物語を届ける相手への招待"
+};
+
+const DELIVERY_STATUS_LABELS = {
+  not_sent: "未送信",
+  scheduled: "配信予定",
+  sending: "送信中",
+  sent: "送信済み",
+  delivered: "到達",
+  opened: "開封済み",
+  answered: "回答済み",
+  failed: "失敗",
+  cancelled: "取消"
+};
+
+function activityLabel(activity) {
+  const base = ACTIVITY_LABELS[activity?.action] || activity?.action || "操作";
+  const sequence = Number(activity?.metadata?.sequence_order || 0);
+  return sequence > 0 && ["answer_created", "answer_updated", "question_answered", "question_skipped"].includes(activity?.action)
+    ? `${base}（問い${sequence}）`
+    : base;
+}
+
+function deliveryKindLabel(value) {
+  return DELIVERY_KIND_LABELS[value] || value || "配信";
+}
+
+function deliveryStatusLabel(value) {
+  return DELIVERY_STATUS_LABELS[value] || value || "未設定";
+}
+
+function deliveryStatusTone(value) {
+  if (["delivered", "opened", "answered"].includes(value)) return "success";
+  if (value === "failed") return "error";
+  if (["scheduled", "sending"].includes(value)) return "info";
+  if (value === "cancelled") return "warning";
+  return "neutral";
+}
+
+function deliveryEventAt(item) {
+  return item?.event_at || item?.answered_at || item?.opened_at || item?.delivered_at || item?.sent_at || item?.attempted_at || item?.scheduled_for || item?.created_at;
+}
 
 function formatDate(value, withTime = true) {
   if (!value) return "—";
@@ -515,6 +575,7 @@ function ProjectRow({ project, onOpen }) {
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <p className="truncate font-medium text-slate-900">{displayName}</p>
+          {project.attention_reason && <StatusPill tone="neutral">物語</StatusPill>}
           {project.attention_reason && <StatusPill tone={tone}>{project.attention_reason}</StatusPill>}
         </div>
         <p className="mt-1 truncate text-xs text-slate-500">
@@ -537,16 +598,73 @@ function ProjectRow({ project, onOpen }) {
   );
 }
 
-function AccountTable({ rows }) {
+function AccountTable({ rows, onOpen }) {
   if (!rows?.length) return <EmptyState>該当するアカウントはありません。</EmptyState>;
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       {rows.map((account) => (
-        <div key={account.id} className="grid gap-3 border-b border-slate-100 px-5 py-4 last:border-b-0 md:grid-cols-[2fr_1fr_1fr] md:items-center">
+        <button type="button" onClick={() => onOpen(account.id)} key={account.id} className="grid w-full gap-3 border-b border-slate-100 px-5 py-4 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[2fr_1fr_1fr_24px] md:items-center">
           <div className="min-w-0"><p className="truncate text-sm font-medium">{account.display_name || "名称未登録"}</p><p className="mt-1 truncate text-xs text-slate-500">{account.email}</p></div>
           <p className="text-sm text-slate-600">所有 {account.owned_project_count || 0}件・お手伝い {account.supporting_project_count || 0}件</p>
           <div><p className="text-xs text-slate-400">最終ログイン {formatDate(account.last_sign_in_at)}</p><p className="mt-1 text-xs text-slate-400">登録 {formatDate(account.created_at)}</p></div>
+          <ChevronRight size={18} className="hidden text-slate-300 md:block" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ActivityTimeline({ rows, emptyText = "利用履歴はまだありません。" }) {
+  if (!rows?.length) return <p className="rounded-2xl border border-slate-200 bg-white px-5 py-5 text-sm text-slate-400">{emptyText}</p>;
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-5">
+      {rows.map((activity) => (
+        <div key={activity.id} className="flex items-start justify-between gap-4 border-b border-slate-100 py-3.5 text-sm last:border-b-0">
+          <div className="min-w-0">
+            <p className="text-slate-700">{activityLabel(activity)}</p>
+            {(activity.project_name || activity.actor_name) && (
+              <p className="mt-1 truncate text-xs text-slate-400">{uniqueIdentityLine(activity.project_name, activity.actor_name)}</p>
+            )}
+          </div>
+          <span className="shrink-0 text-xs text-slate-400">{formatDate(activity.created_at)}</span>
         </div>
+      ))}
+    </div>
+  );
+}
+
+function DeliveryHistoryList({ rows, emptyText = "配信履歴はまだありません。" }) {
+  if (!rows?.length) return <p className="rounded-2xl border border-slate-200 bg-white px-5 py-5 text-sm text-slate-400">{emptyText}</p>;
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-5">
+      {rows.map((item) => (
+        <div key={`${item.delivery_kind}-${item.id}`} className="grid gap-3 border-b border-slate-100 py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm text-slate-700">{deliveryKindLabel(item.delivery_kind)}</p>
+              <StatusPill tone={deliveryStatusTone(item.delivery_status)}>{deliveryStatusLabel(item.delivery_status)}</StatusPill>
+            </div>
+            <p className="mt-1 truncate text-xs text-slate-400">{uniqueIdentityLine(item.project_name, item.resolved_recipient_email || item.recipient_email, item.subject)}</p>
+            {item.error_message && <p className="mt-2 text-xs leading-5 text-rose-600">{item.error_message}</p>}
+          </div>
+          <span className="text-xs text-slate-400">{formatDate(deliveryEventAt(item))}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DeliveryTable({ rows, onOpenProject }) {
+  if (!rows?.length) return <EmptyState>該当する配信履歴はありません。</EmptyState>;
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      {rows.map((item) => (
+        <button type="button" onClick={() => item.book_project_id && onOpenProject(item.book_project_id)} key={`${item.delivery_kind}-${item.id}`} className="grid w-full gap-3 border-b border-slate-100 px-5 py-4 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_24px] md:items-center">
+          <div className="min-w-0"><p className="truncate text-sm font-medium">{item.project_name || "名称未登録"}</p><p className="mt-1 truncate text-xs text-slate-400">{deliveryKindLabel(item.delivery_kind)} · {item.subject || "内容未登録"}</p></div>
+          <p className="truncate text-xs text-slate-500">{item.resolved_recipient_email || item.recipient_email || "送信先未登録"}</p>
+          <div className="flex items-center gap-3"><StatusPill tone={deliveryStatusTone(item.delivery_status)}>{deliveryStatusLabel(item.delivery_status)}</StatusPill><span className="hidden text-xs text-slate-400 lg:block">{formatDate(deliveryEventAt(item))}</span></div>
+          <ChevronRight size={18} className="hidden text-slate-300 md:block" />
+        </button>
       ))}
     </div>
   );
@@ -563,6 +681,58 @@ function PaymentTable({ rows }) {
           <p className="text-xs text-slate-400">購入 {formatDate(payment.purchased_at)}</p>
         </div>
       ))}
+    </div>
+  );
+}
+
+function AccountDetailPanel({ detail, loading, onClose, onOpenProject }) {
+  const account = detail?.account || null;
+  const projects = [
+    ...(detail?.owned_projects || []).map(project => ({ ...project, relationship: "所有" })),
+    ...(detail?.supporting_projects || []).map(project => ({ ...project, relationship: "お手伝い" }))
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35 backdrop-blur-[2px]" onMouseDown={onClose}>
+      <aside className="h-full w-full max-w-2xl overflow-y-auto bg-[#f8f7f4] shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-[#f8f7f4]/95 px-6 py-5 backdrop-blur">
+          <div><p className="text-xs tracking-[0.18em] text-slate-400">ACCOUNT DETAIL</p><h2 className="mt-1 text-lg font-medium">アカウントの状況</h2></div>
+          <button onClick={onClose} className="rounded-full border border-slate-200 bg-white p-2 text-slate-500"><X size={18} /></button>
+        </div>
+        {loading ? (
+          <div className="flex h-64 items-center justify-center"><LoaderCircle className="animate-spin text-slate-400" /></div>
+        ) : !account ? (
+          <div className="p-8 text-sm text-rose-600">アカウント詳細を読み込めませんでした。</div>
+        ) : (
+          <div className="space-y-6 p-6">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5">
+              <h3 className="text-xl font-medium">{account.display_name || "名称未登録"}</h3>
+              <p className="mt-1 text-sm text-slate-500">{account.email || "メール未登録"}</p>
+              <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
+                <div><dt className="text-xs text-slate-400">登録日</dt><dd className="mt-1">{formatDate(account.created_at)}</dd></div>
+                <div><dt className="text-xs text-slate-400">最終ログイン</dt><dd className="mt-1">{formatDate(account.last_sign_in_at)}</dd></div>
+              </dl>
+            </section>
+
+            <section>
+              <h3 className="mb-3 text-sm font-medium">関係する物語</h3>
+              {projects.length ? (
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  {projects.map((project) => (
+                    <button type="button" key={`${project.relationship}-${project.id}`} onClick={() => onOpenProject(project.id)} className="flex w-full items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 text-left last:border-b-0 hover:bg-slate-50">
+                      <div className="min-w-0"><p className="truncate text-sm">{project.name || "名称未登録"}</p><p className="mt-1 text-xs text-slate-400">{project.relationship}{project.access_status ? ` · ${accessLabel(project.access_status)}` : ""}</p></div>
+                      <ChevronRight size={17} className="shrink-0 text-slate-300" />
+                    </button>
+                  ))}
+                </div>
+              ) : <EmptyState>関係する物語はありません。</EmptyState>}
+            </section>
+
+            <section><h3 className="mb-3 text-sm font-medium">利用履歴</h3><ActivityTimeline rows={detail.activities || []} /></section>
+            <section><h3 className="mb-3 text-sm font-medium">配信履歴</h3><DeliveryHistoryList rows={detail.deliveries || []} /></section>
+          </div>
+        )}
+      </aside>
     </div>
   );
 }
@@ -675,7 +845,8 @@ function DetailPanel({
               <div className="rounded-2xl border border-slate-200 bg-white p-5"><h3 className="text-sm font-medium">共有関係</h3><div className="mt-4 space-y-3">{(detail.relationships || []).map((item) => <div key={item.id} className="text-sm"><p>{item.name || item.email || "名称未登録"}</p><p className="mt-1 text-xs text-slate-400">{item.relationship || "関係未登録"} · {item.status}</p></div>)}{!detail.relationships?.length && <p className="text-sm text-slate-400">登録なし</p>}</div></div>
             </section>
 
-            <section><h3 className="mb-3 text-sm font-medium">最近の動き</h3><div className="rounded-2xl border border-slate-200 bg-white px-5">{(detail.activities || []).map((activity) => <div key={activity.id} className="flex items-start justify-between gap-4 border-b border-slate-100 py-3 text-sm last:border-b-0"><span>{activity.event_type || activity.action || "操作"}</span><span className="shrink-0 text-xs text-slate-400">{formatDate(activity.created_at)}</span></div>)}{!detail.activities?.length && <p className="py-5 text-sm text-slate-400">記録なし</p>}</div></section>
+            <section><h3 className="mb-3 text-sm font-medium">物語の利用履歴</h3><ActivityTimeline rows={detail.activities || []} /></section>
+            <section><h3 className="mb-3 text-sm font-medium">配信履歴</h3><DeliveryHistoryList rows={detail.deliveries || []} /></section>
           </div>
         )}
       </aside>
@@ -698,10 +869,15 @@ export default function AdminReview({ supabaseClient }) {
   const [tab, setTab] = useState("attention");
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
+  const [deliveryStatus, setDeliveryStatus] = useState("");
+  const [deliveryHistory, setDeliveryHistory] = useState([]);
   const [error, setError] = useState("");
   const [detailId, setDetailId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [accountDetailId, setAccountDetailId] = useState(null);
+  const [accountDetail, setAccountDetail] = useState(null);
+  const [accountDetailLoading, setAccountDetailLoading] = useState(false);
   const [previewMode, setPreviewMode] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -744,8 +920,17 @@ export default function AdminReview({ supabaseClient }) {
     if (!authorized) return;
     setLoading(true); setError("");
     try {
-      const { data, error: loadError } = await supabaseClient.rpc("get_admin_dashboard", { input_search: appliedSearch || null, input_limit: 250 });
-      if (loadError) throw loadError;
+      const [dashboardResult, deliveryResult] = await Promise.all([
+        supabaseClient.rpc("get_admin_dashboard", { input_search: appliedSearch || null, input_limit: 250 }),
+        supabaseClient.rpc("get_admin_delivery_history", {
+          input_search: appliedSearch || null,
+          input_status: deliveryStatus || null,
+          input_limit: 250
+        })
+      ]);
+      if (dashboardResult.error) throw dashboardResult.error;
+      if (deliveryResult.error) throw deliveryResult.error;
+      const data = dashboardResult.data;
 
       const projectIds = [...new Set([
         ...(data?.projects || []).map(project => project.id),
@@ -773,26 +958,38 @@ export default function AdminReview({ supabaseClient }) {
         attention: (data?.attention || []).map(withDisplayName),
         payments: (data?.payments || []).map(withDisplayName)
       });
+      setDeliveryHistory(deliveryResult.data || []);
     } catch (loadError) {
       setError(loadError?.message || "管理情報を読み込めませんでした。");
     } finally {
       setLoading(false);
     }
-  }, [authorized, appliedSearch, supabaseClient]);
+  }, [authorized, appliedSearch, deliveryStatus, supabaseClient]);
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
   async function openDetail(projectId) {
+    setAccountDetailId(null);
+    setAccountDetail(null);
     setDetailId(projectId);
     setDetail(null);
     setDetailLoading(true);
 
     try {
-      const { data, error: detailError } = await supabaseClient.rpc("get_admin_project_detail", { input_project_id: projectId });
-      if (detailError) throw detailError;
+      const [detailResult, activityResult, deliveryResult] = await Promise.all([
+        supabaseClient.rpc("get_admin_project_detail", { input_project_id: projectId }),
+        supabaseClient.rpc("get_admin_usage_history", { input_project_id: projectId, input_limit: 100 }),
+        supabaseClient.rpc("get_admin_delivery_history", { input_project_id: projectId, input_limit: 100 })
+      ]);
+      if (detailResult.error) throw detailResult.error;
+      if (activityResult.error) throw activityResult.error;
+      if (deliveryResult.error) throw deliveryResult.error;
+      const data = detailResult.data;
       const dashboardProject = (dashboard?.projects || []).find(project => project.id === projectId);
       setDetail({
         ...data,
+        activities: activityResult.data || [],
+        deliveries: deliveryResult.data || [],
         project: data?.project
           ? {
             ...data.project,
@@ -805,6 +1002,35 @@ export default function AdminReview({ supabaseClient }) {
       setDetail(null);
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  async function openAccountDetail(accountId) {
+    setDetailId(null);
+    setDetail(null);
+    setAccountDetailId(accountId);
+    setAccountDetail(null);
+    setAccountDetailLoading(true);
+
+    try {
+      const [detailResult, activityResult, deliveryResult] = await Promise.all([
+        supabaseClient.rpc("get_admin_account_detail", { input_account_id: accountId }),
+        supabaseClient.rpc("get_admin_usage_history", { input_account_id: accountId, input_limit: 100 }),
+        supabaseClient.rpc("get_admin_delivery_history", { input_account_id: accountId, input_limit: 100 })
+      ]);
+      if (detailResult.error) throw detailResult.error;
+      if (activityResult.error) throw activityResult.error;
+      if (deliveryResult.error) throw deliveryResult.error;
+      setAccountDetail({
+        ...(detailResult.data || {}),
+        activities: activityResult.data || [],
+        deliveries: deliveryResult.data || []
+      });
+    } catch (detailError) {
+      setError(detailError?.message || "アカウント詳細を読み込めませんでした。");
+      setAccountDetail(null);
+    } finally {
+      setAccountDetailLoading(false);
     }
   }
 
@@ -881,6 +1107,17 @@ export default function AdminReview({ supabaseClient }) {
             <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
               <div><p className="text-xs text-slate-400">OPERATIONS</p><h2 className="mt-1 text-xl font-medium">{pageTitle}</h2></div>
               <div className="flex gap-2">
+                {tab === "deliveries" && (
+                  <select value={deliveryStatus} onChange={(event) => setDeliveryStatus(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none">
+                    <option value="">すべての結果</option>
+                    <option value="scheduled">配信予定</option>
+                    <option value="sent">送信済み</option>
+                    <option value="delivered">到達</option>
+                    <option value="opened">開封済み</option>
+                    <option value="answered">回答済み</option>
+                    <option value="failed">失敗</option>
+                  </select>
+                )}
                 <form onSubmit={(event) => { event.preventDefault(); setAppliedSearch(search.trim()); }} className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-white px-3"><Search size={15} className="shrink-0 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="氏名・メール・ID" className="min-w-0 bg-transparent px-2 py-2.5 text-sm outline-none" /></form>
                 <button onClick={loadDashboard} title="再読み込み" className="rounded-xl border border-slate-200 bg-white p-3 text-slate-500"><RefreshCw size={16} className={loading ? "animate-spin" : ""} /></button>
               </div>
@@ -889,7 +1126,8 @@ export default function AdminReview({ supabaseClient }) {
             {error && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
             {loading && !dashboard ? <div className="flex h-64 items-center justify-center"><LoaderCircle className="animate-spin text-slate-400" /></div> : null}
             {(tab === "attention" || tab === "projects") && (activeRows.length ? <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">{activeRows.map((project) => <ProjectRow key={project.id} project={project} onOpen={openDetail} />)}</div> : <EmptyState>{tab === "attention" ? <span className="inline-flex items-center gap-2"><CheckCircle2 size={17} className="text-emerald-600" />現在、要対応の物語はありません。</span> : "該当する物語はありません。"}</EmptyState>)}
-            {tab === "accounts" && <AccountTable rows={dashboard?.accounts || []} />}
+            {tab === "accounts" && <AccountTable rows={dashboard?.accounts || []} onOpen={openAccountDetail} />}
+            {tab === "deliveries" && <DeliveryTable rows={deliveryHistory} onOpenProject={openDetail} />}
             {tab === "payments" && <PaymentTable rows={dashboard?.payments || []} />}
           </section>
         </div>
@@ -903,6 +1141,15 @@ export default function AdminReview({ supabaseClient }) {
           onOpenStoryPreview={() => openPreview("stories")}
           onOpenBookPreview={() => openPreview("book")}
           onClose={() => { closePreview(); setDetailId(null); setDetail(null); }}
+        />
+      )}
+
+      {accountDetailId && (
+        <AccountDetailPanel
+          detail={accountDetail}
+          loading={accountDetailLoading}
+          onOpenProject={openDetail}
+          onClose={() => { setAccountDetailId(null); setAccountDetail(null); }}
         />
       )}
 

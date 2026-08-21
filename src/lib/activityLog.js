@@ -2,6 +2,7 @@ export async function logActivity(supabaseClient, payload) {
   try {
     const {
       actorUserId,
+      subjectUserId = actorUserId,
       action,
       entityType = null,
       entityId = null,
@@ -9,6 +10,8 @@ export async function logActivity(supabaseClient, payload) {
       bookProjectId = null,
       answerId = null,
       metadata = {},
+      source = "app",
+      outcome = "success",
     } = payload || {};
 
     if (!actorUserId || !action) return;
@@ -17,6 +20,7 @@ export async function logActivity(supabaseClient, payload) {
       .from("activity_logs")
       .insert({
         actor_user_id: actorUserId,
+        subject_user_id: subjectUserId,
         action,
         entity_type: entityType,
         entity_id: entityId,
@@ -24,6 +28,8 @@ export async function logActivity(supabaseClient, payload) {
         book_project_id: bookProjectId,
         answer_id: answerId,
         metadata,
+        source,
+        outcome,
         user_agent: navigator.userAgent,
       });
 

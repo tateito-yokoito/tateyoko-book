@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Bell, BookOpen, ChevronLeft, ChevronRight, Files, Home, Image as ImageIcon, Lock, Mic, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings, Square, UserCircle, UserCog, Users } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
+import { logActivity } from "./lib/activityLog.js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumossjxehdop.supabase.co";
 
@@ -2549,6 +2550,18 @@ setPendingStoryRelationshipInvites(pendingRelationshipInvites);
 setProgress({
   currentIndex,
   total: questionSet.length
+});
+
+await logActivity(supabaseClient, {
+  actorUserId: session.user.id,
+  subjectUserId: session.user.id,
+  action: deliveryToken ? "delivery_link_opened" : "app_opened",
+  entityType: "book_project",
+  entityId: activeFoundationData?.project?.id || null,
+  bookProjectId: activeFoundationData?.project?.id || null,
+  metadata: deliveryToken
+    ? { entry: "delivery_token", sequence_order: Number(deliveryTokenData?.sequence_order || currentQuestion?.sequence_order || 0) || null }
+    : { entry: getEntryModeFromUrl() || "direct" }
 });
 
 let sceneAfterInvite = nextScene;
@@ -5161,6 +5174,7 @@ let sceneAfterInvite = nextScene;
  {scene === "notification_setup" && (
   <Scene_NotificationSetup
     user={user}
+    bookProjectId={foundation?.project?.id || null}
     initialPreference={notificationPref}
     onPreferenceSaved={setNotificationPref}
     onBack={notificationSetupReturnScene ? () => {
@@ -14578,6 +14592,7 @@ return (
 }
 function Scene_NotificationSetup({
   user,
+  bookProjectId,
   initialPreference,
   onPreferenceSaved,
   onBack,
@@ -14653,6 +14668,15 @@ function Scene_NotificationSetup({
           delivery_channel: "email",
           is_active: true,
           schedules: savedSchedules
+        });
+        await logActivity(supabaseClient, {
+          actorUserId: user?.id,
+          subjectUserId: user?.id,
+          action: "delivery_settings_changed",
+          entityType: bookProjectId ? "book_project" : "account",
+          entityId: bookProjectId || user?.id || null,
+          bookProjectId: bookProjectId || null,
+          metadata: { schedule_count: savedSchedules.length }
         });
         return savedSchedules;
       });
