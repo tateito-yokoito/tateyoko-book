@@ -9877,7 +9877,9 @@ export function Scene_SupportedStoryPages({
           {isAdmin ? "管理者プレビュー・閲覧専用" : isReceived ? "共有された物語" : "物語づくりをお手伝い中"}
         </p>
         <p className="text-white/72 text-sm">
-          {withHonorific(project?.subject_name || "ご家族")}の物語
+          {isAdmin
+            ? `${project?.subject_name || "名称未登録"}の物語`
+            : `${withHonorific(project?.subject_name || "ご家族")}の物語`}
         </p>
       </div>
 

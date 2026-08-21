@@ -8,7 +8,6 @@ import {
   ChevronRight,
   CreditCard,
   Files,
-  Image as ImageIcon,
   LoaderCircle,
   LogOut,
   Mail,
@@ -17,7 +16,6 @@ import {
   ShieldCheck,
   Smartphone,
   UsersRound,
-  Volume2,
   X
 } from "lucide-react";
 import { Scene_BookBuilder, Scene_SupportedStoryPages } from "../App.jsx";
@@ -85,6 +83,26 @@ function sameIdentity(left, right) {
   return Boolean(leftKey) && leftKey === identityKey(right);
 }
 
+function withoutHonorific(value) {
+  return String(value || "")
+    .trim()
+    .replace(/(?:\s|　)*さん$/u, "")
+    .trim();
+}
+
+function projectDisplayName(project) {
+  const subjectName = withoutHonorific(project?.subject_name || project?.title);
+  const ownerName = withoutHonorific(project?.owner_name);
+  const subjectKey = identityKey(subjectName);
+  const ownerKey = identityKey(ownerName);
+
+  if (ownerKey && subjectKey && (ownerKey === subjectKey || ownerKey.endsWith(subjectKey))) {
+    return ownerName;
+  }
+
+  return subjectName || ownerName || "名称未登録";
+}
+
 function uniqueIdentityLine(...values) {
   const seen = new Set();
   return values
@@ -150,7 +168,7 @@ async function attachAdminMediaUrls(supabaseClient, detail) {
   return { ...detail, answers };
 }
 
-function normalizeAdminPreview(preview) {
+function normalizeAdminPreview(preview, displayName = "") {
   const answers = (preview?.answers || []).map(answer => ({
     ...answer,
     transcript_edited: answer.transcript_edited || answer.transcript || "",
@@ -175,7 +193,12 @@ function normalizeAdminPreview(preview) {
     }));
 
   return {
-    project: preview?.project || null,
+    project: preview?.project
+      ? {
+        ...preview.project,
+        subject_name: displayName || projectDisplayName(preview.project)
+      }
+      : null,
     storyRows: answers,
     questionSet: questions,
     mediaByAnswerId
@@ -481,6 +504,8 @@ function MetricCard({ label, value, hint, alert = false }) {
 
 function ProjectRow({ project, onOpen }) {
   const tone = project.health_status === "error" ? "error" : project.health_status === "warning" ? "warning" : project.health_status === "info" ? "info" : "neutral";
+  const displayName = projectDisplayName(project);
+  const ownerName = withoutHonorific(project.owner_name);
   return (
     <button
       type="button"
@@ -489,12 +514,12 @@ function ProjectRow({ project, onOpen }) {
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="truncate font-medium text-slate-900">{project.subject_name || project.title || "名称未登録"}</p>
+          <p className="truncate font-medium text-slate-900">{displayName}</p>
           {project.attention_reason && <StatusPill tone={tone}>{project.attention_reason}</StatusPill>}
         </div>
         <p className="mt-1 truncate text-xs text-slate-500">
           {uniqueIdentityLine(
-            sameIdentity(project.owner_name, project.subject_name) ? null : project.owner_name,
+            sameIdentity(ownerName, displayName) ? null : ownerName,
             project.owner_email
           ) || "連絡先未登録"}
         </p>
@@ -533,7 +558,7 @@ function PaymentTable({ rows }) {
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       {rows.map((payment) => (
         <div key={payment.id} className="grid gap-3 border-b border-slate-100 px-5 py-4 last:border-b-0 md:grid-cols-[2fr_1fr_1fr] md:items-center">
-          <div className="min-w-0"><p className="truncate text-sm font-medium">{payment.subject_name || payment.title}</p><p className="mt-1 truncate font-mono text-[11px] text-slate-400">{payment.stripe_checkout_session_id || "Stripe ID 未登録"}</p></div>
+          <div className="min-w-0"><p className="truncate text-sm font-medium">{projectDisplayName(payment)}</p><p className="mt-1 truncate font-mono text-[11px] text-slate-400">{payment.stripe_checkout_session_id || "Stripe ID 未登録"}</p></div>
           <StatusPill tone={accessTone(payment.access_status)}>{accessLabel(payment.access_status)}</StatusPill>
           <p className="text-xs text-slate-400">購入 {formatDate(payment.purchased_at)}</p>
         </div>
@@ -548,36 +573,8 @@ function DetailPanel({
   onClose,
   onOpenStoryPreview,
   onOpenBookPreview,
-  previewLoading,
-  supabaseClient
+  previewLoading
 }) {
-  const [expandedPhoto, setExpandedPhoto] = useState(null);
-  const auditKeysRef = useRef(new Set());
-
-  useEffect(() => {
-    setExpandedPhoto(null);
-    auditKeysRef.current.clear();
-  }, [detail?.project?.id]);
-
-  const logMediaAccess = useCallback(async (media, action) => {
-    if (!detail?.project?.id || !media?.id) return;
-
-    const auditKey = `${action}:${media.id}`;
-    if (auditKeysRef.current.has(auditKey)) return;
-    auditKeysRef.current.add(auditKey);
-
-    const { error } = await supabaseClient.rpc("log_admin_media_access", {
-      input_project_id: detail.project.id,
-      input_media_id: media.id,
-      input_action: action
-    });
-
-    if (error) {
-      auditKeysRef.current.delete(auditKey);
-      console.warn("admin media access log error", error);
-    }
-  }, [detail?.project?.id, supabaseClient]);
-
   const preference = detail?.notifications?.preference || null;
   const enabledSchedules = (detail?.notifications?.schedules || []).filter((schedule) => schedule.enabled !== false);
   const notificationRows = enabledSchedules.length
@@ -602,10 +599,12 @@ function DetailPanel({
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-xl font-medium">{detail.project?.subject_name || detail.project?.title || "名称未登録"}</h3>
+                  <h3 className="text-xl font-medium">{projectDisplayName(detail.project)}</h3>
                   <p className="mt-1 text-sm text-slate-500">
                     {uniqueIdentityLine(
-                      sameIdentity(detail.project?.owner_name, detail.project?.subject_name) ? null : detail.project?.owner_name,
+                      sameIdentity(withoutHonorific(detail.project?.owner_name), projectDisplayName(detail.project))
+                        ? null
+                        : withoutHonorific(detail.project?.owner_name),
                       detail.project?.owner_email
                     ) || "連絡先未登録"}
                   </p>
@@ -671,70 +670,6 @@ function DetailPanel({
               </div>
             </section>
 
-            <section>
-              <h3 className="mb-3 text-sm font-medium">語り <span className="ml-1 text-slate-400">{detail.answers?.length || 0}</span></h3>
-              <div className="space-y-3">
-                {(detail.answers || []).map((answer) => {
-                  const photos = (answer.media || []).filter((media) => media.asset_type === "photo");
-                  const audioItems = (answer.media || []).filter((media) => media.asset_type === "audio");
-
-                  return (
-                    <article key={answer.id} className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-                        <span>問い {answer.sequence_order ?? "—"}</span>
-                        <div className="flex items-center gap-2">
-                          {answer.access_override === "private_forever" && <StatusPill tone="neutral">本人のみ</StatusPill>}
-                          <span>{formatDate(answer.created_at)}</span>
-                        </div>
-                      </div>
-                      <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700">{answer.transcript || "文章なし"}</p>
-
-                      {!!photos.length && (
-                        <div className="mt-4 border-t border-slate-100 pt-4">
-                          <p className="mb-3 flex items-center gap-2 text-xs text-slate-400"><ImageIcon size={14} />写真 {photos.length}枚</p>
-                          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                            {photos.map((media) => media.signed_url ? (
-                              <button
-                                key={media.id}
-                                type="button"
-                                onClick={() => {
-                                  setExpandedPhoto(media);
-                                  logMediaAccess(media, "view_photo");
-                                }}
-                                className="group aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
-                                aria-label="写真を拡大する"
-                              >
-                                <img src={media.signed_url} alt="語りに添付された写真" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" />
-                              </button>
-                            ) : (
-                              <div key={media.id} className="flex aspect-square items-center justify-center rounded-xl border border-dashed border-slate-200 text-xs text-slate-400">表示できません</div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {!!audioItems.length && (
-                        <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
-                          <p className="flex items-center gap-2 text-xs text-slate-400"><Volume2 size={14} />音声 {audioItems.length}件</p>
-                          {audioItems.map((media, index) => media.signed_url ? (
-                            <div key={media.id} className="rounded-xl bg-slate-50 px-3 py-3">
-                              <p className="mb-2 text-xs text-slate-500">音声 {index + 1}</p>
-                              <audio controls preload="metadata" className="h-9 w-full" onPlay={() => logMediaAccess(media, "play_audio")}>
-                                <source src={media.signed_url} />
-                              </audio>
-                            </div>
-                          ) : (
-                            <p key={media.id} className="text-xs text-slate-400">音声 {index + 1} は再生できません。</p>
-                          ))}
-                        </div>
-                      )}
-                    </article>
-                  );
-                })}
-                {!detail.answers?.length && <EmptyState>まだ語りはありません。</EmptyState>}
-              </div>
-            </section>
-
             <section className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border border-slate-200 bg-white p-5"><h3 className="text-sm font-medium">お手伝いする人</h3><div className="mt-4 space-y-3">{(detail.supporters || []).map((item) => <div key={item.id} className="text-sm"><p>{item.name || item.email || "名称未登録"}</p><p className="mt-1 text-xs text-slate-400">{item.status} · {item.email}</p></div>)}{!detail.supporters?.length && <p className="text-sm text-slate-400">登録なし</p>}</div></div>
               <div className="rounded-2xl border border-slate-200 bg-white p-5"><h3 className="text-sm font-medium">共有関係</h3><div className="mt-4 space-y-3">{(detail.relationships || []).map((item) => <div key={item.id} className="text-sm"><p>{item.name || item.email || "名称未登録"}</p><p className="mt-1 text-xs text-slate-400">{item.relationship || "関係未登録"} · {item.status}</p></div>)}{!detail.relationships?.length && <p className="text-sm text-slate-400">登録なし</p>}</div></div>
@@ -745,12 +680,6 @@ function DetailPanel({
         )}
       </aside>
 
-      {expandedPhoto?.signed_url && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/85 p-5" onMouseDown={() => setExpandedPhoto(null)}>
-          <button type="button" onClick={() => setExpandedPhoto(null)} className="absolute right-5 top-5 rounded-full bg-white/10 p-3 text-white backdrop-blur" aria-label="写真を閉じる"><X size={22} /></button>
-          <img src={expandedPhoto.signed_url} alt="語りに添付された写真" className="max-h-full max-w-full rounded-lg object-contain shadow-2xl" onMouseDown={(event) => event.stopPropagation()} />
-        </div>
-      )}
     </div>
   );
 }
@@ -829,7 +758,7 @@ export default function AdminReview({ supabaseClient }) {
     try {
       const { data, error: detailError } = await supabaseClient.rpc("get_admin_project_detail", { input_project_id: projectId });
       if (detailError) throw detailError;
-      setDetail(await attachAdminMediaUrls(supabaseClient, data));
+      setDetail(data);
     } catch (detailError) {
       setError(detailError?.message || "詳細を読み込めませんでした。");
       setDetail(null);
@@ -856,7 +785,7 @@ export default function AdminReview({ supabaseClient }) {
 
       const previewWithMedia = await attachAdminMediaUrls(supabaseClient, data);
       if (previewRequestRef.current !== requestId) return;
-      setPreviewData(normalizeAdminPreview(previewWithMedia));
+      setPreviewData(normalizeAdminPreview(previewWithMedia, projectDisplayName(detail?.project)));
     } catch (loadError) {
       if (previewRequestRef.current !== requestId) return;
       console.error("admin preview load error", loadError);
@@ -930,7 +859,6 @@ export default function AdminReview({ supabaseClient }) {
           detail={detail}
           loading={detailLoading}
           previewLoading={previewLoading}
-          supabaseClient={supabaseClient}
           onOpenStoryPreview={() => openPreview("stories")}
           onOpenBookPreview={() => openPreview("book")}
           onClose={() => { closePreview(); setDetailId(null); setDetail(null); }}
