@@ -9834,7 +9834,7 @@ function Scene_SupportProjectHome({
   );
 }
 
-function Scene_SupportedStoryPages({
+export function Scene_SupportedStoryPages({
   project,
   questionSet = [],
   storyRows = [],
@@ -9843,6 +9843,7 @@ function Scene_SupportedStoryPages({
   onBack
 }) {
   const isReceived = mode === "received";
+  const isAdmin = mode === "admin";
   const questionBySequence = new Map(
     (questionSet || []).map(question => [
       Number(question.sequence_order),
@@ -9855,13 +9856,13 @@ function Scene_SupportedStoryPages({
     .sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0));
 
   return (
-    <div className="fixed inset-0 min-h-0 flex flex-col fade-enter px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+    <div className="fixed inset-0 mx-auto min-h-0 max-w-[600px] bg-[#0f172a] flex flex-col fade-enter px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)]">
       <div className="shrink-0 relative flex items-center justify-center h-11 mb-5">
         <button
           type="button"
           onClick={onBack}
           className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"
-          aria-label={isReceived ? "つながっている物語へ戻る" : "お手伝い中のホームへ戻る"}
+          aria-label={isAdmin ? "管理画面へ戻る" : isReceived ? "つながっている物語へ戻る" : "お手伝い中のホームへ戻る"}
         >
           <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
         </button>
@@ -9873,7 +9874,7 @@ function Scene_SupportedStoryPages({
 
       <div className="shrink-0 text-center mb-7">
         <p className="text-white/38 text-xs tracking-[0.16em] mb-2">
-          {isReceived ? "共有された物語" : "物語づくりをお手伝い中"}
+          {isAdmin ? "管理者プレビュー・閲覧専用" : isReceived ? "共有された物語" : "物語づくりをお手伝い中"}
         </p>
         <p className="text-white/72 text-sm">
           {withHonorific(project?.subject_name || "ご家族")}の物語
@@ -10222,15 +10223,16 @@ function Scene_SupportRecordingAssist({
   );
 }
 
-function Scene_BookBuilder({
+export function Scene_BookBuilder({
   user,
   userName,
   questionSet = [],
   initialBookStories = null,
   initialBookMediaByAnswerId = null,
+  readOnly = false,
   onBack
 }) {
-  const steps = ["表紙", "収録", "紙面", "注文", "完了"];
+  const steps = readOnly ? ["表紙", "収録", "紙面"] : ["表紙", "収録", "紙面", "注文", "完了"];
   const [stepIndex, setStepIndex] = useState(0);
   const [coverPhoto, setCoverPhoto] = useState(null);
   const [coverColor, setCoverColor] = useState("#1f3a36");
@@ -10444,13 +10446,15 @@ function Scene_BookBuilder({
   });
 
   return (
-    <div className="fixed inset-0 max-w-[760px] mx-auto min-h-0 flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
-      <PhotoCorrectionFlow
-        open={coverPhotoCorrectionOpen}
-        title="表紙の写真"
-        onClose={() => setCoverPhotoCorrectionOpen(false)}
-        onComplete={handleCoverPhotoSelect}
-      />
+    <div className="fixed inset-0 max-w-[760px] mx-auto min-h-0 bg-[#0f172a] flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
+      {!readOnly && (
+        <PhotoCorrectionFlow
+          open={coverPhotoCorrectionOpen}
+          title="表紙の写真"
+          onClose={() => setCoverPhotoCorrectionOpen(false)}
+          onComplete={handleCoverPhotoSelect}
+        />
+      )}
       <div className="shrink-0 pb-3">
         <div className="relative flex items-center justify-center mb-3 h-10">
           <button
@@ -10465,10 +10469,15 @@ function Scene_BookBuilder({
           <p className="text-white/90 text-[1.02rem] text-narrative">
             本に仕上げる
           </p>
+          {readOnly && (
+            <p className="absolute right-0 text-[0.65rem] tracking-wider text-white/35">
+              閲覧専用
+            </p>
+          )}
         </div>
 
         <div>
-          <div className="grid grid-cols-5 gap-2 pb-2">
+          <div className={`grid ${readOnly ? "grid-cols-3" : "grid-cols-5"} gap-2 pb-2`}>
             {steps.map((step, index) => (
               <button
                 key={step}
@@ -10517,7 +10526,7 @@ function Scene_BookBuilder({
             />
             </div>
 
-            <div className="glass-card p-5">
+            {!readOnly && <div className="glass-card p-5">
               <p className="text-white/82 text-[1.05rem] text-narrative mb-5">
                 表紙デザイン
               </p>
@@ -10609,7 +10618,7 @@ function Scene_BookBuilder({
                   className="quiet-input"
                 />
               </div>
-            </div>
+            </div>}
           </div>
         )}
 
@@ -10687,7 +10696,7 @@ function Scene_BookBuilder({
                         </div>
                       </div>
 
-                      <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3">
+                      {!readOnly && <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3">
                         <p className={`text-sm ${included ? "text-white/65" : "text-white/35"}`}>
                           収録する
                         </p>
@@ -10714,7 +10723,7 @@ function Scene_BookBuilder({
                             }`}
                           />
                         </button>
-                      </div>
+                      </div>}
                     </div>
                   );
                 })

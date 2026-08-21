@@ -67,19 +67,13 @@ public/favicon.svg
 public/og-image.svg
 ```
 
-For GitHub Pages under:
+The production site is served from the custom domain root:
 
 ```text
-https://koe-project.github.io/koe-app/
+https://www.tateito-yokoito.jp/
 ```
 
-`vite.config.js` uses:
-
-```js
-base: "/koe-app/"
-```
-
-If a custom domain serves this app at the root path, change it to:
+`vite.config.js` therefore uses:
 
 ```js
 base: "/"

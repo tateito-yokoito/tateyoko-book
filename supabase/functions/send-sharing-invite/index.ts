@@ -57,7 +57,7 @@ serve(async request => {
       subjectName = person?.preferred_name || person?.display_name || subjectName;
     }
 
-    const appUrl = Deno.env.get("APP_URL") || "https://tateyoko-book.vercel.app/?beta=1";
+    const appUrl = Deno.env.get("APP_URL") || "https://www.tateito-yokoito.jp/?app=1";
     const returnUrl = new URL(appUrl);
     returnUrl.searchParams.set("sharing_invite", invite.id);
     const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({

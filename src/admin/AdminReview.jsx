@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertCircle,
   Bell,
@@ -6,6 +7,7 @@ import {
   CheckCircle2,
   ChevronRight,
   CreditCard,
+  Files,
   Image as ImageIcon,
   LoaderCircle,
   LogOut,
@@ -18,6 +20,7 @@ import {
   Volume2,
   X
 } from "lucide-react";
+import { Scene_BookBuilder, Scene_SupportedStoryPages } from "../App.jsx";
 
 const TAB_ITEMS = [
   { id: "attention", label: "要対応", icon: AlertCircle },
@@ -70,6 +73,32 @@ function projectTypeLabel(value) {
   }[value] || value || "未設定";
 }
 
+function identityKey(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .toLocaleLowerCase("ja-JP");
+}
+
+function sameIdentity(left, right) {
+  const leftKey = identityKey(left);
+  return Boolean(leftKey) && leftKey === identityKey(right);
+}
+
+function uniqueIdentityLine(...values) {
+  const seen = new Set();
+  return values
+    .map(value => String(value || "").trim())
+    .filter(value => {
+      if (!value) return false;
+      const key = identityKey(value);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(" · ");
+}
+
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
 function notificationChannelLabel(value) {
@@ -119,6 +148,38 @@ async function attachAdminMediaUrls(supabaseClient, detail) {
   );
 
   return { ...detail, answers };
+}
+
+function normalizeAdminPreview(preview) {
+  const answers = (preview?.answers || []).map(answer => ({
+    ...answer,
+    transcript_edited: answer.transcript_edited || answer.transcript || "",
+    transcript_readable: answer.transcript_readable || answer.transcript || ""
+  }));
+  const mediaByAnswerId = {};
+
+  for (const answer of answers) {
+    mediaByAnswerId[answer.id] = (answer.media || []).map(media => ({
+      ...media,
+      url: media.signed_url || null
+    }));
+  }
+
+  const questions = preview?.questions?.length
+    ? preview.questions
+    : answers.map(answer => ({
+      sequence_order: answer.sequence_order,
+      content: `問い ${answer.sequence_order ?? "—"}`,
+      chapter: "物語",
+      chapter_label: "物語"
+    }));
+
+  return {
+    project: preview?.project || null,
+    storyRows: answers,
+    questionSet: questions,
+    mediaByAnswerId
+  };
 }
 
 function StatusPill({ tone = "neutral", children }) {
@@ -431,7 +492,12 @@ function ProjectRow({ project, onOpen }) {
           <p className="truncate font-medium text-slate-900">{project.subject_name || project.title || "名称未登録"}</p>
           {project.attention_reason && <StatusPill tone={tone}>{project.attention_reason}</StatusPill>}
         </div>
-        <p className="mt-1 truncate text-xs text-slate-500">{project.owner_name} · {project.owner_email || "メール未登録"}</p>
+        <p className="mt-1 truncate text-xs text-slate-500">
+          {uniqueIdentityLine(
+            sameIdentity(project.owner_name, project.subject_name) ? null : project.owner_name,
+            project.owner_email
+          ) || "連絡先未登録"}
+        </p>
       </div>
       <div className="flex flex-wrap gap-2 text-xs">
         <StatusPill tone={accessTone(project.access_status)}>{accessLabel(project.access_status)}</StatusPill>
@@ -476,7 +542,15 @@ function PaymentTable({ rows }) {
   );
 }
 
-function DetailPanel({ detail, loading, onClose, supabaseClient }) {
+function DetailPanel({
+  detail,
+  loading,
+  onClose,
+  onOpenStoryPreview,
+  onOpenBookPreview,
+  previewLoading,
+  supabaseClient
+}) {
   const [expandedPhoto, setExpandedPhoto] = useState(null);
   const auditKeysRef = useRef(new Set());
 
@@ -527,7 +601,15 @@ function DetailPanel({ detail, loading, onClose, supabaseClient }) {
           <div className="space-y-6 p-6">
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div><h3 className="text-xl font-medium">{detail.project?.subject_name || detail.project?.title || "名称未登録"}</h3><p className="mt-1 text-sm text-slate-500">{detail.project?.owner_name} · {detail.project?.owner_email}</p></div>
+                <div>
+                  <h3 className="text-xl font-medium">{detail.project?.subject_name || detail.project?.title || "名称未登録"}</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {uniqueIdentityLine(
+                      sameIdentity(detail.project?.owner_name, detail.project?.subject_name) ? null : detail.project?.owner_name,
+                      detail.project?.owner_email
+                    ) || "連絡先未登録"}
+                  </p>
+                </div>
                 <StatusPill tone={accessTone(detail.project?.access_status)}>{accessLabel(detail.project?.access_status)}</StatusPill>
               </div>
               <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
@@ -536,6 +618,26 @@ function DetailPanel({ detail, loading, onClose, supabaseClient }) {
                 <div><dt className="text-xs text-slate-400">作成日</dt><dd className="mt-1">{formatDate(detail.project?.created_at)}</dd></div>
                 <div><dt className="text-xs text-slate-400">購入日</dt><dd className="mt-1">{formatDate(detail.project?.purchased_at)}</dd></div>
               </dl>
+              <div className="mt-6 grid gap-3 border-t border-slate-100 pt-5 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={onOpenStoryPreview}
+                  disabled={previewLoading}
+                  className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
+                >
+                  <span className="flex items-center gap-2"><Files size={16} />語りを見る</span>
+                  <ChevronRight size={16} className="text-slate-300" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenBookPreview}
+                  disabled={previewLoading}
+                  className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
+                >
+                  <span className="flex items-center gap-2"><BookOpen size={16} />本に仕上げる</span>
+                  <ChevronRight size={16} className="text-slate-300" />
+                </button>
+              </div>
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -671,6 +773,11 @@ export default function AdminReview({ supabaseClient }) {
   const [detailId, setDetailId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [previewMode, setPreviewMode] = useState(null);
+  const [previewData, setPreviewData] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+  const previewRequestRef = useRef(0);
 
   useEffect(() => {
     supabaseClient.auth.getSession().then(({ data }) => { setSession(data.session); setAuthReady(true); });
@@ -731,6 +838,42 @@ export default function AdminReview({ supabaseClient }) {
     }
   }
 
+  async function openPreview(mode) {
+    if (!detailId) return;
+
+    const requestId = previewRequestRef.current + 1;
+    previewRequestRef.current = requestId;
+    setPreviewMode(mode);
+    setPreviewData(null);
+    setPreviewError("");
+    setPreviewLoading(true);
+
+    try {
+      const { data, error: previewLoadError } = await supabaseClient.rpc("get_admin_project_preview", {
+        input_project_id: detailId
+      });
+      if (previewLoadError) throw previewLoadError;
+
+      const previewWithMedia = await attachAdminMediaUrls(supabaseClient, data);
+      if (previewRequestRef.current !== requestId) return;
+      setPreviewData(normalizeAdminPreview(previewWithMedia));
+    } catch (loadError) {
+      if (previewRequestRef.current !== requestId) return;
+      console.error("admin preview load error", loadError);
+      setPreviewError(loadError?.message || "プレビューを読み込めませんでした。");
+    } finally {
+      if (previewRequestRef.current === requestId) setPreviewLoading(false);
+    }
+  }
+
+  function closePreview() {
+    previewRequestRef.current += 1;
+    setPreviewMode(null);
+    setPreviewData(null);
+    setPreviewError("");
+    setPreviewLoading(false);
+  }
+
   const metrics = dashboard?.metrics || {};
   const projects = dashboard?.projects || [];
   const attention = dashboard?.attention || [];
@@ -782,7 +925,56 @@ export default function AdminReview({ supabaseClient }) {
         </div>
       </main>
 
-      {detailId && <DetailPanel detail={detail} loading={detailLoading} supabaseClient={supabaseClient} onClose={() => { setDetailId(null); setDetail(null); }} />}
+      {detailId && (
+        <DetailPanel
+          detail={detail}
+          loading={detailLoading}
+          previewLoading={previewLoading}
+          supabaseClient={supabaseClient}
+          onOpenStoryPreview={() => openPreview("stories")}
+          onOpenBookPreview={() => openPreview("book")}
+          onClose={() => { closePreview(); setDetailId(null); setDetail(null); }}
+        />
+      )}
+
+      {previewMode && createPortal((
+        previewLoading ? (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#0f172a] text-white">
+            <LoaderCircle className="animate-spin text-white/40" />
+          </div>
+        ) : previewError || !previewData ? (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#0f172a] px-6 text-white">
+            <div className="w-full max-w-md text-center">
+              <AlertCircle className="mx-auto text-rose-300/70" />
+              <p className="mt-5 text-sm leading-7 text-white/60">{previewError || "プレビューを読み込めませんでした。"}</p>
+              <button type="button" onClick={closePreview} className="mt-7 rounded-full border border-white/15 px-6 py-3 text-sm text-white/70">管理画面へ戻る</button>
+            </div>
+          </div>
+        ) : previewMode === "stories" ? (
+          <div className="fixed inset-0 z-[90] bg-[#0f172a] text-white">
+            <Scene_SupportedStoryPages
+              project={previewData.project}
+              questionSet={previewData.questionSet}
+              storyRows={previewData.storyRows}
+              mediaByAnswerId={previewData.mediaByAnswerId}
+              mode="admin"
+              onBack={closePreview}
+            />
+          </div>
+        ) : (
+          <div className="fixed inset-0 z-[90] bg-[#0f172a] text-white">
+            <Scene_BookBuilder
+              user={{ id: previewData.project?.owner_user_id }}
+              userName={previewData.project?.subject_name || previewData.project?.title || "名称未登録"}
+              questionSet={previewData.questionSet}
+              initialBookStories={previewData.storyRows}
+              initialBookMediaByAnswerId={previewData.mediaByAnswerId}
+              readOnly
+              onBack={closePreview}
+            />
+          </div>
+        )
+      ), document.body)}
     </div>
   );
 }

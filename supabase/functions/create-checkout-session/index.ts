@@ -15,7 +15,7 @@ function json(body: Record<string, unknown>, status = 200) {
 }
 
 function appReturnUrl(params: Record<string, string>) {
-  const configured = Deno.env.get("APP_URL") || "https://tateyoko-book.vercel.app/";
+  const configured = Deno.env.get("APP_URL") || "https://www.tateito-yokoito.jp/";
   const url = new URL(configured);
   url.search = "";
   Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));

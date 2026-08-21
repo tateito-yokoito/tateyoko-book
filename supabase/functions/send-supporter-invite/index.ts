@@ -33,7 +33,7 @@ function withHonorific(value: unknown, fallback = "ご家族") {
 
 function buildInvitationUrl(inviteId: string) {
   const appUrl = Deno.env.get("APP_URL") ||
-    "https://tateyoko-book.vercel.app/?beta=1";
+    "https://www.tateito-yokoito.jp/?app=1";
   const url = new URL(appUrl);
   url.searchParams.set("supporter_invite", inviteId);
   return url.toString();

@@ -17,7 +17,8 @@ Keep authentication-email link tracking disabled so the provider does not rewrit
 
 Use the production deployment as the default destination for authentication links.
 
-- Site URL: `https://tateyoko-book.vercel.app`
-- Redirect URL: `https://tateyoko-book.vercel.app/**`
+- Site URL: `https://www.tateito-yokoito.jp`
+- Redirect URL: `https://www.tateito-yokoito.jp/**`
+- Redirect URL: `https://tateito-yokoito.jp/**`
 
-The legacy `https://koe-project.github.io` redirect may remain in the allow list for old links, but it must not be the Site URL.
+Keep `https://tateyoko-book.vercel.app/**` temporarily only when direct Vercel deployment testing is still needed. Do not allow the retired `https://koe-project.github.io` origin.
