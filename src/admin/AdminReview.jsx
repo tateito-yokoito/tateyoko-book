@@ -743,9 +743,41 @@ export default function AdminReview({ supabaseClient }) {
   const loadDashboard = useCallback(async () => {
     if (!authorized) return;
     setLoading(true); setError("");
-    const { data, error: loadError } = await supabaseClient.rpc("get_admin_dashboard", { input_search: appliedSearch || null, input_limit: 250 });
-    if (loadError) setError(loadError.message); else setDashboard(data);
-    setLoading(false);
+    try {
+      const { data, error: loadError } = await supabaseClient.rpc("get_admin_dashboard", { input_search: appliedSearch || null, input_limit: 250 });
+      if (loadError) throw loadError;
+
+      const projectIds = [...new Set([
+        ...(data?.projects || []).map(project => project.id),
+        ...(data?.attention || []).map(project => project.id),
+        ...(data?.payments || []).map(project => project.id)
+      ].filter(Boolean))];
+
+      let displayNames = {};
+      if (projectIds.length) {
+        const { data: nameData, error: nameError } = await supabaseClient.rpc("get_admin_project_display_names", {
+          input_project_ids: projectIds
+        });
+        if (nameError) throw nameError;
+        displayNames = nameData || {};
+      }
+
+      const withDisplayName = project => ({
+        ...project,
+        subject_name: displayNames[project.id] || project.subject_name
+      });
+
+      setDashboard({
+        ...data,
+        projects: (data?.projects || []).map(withDisplayName),
+        attention: (data?.attention || []).map(withDisplayName),
+        payments: (data?.payments || []).map(withDisplayName)
+      });
+    } catch (loadError) {
+      setError(loadError?.message || "管理情報を読み込めませんでした。");
+    } finally {
+      setLoading(false);
+    }
   }, [authorized, appliedSearch, supabaseClient]);
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
@@ -758,7 +790,16 @@ export default function AdminReview({ supabaseClient }) {
     try {
       const { data, error: detailError } = await supabaseClient.rpc("get_admin_project_detail", { input_project_id: projectId });
       if (detailError) throw detailError;
-      setDetail(data);
+      const dashboardProject = (dashboard?.projects || []).find(project => project.id === projectId);
+      setDetail({
+        ...data,
+        project: data?.project
+          ? {
+            ...data.project,
+            subject_name: dashboardProject?.subject_name || data.project.subject_name
+          }
+          : null
+      });
     } catch (detailError) {
       setError(detailError?.message || "詳細を読み込めませんでした。");
       setDetail(null);
