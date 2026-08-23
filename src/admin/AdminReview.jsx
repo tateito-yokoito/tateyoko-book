@@ -340,27 +340,34 @@ function OrganizationModeDialog({
           <button type="button" onClick={onClose} className="rounded-full border border-slate-200 p-2 text-slate-500"><X size={17} /></button>
         </div>
         <p className="mt-4 text-sm leading-7 text-slate-500">
-          owner本人であることを再確認します。開始後は非表示操作と非表示ゾーンが{durationMinutes || 15}分間利用できます。
+          owner本人であることを再確認します。認証メール内のボタンから戻ると、非表示操作と非表示ゾーンが{durationMinutes || 15}分間利用できます。
         </p>
-        <form onSubmit={onPasswordSubmit} className="mt-6 space-y-4">
-          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">{email}</div>
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => onPasswordChange(event.target.value)}
-            placeholder="現在のパスワード"
-            autoComplete="current-password"
-            className="w-full rounded-xl border border-slate-200 px-4 py-3.5 text-sm outline-none transition focus:border-slate-500"
-          />
-          <button type="submit" disabled={busy || !password} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#10203a] px-4 py-3.5 text-sm text-white disabled:opacity-40">
+        <div className="mt-6 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">{email}</div>
+        <button type="button" onClick={onSendEmail} disabled={busy} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#10203a] px-4 py-3.5 text-sm text-white disabled:opacity-40">
+          {busy ? <LoaderCircle size={16} className="animate-spin" /> : <Mail size={16} />}
+          認証メールを送信して開始
+        </button>
+        <div className="my-5 flex items-center gap-3 text-xs text-slate-300"><span className="h-px flex-1 bg-slate-200" />パスワードで開始する場合<span className="h-px flex-1 bg-slate-200" /></div>
+        <form onSubmit={onPasswordSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="organization-password" className="mb-2 block text-sm font-medium text-slate-700">現在の管理者パスワード</label>
+            <input
+              id="organization-password"
+              type="password"
+              value={password}
+              onChange={(event) => onPasswordChange(event.target.value)}
+              placeholder="現在の管理者パスワードを入力"
+              autoComplete="current-password"
+              disabled={busy}
+              className="w-full rounded-xl border border-slate-200 px-4 py-3.5 text-sm outline-none transition focus:border-slate-500"
+            />
+            <p className="mt-2 text-xs leading-5 text-slate-500">パスワードを設定していない、または不明な場合は、上の認証メールを利用してください。</p>
+          </div>
+          <button type="submit" disabled={busy || !password} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3.5 text-sm text-slate-600 disabled:opacity-40">
             {busy ? <LoaderCircle size={16} className="animate-spin" /> : <KeyRound size={16} />}
-            再認証して開始
+            パスワードで再認証して開始
           </button>
         </form>
-        <div className="my-5 flex items-center gap-3 text-xs text-slate-300"><span className="h-px flex-1 bg-slate-200" />または<span className="h-px flex-1 bg-slate-200" /></div>
-        <button type="button" onClick={onSendEmail} disabled={busy} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-600 disabled:opacity-40">
-          認証メールで再確認する
-        </button>
         {message && <p className="mt-4 text-sm leading-6 text-slate-600">{message}</p>}
       </section>
     </div>
