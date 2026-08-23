@@ -8966,34 +8966,51 @@ function BookPagePreview({
   );
 }
 
+const CLOTH_COVER_COLORS = [
+  { label: "深緑", value: "#1f3a36" },
+  { label: "紺", value: "#132b49" },
+  { label: "ブラック", value: "#18191b" },
+  { label: "水", value: "#6c8fa3" }
+];
+
+const PRINT_COVER_COLORS = [
+  { label: "アイボリー", value: "#e8e0d6", ink: "#26394a" },
+  { label: "セージグリーン", value: "#a9bcb6", ink: "#294b43" },
+  { label: "ネイビー", value: "#182b48", ink: "#f1e9dc" },
+  { label: "ダスティローズ", value: "#c9aaa7", ink: "#4e3540" }
+];
+
 function BookCoverPreview({
   title,
-  subtitle,
   authorName,
   coverPhoto,
-  coverColor = "#26382f",
+  coverColor = CLOTH_COVER_COLORS[0].value,
   coverStyle = "cloth"
 }) {
-  const isPhoto = coverStyle === "photo";
-  const isMinimal = coverStyle === "minimal";
-  const isCloth = !isPhoto && !isMinimal;
-  const usesDarkInk =
-    isMinimal ||
-    ["#c6d7e9", "#e7d3dc", "#d9cdbd"].includes(
-      String(coverColor || "").toLowerCase()
-    );
-  const coverTexture = isMinimal
+  const isPrint = coverStyle === "print";
+  const isCloth = !isPrint;
+  const normalizedColor = String(coverColor || "").toLowerCase();
+  const printColor = PRINT_COVER_COLORS.find(
+    ({ value }) => value.toLowerCase() === normalizedColor
+  );
+  const printInk = printColor?.ink || "#26394a";
+  const coverTexture = isCloth
     ? {
-        backgroundColor: "#e9e1d3",
-        backgroundImage:
-          "linear-gradient(112deg, rgba(255,255,255,.58), transparent 34%, rgba(102,77,48,.07) 100%), radial-gradient(circle at 22% 16%, rgba(255,255,255,.62), transparent 36%), repeating-linear-gradient(4deg, rgba(92,69,42,.032) 0 1px, transparent 1px 5px)"
+        backgroundColor: coverColor,
+        backgroundImage: [
+          "linear-gradient(118deg, rgba(255,255,255,.075), transparent 24%, rgba(0,0,0,.14) 82%)",
+          "repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 1px, rgba(0,0,0,.052) 1px 2px, transparent 2px 4px)",
+          "repeating-linear-gradient(0deg, rgba(255,255,255,.028) 0 1px, rgba(0,0,0,.04) 1px 2px, transparent 2px 5px)",
+          "repeating-linear-gradient(45deg, transparent 0 9px, rgba(255,255,255,.018) 9px 10px, transparent 10px 18px)",
+          "repeating-linear-gradient(-45deg, transparent 0 9px, rgba(0,0,0,.026) 9px 10px, transparent 10px 18px)"
+        ].join(",")
       }
     : {
         backgroundColor: coverColor,
         backgroundImage:
-          "linear-gradient(112deg, rgba(255,255,255,.11), transparent 27%, rgba(0,0,0,.14) 100%), radial-gradient(circle at 73% 14%, rgba(255,255,255,.11), transparent 34%), repeating-linear-gradient(88deg, rgba(255,255,255,.037) 0 1px, transparent 1px 3px), repeating-linear-gradient(2deg, rgba(0,0,0,.052) 0 1px, transparent 1px 4px)"
+          "linear-gradient(116deg, rgba(255,255,255,.24), transparent 34%, rgba(0,0,0,.055) 88%), linear-gradient(180deg, rgba(255,255,255,.08), transparent 26%, rgba(0,0,0,.025))"
       };
-  const foilStyle = isCloth && !usesDarkInk
+  const foilStyle = isCloth
     ? {
         color: "transparent",
         backgroundImage:
@@ -9002,37 +9019,53 @@ function BookCoverPreview({
         backgroundClip: "text",
         filter: "drop-shadow(0 1px 0 rgba(43,29,8,.42)) drop-shadow(0 -1px 0 rgba(255,244,191,.12))"
       }
-    : undefined;
+    : { color: printInk };
 
   return (
     <div className="flex justify-center py-3" aria-label="表紙プレビュー">
       <div
         className="relative isolate h-[408px] w-full max-w-[520px] overflow-hidden rounded-[22px] border border-[#e8dcc8]/20 shadow-[inset_0_1px_0_rgba(255,255,255,.34)]"
-        style={{
-          background:
-            "linear-gradient(180deg, #e9e2d8 0%, #ddd3c5 71%, #b58b5c 71.3%, #9f7448 100%)"
-        }}
+        style={{ backgroundColor: "#ebe3d9" }}
       >
-        <div className="absolute inset-x-0 top-0 h-[71%] bg-[radial-gradient(circle_at_50%_17%,rgba(255,255,255,.72),transparent_47%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-[29%] opacity-45 [background-image:repeating-linear-gradient(3deg,rgba(66,38,18,.13)_0_1px,transparent_1px_6px)]" />
+        <div
+          className="absolute inset-x-0 top-0 h-[71%] bg-[#ebe3d9]"
+          style={{
+            backgroundImage: [
+              "linear-gradient(180deg, rgba(255,255,255,.13), rgba(109,91,73,.035))",
+              "repeating-linear-gradient(7deg, transparent 0 5px, rgba(91,70,53,.022) 5px 6px, transparent 6px 12px)",
+              "repeating-linear-gradient(93deg, rgba(255,255,255,.028) 0 1px, transparent 1px 9px)"
+            ].join(",")
+          }}
+        />
+        <div
+          className="absolute inset-x-0 bottom-0 h-[29%] border-t border-[#a87343]/35 bg-[#b6814d]"
+          style={{
+            backgroundImage: [
+              "linear-gradient(180deg, rgba(255,255,255,.13), transparent 18%, rgba(69,38,17,.055))",
+              "repeating-linear-gradient(3deg, rgba(78,44,19,.15) 0 1px, transparent 1px 8px)",
+              "repeating-linear-gradient(93deg, rgba(255,255,255,.045) 0 1px, transparent 1px 24px)",
+              "repeating-linear-gradient(11deg, transparent 0 31px, rgba(76,42,20,.06) 31px 33px, transparent 33px 66px)"
+            ].join(",")
+          }}
+        />
         <div className="absolute inset-x-[12%] bottom-[42px] h-[25px] rounded-full bg-black/30 blur-xl" />
         <div className="absolute left-1/2 top-[44px] h-[334px] w-[254px] -translate-x-1/2 [perspective:1200px]">
           <div className="relative h-[320px] w-[226px] [transform:rotateY(-7deg)_rotateX(1deg)_rotateZ(-.35deg)] [transform-style:preserve-3d]">
             <div
-              className="absolute left-[9px] top-[4px] h-[317px] w-[231px] rounded-r-[9px] border border-black/30 shadow-[9px_14px_22px_rgba(43,29,16,.28)]"
-              style={{ backgroundColor: isMinimal ? "#cfc5b4" : coverColor }}
+              className="absolute left-[10px] top-[4px] h-[317px] w-[228px] rounded-r-[8px] border border-black/30 shadow-[9px_14px_22px_rgba(43,29,16,.26)]"
+              style={{ backgroundColor: coverColor }}
             />
 
             <div
-              className="absolute left-[8px] top-[6px] h-[307px] w-[230px] rounded-r-[8px] border-y border-r border-[#c7bda9] shadow-[inset_-3px_0_5px_rgba(98,75,47,.12)]"
+              className="absolute left-[9px] top-[6px] h-[307px] w-[226px] rounded-r-[7px] border-y border-r border-[#c7bda9] shadow-[inset_-2px_0_4px_rgba(98,75,47,.1)]"
               style={{
                 backgroundColor: "#f2ecdf",
                 backgroundImage:
                   "linear-gradient(90deg, #d8cebc 0%, #eee7d9 20%, #faf6ec 72%, #d4c9b5 100%), repeating-linear-gradient(0deg, rgba(111,86,53,.17) 0 1px, transparent 1px 3px)"
               }}
             >
-              <div className="absolute inset-y-[7px] right-[5px] w-px bg-[#bcae96]/70" />
-              <div className="absolute inset-y-[10px] right-[10px] w-px bg-white/65" />
+              <div className="absolute inset-y-[7px] right-[4px] w-px bg-[#bcae96]/70" />
+              <div className="absolute inset-y-[10px] right-[8px] w-px bg-white/65" />
               <div className="absolute inset-x-[8px] bottom-[4px] h-px bg-[#b8aa92]/55" />
             </div>
 
@@ -9041,65 +9074,37 @@ function BookCoverPreview({
               style={coverTexture}
             >
               <div className="absolute inset-0 opacity-70 [background-image:linear-gradient(100deg,rgba(255,255,255,.08),transparent_24%,rgba(0,0,0,.08)_100%)]" />
-              <div className="absolute inset-y-0 left-0 w-[27px] bg-[linear-gradient(90deg,rgba(0,0,0,.24),rgba(255,255,255,.035)_48%,rgba(0,0,0,.15))] shadow-[inset_-4px_0_8px_rgba(0,0,0,.12)]" />
-              <div className={`absolute inset-y-0 left-[27px] w-px ${isMinimal ? "bg-stone-700/22" : "bg-white/15"} shadow-[1px_0_1px_rgba(0,0,0,.22)]`} />
+              <div className="absolute inset-y-0 left-0 w-[18px] bg-[linear-gradient(90deg,rgba(0,0,0,.24),rgba(255,255,255,.035)_52%,rgba(0,0,0,.15))] shadow-[inset_-3px_0_6px_rgba(0,0,0,.11)]" />
+              <div className="absolute inset-y-0 left-[18px] w-px bg-white/15 shadow-[1px_0_1px_rgba(0,0,0,.22)]" />
               <div className="absolute inset-x-2 top-0 h-px bg-white/20" />
               <div className="absolute inset-x-2 bottom-0 h-px bg-black/25" />
 
-              {isPhoto && (
-                <div className="absolute inset-x-[35px] top-[102px] h-[156px] overflow-hidden border border-black/15 bg-black/10 shadow-[0_8px_17px_rgba(0,0,0,.15),inset_0_0_0_1px_rgba(255,255,255,.13)]">
-                  {coverPhoto?.url ? (
-                    <img
-                      src={coverPhoto.url}
-                      alt="表紙に添えた写真"
-                      className="h-full w-full object-cover saturate-[0.9] contrast-[0.96]"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center bg-white/[0.035]">
-                      <ScanLine size={25} className={usesDarkInk ? "text-stone-700/35" : "text-white/30"} strokeWidth={1.3} />
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,.1),transparent_40%,rgba(55,42,29,.08))]" />
-                  <div className="absolute inset-0 opacity-25 [background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.1)_0_1px,transparent_1px_3px)]" />
+              {isPrint && coverPhoto?.url && (
+                <div className="absolute inset-x-[34px] top-[112px] h-[104px] overflow-hidden border border-black/10 bg-black/5 shadow-[0_5px_12px_rgba(0,0,0,.14),inset_0_0_0_1px_rgba(255,255,255,.1)]">
+                  <img
+                    src={coverPhoto.url}
+                    alt="表紙に添えた写真"
+                    className="h-full w-full object-cover saturate-[0.95] contrast-[0.98]"
+                  />
+                  <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,.08),transparent_42%,rgba(55,42,29,.045))]" />
                 </div>
               )}
 
-              <div className={`absolute inset-x-[37px] ${isPhoto ? "top-[27px]" : isMinimal ? "top-[72px]" : "top-[101px]"} text-center`}>
+              <div className={`absolute inset-x-[37px] ${isPrint ? (coverPhoto?.url ? "top-[50px]" : "top-[100px]") : "top-[104px]"} text-center`}>
                 <p
-                  className={`${usesDarkInk ? "text-stone-800/90" : isCloth ? "" : "text-white/90"} text-[1.03rem] leading-[1.65] text-narrative tracking-[0.08em] whitespace-pre-wrap`}
+                  className="text-[1.02rem] leading-[1.65] text-narrative tracking-[0.1em] whitespace-pre-wrap"
                   style={foilStyle}
                 >
                   {title || "わたしの物語"}
                 </p>
-
-                <div className={`mx-auto ${isPhoto ? "my-2.5" : "my-5"} h-px w-8 ${usesDarkInk ? "bg-stone-700/28" : isCloth ? "bg-amber-200/38" : "bg-white/26"}`} />
-
-                <p
-                  className={`${usesDarkInk ? "text-stone-700/62" : isCloth ? "text-amber-100/64" : "text-white/58"} text-[0.64rem] leading-[1.9] tracking-[0.12em] whitespace-pre-wrap`}
-                >
-                  {subtitle || "これまでの時間を、家族へ"}
-                </p>
               </div>
 
-              {isMinimal && (
-                <div className="absolute inset-x-[43px] bottom-[65px] flex items-center gap-3 opacity-48" aria-hidden="true">
-                  <span className="h-px flex-1 bg-stone-600/35" />
-                  <span className="h-1.5 w-1.5 rounded-full border border-stone-600/45" />
-                  <span className="h-px flex-1 bg-stone-600/35" />
-                </div>
-              )}
-
               <p
-                className={`absolute inset-x-[37px] ${isPhoto ? "bottom-[28px]" : "bottom-[29px]"} text-center ${usesDarkInk ? "text-stone-700/55" : isCloth ? "text-amber-100/66" : "text-white/52"} text-[0.6rem] tracking-[0.16em]`}
-                style={isCloth ? foilStyle : undefined}
+                className={`absolute inset-x-[37px] ${isPrint && coverPhoto?.url ? "bottom-[32px]" : "bottom-[39px]"} text-center text-[0.6rem] tracking-[0.15em]`}
+                style={foilStyle}
               >
-                {authorName || ""}
+                {authorName || "あなた"}
               </p>
-              {isPhoto && (
-                <p className={`absolute inset-x-[37px] bottom-[12px] text-center ${usesDarkInk ? "text-stone-700/42" : "text-white/38"} text-[0.42rem] tracking-[0.28em]`}>
-                  縦糸横糸
-                </p>
-              )}
             </div>
           </div>
         </div>
@@ -10884,10 +10889,10 @@ export function Scene_BookBuilder({
   const steps = readOnly ? ["表紙", "収録", "紙面"] : ["表紙", "収録", "紙面", "注文", "完了"];
   const [stepIndex, setStepIndex] = useState(0);
   const [coverPhoto, setCoverPhoto] = useState(null);
-  const [coverColor, setCoverColor] = useState("#1f3a36");
+  const [clothCoverColor, setClothCoverColor] = useState(CLOTH_COVER_COLORS[0].value);
+  const [printCoverColor, setPrintCoverColor] = useState(PRINT_COVER_COLORS[0].value);
   const [coverStyle, setCoverStyle] = useState("cloth");
   const [bookTitle, setBookTitle] = useState("わたしの物語");
-  const [bookSubtitle, setBookSubtitle] = useState("これまでの時間を、家族へ");
   const [coverPhotoCorrectionOpen, setCoverPhotoCorrectionOpen] = useState(false);
 
   const [bookStories, setBookStories] = useState([]);
@@ -10895,13 +10900,8 @@ export function Scene_BookBuilder({
   const [storiesLoading, setStoriesLoading] = useState(false);
   const [includedStoryIds, setIncludedStoryIds] = useState([]);
 
-  const colors = [
-    { label: "深緑", value: "#1f3a36" },
-    { label: "紺", value: "#0f2747" },
-    { label: "水色", value: "#c6d7e9" },
-    { label: "薄桃", value: "#e7d3dc" },
-    { label: "生成", value: "#d9cdbd" }
-  ];
+  const coverColor = coverStyle === "cloth" ? clothCoverColor : printCoverColor;
+  const colors = coverStyle === "cloth" ? CLOTH_COVER_COLORS : PRINT_COVER_COLORS;
 
   const getQuestionForAnswer = (answer) => {
     return (questionSet || []).find(q =>
@@ -11035,7 +11035,14 @@ export function Scene_BookBuilder({
       url: URL.createObjectURL(file),
       name: file.name || "cover-photo"
     });
-    setCoverStyle("photo");
+    setCoverStyle("print");
+  };
+
+  const clearCoverPhoto = () => {
+    if (coverPhoto?.url) {
+      try { URL.revokeObjectURL(coverPhoto.url); } catch (e) {}
+    }
+    setCoverPhoto(null);
   };
 
   const includedStories = [...bookStories]
@@ -11167,8 +11174,7 @@ export function Scene_BookBuilder({
 
             <BookCoverPreview
               title={bookTitle}
-              subtitle={bookSubtitle}
-              authorName={withHonorific(userName)}
+              authorName={String(userName || "").trim() || "あなた"}
               coverPhoto={coverPhoto}
               coverColor={coverColor}
               coverStyle={coverStyle}
@@ -11184,11 +11190,18 @@ export function Scene_BookBuilder({
                 <p className="text-white/40 text-xs tracking-widest mb-3">
                   仕立て
                 </p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {[
-                    { value: "cloth", label: "布張り", detail: "静かな質感" },
-                    { value: "photo", label: "写真", detail: "一枚を添える" },
-                    { value: "minimal", label: "余白", detail: "生成りの紙" }
+                    {
+                      value: "cloth",
+                      label: "布張りハードカバー",
+                      detail: "布の質感と金の箔押し"
+                    },
+                    {
+                      value: "print",
+                      label: "プリントハードカバー",
+                      detail: "滑らかな表紙・写真は任意"
+                    }
                   ].map(style => (
                     <button
                       key={style.value}
@@ -11200,49 +11213,76 @@ export function Scene_BookBuilder({
                           : "border-white/[0.08] bg-white/[0.018]"
                       }`}
                     >
-                      <span className="block text-white/72 text-sm mb-1">{style.label}</span>
+                      <span className="block text-white/72 text-[0.82rem] leading-relaxed mb-1">{style.label}</span>
                       <span className="block text-white/30 text-[0.62rem] leading-relaxed">{style.detail}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {coverStyle === "photo" && (
-                <button
-                  type="button"
-                  onClick={() => setCoverPhotoCorrectionOpen(true)}
-                  className="btn-quiet w-full py-4 rounded-full text-white/80 mb-6"
-                >
-                  {coverPhoto ? "表紙の写真を変える" : "表紙に写真を添える"}
-                </button>
+              {coverStyle === "print" && (
+                <div className="mb-6">
+                  <p className="text-white/40 text-xs tracking-widest mb-3">
+                    表紙写真（任意）
+                  </p>
+                  <div className={`grid gap-2 ${coverPhoto ? "grid-cols-[1fr_auto]" : "grid-cols-1"}`}>
+                    <button
+                      type="button"
+                      onClick={() => setCoverPhotoCorrectionOpen(true)}
+                      className="btn-quiet w-full py-4 rounded-full text-white/80"
+                    >
+                      {coverPhoto ? "写真を変える" : "写真を添える"}
+                    </button>
+                    {coverPhoto && (
+                      <button
+                        type="button"
+                        onClick={clearCoverPhoto}
+                        className="rounded-full border border-white/10 px-5 text-xs text-white/48 transition hover:bg-white/[0.04] hover:text-white/72"
+                      >
+                        写真を外す
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-2 text-[0.66rem] leading-relaxed text-white/28">
+                    写真を載せず、タイトルとお名前だけでも仕上げられます。
+                  </p>
+                </div>
               )}
 
-              {coverStyle !== "minimal" && (
               <div className="mb-6">
                 <p className="text-white/40 text-xs tracking-widest mb-3">
                   表紙の色
                 </p>
 
-                <div className="flex gap-3">
+                <div className="grid grid-cols-4 gap-2">
                   {colors.map(color => (
                     <button
                       key={color.value}
                       type="button"
-                      onClick={() => setCoverColor(color.value)}
-                      className={`w-10 h-10 rounded-full border transition ${
+                      onClick={() => {
+                        if (coverStyle === "cloth") setClothCoverColor(color.value);
+                        else setPrintCoverColor(color.value);
+                      }}
+                      className={`flex min-w-0 flex-col items-center rounded-2xl border px-1 py-3 transition ${
                         coverColor === color.value
-                          ? "border-white scale-105"
-                          : "border-white/15"
+                          ? "border-white/55 bg-white/[0.06]"
+                          : "border-white/[0.08] bg-white/[0.015]"
                       }`}
-                      style={{ backgroundColor: color.value }}
                       aria-label={color.label}
-                    />
+                    >
+                      <span
+                        className="mb-2 h-9 w-9 rounded-full border border-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,.18)]"
+                        style={{ backgroundColor: color.value }}
+                      />
+                      <span className="block min-h-[1.7rem] text-center text-[0.58rem] leading-[1.35] text-white/48">
+                        {color.label}
+                      </span>
+                    </button>
                   ))}
                 </div>
               </div>
-              )}
 
-              <div className="mb-5">
+              <div>
                 <p className="text-white/40 text-xs tracking-widest mb-2">
                   タイトル
                 </p>
@@ -11251,19 +11291,6 @@ export function Scene_BookBuilder({
                   type="text"
                   value={bookTitle}
                   onChange={e => setBookTitle(e.target.value)}
-                  className="quiet-input"
-                />
-              </div>
-
-              <div>
-                <p className="text-white/40 text-xs tracking-widest mb-2">
-                  副題
-                </p>
-
-                <input
-                  type="text"
-                  value={bookSubtitle}
-                  onChange={e => setBookSubtitle(e.target.value)}
                   className="quiet-input"
                 />
               </div>

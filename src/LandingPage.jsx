@@ -203,12 +203,12 @@ export default function LandingPage() {
               <p className="landing-kicker">紙の温かみと、声の記録。</p>
               <h2>開けば読めて、<br />かざせば声に会える。</h2>
               <p className="landing-body-copy">
-                一つひとつの語りを、写真とともにB5判の布張り本へ。
+                一つひとつの語りを、B5判のハードカバーへ。
                 紙面のQRコードから、語ったそのままの声を聴くことができます。
               </p>
               <dl className="landing-specs">
                 <div><dt>判型</dt><dd>B5・182 × 257 mm</dd></div>
-                <div><dt>製本</dt><dd>布張り・ハードカバー</dd></div>
+                <div><dt>製本</dt><dd>布張り／プリント・ハードカバー</dd></div>
                 <div><dt>音声</dt><dd>各語りに音声QR</dd></div>
               </dl>
             </div>
@@ -237,7 +237,7 @@ export default function LandingPage() {
                 <li>問いの配信と音声録音</li>
                 <li>文字起こしと文章づくり</li>
                 <li>写真の補正と紙面編集</li>
-                <li>B5判・布張り本 1冊</li>
+                <li>B5判・ハードカバー 1冊</li>
                 <li>語った声を聴ける音声QR</li>
                 <li>完成前の確認と操作サポート</li>
               </ul>
