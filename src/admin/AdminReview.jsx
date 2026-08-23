@@ -127,6 +127,34 @@ function formatAdminYen(value) {
   return `${new Intl.NumberFormat("ja-JP").format(Number(value || 0))}円`;
 }
 
+function effectiveCampaignStatus(campaign, now = Date.now()) {
+  if (!campaign) return "draft";
+  if (campaign.status === "draft" || campaign.status === "ended") return campaign.status;
+  const endsAt = campaign.ends_at ? new Date(campaign.ends_at).getTime() : null;
+  if (Number.isFinite(endsAt) && endsAt <= now) return "ended";
+  if (campaign.status === "paused") return campaign.status;
+  const startsAt = campaign.starts_at ? new Date(campaign.starts_at).getTime() : null;
+  if (Number.isFinite(startsAt) && startsAt > now) return "scheduled";
+  return "active";
+}
+
+function campaignStatusLabel(status) {
+  return {
+    draft: "下書き",
+    scheduled: "開始前",
+    active: "実施中",
+    paused: "停止中",
+    ended: "終了"
+  }[status] || status || "未設定";
+}
+
+function campaignStatusTone(status) {
+  if (status === "active") return "success";
+  if (status === "scheduled") return "info";
+  if (status === "paused") return "warning";
+  return "neutral";
+}
+
 async function functionErrorDetails(error, data) {
   if (data && typeof data === "object") return data;
   try {
@@ -448,6 +476,7 @@ function CommercePanel({
   onEndSalesMode,
   onSetPrice,
   onSaveCampaign,
+  onSetCampaignActive,
   onGenerateCodes,
   onSetCodeActive,
   onUpdateGift
@@ -588,12 +617,44 @@ function CommercePanel({
         )}
 
         <div className="mt-5 divide-y divide-slate-100 border-t border-slate-100">
-          {campaigns.length ? campaigns.map(item => (
-            <div key={item.id} className="flex flex-col justify-between gap-2 py-4 sm:flex-row sm:items-center">
-              <div><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-medium">{item.name}</p><StatusPill tone={item.status === "active" ? "success" : "neutral"}>{item.status}</StatusPill></div><p className="mt-1 text-xs text-slate-400">{item.campaign_type} · {item.discount_type === "amount" ? formatAdminYen(item.discount_value) : item.discount_type === "full" ? "全額" : `${item.discount_value}%`}</p></div>
-              <p className="text-xs text-slate-400">{codes.filter(code => code.campaign_id === item.id).length}コード</p>
-            </div>
-          )) : <p className="py-8 text-center text-sm text-slate-400">キャンペーンはまだありません。</p>}
+          {campaigns.length ? campaigns.map(item => {
+            const displayStatus = effectiveCampaignStatus(item, now);
+            const canPause = ["active", "scheduled"].includes(displayStatus);
+            const canResume = displayStatus === "paused";
+            const endsAt = item.ends_at ? new Date(item.ends_at).getTime() : null;
+            const resumeExpired = canResume && Number.isFinite(endsAt) && endsAt <= now;
+            return (
+              <div key={item.id} className="flex flex-col justify-between gap-3 py-4 sm:flex-row sm:items-center">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium">{item.name}</p>
+                    <StatusPill tone={campaignStatusTone(displayStatus)}>{campaignStatusLabel(displayStatus)}</StatusPill>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">{item.campaign_type} · {item.discount_type === "amount" ? formatAdminYen(item.discount_value) : item.discount_type === "full" ? "全額" : `${item.discount_value}%`}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <p className="text-xs text-slate-400">{codes.filter(code => code.campaign_id === item.id).length}コード</p>
+                  {salesModeActive && (canPause || canResume) && (
+                    <button
+                      type="button"
+                      disabled={busy || resumeExpired}
+                      title={resumeExpired ? "終了日時を過ぎているため再開できません" : undefined}
+                      onClick={() => {
+                        const nextActive = canResume;
+                        const message = nextActive
+                          ? `「${item.name}」を再開します。利用期限・利用上限内のコードが再び利用可能になります。続けますか？`
+                          : `「${item.name}」を停止します。紐づく割引コードは直ちに利用できなくなります。利用履歴・注文履歴は残ります。続けますか？`;
+                        if (window.confirm(message)) onSetCampaignActive(item.id, nextActive);
+                      }}
+                      className={`rounded-lg border px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40 ${canPause ? "border-rose-200 text-rose-700" : "border-emerald-200 text-emerald-700"}`}
+                    >
+                      {canPause ? "停止" : resumeExpired ? "再開不可" : "再開"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          }) : <p className="py-8 text-center text-sm text-slate-400">キャンペーンはまだありません。</p>}
         </div>
       </section>
 
@@ -2170,6 +2231,14 @@ export default function AdminReview({ supabaseClient }) {
     if (actionError) throw actionError;
   }, "割引キャンペーンを保存しました。");
 
+  const setDiscountCampaignActive = (campaignId, active) => runCommerceAction(async () => {
+    const { error: actionError } = await supabaseClient.rpc("admin_set_discount_campaign_active", {
+      input_campaign_id: campaignId,
+      input_active: active
+    });
+    if (actionError) throw actionError;
+  }, active ? "割引キャンペーンを再開しました。" : "割引キャンペーンを停止しました。");
+
   const generateDiscountCodes = (input) => runCommerceAction(async () => {
     const { error: actionError } = await supabaseClient.rpc("admin_generate_discount_codes", {
       input_campaign_id: input.campaignId,
@@ -2303,6 +2372,7 @@ export default function AdminReview({ supabaseClient }) {
                 onEndSalesMode={endSalesMode}
                 onSetPrice={setCommercePrice}
                 onSaveCampaign={saveDiscountCampaign}
+                onSetCampaignActive={setDiscountCampaignActive}
                 onGenerateCodes={generateDiscountCodes}
                 onSetCodeActive={setDiscountCodeActive}
                 onUpdateGift={updateGiftFulfillment}
