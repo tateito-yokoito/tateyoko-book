@@ -387,6 +387,7 @@ function HiddenZone({ entries, actionTarget, onOpen, onRestore, onRetire }) {
           const snapshot = entry.snapshot || {};
           const isAccount = entry.entity_type === "account";
           const isRetired = isAccount && entry.lifecycle_status === "retired";
+          const followsAccountRetirement = !isAccount && entry.trash_origin === "account_retirement";
           const label = withoutHonorific(snapshot.display_name || snapshot.title) || snapshot.email || "名称未登録";
           const busy = actionTarget.includes(entry.entity_id);
           return (
@@ -396,6 +397,7 @@ function HiddenZone({ entries, actionTarget, onOpen, onRestore, onRetire }) {
                   <p className="truncate font-medium text-slate-900">{label}</p>
                   <StatusPill>{isAccount ? "アカウント" : "物語"}</StatusPill>
                   {isAccount && <StatusPill tone={isRetired ? "warning" : "neutral"}>{isRetired ? "退役・メール解放済み" : "非表示のみ"}</StatusPill>}
+                  {followsAccountRetirement && <StatusPill tone="warning">アカウント退役に連動</StatusPill>}
                 </div>
                 <p className="mt-1 truncate text-xs text-slate-500">{snapshot.email || snapshot.owner_email || "連絡先未登録"}</p>
                 <p className="mt-2 text-xs text-slate-400">非表示 {formatDate(entry.trashed_at)}</p>
@@ -406,10 +408,14 @@ function HiddenZone({ entries, actionTarget, onOpen, onRestore, onRetire }) {
                     退役してメール解放
                   </button>
                 )}
-                <button type="button" disabled={busy} onClick={() => onRestore(entry)} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 disabled:opacity-40">
-                  {busy ? <LoaderCircle size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-                  {isRetired ? "復旧" : "表示中に戻す"}
-                </button>
+                {followsAccountRetirement ? (
+                  <span className="rounded-xl border border-amber-200 px-3 py-2 text-xs text-amber-700">アカウント復旧時に戻る</span>
+                ) : (
+                  <button type="button" disabled={busy} onClick={() => onRestore(entry)} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 disabled:opacity-40">
+                    {busy ? <LoaderCircle size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                    {isRetired ? "復旧" : "表示中に戻す"}
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -825,7 +831,8 @@ function AccountDetailPanel({
   onRestore,
   canTrash,
   hiddenEntry,
-  trashLoading
+  trashLoading,
+  actionError
 }) {
   const account = detail?.account || null;
   const projects = [
@@ -884,10 +891,15 @@ function AccountDetailPanel({
                 </button>
                 <p className="mt-2 text-xs leading-5 text-amber-800/70">
                   {hiddenEntry.lifecycle_status === "retired"
-                    ? "元のメールが別アカウントで使用中の場合は、自動では復旧しません。"
+                    ? `元のメールが別アカウントで使用中の場合は、自動では復旧しません。退役時に連動非表示にした物語${Number(hiddenEntry.snapshot?.auto_hidden_project_count || 0)}件も表示中に戻します。`
                     : "メールアドレスとログイン状態は変更されていません。"}
                 </p>
               </section>
+            )}
+            {actionError && (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm leading-6 text-rose-700">
+                {actionError}
+              </div>
             )}
             {canTrash && !hiddenEntry && (
               <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-5">
@@ -897,9 +909,11 @@ function AccountDetailPanel({
                   onClick={() => onMoveToTrash(account)}
                   className="inline-flex items-center gap-2 text-sm font-medium text-rose-700 disabled:opacity-40"
                 >
-                  <Trash2 size={16} />{trashLoading ? "退役中…" : "このアカウントを退役させる"}
+                  <Trash2 size={16} />{trashLoading ? "退役中…" : "退役してメールを解放する"}
                 </button>
-                <p className="mt-2 text-xs leading-5 text-rose-700/65">管理画面から非表示にし、ログインを停止してメールを新規登録へ解放します。物語と元データは削除されません。</p>
+                <p className="mt-2 text-xs leading-5 text-rose-700/65">
+                  管理画面から非表示にし、ログインを停止してメールを新規登録へ解放します。所有する物語{detail?.owned_projects?.length || 0}件も非表示にします。購入者・お手伝いとして関係するだけの物語と元データは変更しません。
+                </p>
               </section>
             )}
           </div>
@@ -1043,16 +1057,25 @@ function DetailPanel({
             <section><h3 className="mb-3 text-sm font-medium">配信履歴</h3><DeliveryHistoryList rows={detail.deliveries || []} /></section>
             {hiddenEntry && (
               <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
-                <button
-                  type="button"
-                  disabled={trashLoading}
-                  onClick={() => onRestore(hiddenEntry)}
-                  className="inline-flex items-center gap-2 text-sm font-medium text-amber-800 disabled:opacity-40"
-                >
-                  {trashLoading ? <LoaderCircle size={16} className="animate-spin" /> : <RotateCcw size={16} />}
-                  この物語を表示中に戻す
-                </button>
-                <p className="mt-2 text-xs leading-5 text-amber-800/70">回答・音声・写真・購入情報は保持されています。</p>
+                {hiddenEntry.trash_origin === "account_retirement" ? (
+                  <>
+                    <p className="text-sm font-medium text-amber-800">所有者アカウントの退役に連動して非表示</p>
+                    <p className="mt-2 text-xs leading-5 text-amber-800/70">退役したアカウントを復旧すると、この物語も表示中に戻ります。回答・音声・写真・購入情報は保持されています。</p>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={trashLoading}
+                      onClick={() => onRestore(hiddenEntry)}
+                      className="inline-flex items-center gap-2 text-sm font-medium text-amber-800 disabled:opacity-40"
+                    >
+                      {trashLoading ? <LoaderCircle size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                      この物語を表示中に戻す
+                    </button>
+                    <p className="mt-2 text-xs leading-5 text-amber-800/70">回答・音声・写真・購入情報は保持されています。</p>
+                  </>
+                )}
               </section>
             )}
             {canTrash && !hiddenEntry && (
@@ -1096,6 +1119,7 @@ export default function AdminReview({ supabaseClient }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [trashTarget, setTrashTarget] = useState("");
+  const [trashActionError, setTrashActionError] = useState("");
   const [trashEntries, setTrashEntries] = useState([]);
   const [organizationModeStatus, setOrganizationModeStatus] = useState({
     active: false,
@@ -1412,11 +1436,12 @@ export default function AdminReview({ supabaseClient }) {
     }
 
     const isAccount = entityType === "account";
+    const ownedProjectCount = Math.max(0, Number(entity?.owned_project_count || 0));
     const label = isAccount
       ? withoutHonorific(entity.display_name) || entity.email || "このアカウント"
       : projectDisplayName(entity);
     const message = isAccount
-      ? `「${label}」を退役させます。\n\n管理画面から非表示になり、ログインが停止され、現在のメールアドレスは新規登録に解放されます。所有する物語と元データは削除されません。続けますか？`
+      ? `「${label}」を退役させ、メールアドレスを解放します。\n\n管理画面から非表示になり、ログインが停止されます。所有する物語${ownedProjectCount}件も非表示になります。購入者・お手伝いとして関係するだけの物語と元データは変更しません。続けますか？`
       : `「${label}」を管理画面で非表示にします。\n\n回答・音声・写真・購入情報は削除されません。続けますか？`;
 
     if (!window.confirm(message)) return;
@@ -1424,6 +1449,7 @@ export default function AdminReview({ supabaseClient }) {
     const targetKey = `${entityType}:${entityId}`;
     setTrashTarget(targetKey);
     setError("");
+    setTrashActionError("");
     setNotice("");
     try {
       if (isAccount) {
@@ -1434,6 +1460,7 @@ export default function AdminReview({ supabaseClient }) {
           const details = await functionErrorDetails(lifecycleError, data);
           throw new Error(details.error || lifecycleError.message);
         }
+        if (!data?.success) throw new Error(data?.error || "アカウントの退役処理を確認できませんでした。");
       } else {
         const { error: trashError } = await supabaseClient.rpc("move_admin_entity_to_trash", {
           input_entity_type: entityType,
@@ -1448,11 +1475,13 @@ export default function AdminReview({ supabaseClient }) {
       setAccountDetailId(null);
       setAccountDetail(null);
       setNotice(isAccount
-        ? `${label}を退役させ、メールアドレスを新規登録へ解放しました。元データは保持されています。`
+        ? `${label}を退役させ、メールアドレスを解放しました。所有する物語${ownedProjectCount}件も非表示にしました。元データは保持されています。`
         : `${label}を非表示にしました。元データは保持されています。`);
       await loadDashboard();
     } catch (trashError) {
-      setError(trashError?.message || "非表示処理を完了できませんでした。");
+      const actionError = trashError?.message || "非表示処理を完了できませんでした。";
+      setError(actionError);
+      setTrashActionError(actionError);
     } finally {
       setTrashTarget("");
     }
@@ -1466,9 +1495,10 @@ export default function AdminReview({ supabaseClient }) {
     const snapshot = entry.snapshot || {};
     const isAccount = entityType === "account";
     const isRetired = isAccount && entry.lifecycle_status === "retired";
+    const autoHiddenProjectCount = Math.max(0, Number(snapshot.auto_hidden_project_count || 0));
     const label = withoutHonorific(snapshot.display_name || snapshot.title) || snapshot.email || "名称未登録";
     const confirmation = isRetired
-      ? `「${label}」を復旧します。\n\n元のメールアドレスが別のアカウントで使われている場合は復旧できません。続けますか？`
+      ? `「${label}」を復旧します。\n\n退役時に連動非表示にした物語${autoHiddenProjectCount}件も表示中に戻します。元のメールアドレスが別のアカウントで使われている場合は復旧できません。続けますか？`
       : `「${label}」を表示中に戻します。続けますか？`;
 
     if (!restoreEmail && !window.confirm(confirmation)) return;
@@ -1476,6 +1506,7 @@ export default function AdminReview({ supabaseClient }) {
     const targetKey = `restore:${entityType}:${entityId}`;
     setTrashTarget(targetKey);
     setError("");
+    setTrashActionError("");
     setNotice("");
     let retryEmail = "";
 
@@ -1500,6 +1531,7 @@ export default function AdminReview({ supabaseClient }) {
             throw new Error(details.error || lifecycleError.message);
           }
         }
+        if (!lifecycleError && !data?.success) throw new Error(data?.error || "アカウントの復旧処理を確認できませんでした。");
       } else {
         const { error: restoreError } = await supabaseClient.rpc("restore_admin_entity_from_trash", {
           input_entity_type: entityType,
@@ -1518,7 +1550,9 @@ export default function AdminReview({ supabaseClient }) {
         await loadDashboard();
       }
     } catch (restoreError) {
-      setError(restoreError?.message || "表示中に戻せませんでした。");
+      const actionError = restoreError?.message || "表示中に戻せませんでした。";
+      setError(actionError);
+      setTrashActionError(actionError);
     } finally {
       setTrashTarget("");
     }
@@ -1530,7 +1564,8 @@ export default function AdminReview({ supabaseClient }) {
     await moveToTrash("account", {
       id: entry.entity_id,
       display_name: entry.snapshot?.display_name,
-      email: entry.snapshot?.email
+      email: entry.snapshot?.email,
+      owned_project_count: entry.snapshot?.owned_project_count || 0
     });
   }
 
@@ -1591,6 +1626,7 @@ export default function AdminReview({ supabaseClient }) {
     if (hiddenAccount && (!allowHidden || !organizationModeActive)) return;
     setDetailId(null);
     setDetail(null);
+    setTrashActionError("");
     setAccountDetailId(accountId);
     setAccountDetail(null);
     setAccountDetailLoading(true);
@@ -1812,9 +1848,13 @@ export default function AdminReview({ supabaseClient }) {
           canTrash={adminRole === "owner" && organizationModeActive}
           hiddenEntry={hiddenAccountEntry}
           trashLoading={trashTarget.includes(`account:${accountDetailId}`)}
-          onMoveToTrash={(account) => moveToTrash("account", account)}
+          actionError={trashActionError}
+          onMoveToTrash={(account) => moveToTrash("account", {
+            ...account,
+            owned_project_count: accountDetail?.owned_projects?.length || 0
+          })}
           onRestore={restoreFromTrash}
-          onClose={() => { setAccountDetailId(null); setAccountDetail(null); }}
+          onClose={() => { setTrashActionError(""); setAccountDetailId(null); setAccountDetail(null); }}
         />
       )}
 
