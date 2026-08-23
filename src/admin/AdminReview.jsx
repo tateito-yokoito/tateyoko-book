@@ -359,7 +359,7 @@ function OrganizationModeDialog({
               placeholder="現在の管理者パスワードを入力"
               autoComplete="current-password"
               disabled={busy}
-              className="w-full rounded-xl border border-slate-200 px-4 py-3.5 text-sm outline-none transition focus:border-slate-500"
+              className="admin-password-input w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm text-slate-900 caret-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-500"
             />
             <p className="mt-2 text-xs leading-5 text-slate-500">パスワードを設定していない、または不明な場合は、上の認証メールを利用してください。</p>
           </div>

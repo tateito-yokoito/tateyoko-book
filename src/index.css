@@ -181,6 +181,22 @@ input.quiet-input:-webkit-autofill:active {
   transition: background-color 9999s ease-in-out 0s;
 }
 
+.admin-password-input {
+  color: #0f172a;
+  caret-color: #0f172a;
+  background-color: #ffffff;
+}
+
+.admin-password-input:-webkit-autofill,
+.admin-password-input:-webkit-autofill:hover,
+.admin-password-input:-webkit-autofill:focus,
+.admin-password-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #0f172a;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
 .quiet-recording-progress {
   transition: background 1.6s ease-out;
 }
