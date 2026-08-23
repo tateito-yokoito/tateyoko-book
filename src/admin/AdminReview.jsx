@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import {
   AlertCircle,
   Bell,
+  BadgePercent,
   BookOpen,
   CheckCircle2,
   ChevronRight,
@@ -14,6 +15,8 @@ import {
   LoaderCircle,
   LogOut,
   Mail,
+  PackageCheck,
+  Plus,
   RefreshCw,
   RotateCcw,
   Search,
@@ -30,7 +33,8 @@ const TAB_ITEMS = [
   { id: "projects", label: "物語", icon: BookOpen },
   { id: "accounts", label: "アカウント", icon: UsersRound },
   { id: "deliveries", label: "配信", icon: Mail },
-  { id: "payments", label: "決済", icon: CreditCard }
+  { id: "payments", label: "決済", icon: CreditCard },
+  { id: "sales", label: "販売", icon: BadgePercent }
 ];
 
 const ACTIVITY_LABELS = {
@@ -117,6 +121,10 @@ function formatRemaining(expiresAt, now = Date.now()) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatAdminYen(value) {
+  return `${new Intl.NumberFormat("ja-JP").format(Number(value || 0))}円`;
 }
 
 async function functionErrorDetails(error, data) {
@@ -372,6 +380,272 @@ function OrganizationModeDialog({
       </section>
     </div>
   ), document.body);
+}
+
+function SalesModeDialog({
+  email,
+  durationMinutes,
+  password,
+  onPasswordChange,
+  onPasswordSubmit,
+  onSendEmail,
+  onClose,
+  busy,
+  message
+}) {
+  return createPortal((
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 px-5 backdrop-blur-[2px]" onMouseDown={onClose}>
+      <section className="w-full max-w-md rounded-3xl bg-white p-7 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs tracking-[0.18em] text-slate-400">SALES MODE</p>
+            <h2 className="mt-1 text-xl font-medium">販売管理モードを開始</h2>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full border border-slate-200 p-2 text-slate-500"><X size={17} /></button>
+        </div>
+        <p className="mt-4 text-sm leading-7 text-slate-500">
+          価格と割引コードを変更できるowner本人であることを再確認します。開始後は{durationMinutes || 15}分で自動終了します。
+        </p>
+        <div className="mt-6 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">{email}</div>
+        <button type="button" onClick={onSendEmail} disabled={busy} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#10203a] px-4 py-3.5 text-sm text-white disabled:opacity-40">
+          {busy ? <LoaderCircle size={16} className="animate-spin" /> : <Mail size={16} />}
+          認証メールを送信して開始
+        </button>
+        <div className="my-5 flex items-center gap-3 text-xs text-slate-300"><span className="h-px flex-1 bg-slate-200" />パスワードで開始する場合<span className="h-px flex-1 bg-slate-200" /></div>
+        <form onSubmit={onPasswordSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="sales-password" className="mb-2 block text-sm font-medium text-slate-700">現在の管理者パスワード</label>
+            <input
+              id="sales-password"
+              type="password"
+              value={password}
+              onChange={(event) => onPasswordChange(event.target.value)}
+              placeholder="現在の管理者パスワードを入力"
+              autoComplete="current-password"
+              disabled={busy}
+              className="admin-password-input w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm text-slate-900 caret-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+            />
+          </div>
+          <button type="submit" disabled={busy || !password} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3.5 text-sm text-slate-600 disabled:opacity-40">
+            {busy ? <LoaderCircle size={16} className="animate-spin" /> : <KeyRound size={16} />}
+            パスワードで再認証して開始
+          </button>
+        </form>
+        {message && <p className="mt-4 text-sm leading-6 text-slate-600">{message}</p>}
+      </section>
+    </div>
+  ), document.body);
+}
+
+function CommercePanel({
+  data,
+  owner,
+  salesModeActive,
+  salesModeExpiresAt,
+  now,
+  busy,
+  onStartSalesMode,
+  onEndSalesMode,
+  onSetPrice,
+  onSaveCampaign,
+  onGenerateCodes,
+  onSetCodeActive,
+  onUpdateGift
+}) {
+  const [campaignOpen, setCampaignOpen] = useState(false);
+  const [campaign, setCampaign] = useState({
+    name: "",
+    campaign_type: "crowdfunding",
+    discount_type: "amount",
+    discount_value: "",
+    starts_at: "",
+    ends_at: "",
+    max_redemptions: "",
+    one_per_account: false,
+    partner_name: "",
+    status: "active"
+  });
+  const [codeCampaignId, setCodeCampaignId] = useState("");
+  const [codeMode, setCodeMode] = useState("unique");
+  const [codeQuantity, setCodeQuantity] = useState("1");
+  const [codePrefix, setCodePrefix] = useState("");
+  const [commonCode, setCommonCode] = useState("");
+  const [codeMaxUses, setCodeMaxUses] = useState("1");
+  const [codeExpiresAt, setCodeExpiresAt] = useState("");
+
+  const products = data?.products || [];
+  const campaigns = data?.campaigns || [];
+  const codes = data?.codes || [];
+  const orders = data?.orders || [];
+  const gifts = data?.gifts || [];
+  const paidOrders = orders.filter(item => ["paid", "zero_paid"].includes(item.status));
+  const revenue = paidOrders.reduce((sum, item) => sum + Number(item.amount_total || 0) - Number(item.refund_amount || 0), 0);
+
+  const submitCampaign = async (event) => {
+    event.preventDefault();
+    await onSaveCampaign({
+      ...campaign,
+      product_code: "self_book_v1",
+      discount_value: campaign.discount_type === "full" ? 100 : Number(campaign.discount_value || 0),
+      max_redemptions: campaign.max_redemptions || null,
+      starts_at: campaign.starts_at ? new Date(campaign.starts_at).toISOString() : null,
+      ends_at: campaign.ends_at ? new Date(campaign.ends_at).toISOString() : null
+    });
+    setCampaignOpen(false);
+    setCampaign(current => ({ ...current, name: "", discount_value: "", max_redemptions: "", partner_name: "" }));
+  };
+
+  const submitCodes = async (event) => {
+    event.preventDefault();
+    await onGenerateCodes({
+      campaignId: codeCampaignId,
+      quantity: codeMode === "shared" ? 1 : Number(codeQuantity || 1),
+      prefix: codeMode === "shared" ? "" : codePrefix,
+      commonCode: codeMode === "shared" ? commonCode : null,
+      maxRedemptions: Number(codeMaxUses || 1),
+      expiresAt: codeExpiresAt ? new Date(codeExpiresAt).toISOString() : null
+    });
+    setCommonCode("");
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className={`rounded-2xl border px-5 py-4 ${salesModeActive ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white"}`}>
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <p className="font-medium text-slate-900">販売管理モード</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              閲覧と配送更新は常時可能です。価格・キャンペーン・コードの変更はownerの再認証後に限られます。
+            </p>
+          </div>
+          {owner && (salesModeActive ? (
+            <button type="button" onClick={onEndSalesMode} disabled={busy} className="shrink-0 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm text-amber-800 disabled:opacity-40">
+              販売管理中 {formatRemaining(salesModeExpiresAt, now)} · 終了
+            </button>
+          ) : (
+            <button type="button" onClick={onStartSalesMode} className="shrink-0 rounded-xl bg-[#10203a] px-4 py-2.5 text-sm text-white">
+              再認証して変更を許可
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MetricCard label="成立注文" value={paidOrders.length} hint="0円注文を含む" />
+        <MetricCard label="売上" value={formatAdminYen(revenue)} hint="返金額を控除" />
+        <MetricCard label="ギフト" value={gifts.length} hint="購入された贈りもの" />
+      </div>
+
+      <section>
+        <div className="mb-3 flex items-center justify-between"><h3 className="font-medium">商品と価格</h3><span className="text-xs text-slate-400">税込・国内送料込み</span></div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {products.map(product => (
+            <div key={product.product_code} className="rounded-2xl border border-slate-200 bg-white p-5">
+              <p className="text-sm text-slate-500">{product.display_name}</p>
+              <p className="mt-2 text-2xl font-medium">{formatAdminYen(product.amount_jpy)}</p>
+              <p className="mt-2 text-xs text-slate-400">{product.product_code}</p>
+              {salesModeActive && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    const nextValue = window.prompt(`${product.display_name}の新しい税込価格（円）`, String(product.amount_jpy));
+                    if (nextValue !== null && /^\d+$/.test(nextValue.trim())) onSetPrice(product.product_code, Number(nextValue));
+                  }}
+                  className="mt-4 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 disabled:opacity-40"
+                >
+                  価格を変更
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div><h3 className="font-medium">割引キャンペーン</h3><p className="mt-1 text-xs text-slate-400">クラファン個別・広告共通・代理店共通を管理します。</p></div>
+          {salesModeActive && <button type="button" onClick={() => setCampaignOpen(value => !value)} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600"><Plus size={14} />新規</button>}
+        </div>
+
+        {campaignOpen && salesModeActive && (
+          <form onSubmit={submitCampaign} className="mt-5 grid gap-3 border-t border-slate-100 pt-5 md:grid-cols-2">
+            <input required value={campaign.name} onChange={event => setCampaign(current => ({ ...current, name: event.target.value }))} placeholder="キャンペーン名" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
+            <select value={campaign.campaign_type} onChange={event => setCampaign(current => ({ ...current, campaign_type: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">
+              <option value="crowdfunding">クラウドファンディング</option><option value="advertising">広告</option><option value="agency">代理店</option>
+            </select>
+            <select value={campaign.discount_type} onChange={event => setCampaign(current => ({ ...current, discount_type: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">
+              <option value="amount">定額（円）</option><option value="percent">率（%）</option><option value="full">全額</option>
+            </select>
+            <input required={campaign.discount_type !== "full"} type="number" min="0" value={campaign.discount_value} onChange={event => setCampaign(current => ({ ...current, discount_value: event.target.value }))} placeholder={campaign.discount_type === "percent" ? "割引率" : "割引額"} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
+            <input type="datetime-local" value={campaign.starts_at} onChange={event => setCampaign(current => ({ ...current, starts_at: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
+            <input type="datetime-local" value={campaign.ends_at} onChange={event => setCampaign(current => ({ ...current, ends_at: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
+            <input type="number" min="1" value={campaign.max_redemptions} onChange={event => setCampaign(current => ({ ...current, max_redemptions: event.target.value }))} placeholder="キャンペーン全体の上限（任意）" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
+            <input value={campaign.partner_name} onChange={event => setCampaign(current => ({ ...current, partner_name: event.target.value }))} placeholder="代理店名・媒体名（任意）" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
+            <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={campaign.one_per_account} onChange={event => setCampaign(current => ({ ...current, one_per_account: event.target.checked }))} />1アカウント1回</label>
+            <button type="submit" disabled={busy || !campaign.name} className="rounded-xl bg-[#10203a] px-4 py-3 text-sm text-white disabled:opacity-40">キャンペーンを作成</button>
+          </form>
+        )}
+
+        <div className="mt-5 divide-y divide-slate-100 border-t border-slate-100">
+          {campaigns.length ? campaigns.map(item => (
+            <div key={item.id} className="flex flex-col justify-between gap-2 py-4 sm:flex-row sm:items-center">
+              <div><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-medium">{item.name}</p><StatusPill tone={item.status === "active" ? "success" : "neutral"}>{item.status}</StatusPill></div><p className="mt-1 text-xs text-slate-400">{item.campaign_type} · {item.discount_type === "amount" ? formatAdminYen(item.discount_value) : item.discount_type === "full" ? "全額" : `${item.discount_value}%`}</p></div>
+              <p className="text-xs text-slate-400">{codes.filter(code => code.campaign_id === item.id).length}コード</p>
+            </div>
+          )) : <p className="py-8 text-center text-sm text-slate-400">キャンペーンはまだありません。</p>}
+        </div>
+      </section>
+
+      {salesModeActive && campaigns.length > 0 && (
+        <form onSubmit={submitCodes} className="rounded-2xl border border-slate-200 bg-white p-5">
+          <h3 className="font-medium">割引コードを発行</h3>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <select required value={codeCampaignId} onChange={event => setCodeCampaignId(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none"><option value="">キャンペーンを選択</option>{campaigns.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+            <select value={codeMode} onChange={event => setCodeMode(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none"><option value="unique">個別コードを一括発行</option><option value="shared">共通コードを発行</option></select>
+            {codeMode === "unique" ? <><input type="number" min="1" max="1000" value={codeQuantity} onChange={event => setCodeQuantity(event.target.value)} placeholder="発行数" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" /><input value={codePrefix} onChange={event => setCodePrefix(event.target.value.toUpperCase())} placeholder="接頭辞（例 CF26-）" className="rounded-xl border border-slate-200 px-3 py-3 text-sm uppercase outline-none" /></> : <input required value={commonCode} onChange={event => setCommonCode(event.target.value.toUpperCase())} placeholder="共通コード" className="rounded-xl border border-slate-200 px-3 py-3 text-sm uppercase outline-none md:col-span-2" />}
+            <input type="number" min="1" value={codeMaxUses} onChange={event => setCodeMaxUses(event.target.value)} placeholder="コードごとの利用上限" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
+            <input type="datetime-local" value={codeExpiresAt} onChange={event => setCodeExpiresAt(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
+          </div>
+          <button type="submit" disabled={busy || !codeCampaignId || (codeMode === "shared" && !commonCode)} className="mt-4 rounded-xl bg-[#10203a] px-4 py-3 text-sm text-white disabled:opacity-40">コードを発行</button>
+        </form>
+      )}
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h3 className="font-medium">発行済みコード</h3>
+        <div className="mt-4 max-h-80 overflow-y-auto divide-y divide-slate-100 border-t border-slate-100">
+          {codes.length ? codes.slice(0, 200).map(item => (
+            <div key={item.id} className="flex items-center justify-between gap-3 py-3">
+              <div className="min-w-0"><p className="truncate font-mono text-sm">{item.code}</p><p className="mt-1 text-xs text-slate-400">利用 {item.redemption_count || 0} / {item.max_redemptions ?? "無制限"}</p></div>
+              {salesModeActive && <button type="button" disabled={busy} onClick={() => onSetCodeActive(item.id, !item.is_active)} className={`rounded-lg border px-3 py-1.5 text-xs ${item.is_active ? "border-rose-200 text-rose-700" : "border-emerald-200 text-emerald-700"}`}>{item.is_active ? "停止" : "再開"}</button>}
+            </div>
+          )) : <p className="py-8 text-center text-sm text-slate-400">コードはまだありません。</p>}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h3 className="font-medium">注文履歴</h3>
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full text-left text-sm"><thead className="border-b border-slate-100 text-xs text-slate-400"><tr><th className="pb-3 pr-4 font-normal">日時</th><th className="pb-3 pr-4 font-normal">購入者</th><th className="pb-3 pr-4 font-normal">区分</th><th className="pb-3 pr-4 font-normal">コード</th><th className="pb-3 pr-4 font-normal">合計</th><th className="pb-3 font-normal">状態</th></tr></thead><tbody className="divide-y divide-slate-100">{orders.slice(0, 200).map(item => <tr key={item.id}><td className="whitespace-nowrap py-3 pr-4 text-xs text-slate-500">{formatDate(item.created_at)}</td><td className="py-3 pr-4"><p>{item.purchaser_name || "名称未登録"}</p><p className="text-xs text-slate-400">{item.purchaser_email}</p></td><td className="py-3 pr-4">{item.order_type === "gift" ? "ギフト" : "本人"}</td><td className="py-3 pr-4 font-mono text-xs">{item.discount_code || "—"}</td><td className="py-3 pr-4">{formatAdminYen(item.amount_total)}</td><td className="py-3"><StatusPill tone={["paid", "zero_paid"].includes(item.status) ? "success" : item.status === "refunded" ? "error" : "neutral"}>{item.status}</StatusPill></td></tr>)}</tbody></table>
+          {!orders.length && <p className="py-8 text-center text-sm text-slate-400">注文はまだありません。</p>}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="flex items-center gap-2"><PackageCheck size={18} className="text-slate-500" /><h3 className="font-medium">ギフト配送・保証</h3></div>
+        <div className="mt-4 divide-y divide-slate-100 border-t border-slate-100">
+          {gifts.length ? gifts.map(item => (
+            <div key={item.id} className="grid gap-3 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+              <div><p className="text-sm font-medium">{item.recipient_name}</p><p className="mt-1 text-xs text-slate-400">注文 {item.order_number} · 保証 {item.guarantee_status}{item.guarantee_expires_at ? `（${formatDate(item.guarantee_expires_at, false)}まで）` : ""}</p></div>
+              <div className="flex items-center gap-2">
+                <select value={item.package_status} onChange={event => onUpdateGift(item, event.target.value)} disabled={busy || !item.package_selected} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 disabled:opacity-50"><option value="not_requested">梱包なし</option><option value="pending">準備待ち</option><option value="preparing">準備中</option><option value="shipped">発送済み</option><option value="delivered">配達完了</option></select>
+              </div>
+            </div>
+          )) : <p className="py-8 text-center text-sm text-slate-400">ギフト注文はまだありません。</p>}
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function HiddenZone({ entries, actionTarget, onOpen, onRestore, onRetire }) {
@@ -1131,6 +1405,17 @@ export default function AdminReview({ supabaseClient }) {
   const [organizationPassword, setOrganizationPassword] = useState("");
   const [organizationBusy, setOrganizationBusy] = useState(false);
   const [organizationMessage, setOrganizationMessage] = useState("");
+  const [commerceData, setCommerceData] = useState(null);
+  const [salesModeStatus, setSalesModeStatus] = useState({
+    active: false,
+    expires_at: null,
+    duration_minutes: 15,
+    can_start: false
+  });
+  const [salesDialogOpen, setSalesDialogOpen] = useState(false);
+  const [salesPassword, setSalesPassword] = useState("");
+  const [salesBusy, setSalesBusy] = useState(false);
+  const [salesMessage, setSalesMessage] = useState("");
   const [detailId, setDetailId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -1143,6 +1428,7 @@ export default function AdminReview({ supabaseClient }) {
   const [previewError, setPreviewError] = useState("");
   const previewRequestRef = useRef(0);
   const organizationActivationRef = useRef(false);
+  const salesActivationRef = useRef(false);
 
   useEffect(() => {
     supabaseClient.auth.getSession().then(({ data }) => { setSession(data.session); setAuthReady(true); });
@@ -1159,6 +1445,7 @@ export default function AdminReview({ supabaseClient }) {
       setAuthorized(false);
       setAdminRole(null);
       setOrganizationModeStatus({ active: false, expires_at: null, duration_minutes: 15 });
+      setSalesModeStatus({ active: false, expires_at: null, duration_minutes: 15, can_start: false });
       setAuthorizationReady(false);
       return;
     }
@@ -1202,18 +1489,47 @@ export default function AdminReview({ supabaseClient }) {
     loadOrganizationModeStatus();
   }, [loadOrganizationModeStatus]);
 
+  const loadSalesModeStatus = useCallback(async () => {
+    if (!authorized) return;
+    const { data, error: modeError } = await supabaseClient.rpc("get_admin_sales_mode_status");
+    if (modeError) {
+      console.error("admin sales mode status error", modeError);
+      return;
+    }
+    setSalesModeStatus({
+      active: Boolean(data?.active),
+      expires_at: data?.expires_at || null,
+      duration_minutes: Number(data?.duration_minutes || 15),
+      can_start: Boolean(data?.can_start)
+    });
+    setOrganizationNow(Date.now());
+  }, [authorized, supabaseClient]);
+
+  useEffect(() => {
+    loadSalesModeStatus();
+  }, [loadSalesModeStatus]);
+
   const organizationModeActive = Boolean(
     adminRole === "owner"
       && organizationModeStatus.active
       && organizationModeStatus.expires_at
       && new Date(organizationModeStatus.expires_at).getTime() > organizationNow
   );
+  const salesModeActive = Boolean(
+    adminRole === "owner"
+      && salesModeStatus.active
+      && salesModeStatus.expires_at
+      && new Date(salesModeStatus.expires_at).getTime() > organizationNow
+  );
 
   useEffect(() => {
-    if (!organizationModeStatus.active || !organizationModeStatus.expires_at) return undefined;
+    if (
+      (!organizationModeStatus.active || !organizationModeStatus.expires_at) &&
+      (!salesModeStatus.active || !salesModeStatus.expires_at)
+    ) return undefined;
     const timer = window.setInterval(() => setOrganizationNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [organizationModeStatus.active, organizationModeStatus.expires_at]);
+  }, [organizationModeStatus.active, organizationModeStatus.expires_at, salesModeStatus.active, salesModeStatus.expires_at]);
 
   useEffect(() => {
     if (organizationModeActive) return;
@@ -1330,22 +1646,133 @@ export default function AdminReview({ supabaseClient }) {
     }
   }
 
+  async function startSalesModeAfterReauthentication() {
+    const { data, error: modeError } = await supabaseClient.rpc("start_admin_sales_mode");
+    if (modeError) throw modeError;
+    setSalesModeStatus(current => ({
+      ...current,
+      active: true,
+      expires_at: data?.expires_at || null,
+      duration_minutes: Number(data?.duration_minutes || current.duration_minutes || 15),
+      can_start: true
+    }));
+    setOrganizationNow(Date.now());
+    setSalesDialogOpen(false);
+    setSalesPassword("");
+    setSalesMessage("");
+    setNotice(`販売管理モードを開始しました。${Number(data?.duration_minutes || 15)}分後に自動終了します。`);
+  }
+
+  async function handleSalesPasswordSubmit(event) {
+    event.preventDefault();
+    if (!salesPassword || !session?.user?.email) return;
+    setSalesBusy(true);
+    setSalesMessage("");
+    setError("");
+    try {
+      const { error: signInError } = await supabaseClient.auth.signInWithPassword({
+        email: session.user.email,
+        password: salesPassword
+      });
+      if (signInError) throw signInError;
+      await startSalesModeAfterReauthentication();
+    } catch (modeError) {
+      console.error("admin sales mode password reauthentication failed", modeError);
+      setSalesMessage("再認証できませんでした。パスワードを確認してください。");
+    } finally {
+      setSalesBusy(false);
+    }
+  }
+
+  async function handleSalesEmailAuthentication() {
+    if (!session?.user?.email) return;
+    setSalesBusy(true);
+    setSalesMessage("");
+    try {
+      const redirectUrl = new URL(window.location.href);
+      redirectUrl.search = "";
+      redirectUrl.hash = "";
+      redirectUrl.searchParams.set("admin", "1");
+      redirectUrl.searchParams.set("sales", "activate");
+      const { error: signInError } = await supabaseClient.auth.signInWithOtp({
+        email: session.user.email,
+        options: { shouldCreateUser: false, emailRedirectTo: redirectUrl.toString() }
+      });
+      if (signInError) throw signInError;
+      setSalesMessage("認証メールを送信しました。メール内のボタンから戻ると販売管理モードが始まります。");
+    } catch (modeError) {
+      console.error("admin sales mode email reauthentication failed", modeError);
+      setSalesMessage("認証メールを送信できませんでした。");
+    } finally {
+      setSalesBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("sales") !== "activate" || !authorized || adminRole !== "owner" || salesActivationRef.current) return;
+    salesActivationRef.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("sales");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    setSalesBusy(true);
+    startSalesModeAfterReauthentication()
+      .catch((modeError) => {
+        console.error("admin sales mode email activation failed", modeError);
+        setError("販売管理モードを開始できませんでした。もう一度再認証してください。");
+      })
+      .finally(() => setSalesBusy(false));
+  }, [authorized, adminRole]);
+
+  async function endSalesMode() {
+    setSalesBusy(true);
+    setError("");
+    try {
+      const { error: modeError } = await supabaseClient.rpc("end_admin_sales_mode");
+      if (modeError) throw modeError;
+      setSalesModeStatus(current => ({ ...current, active: false, expires_at: null }));
+      setNotice("販売管理モードを終了しました。");
+    } catch (modeError) {
+      setError(modeError?.message || "販売管理モードを終了できませんでした。");
+    } finally {
+      setSalesBusy(false);
+    }
+  }
+
+  async function runCommerceAction(action, successMessage) {
+    setSalesBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await action();
+      setNotice(successMessage);
+      await loadDashboard();
+    } catch (actionError) {
+      console.error("admin commerce action error", actionError);
+      setError(actionError?.message || "販売情報を更新できませんでした。");
+    } finally {
+      setSalesBusy(false);
+    }
+  }
+
   const loadDashboard = useCallback(async () => {
     if (!authorized) return;
     setLoading(true); setError("");
     try {
-      const [dashboardResult, deliveryResult, trashResult] = await Promise.all([
+      const [dashboardResult, deliveryResult, trashResult, commerceResult] = await Promise.all([
         supabaseClient.rpc("get_admin_dashboard", { input_search: appliedSearch || null, input_limit: 250 }),
         supabaseClient.rpc("get_admin_delivery_history", {
           input_search: appliedSearch || null,
           input_status: deliveryStatus || null,
           input_limit: 250
         }),
-        supabaseClient.rpc("get_admin_trash_index")
+        supabaseClient.rpc("get_admin_trash_index"),
+        supabaseClient.rpc("get_admin_commerce_dashboard")
       ]);
       if (dashboardResult.error) throw dashboardResult.error;
       if (deliveryResult.error) throw deliveryResult.error;
       if (trashResult.error) throw trashResult.error;
+      if (commerceResult.error) throw commerceResult.error;
       const data = dashboardResult.data;
       const nextTrashEntries = trashResult.data || [];
       const trashedProjectIds = new Set(nextTrashEntries
@@ -1411,6 +1838,7 @@ export default function AdminReview({ supabaseClient }) {
         payments: visiblePayments.map(withDisplayName)
       });
       setTrashEntries(nextTrashEntries);
+      setCommerceData(commerceResult.data || null);
       setDeliveryHistory((deliveryResult.data || [])
         .filter(item => !trashedProjectIds.has(item.book_project_id))
         .filter(item => !trashedAccountIds.has(item.actor_user_id) && !trashedAccountIds.has(item.recipient_user_id))
@@ -1727,6 +2155,61 @@ export default function AdminReview({ supabaseClient }) {
     setPreviewLoading(false);
   }
 
+  const setCommercePrice = (productCode, amount) => runCommerceAction(async () => {
+    const { error: actionError } = await supabaseClient.rpc("admin_set_product_price", {
+      input_product_code: productCode,
+      input_amount_jpy: amount
+    });
+    if (actionError) throw actionError;
+  }, "価格を更新しました。次回の決済準備時にStripeの新しいPriceが作成されます。");
+
+  const saveDiscountCampaign = (campaign) => runCommerceAction(async () => {
+    const { error: actionError } = await supabaseClient.rpc("admin_save_discount_campaign", {
+      input_campaign: campaign
+    });
+    if (actionError) throw actionError;
+  }, "割引キャンペーンを保存しました。");
+
+  const generateDiscountCodes = (input) => runCommerceAction(async () => {
+    const { error: actionError } = await supabaseClient.rpc("admin_generate_discount_codes", {
+      input_campaign_id: input.campaignId,
+      input_quantity: input.quantity,
+      input_prefix: input.prefix || "",
+      input_common_code: input.commonCode || null,
+      input_max_redemptions: input.maxRedemptions,
+      input_expires_at: input.expiresAt || null
+    });
+    if (actionError) throw actionError;
+  }, "割引コードを発行しました。");
+
+  const setDiscountCodeActive = (codeId, active) => runCommerceAction(async () => {
+    const { error: actionError } = await supabaseClient.rpc("admin_set_discount_code_active", {
+      input_code_id: codeId,
+      input_active: active
+    });
+    if (actionError) throw actionError;
+  }, active ? "割引コードを再開しました。" : "割引コードを停止しました。");
+
+  const updateGiftFulfillment = (gift, packageStatus) => {
+    let trackingNumber = gift.tracking_number || "";
+    if (packageStatus === "shipped") {
+      const entered = window.prompt("配送追跡番号（未定の場合は空欄）", trackingNumber);
+      if (entered === null) return Promise.resolve();
+      trackingNumber = entered.trim();
+    }
+    return runCommerceAction(async () => {
+      const { error: actionError } = await supabaseClient.rpc("admin_update_gift_fulfillment", {
+        input_gift_order_id: gift.id,
+        input_package_status: packageStatus,
+        input_tracking_number: trackingNumber || null,
+        input_delivered_at: packageStatus === "delivered" ? new Date().toISOString() : null
+      });
+      if (actionError) throw actionError;
+    }, packageStatus === "delivered"
+      ? "配達完了を記録し、40日保証を開始しました。"
+      : "ギフト配送状況を更新しました。");
+  };
+
   const metrics = dashboard?.metrics || {};
   const projects = dashboard?.projects || [];
   const attention = dashboard?.attention || [];
@@ -1808,6 +2291,23 @@ export default function AdminReview({ supabaseClient }) {
             {tab === "accounts" && <AccountTable rows={dashboard?.accounts || []} onOpen={openAccountDetail} />}
             {tab === "deliveries" && <DeliveryTable rows={deliveryHistory} onOpenProject={openDetail} />}
             {tab === "payments" && <PaymentTable rows={dashboard?.payments || []} />}
+            {tab === "sales" && (
+              <CommercePanel
+                data={commerceData}
+                owner={adminRole === "owner"}
+                salesModeActive={salesModeActive}
+                salesModeExpiresAt={salesModeStatus.expires_at}
+                now={organizationNow}
+                busy={salesBusy}
+                onStartSalesMode={() => { setSalesMessage(""); setSalesDialogOpen(true); }}
+                onEndSalesMode={endSalesMode}
+                onSetPrice={setCommercePrice}
+                onSaveCampaign={saveDiscountCampaign}
+                onGenerateCodes={generateDiscountCodes}
+                onSetCodeActive={setDiscountCodeActive}
+                onUpdateGift={updateGiftFulfillment}
+              />
+            )}
             {tab === "hidden" && organizationModeActive && (
               <HiddenZone
                 entries={trashEntries}
@@ -1869,6 +2369,20 @@ export default function AdminReview({ supabaseClient }) {
           onClose={() => { if (!organizationBusy) setOrganizationDialogOpen(false); }}
           busy={organizationBusy}
           message={organizationMessage}
+        />
+      )}
+
+      {salesDialogOpen && (
+        <SalesModeDialog
+          email={session.user.email}
+          durationMinutes={salesModeStatus.duration_minutes}
+          password={salesPassword}
+          onPasswordChange={setSalesPassword}
+          onPasswordSubmit={handleSalesPasswordSubmit}
+          onSendEmail={handleSalesEmailAuthentication}
+          onClose={() => { if (!salesBusy) setSalesDialogOpen(false); }}
+          busy={salesBusy}
+          message={salesMessage}
         />
       )}
 

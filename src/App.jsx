@@ -37,11 +37,22 @@ function getEntryModeFromUrl() {
   return params.get("entry") || null;
 }
 
+function getPurchaseForFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("purchase_for") === "gift" ? "gift" : "self";
+}
+
+function getGiftClaimTokenFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("gift") || null;
+}
+
 function getCheckoutReturnFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return {
     status: params.get("checkout") || null,
-    sessionId: params.get("session_id") || null
+    sessionId: params.get("session_id") || null,
+    purchaseFor: params.get("purchase_for") === "gift" ? "gift" : "self"
   };
 }
 
@@ -189,6 +200,12 @@ function getAuthReturnUrlFromCurrentLocation() {
   const entryMode = params.get("entry");
   if (entryMode) url.searchParams.set("entry", entryMode);
 
+  const purchaseFor = params.get("purchase_for");
+  if (purchaseFor) url.searchParams.set("purchase_for", purchaseFor);
+
+  const giftClaim = params.get("gift");
+  if (giftClaim) url.searchParams.set("gift", giftClaim);
+
   const checkoutStatus = params.get("checkout");
   if (checkoutStatus) url.searchParams.set("checkout", checkoutStatus);
 
@@ -196,6 +213,39 @@ function getAuthReturnUrlFromCurrentLocation() {
   if (checkoutSessionId) url.searchParams.set("session_id", checkoutSessionId);
 
   return url.toString();
+}
+
+function formatYen(value) {
+  return `${new Intl.NumberFormat("ja-JP").format(Number(value || 0))}円`;
+}
+
+async function loadCommerceQuote({ discountCode = "", includeGiftPackage = false } = {}) {
+  const { data, error } = await supabaseClient.rpc("get_commerce_quote", {
+    input_product_code: "self_book_v1",
+    input_discount_code: discountCode || null,
+    input_include_gift_package: Boolean(includeGiftPackage)
+  });
+  if (error) throw error;
+  return data;
+}
+
+async function loadGiftClaimPreview(token) {
+  if (!token) return null;
+  const { data, error } = await supabaseClient.rpc("get_gift_claim_preview", {
+    input_claim_token: token
+  });
+  if (error) throw error;
+  return data;
+}
+
+async function claimGiftForProject(token, projectId) {
+  if (!token || !projectId) return null;
+  const { data, error } = await supabaseClient.rpc("claim_gift_order", {
+    input_claim_token: token,
+    input_book_project_id: projectId
+  });
+  if (error) throw error;
+  return data;
 }
 
 async function resolveDeliveryToken(token) {
@@ -2363,6 +2413,9 @@ function App() {
   const [deliveryTokenData, setDeliveryTokenData] = useState(null);
   const [purchaseStatus, setPurchaseStatus] = useState("idle");
   const [purchaseError, setPurchaseError] = useState("");
+  const [purchaseFor, setPurchaseFor] = useState(() => getPurchaseForFromUrl());
+  const [purchaseResult, setPurchaseResult] = useState(null);
+  const [giftClaimPreview, setGiftClaimPreview] = useState(null);
   const checkoutSyncAttemptedRef = useRef(false);
 
   const [voiceData, setVoiceData] = useState({
@@ -2410,6 +2463,15 @@ function App() {
   const initialDeliveryToken = getDeliveryTokenFromUrl();
 
 if (!session) {
+  const initialGiftClaimToken = getGiftClaimTokenFromUrl();
+  if (initialGiftClaimToken) {
+    try {
+      setGiftClaimPreview(await loadGiftClaimPreview(initialGiftClaimToken));
+    } catch (giftPreviewError) {
+      console.error("gift preview init error", giftPreviewError);
+    }
+  }
+
   if (initialDeliveryToken) {
     try {
       const tokenData = await resolveDeliveryToken(initialDeliveryToken);
@@ -2463,10 +2525,17 @@ const questionSet = await loadUserQuestionSet(
  * onboarding状態更新が行われる可能性があるため、
  * 最新のbook_projectsを取得し直す。
  */
-const refreshedFoundationData = await ensureUserFoundation(
+let refreshedFoundationData = await ensureUserFoundation(
   session.user.id,
   currentUser
 );
+
+const initialGiftClaimToken = getGiftClaimTokenFromUrl();
+let initialGiftPreview = null;
+if (initialGiftClaimToken && refreshedFoundationData?.project?.id) {
+  initialGiftPreview = await loadGiftClaimPreview(initialGiftClaimToken);
+  setGiftClaimPreview(initialGiftPreview);
+}
 
 const deliveryToken = getDeliveryTokenFromUrl();
 
@@ -2500,6 +2569,10 @@ nextScene = getCommercialEntryScene({
   questionSet,
   defaultScene: nextScene
 });
+
+if (initialGiftClaimToken && (initialGiftPreview?.valid || initialGiftPreview?.claimed)) {
+  nextScene = "gift_received";
+}
 
 const currentQuestion = questionSet[currentIndex] || null;
 
@@ -4241,12 +4314,22 @@ useEffect(() => {
 
   checkoutSyncAttemptedRef.current = true;
 
-  const finishCheckoutAsPaid = project => {
+  const finishSelfCheckoutAsPaid = project => {
     setFoundation(prev => ({ ...prev, project }));
+    setPurchaseFor("self");
     setPurchaseStatus("paid");
     setPurchaseError("");
     replaceCommercialEntryUrl("purchased");
     setScene("purchase_success");
+  };
+
+  const finishGiftCheckoutAsPaid = data => {
+    setPurchaseFor("gift");
+    setPurchaseResult({ order: data.order, gift: data.gift });
+    setPurchaseStatus("paid");
+    setPurchaseError("");
+    replaceCommercialEntryUrl("purchased");
+    setScene("gift_purchase_success");
   };
 
   const syncCheckout = async () => {
@@ -4257,8 +4340,11 @@ useEffect(() => {
       // The webhook can finish before this return page is opened. In that
       // case the project already contains the authoritative paid state and
       // there is no need to depend on a second Stripe lookup.
-      if (hasFullProjectAccess(foundation.project)) {
-        finishCheckoutAsPaid(foundation.project);
+      if (
+        checkoutReturn.purchaseFor === "self" &&
+        hasFullProjectAccess(foundation.project)
+      ) {
+        finishSelfCheckoutAsPaid(foundation.project);
         return;
       }
 
@@ -4271,31 +4357,42 @@ useEffect(() => {
         throw new Error(data?.error || "購入状況を確認できませんでした");
       }
 
-      if (!data.paid || !data.project) {
+      if (!data.paid) {
         throw new Error("お支払いの完了をまだ確認できませんでした");
       }
 
-      finishCheckoutAsPaid(data.project);
+      if (data.orderType === "gift") {
+        finishGiftCheckoutAsPaid(data);
+        return;
+      }
+
+      if (!data.project) {
+        throw new Error("購入した物語を確認できませんでした");
+      }
+
+      finishSelfCheckoutAsPaid(data.project);
     } catch (error) {
       console.error("checkout sync error", error);
 
       // A successful webhook is the source of truth. If the optional return
       // page sync failed or timed out, read the project once more before
       // showing an error so a completed purchase never looks unpaid.
-      const { data: refreshedProject, error: refreshError } =
-        await supabaseClient
-          .from("book_projects")
-          .select("*")
-          .eq("id", foundation.project.id)
-          .maybeSingle();
+      if (checkoutReturn.purchaseFor === "self") {
+        const { data: refreshedProject, error: refreshError } =
+          await supabaseClient
+            .from("book_projects")
+            .select("*")
+            .eq("id", foundation.project.id)
+            .maybeSingle();
 
-      if (!refreshError && hasFullProjectAccess(refreshedProject)) {
-        finishCheckoutAsPaid(refreshedProject);
-        return;
-      }
+        if (!refreshError && hasFullProjectAccess(refreshedProject)) {
+          finishSelfCheckoutAsPaid(refreshedProject);
+          return;
+        }
 
-      if (refreshError) {
-        console.error("checkout project refresh error", refreshError);
+        if (refreshError) {
+          console.error("checkout project refresh error", refreshError);
+        }
       }
 
       setPurchaseStatus("error");
@@ -4314,19 +4411,33 @@ useEffect(() => {
   foundation?.project?.access_status
 ]);
 
-const startSelfPurchase = async () => {
-  if (!foundation?.project?.id) {
+const startPurchase = async ({
+  orderType = "self",
+  discountCode = "",
+  includeGiftPackage = false,
+  gift = {}
+} = {}) => {
+  if (orderType === "self" && !foundation?.project?.id) {
     setPurchaseError("物語の準備が完了していません。画面を再読み込みしてください。");
     return;
   }
 
+  setPurchaseFor(orderType);
   setPurchaseStatus("starting");
   setPurchaseError("");
 
   try {
     const { data, error } = await supabaseClient.functions.invoke(
       "create-checkout-session",
-      { body: { projectId: foundation.project.id } }
+      {
+        body: {
+          projectId: foundation?.project?.id || null,
+          orderType,
+          discountCode,
+          includeGiftPackage,
+          gift
+        }
+      }
     );
 
     if (error || !data?.success) {
@@ -4820,6 +4931,7 @@ setScene(6);
       )}
       {scene === -1 && (
         <Scene_Login
+          giftPreview={giftClaimPreview}
           onLogin={async (u) => {
             setIsInitializing(true);
             try {
@@ -4832,10 +4944,17 @@ const questionSet = await loadUserQuestionSet(
   foundationData
 );
 
-const refreshedFoundationData = await ensureUserFoundation(
+let refreshedFoundationData = await ensureUserFoundation(
   u.id,
   u
 );
+
+const loginGiftClaimToken = getGiftClaimTokenFromUrl();
+let loginGiftPreview = null;
+if (loginGiftClaimToken && refreshedFoundationData?.project?.id) {
+  loginGiftPreview = await loadGiftClaimPreview(loginGiftClaimToken);
+  setGiftClaimPreview(loginGiftPreview);
+}
 
 const notificationData = await loadNotificationPreference(u.id);
 
@@ -4872,6 +4991,10 @@ nextScene = getCommercialEntryScene({
   questionSet,
   defaultScene: nextScene
 });
+
+if (loginGiftClaimToken && (loginGiftPreview?.valid || loginGiftPreview?.claimed)) {
+  nextScene = "gift_received";
+}
 
 const [supportedStoryProjects, pendingInvites, pendingRelationshipInvites] = await Promise.all([
   loadSupportedStoryProjects(),
@@ -4940,10 +5063,11 @@ let sceneAfterInvite = nextScene;
 
       {scene === "purchase_start" && (
         <Scene_PurchaseStart
+          initialOrderType={purchaseFor}
           checkoutWasCancelled={getCheckoutReturnFromUrl().status === "cancelled"}
           status={purchaseStatus}
           error={purchaseError}
-          onPurchase={startSelfPurchase}
+          onPurchase={startPurchase}
           onTryFree={() => {
             setPurchaseStatus("idle");
             setPurchaseError("");
@@ -4957,7 +5081,12 @@ let sceneAfterInvite = nextScene;
         <Scene_TrialComplete
           status={purchaseStatus}
           error={purchaseError}
-          onPurchase={startSelfPurchase}
+          onPurchase={() => {
+            setPurchaseFor("self");
+            setPurchaseStatus("idle");
+            setPurchaseError("");
+            setScene("purchase_start");
+          }}
           onFinish={() => window.location.assign("/")}
         />
       )}
@@ -4972,6 +5101,43 @@ let sceneAfterInvite = nextScene;
               return;
             }
             setScene("onboarding_overview");
+          }}
+        />
+      )}
+
+      {scene === "gift_purchase_success" && (
+        <Scene_GiftPurchaseSuccess
+          order={purchaseResult?.order}
+          gift={purchaseResult?.gift}
+          onFinish={() => {
+            setPurchaseStatus("idle");
+            setPurchaseResult(null);
+            window.location.assign("/");
+          }}
+        />
+      )}
+
+      {scene === "gift_received" && (
+        <Scene_GiftReceived
+          preview={giftClaimPreview}
+          onContinue={async () => {
+            const giftToken = getGiftClaimTokenFromUrl();
+            if (!giftToken || !foundation?.project?.id || !user?.id) {
+              throw new Error("贈りものを確認できませんでした。");
+            }
+            await claimGiftForProject(giftToken, foundation.project.id);
+            const refreshedFoundation = await ensureUserFoundation(user.id, user);
+            setFoundation(refreshedFoundation);
+            const url = new URL(window.location.href);
+            url.searchParams.delete("gift");
+            url.searchParams.delete("entry");
+            url.searchParams.delete("purchase_for");
+            window.history.replaceState({}, "", url.toString());
+            setScene(
+              isProjectOnboardingComplete(refreshedFoundation?.project)
+                ? getFreeTrialResumeQuestionIndex(questionsDB)
+                : "onboarding_overview"
+            );
           }}
         />
       )}
@@ -6008,11 +6174,14 @@ function Scene_TokenInvalid({ onBack }) {
 }
 
 
-function Scene_Login({ onLogin }) {
+function Scene_Login({ onLogin, giftPreview }) {
   const supporterInvitationUrl = getSupporterInvitationUrlFromCurrentLocation();
   const authReturnUrl = getAuthReturnUrlFromCurrentLocation();
   const isSupporterInviteLogin = Boolean(supporterInvitationUrl);
   const isTrialEntry = getEntryModeFromUrl() === "trial";
+  const isGiftEntry = Boolean(getGiftClaimTokenFromUrl()) && Boolean(
+    giftPreview?.valid || giftPreview?.claimed
+  );
   const [mode, setMode] = useState(
     isSupporterInviteLogin ? "supporter" : "entry"
   ); // entry | new | returning | supporter | pin
@@ -6345,7 +6514,29 @@ if (isNewMode) {
       {mode === "entry" && (
         <div className="w-full max-w-[320px] space-y-8 py-10">
           <div className="space-y-5 text-narrative">
-            {isTrialEntry ? (
+            {isGiftEntry ? (
+              <>
+                <p className="text-amber-100/42 text-xs tracking-[0.18em]">
+                  A GIFT FOR YOU
+                </p>
+
+                <p className="text-[1.15rem] text-white/90 leading-loose">
+                  {giftPreview?.recipient_name || "あなた"}へ、<br />
+                  物語をたどる時間が届きました
+                </p>
+
+                {giftPreview?.gift_message && (
+                  <p className="whitespace-pre-wrap rounded-2xl border border-amber-100/10 bg-amber-100/[0.035] px-5 py-4 text-[0.92rem] leading-loose text-amber-50/58">
+                    {giftPreview.gift_message}
+                  </p>
+                )}
+
+                <p className="text-white/55 text-[0.95rem] leading-loose">
+                  お名前とメールアドレスを登録すると、<br />
+                  {giftPreview?.purchaser_name || "ご家族"}からの贈りものを開けます。
+                </p>
+              </>
+            ) : isTrialEntry ? (
               <>
                 <p className="text-white/40 text-xs tracking-[0.18em]">
                   無料体験・3つの問い
@@ -6383,7 +6574,7 @@ if (isNewMode) {
               disabled={loading}
               className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
             >
-              {isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
+              {isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
             </button>
 
             <button
@@ -6392,7 +6583,7 @@ if (isNewMode) {
               disabled={loading}
               className="w-full py-4 rounded-full border border-white/10 text-white/65 text-sm"
             >
-              {isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
+              {isGiftEntry ? "登録済みの方はこちら" : isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
             </button>
 
             {isDevMode() && (
@@ -6413,7 +6604,7 @@ if (isNewMode) {
         <div className="w-full max-w-[320px] space-y-8 py-10 fade-enter">
           <div className="space-y-4 text-narrative">
             <p className="text-[1.1rem] text-white/90">
-              {isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
+              {isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
             </p>
 
             <p className="ui-small">
@@ -6479,7 +6670,7 @@ if (isNewMode) {
         <div className="w-full max-w-[320px] space-y-8 py-10 fade-enter">
           <div className="space-y-4 text-narrative">
             <p className="text-[1.1rem] text-white/90">
-              {isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
+              {isGiftEntry ? "贈りものを開く" : isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
             </p>
 
             <p className="ui-small">
@@ -6599,6 +6790,7 @@ if (isNewMode) {
 
 
 function Scene_PurchaseStart({
+  initialOrderType = "self",
   checkoutWasCancelled,
   status,
   error,
@@ -6606,64 +6798,324 @@ function Scene_PurchaseStart({
   onTryFree
 }) {
   const isWorking = status === "starting" || status === "checking";
+  const [orderType, setOrderType] = useState(initialOrderType === "gift" ? "gift" : "self");
+  const [includeGiftPackage, setIncludeGiftPackage] = useState(true);
+  const [discountCode, setDiscountCode] = useState("");
+  const [appliedCode, setAppliedCode] = useState("");
+  const [quote, setQuote] = useState(null);
+  const [quoteStatus, setQuoteStatus] = useState("loading");
+  const [quoteError, setQuoteError] = useState("");
+  const [gift, setGift] = useState({
+    recipient_name: "",
+    recipient_email: "",
+    gift_message: "",
+    shipping_address: {
+      postal_code: "",
+      prefecture: "",
+      city: "",
+      line1: "",
+      line2: ""
+    }
+  });
+
+  useEffect(() => {
+    setOrderType(initialOrderType === "gift" ? "gift" : "self");
+  }, [initialOrderType]);
+
+  const refreshQuote = async code => {
+    setQuoteStatus("loading");
+    setQuoteError("");
+    try {
+      const nextQuote = await loadCommerceQuote({
+        discountCode: code,
+        includeGiftPackage: orderType === "gift" && includeGiftPackage
+      });
+      setQuote(nextQuote);
+      setAppliedCode(code);
+      setQuoteStatus("ready");
+      return nextQuote;
+    } catch (quoteLoadError) {
+      console.error("commerce quote error", quoteLoadError);
+      setQuoteError(
+        quoteLoadError?.message || "金額を確認できませんでした。入力内容をご確認ください。"
+      );
+      setQuoteStatus("error");
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    refreshQuote(appliedCode);
+  }, [orderType, includeGiftPackage]);
+
+  const updateGiftAddress = (key, value) => {
+    setGift(current => ({
+      ...current,
+      shipping_address: { ...current.shipping_address, [key]: value }
+    }));
+  };
+
+  const handlePurchase = () => {
+    if (!quote || quoteStatus !== "ready") return;
+    if (orderType === "gift" && !gift.recipient_name.trim()) {
+      setQuoteError("贈る相手のお名前を入力してください。");
+      return;
+    }
+    if (
+      orderType === "gift" &&
+      includeGiftPackage &&
+      ![
+        gift.shipping_address.postal_code,
+        gift.shipping_address.prefecture,
+        gift.shipping_address.city,
+        gift.shipping_address.line1
+      ].every(value => value.trim())
+    ) {
+      setQuoteError("ギフトパッケージの配送先を入力してください。");
+      return;
+    }
+    onPurchase({
+      orderType,
+      discountCode: appliedCode,
+      includeGiftPackage: orderType === "gift" && includeGiftPackage,
+      gift
+    });
+  };
+
+  const inputClass =
+    "w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3.5 text-[0.92rem] text-white outline-none placeholder:text-white/22 focus:border-amber-100/35";
 
   return (
-    <div className="h-full overflow-y-auto fade-enter px-6 py-12 text-center">
-      <div className="mx-auto flex min-h-full w-full max-w-[440px] flex-col justify-center">
+    <div className="h-full overflow-y-auto fade-enter px-5 py-10">
+      <div className="mx-auto w-full max-w-[500px] pb-10">
         <p className="mb-5 text-[0.72rem] tracking-[0.3em] text-white/32">
-          縦糸横糸ブック
+          PURCHASE
         </p>
-        <h1 className="text-narrative text-[1.55rem] leading-[1.9] text-white/92">
-          声でたどる時間を、<br />
-          一冊の物語へ
+        <h1 className="text-narrative text-[1.55rem] leading-[1.8] text-white/92">
+          縦糸横糸ブックのお申し込み
         </h1>
 
-        <p className="mx-auto mt-7 max-w-[340px] text-[0.92rem] leading-[2] text-white/52">
-          届いた問いに、ご自身のペースで語ります。<br />
-          声と文章、写真を整え、本に仕上げます。
-        </p>
-
-        <div className="my-9 border-y border-white/10 py-7">
-          <p className="text-[0.76rem] tracking-[0.18em] text-white/36">一冊</p>
-          <p className="mt-2 text-[1.55rem] tracking-[0.08em] text-white/90">
-            49,800円
-          </p>
-          <p className="mt-1 text-xs text-white/30">税込</p>
+        <div className="mt-8 grid grid-cols-2 rounded-full border border-white/10 bg-white/[0.025] p-1">
+          {[
+            ["self", "自分の物語"],
+            ["gift", "大切な方へ贈る"]
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setOrderType(value)}
+              disabled={isWorking}
+              className={`rounded-full px-3 py-3 text-sm transition ${
+                orderType === value ? "bg-white text-slate-900" : "text-white/48"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
+        <div className="mt-7 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-5 py-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[0.96rem] text-white/84">縦糸横糸ブック　一冊</p>
+              <p className="mt-1 text-xs leading-relaxed text-white/32">
+                税込・国内送料込み
+              </p>
+            </div>
+            <p className="shrink-0 text-[1.05rem] text-white/86">
+              {quote ? formatYen(quote.amount_subtotal) : "—"}
+            </p>
+          </div>
+
+          {orderType === "gift" && (
+            <label className="mt-5 flex cursor-pointer items-start gap-3 border-t border-white/8 pt-5">
+              <input
+                type="checkbox"
+                checked={includeGiftPackage}
+                onChange={event => setIncludeGiftPackage(event.target.checked)}
+                className="mt-1 h-4 w-4 accent-amber-100"
+              />
+              <span className="flex-1">
+                <span className="flex items-start justify-between gap-3 text-sm text-white/72">
+                  <span>ギフトパッケージを付ける（おすすめ）</span>
+                  <span className="shrink-0">
+                    {quote && includeGiftPackage
+                      ? formatYen(quote.gift_package_amount)
+                      : formatYen(3000)}
+                  </span>
+                </span>
+                <span className="mt-2 block text-xs leading-[1.8] text-white/32">
+                  コンセプトブック、使い方、ご挨拶、受取用コードを整えてお届けします。
+                </span>
+              </span>
+            </label>
+          )}
+        </div>
+
+        {orderType === "gift" && (
+          <div className="mt-6 space-y-3 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-5 py-5">
+            <p className="mb-4 text-sm tracking-[0.08em] text-white/62">贈りものの内容</p>
+            <input
+              value={gift.recipient_name}
+              onChange={event => setGift(current => ({ ...current, recipient_name: event.target.value }))}
+              placeholder="贈る相手のお名前（必須）"
+              className={inputClass}
+            />
+            <input
+              type="email"
+              value={gift.recipient_email}
+              onChange={event => setGift(current => ({ ...current, recipient_email: event.target.value }))}
+              placeholder="贈る相手のメールアドレス（任意）"
+              className={inputClass}
+            />
+            <textarea
+              value={gift.gift_message}
+              onChange={event => setGift(current => ({ ...current, gift_message: event.target.value }))}
+              placeholder="贈る言葉（任意）"
+              rows={3}
+              className={`${inputClass} resize-none leading-relaxed`}
+            />
+
+            {includeGiftPackage && (
+              <div className="space-y-3 border-t border-white/8 pt-5">
+                <p className="text-xs tracking-[0.1em] text-white/38">パッケージのお届け先</p>
+                <div className="grid grid-cols-[0.85fr_1.15fr] gap-3">
+                  <input
+                    value={gift.shipping_address.postal_code}
+                    onChange={event => updateGiftAddress("postal_code", event.target.value)}
+                    placeholder="郵便番号"
+                    className={inputClass}
+                  />
+                  <input
+                    value={gift.shipping_address.prefecture}
+                    onChange={event => updateGiftAddress("prefecture", event.target.value)}
+                    placeholder="都道府県"
+                    className={inputClass}
+                  />
+                </div>
+                <input
+                  value={gift.shipping_address.city}
+                  onChange={event => updateGiftAddress("city", event.target.value)}
+                  placeholder="市区町村"
+                  className={inputClass}
+                />
+                <input
+                  value={gift.shipping_address.line1}
+                  onChange={event => updateGiftAddress("line1", event.target.value)}
+                  placeholder="番地・建物名"
+                  className={inputClass}
+                />
+                <input
+                  value={gift.shipping_address.line2}
+                  onChange={event => updateGiftAddress("line2", event.target.value)}
+                  placeholder="部屋番号など（任意）"
+                  className={inputClass}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-6 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-5 py-5">
+          <label className="text-xs tracking-[0.08em] text-white/38">割引コード</label>
+          <div className="mt-3 flex gap-2">
+            <input
+              value={discountCode}
+              onChange={event => setDiscountCode(event.target.value.toUpperCase())}
+              placeholder="コードを入力"
+              className={`${inputClass} min-w-0 flex-1 uppercase tracking-[0.08em]`}
+            />
+            <button
+              type="button"
+              onClick={() => refreshQuote(discountCode.trim())}
+              disabled={isWorking || quoteStatus === "loading"}
+              className="shrink-0 rounded-2xl border border-white/12 px-4 text-sm text-white/66 disabled:opacity-40"
+            >
+              適用
+            </button>
+          </div>
+          {quote?.campaign_name && appliedCode && (
+            <p className="mt-3 text-xs text-emerald-200/60">
+              {quote.campaign_name}を適用しました。
+            </p>
+          )}
+        </div>
+
+        <div className="mt-6 space-y-3 border-y border-white/10 py-6 text-sm">
+          <div className="flex justify-between text-white/42">
+            <span>商品</span>
+            <span>{quote ? formatYen(quote.amount_subtotal) : "—"}</span>
+          </div>
+          {Number(quote?.gift_package_amount || 0) > 0 && (
+            <div className="flex justify-between text-white/42">
+              <span>ギフトパッケージ</span>
+              <span>{formatYen(quote.gift_package_amount)}</span>
+            </div>
+          )}
+          {Number(quote?.discount_amount || 0) > 0 && (
+            <div className="flex justify-between text-emerald-200/62">
+              <span>割引</span>
+              <span>−{formatYen(quote.discount_amount)}</span>
+            </div>
+          )}
+          <div className="flex items-end justify-between border-t border-white/8 pt-4 text-white/88">
+            <span>お支払い合計</span>
+            <span className="text-[1.35rem]">
+              {quoteStatus === "loading" ? "確認中…" : quote ? formatYen(quote.amount_total) : "—"}
+            </span>
+          </div>
+        </div>
+
+        {orderType === "gift" && (
+          <div className="mt-6 rounded-2xl border border-amber-100/10 bg-amber-100/[0.035] px-5 py-4 text-xs leading-[1.9] text-amber-50/48">
+            パッケージのお届け完了から40日間、贈られた方が4つ目の問いへ進む前であれば、
+            本体代金の返金をご相談いただけます。発送後のパッケージ代は返金対象外です。
+          </div>
+        )}
+
         {checkoutWasCancelled && !error && (
-          <p className="mb-5 text-sm leading-relaxed text-white/48">
+          <p className="mt-5 text-sm leading-relaxed text-white/48">
             購入は確定していません。ここからいつでも再開できます。
           </p>
         )}
 
-        {error && (
-          <p className="mb-5 rounded-2xl border border-red-200/15 bg-red-200/[0.05] px-5 py-4 text-sm leading-relaxed text-red-100/75">
-            {error}
+        {(error || quoteError) && (
+          <p className="mt-5 rounded-2xl border border-red-200/15 bg-red-200/[0.05] px-5 py-4 text-sm leading-relaxed text-red-100/75">
+            {error || quoteError}
           </p>
         )}
 
         <button
           type="button"
-          onClick={onPurchase}
-          disabled={isWorking}
-          className="btn-quiet w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-45"
+          onClick={handlePurchase}
+          disabled={isWorking || quoteStatus !== "ready"}
+          className="btn-quiet mt-7 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-45"
         >
-          {isWorking ? "購入画面を準備しています…" : "購入してはじめる"}
+          {isWorking
+            ? "購入画面を準備しています…"
+            : orderType === "gift"
+              ? "この内容で贈る"
+              : "この内容で購入する"}
         </button>
 
-        <button
-          type="button"
-          onClick={onTryFree}
-          disabled={isWorking}
-          className="mt-4 w-full rounded-full border border-white/12 py-4 text-white/72 disabled:opacity-45"
-        >
-          まず3つの問いを試す
-        </button>
+        {orderType === "self" && (
+          <>
+            <button
+              type="button"
+              onClick={onTryFree}
+              disabled={isWorking}
+              className="mt-4 w-full rounded-full border border-white/12 py-4 text-white/72 disabled:opacity-45"
+            >
+              まず3つの問いを試す
+            </button>
+            <p className="mt-5 text-center text-xs leading-relaxed text-white/28">
+              お試しに料金はかかりません。録音と文章は購入後も引き継がれます。
+            </p>
+          </>
+        )}
 
-        <p className="mt-5 text-xs leading-relaxed text-white/28">
-          お試しに料金はかかりません。<br />
-          録音と文章は、購入後もそのまま引き継がれます。
+        <p className="mt-5 text-center text-xs leading-relaxed text-white/24">
+          カード情報はStripeの安全な決済画面で入力します。
         </p>
       </div>
     </div>
@@ -6752,6 +7204,142 @@ function Scene_PurchaseSuccess({ hasTrial, onContinue }) {
       >
         続きをはじめる
       </button>
+    </div>
+  );
+}
+
+function Scene_GiftPurchaseSuccess({ order, gift, onFinish }) {
+  const [copied, setCopied] = useState(false);
+  const claimUrl = gift?.claim_token
+    ? (() => {
+        const url = new URL(window.location.origin + window.location.pathname);
+        url.searchParams.set("app", "1");
+        url.searchParams.set("gift", gift.claim_token);
+        return url.toString();
+      })()
+    : "";
+
+  const copyClaimUrl = async () => {
+    if (!claimUrl) return;
+    try {
+      await navigator.clipboard.writeText(claimUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch (copyError) {
+      console.error("gift url copy error", copyError);
+    }
+  };
+
+  return (
+    <div className="h-full overflow-y-auto fade-enter px-6 py-12 text-center">
+      <div className="mx-auto flex min-h-full w-full max-w-[440px] flex-col justify-center">
+        <p className="text-[0.72rem] tracking-[0.3em] text-amber-100/42">
+          お手続きが完了しました
+        </p>
+        <h1 className="text-narrative mt-7 text-[1.55rem] leading-[1.9] text-white/92">
+          {gift?.recipient_name || "大切な方"}への贈りものを、<br />
+          お預かりしました
+        </h1>
+        <p className="mt-7 text-[0.92rem] leading-[2] text-white/50">
+          {gift?.package_selected
+            ? "パッケージを整え、発送の準備を進めます。"
+            : "下の受取リンクから、贈られた方が物語を始められます。"}
+        </p>
+
+        {claimUrl && (
+          <div className="mt-8 rounded-[1.6rem] border border-white/10 bg-white/[0.025] p-5 text-left">
+            <p className="text-xs tracking-[0.12em] text-white/35">受取リンク</p>
+            <p className="mt-3 break-all text-xs leading-relaxed text-white/46">{claimUrl}</p>
+            <button
+              type="button"
+              onClick={copyClaimUrl}
+              className="mt-4 w-full rounded-full border border-white/12 py-3 text-sm text-white/72"
+            >
+              {copied ? "コピーしました" : "受取リンクをコピー"}
+            </button>
+          </div>
+        )}
+
+        <p className="mt-6 text-xs leading-[1.9] text-white/28">
+          ご注文番号: {order?.id ? String(order.id).slice(0, 8).toUpperCase() : "確認中"}
+          <br />
+          受取リンクには贈りものを開くための情報が含まれます。大切にお取り扱いください。
+        </p>
+
+        <button
+          type="button"
+          onClick={onFinish}
+          className="btn-quiet mt-10 w-full rounded-full bg-white py-4 text-slate-900"
+        >
+          完了
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Scene_GiftReceived({ preview, onContinue }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const openGift = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await onContinue();
+    } catch (claimError) {
+      console.error("gift claim error", claimError);
+      setError(claimError?.message || "贈りものを開けませんでした。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="h-full overflow-y-auto fade-enter px-6 py-12 text-center">
+      <div className="mx-auto flex min-h-full w-full max-w-[430px] flex-col justify-center">
+        <p className="text-[0.72rem] tracking-[0.3em] text-amber-100/42">
+          A GIFT FOR YOU
+        </p>
+        <h1 className="text-narrative mt-7 text-[1.6rem] leading-[1.9] text-white/92">
+          {preview?.recipient_name ? `${preview.recipient_name}へ` : "あなたへ"}、<br />
+          物語をたどる時間が届きました
+        </h1>
+
+        {preview?.gift_message && (
+          <div className="mt-8 rounded-[1.7rem] border border-amber-100/12 bg-amber-100/[0.035] px-6 py-6">
+            <p className="text-narrative whitespace-pre-wrap text-[0.98rem] leading-[2] text-amber-50/66">
+              {preview.gift_message}
+            </p>
+            <p className="mt-5 text-xs tracking-[0.12em] text-amber-50/34">
+              {preview.purchaser_name}より
+            </p>
+          </div>
+        )}
+
+        <p className="mx-auto mt-8 max-w-[350px] text-[0.92rem] leading-[2.1] text-white/52">
+          最初にお届けするのは、三つの問いです。<br />
+          声にしても、文章にしても、ご自身のペースでかまいません。
+        </p>
+        <p className="mt-5 text-xs leading-[1.9] text-white/28">
+          三つの問いのあとに、続きを進めるか、ひと休みするかを選べます。
+        </p>
+
+        {error && (
+          <p className="mt-6 rounded-2xl border border-red-200/15 bg-red-200/[0.05] px-5 py-4 text-sm leading-relaxed text-red-100/75">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={openGift}
+          disabled={busy}
+          className="btn-quiet mt-11 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-45"
+        >
+          {busy ? "贈りものを開いています…" : "贈りものを開く"}
+        </button>
+      </div>
     </div>
   );
 }
