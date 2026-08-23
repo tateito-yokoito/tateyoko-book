@@ -7,11 +7,15 @@ import {
   CheckCircle2,
   ChevronRight,
   CreditCard,
+  Clock3,
+  EyeOff,
   Files,
+  KeyRound,
   LoaderCircle,
   LogOut,
   Mail,
   RefreshCw,
+  RotateCcw,
   Search,
   ShieldCheck,
   Smartphone,
@@ -104,6 +108,25 @@ function formatDate(value, withTime = true) {
     day: "2-digit",
     ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {})
   }).format(date);
+}
+
+function formatRemaining(expiresAt, now = Date.now()) {
+  const remainingMilliseconds = new Date(expiresAt).getTime() - now;
+  if (!Number.isFinite(remainingMilliseconds) || remainingMilliseconds <= 0) return "終了";
+  const totalSeconds = Math.ceil(remainingMilliseconds / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+async function functionErrorDetails(error, data) {
+  if (data && typeof data === "object") return data;
+  try {
+    if (error?.context?.json) return await error.context.json();
+  } catch (parseError) {
+    console.warn("admin function error response parse failed", parseError);
+  }
+  return { error: error?.message || "処理を完了できませんでした。" };
 }
 
 function accessLabel(value) {
@@ -291,6 +314,100 @@ function EmptyState({ children }) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">
       {children}
+    </div>
+  );
+}
+
+function OrganizationModeDialog({
+  email,
+  durationMinutes,
+  password,
+  onPasswordChange,
+  onPasswordSubmit,
+  onSendEmail,
+  onClose,
+  busy,
+  message
+}) {
+  return createPortal((
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 px-5 backdrop-blur-[2px]" onMouseDown={onClose}>
+      <section className="w-full max-w-md rounded-3xl bg-white p-7 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs tracking-[0.18em] text-slate-400">ORGANIZATION MODE</p>
+            <h2 className="mt-1 text-xl font-medium">整理モードを開始</h2>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full border border-slate-200 p-2 text-slate-500"><X size={17} /></button>
+        </div>
+        <p className="mt-4 text-sm leading-7 text-slate-500">
+          owner本人であることを再確認します。開始後は非表示操作と非表示ゾーンが{durationMinutes || 15}分間利用できます。
+        </p>
+        <form onSubmit={onPasswordSubmit} className="mt-6 space-y-4">
+          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">{email}</div>
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => onPasswordChange(event.target.value)}
+            placeholder="現在のパスワード"
+            autoComplete="current-password"
+            className="w-full rounded-xl border border-slate-200 px-4 py-3.5 text-sm outline-none transition focus:border-slate-500"
+          />
+          <button type="submit" disabled={busy || !password} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#10203a] px-4 py-3.5 text-sm text-white disabled:opacity-40">
+            {busy ? <LoaderCircle size={16} className="animate-spin" /> : <KeyRound size={16} />}
+            再認証して開始
+          </button>
+        </form>
+        <div className="my-5 flex items-center gap-3 text-xs text-slate-300"><span className="h-px flex-1 bg-slate-200" />または<span className="h-px flex-1 bg-slate-200" /></div>
+        <button type="button" onClick={onSendEmail} disabled={busy} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-600 disabled:opacity-40">
+          認証メールで再確認する
+        </button>
+        {message && <p className="mt-4 text-sm leading-6 text-slate-600">{message}</p>}
+      </section>
+    </div>
+  ), document.body);
+}
+
+function HiddenZone({ entries, actionTarget, onOpen, onRestore, onRetire }) {
+  if (!entries.length) return <EmptyState>非表示にした物語・アカウントはありません。</EmptyState>;
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-800">
+        ここにあるデータは通常の管理画面では表示されません。物語は表示中に戻せます。退役済みアカウントの復旧はメールの重複を確認して行います。
+      </div>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        {entries.map((entry) => {
+          const snapshot = entry.snapshot || {};
+          const isAccount = entry.entity_type === "account";
+          const isRetired = isAccount && entry.lifecycle_status === "retired";
+          const label = withoutHonorific(snapshot.display_name || snapshot.title) || snapshot.email || "名称未登録";
+          const busy = actionTarget.includes(entry.entity_id);
+          return (
+            <div key={`${entry.entity_type}:${entry.entity_id}`} className="grid gap-4 border-b border-slate-100 px-5 py-5 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+              <button type="button" onClick={() => onOpen(entry)} className="min-w-0 text-left">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate font-medium text-slate-900">{label}</p>
+                  <StatusPill>{isAccount ? "アカウント" : "物語"}</StatusPill>
+                  {isAccount && <StatusPill tone={isRetired ? "warning" : "neutral"}>{isRetired ? "退役・メール解放済み" : "非表示のみ"}</StatusPill>}
+                </div>
+                <p className="mt-1 truncate text-xs text-slate-500">{snapshot.email || snapshot.owner_email || "連絡先未登録"}</p>
+                <p className="mt-2 text-xs text-slate-400">非表示 {formatDate(entry.trashed_at)}</p>
+              </button>
+              <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                {isAccount && !isRetired && (
+                  <button type="button" disabled={busy} onClick={() => onRetire(entry)} className="rounded-xl border border-amber-200 px-3 py-2 text-xs text-amber-700 disabled:opacity-40">
+                    退役してメール解放
+                  </button>
+                )}
+                <button type="button" disabled={busy} onClick={() => onRestore(entry)} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 disabled:opacity-40">
+                  {busy ? <LoaderCircle size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                  {isRetired ? "復旧" : "表示中に戻す"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -692,7 +809,17 @@ function PaymentTable({ rows }) {
   );
 }
 
-function AccountDetailPanel({ detail, loading, onClose, onOpenProject, onMoveToTrash, canTrash, trashLoading }) {
+function AccountDetailPanel({
+  detail,
+  loading,
+  onClose,
+  onOpenProject,
+  onMoveToTrash,
+  onRestore,
+  canTrash,
+  hiddenEntry,
+  trashLoading
+}) {
   const account = detail?.account || null;
   const projects = [
     ...(detail?.owned_projects || []).map(project => ({ ...project, relationship: "所有" })),
@@ -737,7 +864,25 @@ function AccountDetailPanel({ detail, loading, onClose, onOpenProject, onMoveToT
 
             <section><h3 className="mb-3 text-sm font-medium">利用履歴</h3><ActivityTimeline rows={detail.activities || []} /></section>
             <section><h3 className="mb-3 text-sm font-medium">配信履歴</h3><DeliveryHistoryList rows={detail.deliveries || []} /></section>
-            {canTrash && (
+            {hiddenEntry && (
+              <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
+                <button
+                  type="button"
+                  disabled={trashLoading}
+                  onClick={() => onRestore(hiddenEntry)}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-amber-800 disabled:opacity-40"
+                >
+                  {trashLoading ? <LoaderCircle size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                  {hiddenEntry.lifecycle_status === "retired" ? "このアカウントを復旧" : "このアカウントを表示中に戻す"}
+                </button>
+                <p className="mt-2 text-xs leading-5 text-amber-800/70">
+                  {hiddenEntry.lifecycle_status === "retired"
+                    ? "元のメールが別アカウントで使用中の場合は、自動では復旧しません。"
+                    : "メールアドレスとログイン状態は変更されていません。"}
+                </p>
+              </section>
+            )}
+            {canTrash && !hiddenEntry && (
               <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-5">
                 <button
                   type="button"
@@ -745,9 +890,9 @@ function AccountDetailPanel({ detail, loading, onClose, onOpenProject, onMoveToT
                   onClick={() => onMoveToTrash(account)}
                   className="inline-flex items-center gap-2 text-sm font-medium text-rose-700 disabled:opacity-40"
                 >
-                  <Trash2 size={16} />{trashLoading ? "移動中…" : "このアカウントをゴミ箱へ移動"}
+                  <Trash2 size={16} />{trashLoading ? "退役中…" : "このアカウントを退役させる"}
                 </button>
-                <p className="mt-2 text-xs leading-5 text-rose-700/65">管理画面から非表示にします。所有する物語と元データは削除されません。</p>
+                <p className="mt-2 text-xs leading-5 text-rose-700/65">管理画面から非表示にし、ログインを停止してメールを新規登録へ解放します。物語と元データは削除されません。</p>
               </section>
             )}
           </div>
@@ -763,7 +908,9 @@ function DetailPanel({
   onClose,
   onOpenPurchaser,
   onMoveToTrash,
+  onRestore,
   canTrash,
+  hiddenEntry,
   trashLoading,
   onOpenStoryPreview,
   onOpenBookPreview,
@@ -887,7 +1034,21 @@ function DetailPanel({
 
             <section><h3 className="mb-3 text-sm font-medium">物語の利用履歴</h3><ActivityTimeline rows={detail.activities || []} /></section>
             <section><h3 className="mb-3 text-sm font-medium">配信履歴</h3><DeliveryHistoryList rows={detail.deliveries || []} /></section>
-            {canTrash && (
+            {hiddenEntry && (
+              <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
+                <button
+                  type="button"
+                  disabled={trashLoading}
+                  onClick={() => onRestore(hiddenEntry)}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-amber-800 disabled:opacity-40"
+                >
+                  {trashLoading ? <LoaderCircle size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                  この物語を表示中に戻す
+                </button>
+                <p className="mt-2 text-xs leading-5 text-amber-800/70">回答・音声・写真・購入情報は保持されています。</p>
+              </section>
+            )}
+            {canTrash && !hiddenEntry && (
               <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-5">
                 <button
                   type="button"
@@ -895,7 +1056,7 @@ function DetailPanel({
                   onClick={() => onMoveToTrash(detail.project)}
                   className="inline-flex items-center gap-2 text-sm font-medium text-rose-700 disabled:opacity-40"
                 >
-                  <Trash2 size={16} />{trashLoading ? "移動中…" : "この物語をゴミ箱へ移動"}
+                  <Trash2 size={16} />{trashLoading ? "処理中…" : "この物語を非表示にする"}
                 </button>
                 <p className="mt-2 text-xs leading-5 text-rose-700/65">管理画面から非表示にします。回答・音声・写真・購入情報は削除されません。</p>
               </section>
@@ -929,6 +1090,16 @@ export default function AdminReview({ supabaseClient }) {
   const [notice, setNotice] = useState("");
   const [trashTarget, setTrashTarget] = useState("");
   const [trashEntries, setTrashEntries] = useState([]);
+  const [organizationModeStatus, setOrganizationModeStatus] = useState({
+    active: false,
+    expires_at: null,
+    duration_minutes: 15
+  });
+  const [organizationNow, setOrganizationNow] = useState(Date.now());
+  const [organizationDialogOpen, setOrganizationDialogOpen] = useState(false);
+  const [organizationPassword, setOrganizationPassword] = useState("");
+  const [organizationBusy, setOrganizationBusy] = useState(false);
+  const [organizationMessage, setOrganizationMessage] = useState("");
   const [detailId, setDetailId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -940,6 +1111,7 @@ export default function AdminReview({ supabaseClient }) {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
   const previewRequestRef = useRef(0);
+  const organizationActivationRef = useRef(false);
 
   useEffect(() => {
     supabaseClient.auth.getSession().then(({ data }) => { setSession(data.session); setAuthReady(true); });
@@ -955,6 +1127,7 @@ export default function AdminReview({ supabaseClient }) {
     if (!session) {
       setAuthorized(false);
       setAdminRole(null);
+      setOrganizationModeStatus({ active: false, expires_at: null, duration_minutes: 15 });
       setAuthorizationReady(false);
       return;
     }
@@ -978,6 +1151,153 @@ export default function AdminReview({ supabaseClient }) {
       active = false;
     };
   }, [session, supabaseClient]);
+
+  const loadOrganizationModeStatus = useCallback(async () => {
+    if (!authorized) return;
+    const { data, error: modeError } = await supabaseClient.rpc("get_admin_organization_mode_status");
+    if (modeError) {
+      console.error("admin organization mode status error", modeError);
+      return;
+    }
+    setOrganizationModeStatus({
+      active: Boolean(data?.active),
+      expires_at: data?.expires_at || null,
+      duration_minutes: Number(data?.duration_minutes || 15)
+    });
+    setOrganizationNow(Date.now());
+  }, [authorized, supabaseClient]);
+
+  useEffect(() => {
+    loadOrganizationModeStatus();
+  }, [loadOrganizationModeStatus]);
+
+  const organizationModeActive = Boolean(
+    adminRole === "owner"
+      && organizationModeStatus.active
+      && organizationModeStatus.expires_at
+      && new Date(organizationModeStatus.expires_at).getTime() > organizationNow
+  );
+
+  useEffect(() => {
+    if (!organizationModeStatus.active || !organizationModeStatus.expires_at) return undefined;
+    const timer = window.setInterval(() => setOrganizationNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [organizationModeStatus.active, organizationModeStatus.expires_at]);
+
+  useEffect(() => {
+    if (organizationModeActive) return;
+    if (organizationModeStatus.active && organizationModeStatus.expires_at) {
+      setOrganizationModeStatus(current => ({ ...current, active: false, expires_at: null }));
+    }
+    if (tab === "hidden") setTab("attention");
+    const detailIsHidden = detailId && trashEntries.some(item => item.entity_type === "book_project" && item.entity_id === detailId);
+    const accountIsHidden = accountDetailId && trashEntries.some(item => item.entity_type === "account" && item.entity_id === accountDetailId);
+    if (detailIsHidden) {
+      setDetailId(null);
+      setDetail(null);
+    }
+    if (accountIsHidden) {
+      setAccountDetailId(null);
+      setAccountDetail(null);
+    }
+  }, [organizationModeActive, organizationModeStatus.active, organizationModeStatus.expires_at, tab, detailId, accountDetailId, trashEntries]);
+
+  async function startOrganizationModeAfterReauthentication() {
+    const { data, error: modeError } = await supabaseClient.rpc("start_admin_organization_mode");
+    if (modeError) throw modeError;
+    setOrganizationModeStatus({
+      active: true,
+      expires_at: data?.expires_at || null,
+      duration_minutes: Number(data?.duration_minutes || organizationModeStatus.duration_minutes || 15)
+    });
+    setOrganizationNow(Date.now());
+    setOrganizationDialogOpen(false);
+    setOrganizationPassword("");
+    setOrganizationMessage("");
+    setNotice(`整理モードを開始しました。${Number(data?.duration_minutes || 15)}分後に自動終了します。`);
+    await loadDashboard();
+  }
+
+  async function handleOrganizationPasswordSubmit(event) {
+    event.preventDefault();
+    if (!organizationPassword || !session?.user?.email) return;
+    setOrganizationBusy(true);
+    setOrganizationMessage("");
+    setError("");
+    try {
+      const { error: signInError } = await supabaseClient.auth.signInWithPassword({
+        email: session.user.email,
+        password: organizationPassword
+      });
+      if (signInError) throw signInError;
+      await startOrganizationModeAfterReauthentication();
+    } catch (modeError) {
+      console.error("admin organization mode password reauthentication failed", modeError);
+      setOrganizationMessage("再認証できませんでした。パスワードを確認してください。");
+    } finally {
+      setOrganizationBusy(false);
+    }
+  }
+
+  async function handleOrganizationEmailAuthentication() {
+    if (!session?.user?.email) return;
+    setOrganizationBusy(true);
+    setOrganizationMessage("");
+    try {
+      const redirectUrl = new URL(window.location.href);
+      redirectUrl.search = "";
+      redirectUrl.hash = "";
+      redirectUrl.searchParams.set("admin", "1");
+      redirectUrl.searchParams.set("organize", "activate");
+      const { error: signInError } = await supabaseClient.auth.signInWithOtp({
+        email: session.user.email,
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: redirectUrl.toString()
+        }
+      });
+      if (signInError) throw signInError;
+      setOrganizationMessage("認証メールを送信しました。メール内のボタンから戻ると整理モードが始まります。");
+    } catch (modeError) {
+      console.error("admin organization mode email reauthentication failed", modeError);
+      setOrganizationMessage("認証メールを送信できませんでした。");
+    } finally {
+      setOrganizationBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("organize") !== "activate" || !authorized || adminRole !== "owner" || organizationActivationRef.current) return;
+    organizationActivationRef.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("organize");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    setOrganizationBusy(true);
+    startOrganizationModeAfterReauthentication()
+      .catch((modeError) => {
+        console.error("admin organization mode email activation failed", modeError);
+        setError("整理モードを開始できませんでした。もう一度再認証してください。");
+      })
+      .finally(() => setOrganizationBusy(false));
+  }, [authorized, adminRole]);
+
+  async function endOrganizationMode() {
+    setOrganizationBusy(true);
+    setError("");
+    try {
+      const { error: modeError } = await supabaseClient.rpc("end_admin_organization_mode");
+      if (modeError) throw modeError;
+      setOrganizationModeStatus(current => ({ ...current, active: false, expires_at: null }));
+      setTab(current => current === "hidden" ? "attention" : current);
+      setNotice("整理モードを終了しました。");
+      await loadDashboard();
+    } catch (modeError) {
+      setError(modeError?.message || "整理モードを終了できませんでした。");
+    } finally {
+      setOrganizationBusy(false);
+    }
+  }
 
   const loadDashboard = useCallback(async () => {
     if (!authorized) return;
@@ -1079,14 +1399,18 @@ export default function AdminReview({ supabaseClient }) {
   async function moveToTrash(entityType, entity) {
     const entityId = entity?.id;
     if (!entityId) return;
+    if (!organizationModeActive) {
+      setError("この操作には有効な整理モードが必要です。");
+      return;
+    }
 
     const isAccount = entityType === "account";
     const label = isAccount
       ? withoutHonorific(entity.display_name) || entity.email || "このアカウント"
       : projectDisplayName(entity);
     const message = isAccount
-      ? `「${label}」を管理画面のゴミ箱へ移動します。\n\n所有する物語と元データは削除されません。続けますか？`
-      : `「${label}」を管理画面のゴミ箱へ移動します。\n\n回答・音声・写真・購入情報は削除されません。続けますか？`;
+      ? `「${label}」を退役させます。\n\n管理画面から非表示になり、ログインが停止され、現在のメールアドレスは新規登録に解放されます。所有する物語と元データは削除されません。続けますか？`
+      : `「${label}」を管理画面で非表示にします。\n\n回答・音声・写真・購入情報は削除されません。続けますか？`;
 
     if (!window.confirm(message)) return;
 
@@ -1095,28 +1419,116 @@ export default function AdminReview({ supabaseClient }) {
     setError("");
     setNotice("");
     try {
-      const { error: trashError } = await supabaseClient.rpc("move_admin_entity_to_trash", {
-        input_entity_type: entityType,
-        input_entity_id: entityId
-      });
-      if (trashError) throw trashError;
+      if (isAccount) {
+        const { data, error: lifecycleError } = await supabaseClient.functions.invoke("admin-account-lifecycle", {
+          body: { action: "retire", account_id: entityId }
+        });
+        if (lifecycleError) {
+          const details = await functionErrorDetails(lifecycleError, data);
+          throw new Error(details.error || lifecycleError.message);
+        }
+      } else {
+        const { error: trashError } = await supabaseClient.rpc("move_admin_entity_to_trash", {
+          input_entity_type: entityType,
+          input_entity_id: entityId
+        });
+        if (trashError) throw trashError;
+      }
 
       closePreview();
       setDetailId(null);
       setDetail(null);
       setAccountDetailId(null);
       setAccountDetail(null);
-      setNotice(`${label}をゴミ箱へ移動しました。元データは保持されています。`);
+      setNotice(isAccount
+        ? `${label}を退役させ、メールアドレスを新規登録へ解放しました。元データは保持されています。`
+        : `${label}を非表示にしました。元データは保持されています。`);
       await loadDashboard();
     } catch (trashError) {
-      setError(trashError?.message || "ゴミ箱へ移動できませんでした。");
+      setError(trashError?.message || "非表示処理を完了できませんでした。");
     } finally {
       setTrashTarget("");
     }
   }
 
-  async function openDetail(projectId) {
-    if (trashEntries.some(item => item.entity_type === "book_project" && item.entity_id === projectId)) return;
+  async function restoreFromTrash(entry, restoreEmail = "") {
+    const entityType = entry?.entity_type;
+    const entityId = entry?.entity_id;
+    if (!entityType || !entityId || !organizationModeActive) return;
+
+    const snapshot = entry.snapshot || {};
+    const isAccount = entityType === "account";
+    const isRetired = isAccount && entry.lifecycle_status === "retired";
+    const label = withoutHonorific(snapshot.display_name || snapshot.title) || snapshot.email || "名称未登録";
+    const confirmation = isRetired
+      ? `「${label}」を復旧します。\n\n元のメールアドレスが別のアカウントで使われている場合は復旧できません。続けますか？`
+      : `「${label}」を表示中に戻します。続けますか？`;
+
+    if (!restoreEmail && !window.confirm(confirmation)) return;
+
+    const targetKey = `restore:${entityType}:${entityId}`;
+    setTrashTarget(targetKey);
+    setError("");
+    setNotice("");
+    let retryEmail = "";
+
+    try {
+      if (isRetired) {
+        const { data, error: lifecycleError } = await supabaseClient.functions.invoke("admin-account-lifecycle", {
+          body: {
+            action: "restore",
+            account_id: entityId,
+            ...(restoreEmail ? { restore_email: restoreEmail } : {})
+          }
+        });
+        if (lifecycleError) {
+          const details = await functionErrorDetails(lifecycleError, data);
+          if (details.email_conflict && !restoreEmail) {
+            retryEmail = String(window.prompt(
+              "元のメールアドレスは新しいアカウントで使用されています。\n古いアカウントを復旧する別の未使用メールアドレスを入力してください。\n\n統合や上書きは行いません。",
+              ""
+            ) || "").trim();
+            if (!retryEmail) return;
+          } else {
+            throw new Error(details.error || lifecycleError.message);
+          }
+        }
+      } else {
+        const { error: restoreError } = await supabaseClient.rpc("restore_admin_entity_from_trash", {
+          input_entity_type: entityType,
+          input_entity_id: entityId
+        });
+        if (restoreError) throw restoreError;
+      }
+
+      if (!retryEmail) {
+        closePreview();
+        setDetailId(null);
+        setDetail(null);
+        setAccountDetailId(null);
+        setAccountDetail(null);
+        setNotice(`${label}を${isRetired ? "復旧" : "表示中に戻"}しました。`);
+        await loadDashboard();
+      }
+    } catch (restoreError) {
+      setError(restoreError?.message || "表示中に戻せませんでした。");
+    } finally {
+      setTrashTarget("");
+    }
+
+    if (retryEmail) await restoreFromTrash(entry, retryEmail);
+  }
+
+  async function retireHiddenAccount(entry) {
+    await moveToTrash("account", {
+      id: entry.entity_id,
+      display_name: entry.snapshot?.display_name,
+      email: entry.snapshot?.email
+    });
+  }
+
+  async function openDetail(projectId, allowHidden = false) {
+    if (trashEntries.some(item => item.entity_type === "book_project" && item.entity_id === projectId) && (!allowHidden || !organizationModeActive)) return;
     setAccountDetailId(null);
     setAccountDetail(null);
     setDetailId(projectId);
@@ -1137,6 +1549,9 @@ export default function AdminReview({ supabaseClient }) {
       const data = detailResult.data;
       const dashboardProject = (dashboard?.projects || []).find(project => project.id === projectId);
       const resolvedProjectName = dashboardProject?.subject_name || data?.project?.subject_name || data?.project?.title;
+      const retiredOwner = trashEntries.find(item =>
+        item.entity_type === "account" && item.entity_id === data?.project?.owner_user_id
+      );
       setDetail({
         ...data,
         purchase: purchaseResult.data || {},
@@ -1151,6 +1566,7 @@ export default function AdminReview({ supabaseClient }) {
         project: data?.project
           ? {
             ...data.project,
+            owner_email: retiredOwner?.snapshot?.email || data.project.owner_email,
             subject_name: dashboardProject?.subject_name || data.project.subject_name
           }
           : null
@@ -1163,8 +1579,9 @@ export default function AdminReview({ supabaseClient }) {
     }
   }
 
-  async function openAccountDetail(accountId) {
-    if (trashEntries.some(item => item.entity_type === "account" && item.entity_id === accountId)) return;
+  async function openAccountDetail(accountId, allowHidden = false) {
+    const hiddenAccount = trashEntries.find(item => item.entity_type === "account" && item.entity_id === accountId);
+    if (hiddenAccount && (!allowHidden || !organizationModeActive)) return;
     setDetailId(null);
     setDetail(null);
     setAccountDetailId(accountId);
@@ -1200,6 +1617,12 @@ export default function AdminReview({ supabaseClient }) {
       }
       setAccountDetail({
         ...rawDetail,
+        account: rawDetail.account
+          ? {
+            ...rawDetail.account,
+            email: hiddenAccount?.snapshot?.email || rawDetail.account.email
+          }
+          : null,
         owned_projects: (rawDetail.owned_projects || []).filter(project => !trashedProjectIds.has(project.id)).map(project => ({
           ...project,
           name: projectNames[project.id] || withoutHonorific(project.name)
@@ -1265,7 +1688,16 @@ export default function AdminReview({ supabaseClient }) {
   const projects = dashboard?.projects || [];
   const attention = dashboard?.attention || [];
   const activeRows = tab === "attention" ? attention : projects;
-  const pageTitle = TAB_ITEMS.find((item) => item.id === tab)?.label;
+  const navigationItems = organizationModeActive
+    ? [...TAB_ITEMS, { id: "hidden", label: "非表示ゾーン", icon: EyeOff }]
+    : TAB_ITEMS;
+  const pageTitle = navigationItems.find((item) => item.id === tab)?.label || "運営管理";
+  const hiddenProjectEntry = detailId
+    ? trashEntries.find(item => item.entity_type === "book_project" && item.entity_id === detailId)
+    : null;
+  const hiddenAccountEntry = accountDetailId
+    ? trashEntries.find(item => item.entity_type === "account" && item.entity_id === accountDetailId)
+    : null;
   const metricCards = useMemo(() => [
     ["要対応", metrics.attention_count, "確認が必要な物語", true],
     ["物語", metrics.project_count, "登録されているプロジェクト"],
@@ -1284,7 +1716,19 @@ export default function AdminReview({ supabaseClient }) {
       <header className="bg-[#10203a] text-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 md:px-8">
           <div><p className="text-[10px] tracking-[0.24em] text-white/45">TATEITO YOKOITO</p><h1 className="mt-1 text-lg font-medium">運営管理</h1></div>
-          <div className="flex items-center gap-3"><p className="hidden text-xs text-white/50 sm:block">{session.user.email}</p><button onClick={() => supabaseClient.auth.signOut()} title="ログアウト" className="rounded-full border border-white/15 p-2.5 text-white/65 hover:bg-white/10"><LogOut size={16} /></button></div>
+          <div className="flex items-center gap-3">
+            {adminRole === "owner" && (organizationModeActive ? (
+              <button type="button" onClick={endOrganizationMode} disabled={organizationBusy} className="inline-flex items-center gap-2 rounded-full border border-amber-300/35 bg-amber-300/15 px-3.5 py-2 text-xs text-amber-100 disabled:opacity-40" title="整理モードを終了">
+                <Clock3 size={14} />整理中 {formatRemaining(organizationModeStatus.expires_at, organizationNow)}
+              </button>
+            ) : (
+              <button type="button" onClick={() => { setOrganizationMessage(""); setOrganizationDialogOpen(true); }} className="inline-flex items-center gap-2 rounded-full border border-white/15 px-3.5 py-2 text-xs text-white/70 hover:bg-white/10">
+                <EyeOff size={14} />整理モード
+              </button>
+            ))}
+            <p className="hidden text-xs text-white/50 sm:block">{session.user.email}</p>
+            <button onClick={() => supabaseClient.auth.signOut()} title="ログアウト" className="rounded-full border border-white/15 p-2.5 text-white/65 hover:bg-white/10"><LogOut size={16} /></button>
+          </div>
         </div>
       </header>
 
@@ -1292,7 +1736,7 @@ export default function AdminReview({ supabaseClient }) {
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{metricCards.map(([label, value, hint, alert]) => <MetricCard key={label} label={label} value={value} hint={hint} alert={alert} />)}</section>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
-          <nav className="space-y-1">{TAB_ITEMS.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => setTab(item.id)} className={`flex w-full items-center justify-between rounded-xl px-3.5 py-3 text-sm transition ${tab === item.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:bg-white/60"}`}><span className="flex items-center gap-3"><Icon size={17} />{item.label}</span>{item.id === "attention" && metrics.attention_count > 0 && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700">{metrics.attention_count}</span>}</button>; })}</nav>
+          <nav className="space-y-1">{navigationItems.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => setTab(item.id)} className={`flex w-full items-center justify-between rounded-xl px-3.5 py-3 text-sm transition ${tab === item.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:bg-white/60"}`}><span className="flex items-center gap-3"><Icon size={17} />{item.label}</span>{item.id === "attention" && metrics.attention_count > 0 && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700">{metrics.attention_count}</span>}{item.id === "hidden" && trashEntries.length > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">{trashEntries.length}</span>}</button>; })}</nav>
 
           <section className="min-w-0">
             <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -1309,7 +1753,7 @@ export default function AdminReview({ supabaseClient }) {
                     <option value="failed">失敗</option>
                   </select>
                 )}
-                <form onSubmit={(event) => { event.preventDefault(); setAppliedSearch(search.trim()); }} className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-white px-3"><Search size={15} className="shrink-0 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="氏名・メール・ID" className="min-w-0 bg-transparent px-2 py-2.5 text-sm outline-none" /></form>
+                {tab !== "hidden" && <form onSubmit={(event) => { event.preventDefault(); setAppliedSearch(search.trim()); }} className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-white px-3"><Search size={15} className="shrink-0 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="氏名・メール・ID" className="min-w-0 bg-transparent px-2 py-2.5 text-sm outline-none" /></form>}
                 <button onClick={loadDashboard} title="再読み込み" className="rounded-xl border border-slate-200 bg-white p-3 text-slate-500"><RefreshCw size={16} className={loading ? "animate-spin" : ""} /></button>
               </div>
             </div>
@@ -1321,6 +1765,17 @@ export default function AdminReview({ supabaseClient }) {
             {tab === "accounts" && <AccountTable rows={dashboard?.accounts || []} onOpen={openAccountDetail} />}
             {tab === "deliveries" && <DeliveryTable rows={deliveryHistory} onOpenProject={openDetail} />}
             {tab === "payments" && <PaymentTable rows={dashboard?.payments || []} />}
+            {tab === "hidden" && organizationModeActive && (
+              <HiddenZone
+                entries={trashEntries}
+                actionTarget={trashTarget}
+                onOpen={(entry) => entry.entity_type === "account"
+                  ? openAccountDetail(entry.entity_id, true)
+                  : openDetail(entry.entity_id, true)}
+                onRestore={restoreFromTrash}
+                onRetire={retireHiddenAccount}
+              />
+            )}
           </section>
         </div>
       </main>
@@ -1331,9 +1786,11 @@ export default function AdminReview({ supabaseClient }) {
           loading={detailLoading}
           previewLoading={previewLoading}
           onOpenPurchaser={openAccountDetail}
-          canTrash={["owner", "operator"].includes(adminRole)}
-          trashLoading={trashTarget === `book_project:${detailId}`}
+          canTrash={adminRole === "owner" && organizationModeActive}
+          hiddenEntry={hiddenProjectEntry}
+          trashLoading={trashTarget.includes(`book_project:${detailId}`)}
           onMoveToTrash={(project) => moveToTrash("book_project", project)}
+          onRestore={restoreFromTrash}
           onOpenStoryPreview={() => openPreview("stories")}
           onOpenBookPreview={() => openPreview("book")}
           onClose={() => { closePreview(); setDetailId(null); setDetail(null); }}
@@ -1345,10 +1802,26 @@ export default function AdminReview({ supabaseClient }) {
           detail={accountDetail}
           loading={accountDetailLoading}
           onOpenProject={openDetail}
-          canTrash={["owner", "operator"].includes(adminRole)}
-          trashLoading={trashTarget === `account:${accountDetailId}`}
+          canTrash={adminRole === "owner" && organizationModeActive}
+          hiddenEntry={hiddenAccountEntry}
+          trashLoading={trashTarget.includes(`account:${accountDetailId}`)}
           onMoveToTrash={(account) => moveToTrash("account", account)}
+          onRestore={restoreFromTrash}
           onClose={() => { setAccountDetailId(null); setAccountDetail(null); }}
+        />
+      )}
+
+      {organizationDialogOpen && (
+        <OrganizationModeDialog
+          email={session.user.email}
+          durationMinutes={organizationModeStatus.duration_minutes}
+          password={organizationPassword}
+          onPasswordChange={setOrganizationPassword}
+          onPasswordSubmit={handleOrganizationPasswordSubmit}
+          onSendEmail={handleOrganizationEmailAuthentication}
+          onClose={() => { if (!organizationBusy) setOrganizationDialogOpen(false); }}
+          busy={organizationBusy}
+          message={organizationMessage}
         />
       )}
 
