@@ -8974,10 +8974,10 @@ const CLOTH_COVER_COLORS = [
 ];
 
 const PRINT_COVER_COLORS = [
-  { label: "アイボリー", value: "#e8e0d6", ink: "#26394a", image: "/site/book-covers/print-ivory.png" },
   { label: "セージグリーン", value: "#a9bcb6", ink: "#294b43", image: "/site/book-covers/print-sage-green.png" },
-  { label: "ネイビー", value: "#182b48", ink: "#f1e9dc", image: "/site/book-covers/print-navy.png" },
-  { label: "ダスティローズ", value: "#c9aaa7", ink: "#4e3540", image: "/site/book-covers/print-dusty-rose.png" }
+  { label: "ダスティローズ", value: "#c9aaa7", ink: "#4e3540", image: "/site/book-covers/print-dusty-rose.png" },
+  { label: "アイボリー", value: "#e8e0d6", ink: "#26394a", image: "/site/book-covers/print-ivory.png" },
+  { label: "ネイビー", value: "#182b48", ink: "#f1e9dc", image: "/site/book-covers/print-navy.png" }
 ];
 
 function BookCoverPreview({
