@@ -169,24 +169,7 @@ serve(async (req) => {
         return jsonResponse({ error: "Authentication account could not be retired" }, 409);
       }
 
-      const { error: profileUpdateError } = profile
-        ? await adminClient.from("profiles").update({ email: tombstoneEmail }).eq("id", accountId)
-        : { error: null };
-
-      if (profileUpdateError) {
-        console.error("admin-account-lifecycle retirement profile update failed", profileUpdateError);
-        await adminClient.auth.admin.updateUserById(accountId, {
-          email: originalEmail,
-          email_confirm: true,
-          ban_duration: "none"
-        });
-        if (profile) {
-          await adminClient.from("profiles").update({ email: originalEmail }).eq("id", accountId);
-        }
-        return jsonResponse({ error: "Account retirement could not be completed" }, 500);
-      }
-
-      const { error: finalizeError } = await adminClient.rpc("finalize_admin_account_retirement", {
+      const { error: finalizeError } = await adminClient.rpc("complete_admin_account_retirement", {
         input_actor_id: actorId,
         input_account_id: accountId,
         input_original_email: originalEmail,
@@ -201,9 +184,6 @@ serve(async (req) => {
           email_confirm: true,
           ban_duration: "none"
         });
-        if (profile) {
-          await adminClient.from("profiles").update({ email: originalEmail }).eq("id", accountId);
-        }
         return jsonResponse({ error: "Account retirement could not be completed" }, 500);
       }
 
@@ -265,24 +245,7 @@ serve(async (req) => {
       }, isConflict ? 409 : 500);
     }
 
-    const { error: restoreProfileError } = profile
-      ? await adminClient.from("profiles").update({ email: restoreEmail }).eq("id", accountId)
-      : { error: null };
-
-    if (restoreProfileError) {
-      console.error("admin-account-lifecycle restore profile update failed", restoreProfileError);
-      await adminClient.auth.admin.updateUserById(accountId, {
-        email: retiredRow.tombstone_email,
-        email_confirm: true,
-        ban_duration: "876000h"
-      });
-      if (profile) {
-        await adminClient.from("profiles").update({ email: retiredRow.tombstone_email }).eq("id", accountId);
-      }
-      return jsonResponse({ error: "Account restoration could not be completed" }, 500);
-    }
-
-    const { error: finalizeRestoreError } = await adminClient.rpc("finalize_admin_account_restore", {
+    const { error: finalizeRestoreError } = await adminClient.rpc("complete_admin_account_restore", {
       input_actor_id: actorId,
       input_account_id: accountId,
       input_restore_email: restoreEmail,
@@ -296,9 +259,6 @@ serve(async (req) => {
         email_confirm: true,
         ban_duration: "876000h"
       });
-      if (profile) {
-        await adminClient.from("profiles").update({ email: retiredRow.tombstone_email }).eq("id", accountId);
-      }
       return jsonResponse({ error: "Account restoration could not be completed" }, 500);
     }
 
