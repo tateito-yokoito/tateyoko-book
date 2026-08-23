@@ -8967,17 +8967,17 @@ function BookPagePreview({
 }
 
 const CLOTH_COVER_COLORS = [
-  { label: "深緑", value: "#1f3a36" },
-  { label: "紺", value: "#132b49" },
-  { label: "ブラック", value: "#18191b" },
-  { label: "水", value: "#6c8fa3" }
+  { label: "深緑", value: "#1f3a36", image: "/site/book-covers/cloth-deep-green.png" },
+  { label: "紺", value: "#132b49", image: "/site/book-covers/cloth-navy.png" },
+  { label: "ブラック", value: "#18191b", image: "/site/book-covers/cloth-black.png" },
+  { label: "水", value: "#6c8fa3", image: "/site/book-covers/cloth-water.png" }
 ];
 
 const PRINT_COVER_COLORS = [
-  { label: "アイボリー", value: "#e8e0d6", ink: "#26394a" },
-  { label: "セージグリーン", value: "#a9bcb6", ink: "#294b43" },
-  { label: "ネイビー", value: "#182b48", ink: "#f1e9dc" },
-  { label: "ダスティローズ", value: "#c9aaa7", ink: "#4e3540" }
+  { label: "アイボリー", value: "#e8e0d6", ink: "#26394a", image: "/site/book-covers/print-ivory.png" },
+  { label: "セージグリーン", value: "#a9bcb6", ink: "#294b43", image: "/site/book-covers/print-sage-green.png" },
+  { label: "ネイビー", value: "#182b48", ink: "#f1e9dc", image: "/site/book-covers/print-navy.png" },
+  { label: "ダスティローズ", value: "#c9aaa7", ink: "#4e3540", image: "/site/book-covers/print-dusty-rose.png" }
 ];
 
 function BookCoverPreview({
@@ -8988,127 +8988,59 @@ function BookCoverPreview({
   coverStyle = "cloth"
 }) {
   const isPrint = coverStyle === "print";
-  const isCloth = !isPrint;
   const normalizedColor = String(coverColor || "").toLowerCase();
-  const printColor = PRINT_COVER_COLORS.find(
+  const coverOptions = isPrint ? PRINT_COVER_COLORS : CLOTH_COVER_COLORS;
+  const selectedCover = coverOptions.find(
     ({ value }) => value.toLowerCase() === normalizedColor
-  );
-  const printInk = printColor?.ink || "#26394a";
-  const coverTexture = isCloth
+  ) || coverOptions[0];
+  const printInk = selectedCover.ink || "#26394a";
+  const coverTextStyle = !isPrint
     ? {
-        backgroundColor: coverColor,
-        backgroundImage: [
-          "linear-gradient(118deg, rgba(255,255,255,.075), transparent 24%, rgba(0,0,0,.14) 82%)",
-          "repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 1px, rgba(0,0,0,.052) 1px 2px, transparent 2px 4px)",
-          "repeating-linear-gradient(0deg, rgba(255,255,255,.028) 0 1px, rgba(0,0,0,.04) 1px 2px, transparent 2px 5px)",
-          "repeating-linear-gradient(45deg, transparent 0 9px, rgba(255,255,255,.018) 9px 10px, transparent 10px 18px)",
-          "repeating-linear-gradient(-45deg, transparent 0 9px, rgba(0,0,0,.026) 9px 10px, transparent 10px 18px)"
-        ].join(",")
+        color: "#d9a94f",
+        textShadow: "0 1px 0 rgba(63,35,6,.72), 0 -1px 0 rgba(255,239,166,.18)"
       }
     : {
-        backgroundColor: coverColor,
-        backgroundImage:
-          "linear-gradient(116deg, rgba(255,255,255,.24), transparent 34%, rgba(0,0,0,.055) 88%), linear-gradient(180deg, rgba(255,255,255,.08), transparent 26%, rgba(0,0,0,.025))"
+        color: printInk,
+        textShadow: selectedCover.value === "#182b48" ? "0 1px 2px rgba(0,0,0,.18)" : "none"
       };
-  const foilStyle = isCloth
-    ? {
-        color: "transparent",
-        backgroundImage:
-          "linear-gradient(105deg, #9d6d24 0%, #eed58e 33%, #b47b27 58%, #f4df9e 82%, #9d6b22 100%)",
-        WebkitBackgroundClip: "text",
-        backgroundClip: "text",
-        filter: "drop-shadow(0 1px 0 rgba(43,29,8,.42)) drop-shadow(0 -1px 0 rgba(255,244,191,.12))"
-      }
-    : { color: printInk };
 
   return (
-    <div className="flex justify-center py-3" aria-label="表紙プレビュー">
-      <div
-        className="relative isolate h-[408px] w-full max-w-[520px] overflow-hidden rounded-[22px] border border-[#e8dcc8]/20 shadow-[inset_0_1px_0_rgba(255,255,255,.34)]"
-        style={{ backgroundColor: "#ebe3d9" }}
-      >
-        <div
-          className="absolute inset-x-0 top-0 h-[71%] bg-[#ebe3d9]"
-          style={{
-            backgroundImage: [
-              "linear-gradient(180deg, rgba(255,255,255,.13), rgba(109,91,73,.035))",
-              "repeating-linear-gradient(7deg, transparent 0 5px, rgba(91,70,53,.022) 5px 6px, transparent 6px 12px)",
-              "repeating-linear-gradient(93deg, rgba(255,255,255,.028) 0 1px, transparent 1px 9px)"
-            ].join(",")
-          }}
+    <div className="flex justify-center" aria-label="表紙プレビュー">
+      <div className="relative aspect-[1543/1019] w-full max-w-[760px] overflow-hidden bg-[#071b2b]">
+        <img
+          src={selectedCover.image}
+          alt={`${isPrint ? "プリント" : "布張り"}ハードカバー・${selectedCover.label}の完成イメージ`}
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="eager"
         />
-        <div
-          className="absolute inset-x-0 bottom-0 h-[29%] border-t border-[#a87343]/35 bg-[#b6814d]"
-          style={{
-            backgroundImage: [
-              "linear-gradient(180deg, rgba(255,255,255,.13), transparent 18%, rgba(69,38,17,.055))",
-              "repeating-linear-gradient(3deg, rgba(78,44,19,.15) 0 1px, transparent 1px 8px)",
-              "repeating-linear-gradient(93deg, rgba(255,255,255,.045) 0 1px, transparent 1px 24px)",
-              "repeating-linear-gradient(11deg, transparent 0 31px, rgba(76,42,20,.06) 31px 33px, transparent 33px 66px)"
-            ].join(",")
-          }}
-        />
-        <div className="absolute inset-x-[12%] bottom-[42px] h-[25px] rounded-full bg-black/30 blur-xl" />
-        <div className="absolute left-1/2 top-[44px] h-[334px] w-[254px] -translate-x-1/2 [perspective:1200px]">
-          <div className="relative h-[320px] w-[226px] [transform:rotateY(-7deg)_rotateX(1deg)_rotateZ(-.35deg)] [transform-style:preserve-3d]">
-            <div
-              className="absolute left-[10px] top-[4px] h-[317px] w-[228px] rounded-r-[8px] border border-black/30 shadow-[9px_14px_22px_rgba(43,29,16,.26)]"
-              style={{ backgroundColor: coverColor }}
+
+        {isPrint && coverPhoto?.url && (
+          <div className="absolute left-[37.45%] top-[42.9%] h-[26.5%] w-[23.35%] overflow-hidden bg-black/5 shadow-[0_3px_8px_rgba(0,0,0,.12)] [clip-path:polygon(0_0,99.2%_.5%,99.2%_99.2%,0_98.8%)]">
+            <img
+              src={coverPhoto.url}
+              alt="表紙に添えた写真"
+              className="h-full w-full object-cover saturate-[0.95] contrast-[0.98]"
             />
-
-            <div
-              className="absolute left-[9px] top-[6px] h-[307px] w-[226px] rounded-r-[7px] border-y border-r border-[#c7bda9] shadow-[inset_-2px_0_4px_rgba(98,75,47,.1)]"
-              style={{
-                backgroundColor: "#f2ecdf",
-                backgroundImage:
-                  "linear-gradient(90deg, #d8cebc 0%, #eee7d9 20%, #faf6ec 72%, #d4c9b5 100%), repeating-linear-gradient(0deg, rgba(111,86,53,.17) 0 1px, transparent 1px 3px)"
-              }}
-            >
-              <div className="absolute inset-y-[7px] right-[4px] w-px bg-[#bcae96]/70" />
-              <div className="absolute inset-y-[10px] right-[8px] w-px bg-white/65" />
-              <div className="absolute inset-x-[8px] bottom-[4px] h-px bg-[#b8aa92]/55" />
-            </div>
-
-            <div
-              className="absolute inset-0 overflow-hidden rounded-[5px_9px_9px_5px] border border-black/25 shadow-[0_24px_38px_rgba(54,35,19,.34),inset_0_1px_0_rgba(255,255,255,.16)]"
-              style={coverTexture}
-            >
-              <div className="absolute inset-0 opacity-70 [background-image:linear-gradient(100deg,rgba(255,255,255,.08),transparent_24%,rgba(0,0,0,.08)_100%)]" />
-              <div className="absolute inset-y-0 left-0 w-[18px] bg-[linear-gradient(90deg,rgba(0,0,0,.24),rgba(255,255,255,.035)_52%,rgba(0,0,0,.15))] shadow-[inset_-3px_0_6px_rgba(0,0,0,.11)]" />
-              <div className="absolute inset-y-0 left-[18px] w-px bg-white/15 shadow-[1px_0_1px_rgba(0,0,0,.22)]" />
-              <div className="absolute inset-x-2 top-0 h-px bg-white/20" />
-              <div className="absolute inset-x-2 bottom-0 h-px bg-black/25" />
-
-              {isPrint && coverPhoto?.url && (
-                <div className="absolute inset-x-[34px] top-[112px] h-[104px] overflow-hidden border border-black/10 bg-black/5 shadow-[0_5px_12px_rgba(0,0,0,.14),inset_0_0_0_1px_rgba(255,255,255,.1)]">
-                  <img
-                    src={coverPhoto.url}
-                    alt="表紙に添えた写真"
-                    className="h-full w-full object-cover saturate-[0.95] contrast-[0.98]"
-                  />
-                  <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,.08),transparent_42%,rgba(55,42,29,.045))]" />
-                </div>
-              )}
-
-              <div className={`absolute inset-x-[37px] ${isPrint ? (coverPhoto?.url ? "top-[50px]" : "top-[100px]") : "top-[104px]"} text-center`}>
-                <p
-                  className="text-[1.02rem] leading-[1.65] text-narrative tracking-[0.1em] whitespace-pre-wrap"
-                  style={foilStyle}
-                >
-                  {title || "わたしの物語"}
-                </p>
-              </div>
-
-              <p
-                className={`absolute inset-x-[37px] ${isPrint && coverPhoto?.url ? "bottom-[32px]" : "bottom-[39px]"} text-center text-[0.6rem] tracking-[0.15em]`}
-                style={foilStyle}
-              >
-                {authorName || "あなた"}
-              </p>
-            </div>
           </div>
+        )}
+
+        <div
+          className={`absolute text-center ${isPrint ? "left-[37%] top-[34.5%] w-[26%]" : "left-[38%] top-[44%] w-[24%]"}`}
+        >
+          <p
+            className="whitespace-pre-wrap text-narrative text-[clamp(0.64rem,1vw,0.98rem)] leading-[1.55] tracking-[0.1em]"
+            style={coverTextStyle}
+          >
+            {title || "わたしの物語"}
+          </p>
         </div>
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(104deg,rgba(255,255,255,.12),transparent_32%,rgba(77,50,26,.05)_100%)]" />
+
+        <p
+          className={`absolute top-[77%] w-[18%] text-center text-narrative text-[clamp(0.46rem,.65vw,.68rem)] tracking-[0.15em] ${isPrint ? "left-[41%]" : "left-[40.5%]"}`}
+          style={coverTextStyle}
+        >
+          {authorName || "あなた"}
+        </p>
       </div>
     </div>
   );
@@ -11166,19 +11098,14 @@ export function Scene_BookBuilder({
         {stepIndex === 0 && (
           <div className="space-y-7">
 
-            <div className="relative overflow-hidden rounded-[28px] border border-white/[0.07] bg-gradient-to-b from-white/[0.045] to-transparent px-5 py-6">
-              <div className="absolute inset-x-[18%] bottom-7 h-20 bg-amber-100/[0.035] blur-3xl" />
-              <p className="relative text-center text-white/28 text-[0.62rem] tracking-[0.25em] mb-1">
-                COVER PREVIEW
-              </p>
-
-            <BookCoverPreview
-              title={bookTitle}
-              authorName={String(userName || "").trim() || "あなた"}
-              coverPhoto={coverPhoto}
-              coverColor={coverColor}
-              coverStyle={coverStyle}
-            />
+            <div className="relative overflow-hidden rounded-[28px] border border-white/[0.07] bg-[#071b2b]">
+              <BookCoverPreview
+                title={bookTitle}
+                authorName={String(userName || "").trim() || "あなた"}
+                coverPhoto={coverPhoto}
+                coverColor={coverColor}
+                coverStyle={coverStyle}
+              />
             </div>
 
             {!readOnly && <div className="glass-card p-5">
