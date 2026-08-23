@@ -8976,6 +8976,7 @@ function BookCoverPreview({
 }) {
   const isPhoto = coverStyle === "photo";
   const isMinimal = coverStyle === "minimal";
+  const isCloth = !isPhoto && !isMinimal;
   const usesDarkInk =
     isMinimal ||
     ["#c6d7e9", "#e7d3dc", "#d9cdbd"].includes(
@@ -8983,82 +8984,126 @@ function BookCoverPreview({
     );
   const coverTexture = isMinimal
     ? {
-        backgroundColor: "#eee8dc",
+        backgroundColor: "#e9e1d3",
         backgroundImage:
-          "radial-gradient(circle at 20% 15%, rgba(255,255,255,.7), transparent 32%), repeating-linear-gradient(0deg, rgba(82,65,45,.025) 0 1px, transparent 1px 4px)"
+          "linear-gradient(112deg, rgba(255,255,255,.58), transparent 34%, rgba(102,77,48,.07) 100%), radial-gradient(circle at 22% 16%, rgba(255,255,255,.62), transparent 36%), repeating-linear-gradient(4deg, rgba(92,69,42,.032) 0 1px, transparent 1px 5px)"
       }
     : {
         backgroundColor: coverColor,
         backgroundImage:
-          "repeating-linear-gradient(0deg, rgba(255,255,255,.028) 0 1px, transparent 1px 4px), repeating-linear-gradient(90deg, rgba(0,0,0,.035) 0 1px, transparent 1px 5px), radial-gradient(circle at 72% 18%, rgba(255,255,255,.08), transparent 35%)"
+          "linear-gradient(112deg, rgba(255,255,255,.11), transparent 27%, rgba(0,0,0,.14) 100%), radial-gradient(circle at 73% 14%, rgba(255,255,255,.11), transparent 34%), repeating-linear-gradient(88deg, rgba(255,255,255,.037) 0 1px, transparent 1px 3px), repeating-linear-gradient(2deg, rgba(0,0,0,.052) 0 1px, transparent 1px 4px)"
       };
+  const foilStyle = isCloth && !usesDarkInk
+    ? {
+        color: "transparent",
+        backgroundImage:
+          "linear-gradient(105deg, #9d6d24 0%, #eed58e 33%, #b47b27 58%, #f4df9e 82%, #9d6b22 100%)",
+        WebkitBackgroundClip: "text",
+        backgroundClip: "text",
+        filter: "drop-shadow(0 1px 0 rgba(43,29,8,.42)) drop-shadow(0 -1px 0 rgba(255,244,191,.12))"
+      }
+    : undefined;
 
   return (
-    <div className="flex justify-center py-5" aria-label="表紙プレビュー">
-      <div className="relative w-[254px] h-[356px] [perspective:900px]">
-        <div className="absolute left-[30px] top-[33px] w-[218px] h-[310px] rounded-r-[12px] bg-black/50 blur-2xl" />
+    <div className="flex justify-center py-3" aria-label="表紙プレビュー">
+      <div
+        className="relative isolate h-[408px] w-full max-w-[520px] overflow-hidden rounded-[22px] border border-[#e8dcc8]/20 shadow-[inset_0_1px_0_rgba(255,255,255,.34)]"
+        style={{
+          background:
+            "linear-gradient(180deg, #e9e2d8 0%, #ddd3c5 71%, #b58b5c 71.3%, #9f7448 100%)"
+        }}
+      >
+        <div className="absolute inset-x-0 top-0 h-[71%] bg-[radial-gradient(circle_at_50%_17%,rgba(255,255,255,.72),transparent_47%)]" />
+        <div className="absolute inset-x-0 bottom-0 h-[29%] opacity-45 [background-image:repeating-linear-gradient(3deg,rgba(66,38,18,.13)_0_1px,transparent_1px_6px)]" />
+        <div className="absolute inset-x-[12%] bottom-[42px] h-[25px] rounded-full bg-black/30 blur-xl" />
+        <div className="absolute left-1/2 top-[44px] h-[334px] w-[254px] -translate-x-1/2 [perspective:1200px]">
+          <div className="relative h-[320px] w-[226px] [transform:rotateY(-7deg)_rotateX(1deg)_rotateZ(-.35deg)] [transform-style:preserve-3d]">
+            <div
+              className="absolute left-[9px] top-[4px] h-[317px] w-[231px] rounded-r-[9px] border border-black/30 shadow-[9px_14px_22px_rgba(43,29,16,.28)]"
+              style={{ backgroundColor: isMinimal ? "#cfc5b4" : coverColor }}
+            />
 
-        <div className="absolute left-[215px] top-[11px] w-[24px] h-[318px] rounded-r-[9px] bg-[#f3eee3] shadow-[8px_9px_20px_rgba(0,0,0,.28)] overflow-hidden">
-          <div className="absolute inset-y-3 left-[6px] w-px bg-[#cfc7b8]" />
-          <div className="absolute inset-y-4 left-[11px] w-px bg-[#ddd5c7]" />
-          <div className="absolute inset-y-5 left-[16px] w-px bg-[#e4ddd2]" />
-        </div>
+            <div
+              className="absolute left-[8px] top-[6px] h-[307px] w-[230px] rounded-r-[8px] border-y border-r border-[#c7bda9] shadow-[inset_-3px_0_5px_rgba(98,75,47,.12)]"
+              style={{
+                backgroundColor: "#f2ecdf",
+                backgroundImage:
+                  "linear-gradient(90deg, #d8cebc 0%, #eee7d9 20%, #faf6ec 72%, #d4c9b5 100%), repeating-linear-gradient(0deg, rgba(111,86,53,.17) 0 1px, transparent 1px 3px)"
+              }}
+            >
+              <div className="absolute inset-y-[7px] right-[5px] w-px bg-[#bcae96]/70" />
+              <div className="absolute inset-y-[10px] right-[10px] w-px bg-white/65" />
+              <div className="absolute inset-x-[8px] bottom-[4px] h-px bg-[#b8aa92]/55" />
+            </div>
 
-        <div
-          className="absolute left-[8px] top-0 w-[216px] h-[326px] rounded-r-[10px] overflow-hidden border border-black/15 shadow-[0_24px_45px_rgba(0,0,0,.42)]"
-          style={coverTexture}
-        >
-          <div className="absolute inset-y-0 left-0 w-[22px] bg-black/[0.13] border-r border-black/10 shadow-[inset_-4px_0_10px_rgba(0,0,0,.12)]" />
-          <div className={`absolute inset-y-0 left-[31px] w-px ${isMinimal ? "bg-stone-600/12" : "bg-white/12"}`} />
+            <div
+              className="absolute inset-0 overflow-hidden rounded-[5px_9px_9px_5px] border border-black/25 shadow-[0_24px_38px_rgba(54,35,19,.34),inset_0_1px_0_rgba(255,255,255,.16)]"
+              style={coverTexture}
+            >
+              <div className="absolute inset-0 opacity-70 [background-image:linear-gradient(100deg,rgba(255,255,255,.08),transparent_24%,rgba(0,0,0,.08)_100%)]" />
+              <div className="absolute inset-y-0 left-0 w-[27px] bg-[linear-gradient(90deg,rgba(0,0,0,.24),rgba(255,255,255,.035)_48%,rgba(0,0,0,.15))] shadow-[inset_-4px_0_8px_rgba(0,0,0,.12)]" />
+              <div className={`absolute inset-y-0 left-[27px] w-px ${isMinimal ? "bg-stone-700/22" : "bg-white/15"} shadow-[1px_0_1px_rgba(0,0,0,.22)]`} />
+              <div className="absolute inset-x-2 top-0 h-px bg-white/20" />
+              <div className="absolute inset-x-2 bottom-0 h-px bg-black/25" />
 
-          {isPhoto && (
-            <div className="absolute inset-x-[38px] top-[36px] h-[126px] overflow-hidden border border-white/20 bg-black/10 shadow-[0_9px_22px_rgba(0,0,0,.16)]">
-              {coverPhoto?.url ? (
-                <img
-                  src={coverPhoto.url}
-                  alt="表紙に添えた写真"
-                  className="w-full h-full object-cover saturate-[0.72] contrast-[0.92]"
-                />
-              ) : (
-                <div className="h-full flex items-center justify-center">
-                  <ScanLine size={25} className="text-white/24" strokeWidth={1.3} />
+              {isPhoto && (
+                <div className="absolute inset-x-[35px] top-[102px] h-[156px] overflow-hidden border border-black/15 bg-black/10 shadow-[0_8px_17px_rgba(0,0,0,.15),inset_0_0_0_1px_rgba(255,255,255,.13)]">
+                  {coverPhoto?.url ? (
+                    <img
+                      src={coverPhoto.url}
+                      alt="表紙に添えた写真"
+                      className="h-full w-full object-cover saturate-[0.9] contrast-[0.96]"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center bg-white/[0.035]">
+                      <ScanLine size={25} className={usesDarkInk ? "text-stone-700/35" : "text-white/30"} strokeWidth={1.3} />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,.1),transparent_40%,rgba(55,42,29,.08))]" />
+                  <div className="absolute inset-0 opacity-25 [background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.1)_0_1px,transparent_1px_3px)]" />
                 </div>
               )}
-              <div className="absolute inset-0 bg-[#1c1a18]/10 mix-blend-multiply" />
+
+              <div className={`absolute inset-x-[37px] ${isPhoto ? "top-[27px]" : isMinimal ? "top-[72px]" : "top-[101px]"} text-center`}>
+                <p
+                  className={`${usesDarkInk ? "text-stone-800/90" : isCloth ? "" : "text-white/90"} text-[1.03rem] leading-[1.65] text-narrative tracking-[0.08em] whitespace-pre-wrap`}
+                  style={foilStyle}
+                >
+                  {title || "わたしの物語"}
+                </p>
+
+                <div className={`mx-auto ${isPhoto ? "my-2.5" : "my-5"} h-px w-8 ${usesDarkInk ? "bg-stone-700/28" : isCloth ? "bg-amber-200/38" : "bg-white/26"}`} />
+
+                <p
+                  className={`${usesDarkInk ? "text-stone-700/62" : isCloth ? "text-amber-100/64" : "text-white/58"} text-[0.64rem] leading-[1.9] tracking-[0.12em] whitespace-pre-wrap`}
+                >
+                  {subtitle || "これまでの時間を、家族へ"}
+                </p>
+              </div>
+
+              {isMinimal && (
+                <div className="absolute inset-x-[43px] bottom-[65px] flex items-center gap-3 opacity-48" aria-hidden="true">
+                  <span className="h-px flex-1 bg-stone-600/35" />
+                  <span className="h-1.5 w-1.5 rounded-full border border-stone-600/45" />
+                  <span className="h-px flex-1 bg-stone-600/35" />
+                </div>
+              )}
+
+              <p
+                className={`absolute inset-x-[37px] ${isPhoto ? "bottom-[28px]" : "bottom-[29px]"} text-center ${usesDarkInk ? "text-stone-700/55" : isCloth ? "text-amber-100/66" : "text-white/52"} text-[0.6rem] tracking-[0.16em]`}
+                style={isCloth ? foilStyle : undefined}
+              >
+                {authorName || ""}
+              </p>
+              {isPhoto && (
+                <p className={`absolute inset-x-[37px] bottom-[12px] text-center ${usesDarkInk ? "text-stone-700/42" : "text-white/38"} text-[0.42rem] tracking-[0.28em]`}>
+                  縦糸横糸
+                </p>
+              )}
             </div>
-          )}
-
-          {!isMinimal && !isPhoto && (
-            <svg className="absolute inset-x-[35px] top-[36px] w-[146px] h-[34px] opacity-45" viewBox="0 0 146 34" aria-hidden="true">
-              <path d="M2 23 C 30 8, 48 31, 74 17 S 118 7, 144 19" fill="none" stroke={usesDarkInk ? "rgba(100,76,35,.7)" : "rgba(230,207,137,.75)"} strokeWidth="1.2" strokeDasharray="3 5" />
-              <circle cx="74" cy="17" r="2.4" fill={usesDarkInk ? "rgba(107,78,31,.8)" : "rgba(241,220,153,.85)"} />
-            </svg>
-          )}
-
-          <div className={`absolute inset-x-[38px] ${isPhoto ? "top-[184px]" : isMinimal ? "top-[72px]" : "top-[98px]"} text-center`}>
-            <p className={`${usesDarkInk ? "text-stone-800/90" : "text-white/90"} text-[1.02rem] leading-[1.8] text-narrative tracking-[0.07em] whitespace-pre-wrap`}>
-              {title || "わたしの物語"}
-            </p>
-
-            <div className={`mx-auto my-5 w-9 h-px ${usesDarkInk ? "bg-stone-700/25" : "bg-white/26"}`} />
-
-            <p className={`${usesDarkInk ? "text-stone-700/58" : "text-white/55"} text-[0.68rem] leading-loose tracking-[0.14em] whitespace-pre-wrap`}>
-              {subtitle || "これまでの時間を、家族へ"}
-            </p>
           </div>
-
-          {isMinimal && (
-            <div className="absolute inset-x-[44px] bottom-[62px] flex items-center gap-3 opacity-50" aria-hidden="true">
-              <span className="h-px flex-1 bg-stone-600/30" />
-              <span className="w-1.5 h-1.5 rounded-full border border-stone-600/40" />
-              <span className="h-px flex-1 bg-stone-600/30" />
-            </div>
-          )}
-
-          <p className={`absolute inset-x-[38px] bottom-8 text-center ${usesDarkInk ? "text-stone-700/48" : "text-white/48"} text-[0.65rem] tracking-[0.18em]`}>
-            {authorName || ""}
-          </p>
         </div>
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(104deg,rgba(255,255,255,.12),transparent_32%,rgba(77,50,26,.05)_100%)]" />
       </div>
     </div>
   );
