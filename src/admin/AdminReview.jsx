@@ -2484,7 +2484,7 @@ export default function AdminReview({ supabaseClient }) {
           <div className="fixed inset-0 z-[90] bg-[#0f172a] text-white">
             <Scene_BookBuilder
               user={{ id: previewData.project?.owner_user_id }}
-              userName={previewData.project?.subject_name || previewData.project?.title || "名称未登録"}
+              bookProjectId={previewData.project?.id}
               questionSet={previewData.questionSet}
               initialBookStories={previewData.storyRows}
               initialBookMediaByAnswerId={previewData.mediaByAnswerId}

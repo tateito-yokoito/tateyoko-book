@@ -5709,7 +5709,7 @@ let sceneAfterInvite = nextScene;
       {scene === "support_book_builder" && supportContext && (
         <Scene_BookBuilder
           user={user}
-          userName={supportContext.project.subject_name || "物語の持ち主"}
+          bookProjectId={supportContext.project.book_project_id || supportContext.project.id}
           questionSet={supportContext.questionSet}
           initialBookStories={supportContext.storyRows}
           initialBookMediaByAnswerId={supportContext.mediaByAnswerId}
@@ -5720,7 +5720,7 @@ let sceneAfterInvite = nextScene;
       {scene === "book_builder" && (
         <Scene_BookBuilder
           user={user}
-          userName={user?.name || "あなた"}
+          bookProjectId={foundation?.project?.id}
           questionSet={questionsDB}
           onBack={() => setScene("home")}
         />
@@ -8980,9 +8980,351 @@ const PRINT_COVER_COLORS = [
   { label: "ネイビー", value: "#182b48", ink: "#f1e9dc", image: "/site/book-covers/print-navy.png" }
 ];
 
+const DEFAULT_COVER_PHOTO_TRANSFORM = {
+  pan_x: 0,
+  pan_y: 0,
+  zoom: 1,
+  rotation: 0,
+  brightness: 0,
+  contrast: 1
+};
+
+const DEFAULT_COVER_SUGGESTIONS = [
+  { title: "わたしの物語", subtitle: "これまでの時間を、家族へ" },
+  { title: "ここまで、これから", subtitle: "歩んできた日々の記録" },
+  { title: "受け継いでいくこと", subtitle: "家族へ残す人生のことば" },
+  { title: "日々を織る", subtitle: "出会いと選択の軌跡" },
+  { title: "記憶の向こうへ", subtitle: "いま振り返る、わたしの時間" }
+];
+
+function normalizeCoverPhotoTransform(value = {}) {
+  const panX = Number(value?.pan_x);
+  const panY = Number(value?.pan_y);
+  const zoom = Number(value?.zoom);
+  const rotation = Number(value?.rotation);
+  const brightness = Number(value?.brightness);
+  const contrast = Number(value?.contrast);
+
+  return {
+    pan_x: Number.isFinite(panX) ? Math.max(-2, Math.min(2, panX)) : 0,
+    pan_y: Number.isFinite(panY) ? Math.max(-2, Math.min(2, panY)) : 0,
+    zoom: Number.isFinite(zoom) ? Math.max(1, Math.min(3, zoom)) : 1,
+    rotation: Number.isFinite(rotation) ? ((rotation % 360) + 360) % 360 : 0,
+    brightness: Number.isFinite(brightness) ? Math.max(-35, Math.min(35, brightness)) : 0,
+    contrast: Number.isFinite(contrast) ? Math.max(0.7, Math.min(1.35, contrast)) : 1
+  };
+}
+
+function CoverPhotoFrame({ photo, showGrid = false, className = "" }) {
+  const frameRef = useRef(null);
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const transform = normalizeCoverPhotoTransform(photo?.transform);
+
+  useEffect(() => {
+    const node = frameRef.current;
+    if (!node) return undefined;
+    const update = () => {
+      const rect = node.getBoundingClientRect();
+      setFrameSize({ width: rect.width, height: rect.height });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const rotated = transform.rotation % 180 !== 0;
+  const rotatedWidth = rotated ? imageSize.height : imageSize.width;
+  const rotatedHeight = rotated ? imageSize.width : imageSize.height;
+  const baseScale = frameSize.width && frameSize.height && rotatedWidth && rotatedHeight
+    ? Math.max(frameSize.width / rotatedWidth, frameSize.height / rotatedHeight)
+    : 1;
+  const renderedWidth = rotatedWidth * baseScale * transform.zoom;
+  const renderedHeight = rotatedHeight * baseScale * transform.zoom;
+  const maxX = Math.max(0, (renderedWidth - frameSize.width) / 2);
+  const maxY = Math.max(0, (renderedHeight - frameSize.height) / 2);
+  const offsetX = Math.max(-maxX, Math.min(maxX, transform.pan_x * frameSize.width));
+  const offsetY = Math.max(-maxY, Math.min(maxY, transform.pan_y * frameSize.height));
+
+  return (
+    <div ref={frameRef} className={`overflow-hidden bg-black/10 ${className}`}>
+      {photo?.url && (
+        <div
+          className="absolute left-1/2 top-1/2"
+          style={{
+            width: imageSize.width ? imageSize.width * baseScale : "100%",
+            height: imageSize.height ? imageSize.height * baseScale : "100%",
+            transform: `translate(-50%, -50%) translate(${offsetX}px, ${offsetY}px)`
+          }}
+        >
+          <img
+            src={photo.url}
+            alt=""
+            draggable="false"
+            onLoad={event => setImageSize({
+              width: event.currentTarget.naturalWidth || 1,
+              height: event.currentTarget.naturalHeight || 1
+            })}
+            className="h-full w-full max-w-none select-none object-fill"
+            style={{
+              transform: `rotate(${transform.rotation}deg) scale(${transform.zoom})`,
+              transformOrigin: "center",
+              filter: `brightness(${100 + transform.brightness}%) contrast(${transform.contrast})`
+            }}
+          />
+        </div>
+      )}
+      {showGrid && (
+        <div className="pointer-events-none absolute inset-0">
+          <span className="absolute left-1/3 top-0 h-full w-px bg-white/35" />
+          <span className="absolute left-2/3 top-0 h-full w-px bg-white/35" />
+          <span className="absolute left-0 top-1/3 h-px w-full bg-white/35" />
+          <span className="absolute left-0 top-2/3 h-px w-full bg-white/35" />
+          <span className="absolute inset-0 border border-white/70" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CoverPhotoCorrectionFlow({ open, photo, onClose, onComplete, onRemove, busy = false }) {
+  const [draft, setDraft] = useState(null);
+  const draftRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const frameRef = useRef(null);
+  const pointersRef = useRef(new Map());
+  const gestureRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const nextDraft = photo ? {
+      ...photo,
+      transform: normalizeCoverPhotoTransform(photo.transform)
+    } : null;
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+    pointersRef.current.clear();
+    gestureRef.current = null;
+  }, [open, photo]);
+
+  if (!open) return null;
+
+  const selectFile = event => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file?.type?.startsWith("image/")) return;
+    if (draftRef.current?.url?.startsWith("blob:") && draftRef.current.url !== photo?.url) {
+      try { URL.revokeObjectURL(draftRef.current.url); } catch (_error) {}
+    }
+    const url = URL.createObjectURL(file);
+    const nextDraft = {
+      file,
+      url,
+      name: file.name || "cover-photo",
+      transform: { ...DEFAULT_COVER_PHOTO_TRANSFORM }
+    };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+  };
+
+  const updateTransform = patch => {
+    setDraft(current => {
+      if (!current) return current;
+      const nextDraft = {
+        ...current,
+        transform: normalizeCoverPhotoTransform({ ...current.transform, ...patch })
+      };
+      draftRef.current = nextDraft;
+      return nextDraft;
+    });
+  };
+
+  const pointerDistance = points => Math.hypot(
+    points[0].clientX - points[1].clientX,
+    points[0].clientY - points[1].clientY
+  );
+
+  const handlePointerDown = event => {
+    if (!draft) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    pointersRef.current.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+    const points = [...pointersRef.current.values()];
+    if (points.length === 1) {
+      gestureRef.current = { type: "pan", x: event.clientX, y: event.clientY };
+    } else if (points.length === 2) {
+      gestureRef.current = {
+        type: "pinch",
+        distance: pointerDistance(points),
+        zoom: normalizeCoverPhotoTransform(draft.transform).zoom
+      };
+    }
+  };
+
+  const handlePointerMove = event => {
+    if (!pointersRef.current.has(event.pointerId) || !draft) return;
+    pointersRef.current.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+    const points = [...pointersRef.current.values()];
+    const rect = frameRef.current?.getBoundingClientRect();
+    if (!rect?.width || !rect?.height) return;
+
+    if (points.length === 1 && gestureRef.current?.type === "pan") {
+      const current = normalizeCoverPhotoTransform(draftRef.current?.transform);
+      const dx = event.clientX - gestureRef.current.x;
+      const dy = event.clientY - gestureRef.current.y;
+      gestureRef.current = { type: "pan", x: event.clientX, y: event.clientY };
+      updateTransform({
+        pan_x: current.pan_x + dx / rect.width,
+        pan_y: current.pan_y + dy / rect.height
+      });
+    } else if (points.length === 2 && gestureRef.current?.type === "pinch") {
+      const distance = pointerDistance(points);
+      updateTransform({ zoom: gestureRef.current.zoom * distance / Math.max(1, gestureRef.current.distance) });
+    }
+  };
+
+  const handlePointerEnd = event => {
+    pointersRef.current.delete(event.pointerId);
+    const points = [...pointersRef.current.values()];
+    if (points.length === 1) {
+      gestureRef.current = { type: "pan", x: points[0].clientX, y: points[0].clientY };
+    } else {
+      gestureRef.current = null;
+    }
+  };
+
+  const transform = normalizeCoverPhotoTransform(draft?.transform);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[#020817]/95 px-4 py-5">
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={selectFile} />
+      <div className="flex max-h-full w-full max-w-[720px] flex-col overflow-y-auto rounded-[28px] border border-white/10 bg-[#07101f] p-4 sm:p-6">
+        <div className="relative mb-5 flex h-10 items-center justify-center">
+          <p className="text-narrative text-[1rem] text-white/82">表紙の写真</p>
+          <button
+            type="button"
+            onClick={() => {
+              if (draftRef.current?.url?.startsWith("blob:") && draftRef.current.url !== photo?.url) {
+                try { URL.revokeObjectURL(draftRef.current.url); } catch (_error) {}
+              }
+              onClose();
+            }}
+            disabled={busy}
+            className="absolute right-0 h-10 rounded-full border border-white/10 px-4 text-xs text-white/55"
+          >
+            キャンセル
+          </button>
+        </div>
+
+        {!draft ? (
+          <div className="flex min-h-[360px] flex-col items-center justify-center rounded-[24px] border border-white/8 bg-black/20 px-6">
+            <ImageIcon size={34} className="mb-6 text-white/30" strokeWidth={1.4} />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="btn-quiet rounded-full bg-white/10 px-10 py-4 text-white/82"
+            >
+              写真を選ぶ
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="rounded-[22px] bg-black/55 p-3 sm:p-6">
+              <div
+                ref={frameRef}
+                className="relative mx-auto aspect-[4/3] w-full max-w-[600px] cursor-grab overflow-hidden rounded-[2px] bg-black active:cursor-grabbing touch-none"
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerEnd}
+                onPointerCancel={handlePointerEnd}
+              >
+                <CoverPhotoFrame photo={draft} showGrid className="absolute inset-0 h-full w-full" />
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-4 px-1 sm:px-4">
+              <div className="grid grid-cols-[auto_1fr] items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => updateTransform({ rotation: transform.rotation + 90 })}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/12 text-white/60"
+                  aria-label="90度回転"
+                >
+                  <RotateCw size={18} strokeWidth={1.7} />
+                </button>
+                <input
+                  type="range"
+                  min="1"
+                  max="3"
+                  step="0.01"
+                  value={transform.zoom}
+                  onInput={event => updateTransform({ zoom: Number(event.currentTarget.value) })}
+                  onChange={event => updateTransform({ zoom: Number(event.target.value) })}
+                  aria-label="拡大率"
+                  className="w-full accent-[#d9a94f]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <label className="text-[0.66rem] tracking-wider text-white/42">
+                  明るさ
+                  <input
+                    type="range"
+                    min="-35"
+                    max="35"
+                    step="1"
+                    value={transform.brightness}
+                    onInput={event => updateTransform({ brightness: Number(event.currentTarget.value) })}
+                    onChange={event => updateTransform({ brightness: Number(event.target.value) })}
+                    className="mt-2 block w-full accent-white/70"
+                  />
+                </label>
+                <label className="text-[0.66rem] tracking-wider text-white/42">
+                  濃さ
+                  <input
+                    type="range"
+                    min="0.7"
+                    max="1.35"
+                    step="0.01"
+                    value={transform.contrast}
+                    onInput={event => updateTransform({ contrast: Number(event.currentTarget.value) })}
+                    onChange={event => updateTransform({ contrast: Number(event.target.value) })}
+                    className="mt-2 block w-full accent-white/70"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onComplete(draftRef.current)}
+              disabled={busy}
+              className="btn-quiet mt-6 w-full rounded-full bg-white/10 py-4 text-white/88 disabled:opacity-40"
+            >
+              {busy ? "保存しています…" : "この配置を使う"}
+            </button>
+
+            <div className="mt-3 flex items-center justify-center gap-6 text-xs">
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="py-2 text-white/45">
+                別の写真を選ぶ
+              </button>
+              {photo && (
+                <button type="button" onClick={onRemove} className="py-2 text-rose-200/55">
+                  写真を外す
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function BookCoverPreview({
   title,
-  authorName,
+  subtitle,
   coverPhoto,
   coverColor = CLOTH_COVER_COLORS[0].value,
   coverStyle = "cloth"
@@ -9016,16 +9358,12 @@ function BookCoverPreview({
 
         {isPrint && coverPhoto?.url && (
           <div className="absolute left-[37.45%] top-[42.9%] h-[26.5%] w-[23.35%] overflow-hidden bg-black/5 shadow-[0_3px_8px_rgba(0,0,0,.12)] [clip-path:polygon(0_0,99.2%_.5%,99.2%_99.2%,0_98.8%)]">
-            <img
-              src={coverPhoto.url}
-              alt="表紙に添えた写真"
-              className="h-full w-full object-cover saturate-[0.95] contrast-[0.98]"
-            />
+            <CoverPhotoFrame photo={coverPhoto} className="h-full w-full" />
           </div>
         )}
 
         <div
-          className={`absolute text-center ${isPrint ? "left-[37%] top-[34.5%] w-[26%]" : "left-[38%] top-[44%] w-[24%]"}`}
+          className={`absolute text-center ${isPrint ? "left-[37%] top-[30.5%] w-[26%]" : "left-[38%] top-[41%] w-[24%]"}`}
         >
           <p
             className="whitespace-pre-wrap text-narrative text-[clamp(0.64rem,1vw,0.98rem)] leading-[1.55] tracking-[0.1em]"
@@ -9033,14 +9371,15 @@ function BookCoverPreview({
           >
             {title || "わたしの物語"}
           </p>
+          {subtitle && (
+            <p
+              className="mt-[3%] whitespace-pre-wrap text-narrative text-[clamp(0.46rem,.72vw,.7rem)] leading-[1.5] tracking-[0.09em] opacity-85"
+              style={coverTextStyle}
+            >
+              {subtitle}
+            </p>
+          )}
         </div>
-
-        <p
-          className={`absolute top-[77%] w-[18%] text-center text-narrative text-[clamp(0.46rem,.65vw,.68rem)] tracking-[0.15em] ${isPrint ? "left-[41%]" : "left-[40.5%]"}`}
-          style={coverTextStyle}
-        >
-          {authorName || "あなた"}
-        </p>
       </div>
     </div>
   );
@@ -10811,7 +11150,7 @@ function Scene_SupportRecordingAssist({
 
 export function Scene_BookBuilder({
   user,
-  userName,
+  bookProjectId = null,
   questionSet = [],
   initialBookStories = null,
   initialBookMediaByAnswerId = null,
@@ -10825,7 +11164,14 @@ export function Scene_BookBuilder({
   const [printCoverColor, setPrintCoverColor] = useState(PRINT_COVER_COLORS[0].value);
   const [coverStyle, setCoverStyle] = useState("cloth");
   const [bookTitle, setBookTitle] = useState("わたしの物語");
+  const [bookSubtitle, setBookSubtitle] = useState("");
   const [coverPhotoCorrectionOpen, setCoverPhotoCorrectionOpen] = useState(false);
+  const [coverSettingsReady, setCoverSettingsReady] = useState(false);
+  const [coverSettingsSaving, setCoverSettingsSaving] = useState(false);
+  const [coverPhotoSaving, setCoverPhotoSaving] = useState(false);
+  const [coverSuggestions, setCoverSuggestions] = useState([]);
+  const [coverSuggestionStatus, setCoverSuggestionStatus] = useState("idle");
+  const coverSuggestionRequestedRef = useRef(false);
 
   const [bookStories, setBookStories] = useState([]);
   const [bookMediaByAnswerId, setBookMediaByAnswerId] = useState({});
@@ -10834,6 +11180,146 @@ export function Scene_BookBuilder({
 
   const coverColor = coverStyle === "cloth" ? clothCoverColor : printCoverColor;
   const colors = coverStyle === "cloth" ? CLOTH_COVER_COLORS : PRINT_COVER_COLORS;
+
+  const persistCoverSettings = async (overrides = {}) => {
+    if (!bookProjectId || readOnly) return;
+    const nextPhoto = Object.prototype.hasOwnProperty.call(overrides, "coverPhoto")
+      ? overrides.coverPhoto
+      : coverPhoto;
+    const payload = {
+      book_project_id: bookProjectId,
+      title: Object.prototype.hasOwnProperty.call(overrides, "title") ? overrides.title : bookTitle,
+      subtitle: Object.prototype.hasOwnProperty.call(overrides, "subtitle") ? overrides.subtitle : bookSubtitle,
+      cover_style: Object.prototype.hasOwnProperty.call(overrides, "coverStyle") ? overrides.coverStyle : coverStyle,
+      cloth_color: Object.prototype.hasOwnProperty.call(overrides, "clothColor") ? overrides.clothColor : clothCoverColor,
+      print_color: Object.prototype.hasOwnProperty.call(overrides, "printColor") ? overrides.printColor : printCoverColor,
+      cover_photo_path: nextPhoto?.storagePath || null,
+      cover_photo_transform: normalizeCoverPhotoTransform(nextPhoto?.transform),
+      suggestions: Object.prototype.hasOwnProperty.call(overrides, "suggestions")
+        ? overrides.suggestions
+        : coverSuggestions,
+      updated_at: new Date().toISOString()
+    };
+
+    const { error } = await supabaseClient
+      .from("book_cover_settings")
+      .upsert(payload, { onConflict: "book_project_id" });
+    if (error) throw error;
+  };
+
+  const generateCoverSuggestions = async ({ regenerate = false } = {}) => {
+    if (coverSuggestionStatus === "loading") return;
+    if (!bookProjectId) {
+      setCoverSuggestions(DEFAULT_COVER_SUGGESTIONS);
+      return;
+    }
+
+    try {
+      setCoverSuggestionStatus("loading");
+      const { data, error } = await supabaseClient.functions.invoke("suggest-book-cover", {
+        body: { bookProjectId, regenerate }
+      });
+      if (error) throw error;
+      const suggestions = Array.isArray(data?.suggestions) && data.suggestions.length
+        ? data.suggestions.slice(0, 5)
+        : DEFAULT_COVER_SUGGESTIONS;
+      setCoverSuggestions(suggestions);
+      setCoverSuggestionStatus("ready");
+    } catch (error) {
+      console.warn("cover suggestions fallback", error);
+      setCoverSuggestions(DEFAULT_COVER_SUGGESTIONS);
+      setCoverSuggestionStatus("error");
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCoverSettings = async () => {
+      if (!bookProjectId) {
+        setCoverSettingsReady(true);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabaseClient
+          .from("book_cover_settings")
+          .select("title, subtitle, cover_style, cloth_color, print_color, cover_photo_path, cover_photo_transform, suggestions")
+          .eq("book_project_id", bookProjectId)
+          .maybeSingle();
+        if (error) throw error;
+        if (cancelled) return;
+
+        if (data) {
+          setBookTitle(data.title || "わたしの物語");
+          setBookSubtitle(data.subtitle || "");
+          setCoverStyle(data.cover_style === "print" ? "print" : "cloth");
+          setClothCoverColor(data.cloth_color || CLOTH_COVER_COLORS[0].value);
+          setPrintCoverColor(data.print_color || PRINT_COVER_COLORS[0].value);
+          if (Array.isArray(data.suggestions) && data.suggestions.length) {
+            setCoverSuggestions(data.suggestions.slice(0, 5));
+            coverSuggestionRequestedRef.current = true;
+          }
+
+          if (data.cover_photo_path) {
+            const { data: signed, error: signedError } = await supabaseClient.storage
+              .from("photos")
+              .createSignedUrl(data.cover_photo_path, 60 * 60 * 24);
+            if (signedError) throw signedError;
+            if (!cancelled && signed?.signedUrl) {
+              setCoverPhoto({
+                url: signed.signedUrl,
+                name: "cover-photo",
+                storagePath: data.cover_photo_path,
+                transform: normalizeCoverPhotoTransform(data.cover_photo_transform)
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error("book cover settings load error", error);
+      } finally {
+        if (!cancelled) setCoverSettingsReady(true);
+      }
+    };
+
+    setCoverSettingsReady(false);
+    coverSuggestionRequestedRef.current = false;
+    loadCoverSettings();
+    return () => { cancelled = true; };
+  }, [bookProjectId]);
+
+  useEffect(() => {
+    if (!coverSettingsReady || readOnly || !bookProjectId || coverSuggestionRequestedRef.current) return;
+    coverSuggestionRequestedRef.current = true;
+    generateCoverSuggestions();
+  }, [coverSettingsReady, readOnly, bookProjectId]);
+
+  useEffect(() => {
+    if (!coverSettingsReady || readOnly || !bookProjectId) return undefined;
+    const timer = window.setTimeout(async () => {
+      try {
+        setCoverSettingsSaving(true);
+        await persistCoverSettings();
+      } catch (error) {
+        console.error("book cover settings save error", error);
+      } finally {
+        setCoverSettingsSaving(false);
+      }
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [
+    coverSettingsReady,
+    readOnly,
+    bookProjectId,
+    bookTitle,
+    bookSubtitle,
+    coverStyle,
+    clothCoverColor,
+    printCoverColor,
+    coverPhoto?.storagePath,
+    coverPhoto?.transform,
+    coverSuggestions
+  ]);
 
   const getQuestionForAnswer = (answer) => {
     return (questionSet || []).find(q =>
@@ -10955,26 +11441,79 @@ export function Scene_BookBuilder({
     loadBookStories();
   }, [user?.id, initialBookStories, initialBookMediaByAnswerId]);
 
-  const handleCoverPhotoSelect = (file) => {
-    if (!file?.type?.startsWith("image/")) return;
+  const handleCoverPhotoSelect = async draft => {
+    if (!draft?.url) return;
+    const previousPhoto = coverPhoto;
+    let nextPhoto = {
+      ...draft,
+      transform: normalizeCoverPhotoTransform(draft.transform),
+      storagePath: draft.storagePath || null
+    };
+    let uploadedPath = null;
 
-    if (coverPhoto?.url) {
-      try { URL.revokeObjectURL(coverPhoto.url); } catch (e) {}
+    try {
+      setCoverPhotoSaving(true);
+      if (draft.file && bookProjectId) {
+        const contentType = draft.file.type || "image/jpeg";
+        const rawExtension = String(draft.file.name || "").split(".").pop()?.toLowerCase();
+        const extension = rawExtension && /^[a-z0-9]{2,5}$/.test(rawExtension)
+          ? rawExtension
+          : (contentType.includes("png") ? "png" : "jpg");
+        const storagePath = `book-covers/${bookProjectId}/cover-${Date.now()}.${extension}`;
+        const { error: uploadError } = await supabaseClient.storage
+          .from("photos")
+          .upload(storagePath, draft.file, { contentType, upsert: false });
+        if (uploadError) throw uploadError;
+        uploadedPath = storagePath;
+        nextPhoto = { ...nextPhoto, storagePath, file: null };
+      }
+
+      await persistCoverSettings({ coverPhoto: nextPhoto, coverStyle: "print" });
+      setCoverPhoto(nextPhoto);
+      setCoverStyle("print");
+      setCoverPhotoCorrectionOpen(false);
+
+      if (previousPhoto?.storagePath && previousPhoto.storagePath !== nextPhoto.storagePath) {
+        const { error: removeError } = await supabaseClient.storage
+          .from("photos")
+          .remove([previousPhoto.storagePath]);
+        if (removeError) console.warn("old cover photo cleanup error", removeError);
+      }
+      if (previousPhoto?.url?.startsWith("blob:") && previousPhoto.url !== nextPhoto.url) {
+        try { URL.revokeObjectURL(previousPhoto.url); } catch (_error) {}
+      }
+    } catch (error) {
+      console.error("cover photo save error", error);
+      if (uploadedPath) {
+        const { error: cleanupError } = await supabaseClient.storage.from("photos").remove([uploadedPath]);
+        if (cleanupError) console.warn("failed cover photo cleanup error", cleanupError);
+      }
+      alert("表紙の写真を保存できませんでした。もう一度お試しください。");
+    } finally {
+      setCoverPhotoSaving(false);
     }
-
-    setCoverPhoto({
-      file,
-      url: URL.createObjectURL(file),
-      name: file.name || "cover-photo"
-    });
-    setCoverStyle("print");
   };
 
-  const clearCoverPhoto = () => {
-    if (coverPhoto?.url) {
-      try { URL.revokeObjectURL(coverPhoto.url); } catch (e) {}
+  const clearCoverPhoto = async () => {
+    const previousPhoto = coverPhoto;
+    try {
+      setCoverPhotoSaving(true);
+      await persistCoverSettings({ coverPhoto: null });
+      setCoverPhoto(null);
+      setCoverPhotoCorrectionOpen(false);
+      if (previousPhoto?.storagePath) {
+        const { error } = await supabaseClient.storage.from("photos").remove([previousPhoto.storagePath]);
+        if (error) console.warn("cover photo cleanup error", error);
+      }
+      if (previousPhoto?.url?.startsWith("blob:")) {
+        try { URL.revokeObjectURL(previousPhoto.url); } catch (_error) {}
+      }
+    } catch (error) {
+      console.error("cover photo remove error", error);
+      alert("表紙の写真を外せませんでした。もう一度お試しください。");
+    } finally {
+      setCoverPhotoSaving(false);
     }
-    setCoverPhoto(null);
   };
 
   const includedStories = [...bookStories]
@@ -11036,11 +11575,13 @@ export function Scene_BookBuilder({
   return (
     <div className="fixed inset-0 max-w-[760px] mx-auto min-h-0 bg-[#0f172a] flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
       {!readOnly && (
-        <PhotoCorrectionFlow
+        <CoverPhotoCorrectionFlow
           open={coverPhotoCorrectionOpen}
-          title="表紙の写真"
+          photo={coverPhoto}
           onClose={() => setCoverPhotoCorrectionOpen(false)}
           onComplete={handleCoverPhotoSelect}
+          onRemove={clearCoverPhoto}
+          busy={coverPhotoSaving}
         />
       )}
       <div className="shrink-0 pb-3">
@@ -11101,7 +11642,7 @@ export function Scene_BookBuilder({
             <div className="relative overflow-hidden rounded-[28px] border border-white/[0.07] bg-[#071b2b]">
               <BookCoverPreview
                 title={bookTitle}
-                authorName={String(userName || "").trim() || "あなた"}
+                subtitle={bookSubtitle}
                 coverPhoto={coverPhoto}
                 coverColor={coverColor}
                 coverStyle={coverStyle}
@@ -11152,26 +11693,17 @@ export function Scene_BookBuilder({
                   <p className="text-white/40 text-xs tracking-widest mb-3">
                     表紙写真（任意）
                   </p>
-                  <div className={`grid gap-2 ${coverPhoto ? "grid-cols-[1fr_auto]" : "grid-cols-1"}`}>
+                  <div className="grid grid-cols-1 gap-2">
                     <button
                       type="button"
                       onClick={() => setCoverPhotoCorrectionOpen(true)}
                       className="btn-quiet w-full py-4 rounded-full text-white/80"
                     >
-                      {coverPhoto ? "写真を変える" : "写真を添える"}
+                      {coverPhoto ? "写真を調整" : "写真を添える"}
                     </button>
-                    {coverPhoto && (
-                      <button
-                        type="button"
-                        onClick={clearCoverPhoto}
-                        className="rounded-full border border-white/10 px-5 text-xs text-white/48 transition hover:bg-white/[0.04] hover:text-white/72"
-                      >
-                        写真を外す
-                      </button>
-                    )}
                   </div>
                   <p className="mt-2 text-[0.66rem] leading-relaxed text-white/28">
-                    写真を載せず、タイトルとお名前だけでも仕上げられます。
+                    写真を載せず、文字だけでも仕上げられます。
                   </p>
                 </div>
               )}
@@ -11209,7 +11741,7 @@ export function Scene_BookBuilder({
                 </div>
               </div>
 
-              <div>
+              <div className="space-y-5">
                 <p className="text-white/40 text-xs tracking-widest mb-2">
                   タイトル
                 </p>
@@ -11220,6 +11752,57 @@ export function Scene_BookBuilder({
                   onChange={e => setBookTitle(e.target.value)}
                   className="quiet-input"
                 />
+
+                <div>
+                  <p className="text-white/40 text-xs tracking-widest mb-2">
+                    サブタイトル
+                  </p>
+                  <input
+                    type="text"
+                    value={bookSubtitle}
+                    onChange={e => setBookSubtitle(e.target.value)}
+                    placeholder="任意"
+                    className="quiet-input"
+                  />
+                </div>
+
+                <div className="border-t border-white/[0.07] pt-5">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-white/40 text-xs tracking-widest">
+                      タイトルとサブタイトルの候補
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => generateCoverSuggestions({ regenerate: true })}
+                      disabled={coverSuggestionStatus === "loading"}
+                      className="text-[0.66rem] text-white/35 disabled:opacity-40"
+                    >
+                      {coverSuggestionStatus === "loading" ? "考えています…" : "作り直す"}
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {(coverSuggestions.length ? coverSuggestions : DEFAULT_COVER_SUGGESTIONS).slice(0, 5).map((suggestion, index) => (
+                      <button
+                        key={`${suggestion.title}-${index}`}
+                        type="button"
+                        onClick={() => {
+                          setBookTitle(suggestion.title);
+                          setBookSubtitle(suggestion.subtitle);
+                        }}
+                        className="w-full rounded-2xl border border-white/[0.07] bg-white/[0.018] px-4 py-3 text-left transition hover:bg-white/[0.045]"
+                      >
+                        <span className="block text-[0.78rem] leading-relaxed text-white/68">{suggestion.title}</span>
+                        <span className="mt-0.5 block text-[0.65rem] leading-relaxed text-white/32">{suggestion.subtitle}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {bookProjectId && (
+                  <p className="text-right text-[0.58rem] tracking-wider text-white/22">
+                    {coverSettingsSaving ? "保存中…" : "自動保存"}
+                  </p>
+                )}
               </div>
             </div>}
           </div>
