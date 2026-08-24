@@ -8986,7 +8986,8 @@ const DEFAULT_COVER_PHOTO_TRANSFORM = {
   zoom: 1,
   rotation: 0,
   brightness: 0,
-  contrast: 1
+  contrast: 1,
+  fit_mode: "contain"
 };
 
 const DEFAULT_COVER_SUGGESTIONS = [
@@ -8997,6 +8998,14 @@ const DEFAULT_COVER_SUGGESTIONS = [
   { title: "記憶の向こうへ", subtitle: "いま振り返る、わたしの時間" }
 ];
 
+const ALTERNATE_COVER_SUGGESTIONS = [
+  { title: "歩いてきた道", subtitle: "心に残る日々をたどって" },
+  { title: "人生のよりどころ", subtitle: "出会いに支えられた時間" },
+  { title: "家族へつなぐ記憶", subtitle: "語り残したい、わたしの歩み" },
+  { title: "小さな選択の先に", subtitle: "いまの自分へ続く物語" },
+  { title: "風景を抱いて", subtitle: "忘れたくない時間の記録" }
+];
+
 function normalizeCoverPhotoTransform(value = {}) {
   const panX = Number(value?.pan_x);
   const panY = Number(value?.pan_y);
@@ -9004,6 +9013,9 @@ function normalizeCoverPhotoTransform(value = {}) {
   const rotation = Number(value?.rotation);
   const brightness = Number(value?.brightness);
   const contrast = Number(value?.contrast);
+  // 既存の保存データは従来どおり枠いっぱいに表示し、新しく選ぶ写真だけ
+  // DEFAULT_COVER_PHOTO_TRANSFORM の contain から始めます。
+  const fitMode = value?.fit_mode === "contain" ? "contain" : "cover";
 
   return {
     pan_x: Number.isFinite(panX) ? Math.max(-2, Math.min(2, panX)) : 0,
@@ -9011,11 +9023,12 @@ function normalizeCoverPhotoTransform(value = {}) {
     zoom: Number.isFinite(zoom) ? Math.max(1, Math.min(3, zoom)) : 1,
     rotation: Number.isFinite(rotation) ? ((rotation % 360) + 360) % 360 : 0,
     brightness: Number.isFinite(brightness) ? Math.max(-35, Math.min(35, brightness)) : 0,
-    contrast: Number.isFinite(contrast) ? Math.max(0.7, Math.min(1.35, contrast)) : 1
+    contrast: Number.isFinite(contrast) ? Math.max(0.7, Math.min(1.35, contrast)) : 1,
+    fit_mode: fitMode
   };
 }
 
-function CoverPhotoFrame({ photo, showGrid = false, className = "" }) {
+function CoverPhotoFrame({ photo, showGrid = false, backgroundColor = "rgba(0,0,0,.1)", className = "" }) {
   const frameRef = useRef(null);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
@@ -9034,11 +9047,16 @@ function CoverPhotoFrame({ photo, showGrid = false, className = "" }) {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    setImageSize({ width: 0, height: 0 });
+  }, [photo?.url]);
+
   const rotated = transform.rotation % 180 !== 0;
   const rotatedWidth = rotated ? imageSize.height : imageSize.width;
   const rotatedHeight = rotated ? imageSize.width : imageSize.height;
+  const scaleForFrame = transform.fit_mode === "contain" ? Math.min : Math.max;
   const baseScale = frameSize.width && frameSize.height && rotatedWidth && rotatedHeight
-    ? Math.max(frameSize.width / rotatedWidth, frameSize.height / rotatedHeight)
+    ? scaleForFrame(frameSize.width / rotatedWidth, frameSize.height / rotatedHeight)
     : 1;
   const renderedWidth = rotatedWidth * baseScale * transform.zoom;
   const renderedHeight = rotatedHeight * baseScale * transform.zoom;
@@ -9048,7 +9066,11 @@ function CoverPhotoFrame({ photo, showGrid = false, className = "" }) {
   const offsetY = Math.max(-maxY, Math.min(maxY, transform.pan_y * frameSize.height));
 
   return (
-    <div ref={frameRef} className={`overflow-hidden bg-black/10 ${className}`}>
+    <div
+      ref={frameRef}
+      className={`overflow-hidden ${className}`}
+      style={{ backgroundColor }}
+    >
       {photo?.url && (
         <div
           className="absolute left-1/2 top-1/2"
@@ -9088,7 +9110,15 @@ function CoverPhotoFrame({ photo, showGrid = false, className = "" }) {
   );
 }
 
-function CoverPhotoCorrectionFlow({ open, photo, onClose, onComplete, onRemove, busy = false }) {
+function CoverPhotoCorrectionFlow({
+  open,
+  photo,
+  coverColor,
+  onClose,
+  onComplete,
+  onRemove,
+  busy = false
+}) {
   const [draft, setDraft] = useState(null);
   const draftRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -9238,12 +9268,17 @@ function CoverPhotoCorrectionFlow({ open, photo, onClose, onComplete, onRemove, 
                 onPointerUp={handlePointerEnd}
                 onPointerCancel={handlePointerEnd}
               >
-                <CoverPhotoFrame photo={draft} showGrid className="absolute inset-0 h-full w-full" />
+                <CoverPhotoFrame
+                  photo={draft}
+                  showGrid
+                  backgroundColor={coverColor}
+                  className="absolute inset-0 h-full w-full"
+                />
               </div>
             </div>
 
             <div className="mt-5 space-y-4 px-1 sm:px-4">
-              <div className="grid grid-cols-[auto_1fr] items-center gap-4">
+              <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4">
                 <button
                   type="button"
                   onClick={() => updateTransform({ rotation: transform.rotation + 90 })}
@@ -9263,6 +9298,19 @@ function CoverPhotoCorrectionFlow({ open, photo, onClose, onComplete, onRemove, 
                   aria-label="拡大率"
                   className="w-full accent-[#d9a94f]"
                 />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const resetTransform = { ...DEFAULT_COVER_PHOTO_TRANSFORM };
+                    draftRef.current = draftRef.current
+                      ? { ...draftRef.current, transform: resetTransform }
+                      : draftRef.current;
+                    setDraft(current => current ? { ...current, transform: resetTransform } : current);
+                  }}
+                  className="h-10 rounded-full border border-white/12 px-3 text-[0.65rem] text-white/48"
+                >
+                  元に戻す
+                </button>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -9345,36 +9393,60 @@ function BookCoverPreview({
         color: printInk,
         textShadow: selectedCover.value === "#182b48" ? "0 1px 2px rgba(0,0,0,.18)" : "none"
       };
+  const titleValue = title || "わたしの物語";
+  const titleLength = Array.from(titleValue).length;
+  const subtitleLength = Array.from(subtitle || "").length;
+  const titleFontSize = titleLength > 28
+    ? "1.2cqw"
+    : titleLength > 20
+      ? "1.4cqw"
+      : titleLength > 13
+        ? "1.7cqw"
+        : "2.05cqw";
+  const subtitleFontSize = subtitleLength > 44
+    ? ".72cqw"
+    : subtitleLength > 30
+      ? ".84cqw"
+      : subtitleLength > 18
+        ? ".98cqw"
+        : "1.12cqw";
 
   return (
     <div className="flex justify-center" aria-label="表紙プレビュー">
-      <div className="relative aspect-[1543/1019] w-full max-w-[760px] overflow-hidden bg-[#071b2b]">
+      <div
+        className="relative aspect-[1067/809] w-full max-w-[760px] overflow-hidden"
+        style={{ containerType: "inline-size" }}
+      >
         <img
           src={selectedCover.image}
           alt={`${isPrint ? "プリント" : "布張り"}ハードカバー・${selectedCover.label}の完成イメージ`}
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute left-[-20.34%] top-[-16.07%] h-[125.96%] w-[144.61%] max-w-none"
           loading="eager"
         />
 
         {isPrint && coverPhoto?.url && (
-          <div className="absolute left-[37.45%] top-[42.9%] h-[26.5%] w-[23.35%] overflow-hidden bg-black/5 shadow-[0_3px_8px_rgba(0,0,0,.12)] [clip-path:polygon(0_0,99.2%_.5%,99.2%_99.2%,0_98.8%)]">
-            <CoverPhotoFrame photo={coverPhoto} className="h-full w-full" />
+          <div className="absolute left-[33.82%] top-[37.97%] h-[33.38%] w-[33.77%] overflow-hidden shadow-[0_3px_8px_rgba(0,0,0,.12)] [clip-path:polygon(0_0,99.2%_.5%,99.2%_99.2%,0_98.8%)]">
+            <CoverPhotoFrame
+              photo={coverPhoto}
+              backgroundColor={selectedCover.value}
+              className="h-full w-full"
+            />
           </div>
         )}
 
         <div
-          className={`absolute text-center ${isPrint ? "left-[37%] top-[30.5%] w-[26%]" : "left-[38%] top-[41%] w-[24%]"}`}
+          className={`absolute text-center ${isPrint ? "left-[33.17%] top-[22.35%] w-[37.6%]" : "left-[34.61%] top-[35.57%] w-[34.71%]"}`}
         >
           <p
-            className="whitespace-pre-wrap text-narrative text-[clamp(0.64rem,1vw,0.98rem)] leading-[1.55] tracking-[0.1em]"
-            style={coverTextStyle}
+            className="line-clamp-2 whitespace-pre-wrap text-balance text-narrative leading-[1.45] tracking-[0.08em]"
+            style={{ ...coverTextStyle, fontSize: titleFontSize }}
           >
-            {title || "わたしの物語"}
+            {titleValue}
           </p>
           {subtitle && (
             <p
-              className="mt-[3%] whitespace-pre-wrap text-narrative text-[clamp(0.46rem,.72vw,.7rem)] leading-[1.5] tracking-[0.09em] opacity-85"
-              style={coverTextStyle}
+              className="line-clamp-2 whitespace-pre-wrap text-balance text-narrative leading-[1.45] tracking-[0.07em] opacity-85"
+              style={{ ...coverTextStyle, fontSize: subtitleFontSize, marginTop: ".9cqw" }}
             >
               {subtitle}
             </p>
@@ -11171,6 +11243,7 @@ export function Scene_BookBuilder({
   const [coverPhotoSaving, setCoverPhotoSaving] = useState(false);
   const [coverSuggestions, setCoverSuggestions] = useState([]);
   const [coverSuggestionStatus, setCoverSuggestionStatus] = useState("idle");
+  const [coverSuggestionMessage, setCoverSuggestionMessage] = useState("");
   const coverSuggestionRequestedRef = useRef(false);
 
   const [bookStories, setBookStories] = useState([]);
@@ -11209,26 +11282,45 @@ export function Scene_BookBuilder({
 
   const generateCoverSuggestions = async ({ regenerate = false } = {}) => {
     if (coverSuggestionStatus === "loading") return;
+    setCoverSuggestionMessage("");
     if (!bookProjectId) {
-      setCoverSuggestions(DEFAULT_COVER_SUGGESTIONS);
+      const currentSignature = JSON.stringify(coverSuggestions);
+      const defaultSignature = JSON.stringify(DEFAULT_COVER_SUGGESTIONS);
+      setCoverSuggestions(
+        regenerate && currentSignature === defaultSignature
+          ? ALTERNATE_COVER_SUGGESTIONS
+          : DEFAULT_COVER_SUGGESTIONS
+      );
+      setCoverSuggestionStatus("ready");
       return;
     }
 
     try {
       setCoverSuggestionStatus("loading");
       const { data, error } = await supabaseClient.functions.invoke("suggest-book-cover", {
-        body: { bookProjectId, regenerate }
+        body: {
+          bookProjectId,
+          regenerate,
+          excludeSuggestions: regenerate ? coverSuggestions : []
+        }
       });
       if (error) throw error;
       const suggestions = Array.isArray(data?.suggestions) && data.suggestions.length
         ? data.suggestions.slice(0, 5)
         : DEFAULT_COVER_SUGGESTIONS;
+      if (regenerate && JSON.stringify(suggestions) === JSON.stringify(coverSuggestions)) {
+        throw new Error("Suggestion response did not change");
+      }
       setCoverSuggestions(suggestions);
       setCoverSuggestionStatus("ready");
     } catch (error) {
       console.warn("cover suggestions fallback", error);
-      setCoverSuggestions(DEFAULT_COVER_SUGGESTIONS);
       setCoverSuggestionStatus("error");
+      if (regenerate) {
+        setCoverSuggestionMessage("候補を更新できませんでした。時間をおいて、もう一度お試しください。");
+      } else {
+        setCoverSuggestions(DEFAULT_COVER_SUGGESTIONS);
+      }
     }
   };
 
@@ -11578,6 +11670,7 @@ export function Scene_BookBuilder({
         <CoverPhotoCorrectionFlow
           open={coverPhotoCorrectionOpen}
           photo={coverPhoto}
+          coverColor={printCoverColor}
           onClose={() => setCoverPhotoCorrectionOpen(false)}
           onComplete={handleCoverPhotoSelect}
           onRemove={clearCoverPhoto}
@@ -11639,7 +11732,7 @@ export function Scene_BookBuilder({
         {stepIndex === 0 && (
           <div className="space-y-7">
 
-            <div className="relative overflow-hidden rounded-[28px] border border-white/[0.07] bg-[#071b2b]">
+            <div className="relative overflow-hidden">
               <BookCoverPreview
                 title={bookTitle}
                 subtitle={bookSubtitle}
@@ -11777,7 +11870,7 @@ export function Scene_BookBuilder({
                       disabled={coverSuggestionStatus === "loading"}
                       className="text-[0.66rem] text-white/35 disabled:opacity-40"
                     >
-                      {coverSuggestionStatus === "loading" ? "考えています…" : "作り直す"}
+                      {coverSuggestionStatus === "loading" ? "候補を考えています…" : "ほかの候補を見る"}
                     </button>
                   </div>
                   <div className="space-y-2">
@@ -11796,6 +11889,11 @@ export function Scene_BookBuilder({
                       </button>
                     ))}
                   </div>
+                  {coverSuggestionMessage && (
+                    <p className="mt-3 text-[0.65rem] leading-relaxed text-rose-200/58">
+                      {coverSuggestionMessage}
+                    </p>
+                  )}
                 </div>
 
                 {bookProjectId && (

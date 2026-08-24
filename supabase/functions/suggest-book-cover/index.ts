@@ -14,7 +14,12 @@ const fallbackSuggestions: CoverSuggestion[] = [
   { title: "ここまで、これから", subtitle: "歩んできた日々の記録" },
   { title: "受け継いでいくこと", subtitle: "家族へ残す人生のことば" },
   { title: "日々を織る", subtitle: "出会いと選択の軌跡" },
-  { title: "記憶の向こうへ", subtitle: "いま振り返る、わたしの時間" }
+  { title: "記憶の向こうへ", subtitle: "いま振り返る、わたしの時間" },
+  { title: "歩いてきた道", subtitle: "心に残る日々をたどって" },
+  { title: "人生のよりどころ", subtitle: "出会いに支えられた時間" },
+  { title: "家族へつなぐ記憶", subtitle: "語り残したい、わたしの歩み" },
+  { title: "小さな選択の先に", subtitle: "いまの自分へ続く物語" },
+  { title: "風景を抱いて", subtitle: "忘れたくない時間の記録" }
 ];
 
 serve(async (req) => {
@@ -50,6 +55,10 @@ serve(async (req) => {
     if (!regenerate && cached.length === 5) {
       return jsonResponse({ success: true, suggestions: cached, cached: true });
     }
+    const requestedExclusions = sanitizeSuggestions(body.excludeSuggestions, 20);
+    const excludedSuggestions = regenerate
+      ? (requestedExclusions.length ? requestedExclusions : cached)
+      : [];
 
     const { data: answers, error: answersError } = await serviceClient
       .from("answers")
@@ -68,11 +77,11 @@ serve(async (req) => {
       .join("\n\n")
       .slice(0, 14000);
 
-    let suggestions = fallbackSuggestions;
+    let suggestions = pickFallbackSuggestions(excludedSuggestions);
     if (openaiApiKey && sourceText) {
-      suggestions = await generateSuggestions(openaiApiKey, sourceText).catch((error) => {
+      suggestions = await generateSuggestions(openaiApiKey, sourceText, excludedSuggestions).catch((error) => {
         console.warn("cover suggestion generation fallback", error);
-        return fallbackSuggestions;
+        return pickFallbackSuggestions(excludedSuggestions);
       });
     }
 
@@ -130,9 +139,16 @@ async function requireProjectAccess(
   if (!supporter) throw new Error("Forbidden");
 }
 
-async function generateSuggestions(apiKey: string, sourceText: string): Promise<CoverSuggestion[]> {
+async function generateSuggestions(
+  apiKey: string,
+  sourceText: string,
+  excludedSuggestions: CoverSuggestion[]
+): Promise<CoverSuggestion[]> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 25000);
+  const excludedText = excludedSuggestions.length
+    ? `\n\n【現在表示中の候補】\n${excludedSuggestions.map((item) => `- ${item.title}｜${item.subtitle}`).join("\n")}\n上記と同じ、または言い換えただけの案は出さないでください。`
+    : "";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     signal: controller.signal,
@@ -148,7 +164,7 @@ async function generateSuggestions(apiKey: string, sourceText: string): Promise<
         },
         {
           role: "user",
-          content: `以下の語りから、表紙の「タイトル」と「サブタイトル」の組み合わせを5案作ってください。\n\n【条件】\n- 語りにない年齢・地名・事実を作らない\n- 氏名や著者名を必ず入れる設計にしない\n- タイトルは18文字程度まで、サブタイトルは28文字程度まで\n- 5案は、素直な自分史、節目、家族への継承、人生の主題、静かな詩情の順で変化をつける\n- 記号や説明文は避ける\n\n【返却形式】\n{"suggestions":[{"title":"...","subtitle":"..."}]}\n\n【語り】\n${sourceText}`
+          content: `以下の語りから、表紙の「タイトル」と「サブタイトル」の組み合わせを8案作ってください。\n\n【条件】\n- 語りにない年齢・地名・事実を作らない\n- 氏名や著者名を必ず入れる設計にしない\n- タイトルは18文字程度まで、サブタイトルは28文字程度まで\n- 素直な自分史、節目、家族への継承、人生の主題、静かな詩情など、方向性に変化をつける\n- 記号や説明文は避ける${excludedText}\n\n【返却形式】\n{"suggestions":[{"title":"...","subtitle":"..."}]}\n\n【語り】\n${sourceText}`
         }
       ]
     })
@@ -156,13 +172,28 @@ async function generateSuggestions(apiKey: string, sourceText: string): Promise<
 
   if (!response.ok) throw new Error(await response.text());
   const json = await response.json();
-  const parsed = JSON.parse(extractOutputText(json));
-  const suggestions = sanitizeSuggestions(parsed?.suggestions);
+  const parsed = JSON.parse(stripJsonFence(extractOutputText(json)));
+  const excludedKeys = new Set(excludedSuggestions.map(suggestionKey));
+  const generated = sanitizeSuggestions(parsed?.suggestions, 12)
+    .filter((item) => !excludedKeys.has(suggestionKey(item)));
+  const supplements = pickFallbackSuggestions([...excludedSuggestions, ...generated]);
+  const suggestions = sanitizeSuggestions([...generated, ...supplements], 5);
   if (suggestions.length !== 5) throw new Error("Suggestion response was incomplete");
   return suggestions;
 }
 
-function sanitizeSuggestions(value: unknown): CoverSuggestion[] {
+function suggestionKey(value: CoverSuggestion) {
+  return `${value.title.trim()}\n${value.subtitle.trim()}`;
+}
+
+function pickFallbackSuggestions(excludedSuggestions: CoverSuggestion[]) {
+  const excludedKeys = new Set(excludedSuggestions.map(suggestionKey));
+  const available = fallbackSuggestions.filter((item) => !excludedKeys.has(suggestionKey(item)));
+  if (available.length >= 5) return available.slice(0, 5);
+  return [...available, ...fallbackSuggestions.filter((item) => !available.includes(item))].slice(0, 5);
+}
+
+function sanitizeSuggestions(value: unknown, limit = 5): CoverSuggestion[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
   const result: CoverSuggestion[] = [];
@@ -175,9 +206,17 @@ function sanitizeSuggestions(value: unknown): CoverSuggestion[] {
     if (!title || !subtitle || seen.has(key)) continue;
     seen.add(key);
     result.push({ title, subtitle });
-    if (result.length === 5) break;
+    if (result.length === limit) break;
   }
   return result;
+}
+
+function stripJsonFence(value: string) {
+  return value
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
 }
 
 function extractOutputText(json: any) {
