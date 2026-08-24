@@ -9031,7 +9031,10 @@ function normalizeCoverPhotoTransform(value = {}) {
 function CoverPhotoFrame({ photo, showGrid = false, backgroundColor = "rgba(0,0,0,.1)", className = "" }) {
   const frameRef = useRef(null);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
-  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [loadedImage, setLoadedImage] = useState({ url: null, width: 0, height: 0 });
+  const imageSize = loadedImage.url === photo?.url
+    ? loadedImage
+    : { width: 0, height: 0 };
   const transform = normalizeCoverPhotoTransform(photo?.transform);
 
   useEffect(() => {
@@ -9046,10 +9049,6 @@ function CoverPhotoFrame({ photo, showGrid = false, backgroundColor = "rgba(0,0,
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
-
-  useEffect(() => {
-    setImageSize({ width: 0, height: 0 });
-  }, [photo?.url]);
 
   const rotated = transform.rotation % 180 !== 0;
   const rotatedWidth = rotated ? imageSize.height : imageSize.width;
@@ -9081,10 +9080,12 @@ function CoverPhotoFrame({ photo, showGrid = false, backgroundColor = "rgba(0,0,
           }}
         >
           <img
+            key={photo.url}
             src={photo.url}
             alt=""
             draggable="false"
-            onLoad={event => setImageSize({
+            onLoad={event => setLoadedImage({
+              url: photo.url,
               width: event.currentTarget.naturalWidth || 1,
               height: event.currentTarget.naturalHeight || 1
             })}
