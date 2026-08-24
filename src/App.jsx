@@ -9423,6 +9423,7 @@ function CoverPhotoCorrectionFlow({
 function BookCoverPreview({
   title,
   subtitle,
+  footerText,
   coverPhoto,
   coverColor = CLOTH_COVER_COLORS[0].value,
   coverStyle = "cloth"
@@ -9446,6 +9447,7 @@ function BookCoverPreview({
   const titleValue = title || "わたしの物語";
   const titleLength = Array.from(titleValue).length;
   const subtitleLength = Array.from(subtitle || "").length;
+  const footerLength = Array.from(footerText || "").length;
   const titleFontSize = titleLength > 28
     ? "1.2cqw"
     : titleLength > 20
@@ -9460,6 +9462,11 @@ function BookCoverPreview({
       : subtitleLength > 18
         ? ".98cqw"
         : "1.12cqw";
+  const footerFontSize = footerLength > 24
+    ? ".62cqw"
+    : footerLength > 16
+      ? ".74cqw"
+      : ".88cqw";
 
   return (
     <div className="flex justify-center" aria-label="表紙プレビュー">
@@ -9496,8 +9503,154 @@ function BookCoverPreview({
             </p>
           )}
         </div>
+
+        {footerText && (
+          <p
+            className={`absolute line-clamp-1 whitespace-nowrap text-center text-narrative leading-none tracking-[0.08em] opacity-85 ${isPrint ? "bottom-[16.9%] left-[33.17%] w-[37.6%]" : "bottom-[16.5%] left-[34.61%] w-[34.71%]"}`}
+            style={{ ...coverTextStyle, fontSize: footerFontSize }}
+          >
+            {footerText}
+          </p>
+        )}
       </div>
     </div>
+  );
+}
+
+function CoverSuggestionPicker({
+  open,
+  suggestions,
+  status,
+  message,
+  onClose,
+  onSelect,
+  onRegenerate
+}) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const scrollerRef = useRef(null);
+  const visibleSuggestions = (suggestions.length ? suggestions : DEFAULT_COVER_SUGGESTIONS).slice(0, 5);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    setActiveIndex(0);
+    window.requestAnimationFrame(() => {
+      scrollerRef.current?.scrollTo({ left: 0, behavior: "auto" });
+    });
+    const onKeyDown = event => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
+  if (!open) return null;
+
+  const moveTo = nextIndex => {
+    const normalizedIndex = Math.max(0, Math.min(nextIndex, visibleSuggestions.length - 1));
+    setActiveIndex(normalizedIndex);
+    const scroller = scrollerRef.current;
+    if (scroller) {
+      scroller.scrollTo({ left: scroller.clientWidth * normalizedIndex, behavior: "smooth" });
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[150] flex items-end justify-center bg-[#020816]/78 p-0 backdrop-blur-sm md:items-center md:p-6" onMouseDown={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cover-suggestion-title"
+        className="w-full rounded-t-[2rem] border border-white/[0.1] bg-[#101a30] px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 shadow-2xl md:max-w-[34rem] md:rounded-[2rem] md:p-7"
+        onMouseDown={event => event.stopPropagation()}
+      >
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <div>
+            <p id="cover-suggestion-title" className="text-narrative text-[1rem] text-white/82">おすすめから選ぶ</p>
+            <p className="mt-1 text-[0.65rem] text-white/30">左右に送って、組み合わせを選べます</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full border border-white/10 px-4 py-2 text-xs text-white/42">
+            閉じる
+          </button>
+        </div>
+
+        {status === "loading" ? (
+          <div className="flex min-h-[10rem] items-center justify-center rounded-3xl border border-white/[0.07] bg-white/[0.02]">
+            <p className="animate-pulse text-sm text-white/38">候補を考えています…</p>
+          </div>
+        ) : (
+          <>
+            <div
+              ref={scrollerRef}
+              className="flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain rounded-3xl [&::-webkit-scrollbar]:hidden"
+              style={{ scrollbarWidth: "none" }}
+              onScroll={event => {
+                const element = event.currentTarget;
+                if (!element.clientWidth) return;
+                const nextIndex = Math.round(element.scrollLeft / element.clientWidth);
+                setActiveIndex(Math.max(0, Math.min(nextIndex, visibleSuggestions.length - 1)));
+              }}
+            >
+              {visibleSuggestions.map((suggestion, index) => (
+                <div key={`${suggestion.title}-${index}`} className="min-w-full snap-center px-px">
+                  <button
+                    type="button"
+                    onClick={() => onSelect(suggestion)}
+                    className="flex min-h-[10rem] w-full flex-col items-center justify-center rounded-3xl border border-amber-100/15 bg-amber-50/[0.045] px-8 py-7 text-center transition hover:bg-amber-50/[0.075]"
+                  >
+                    <span className="block text-narrative text-[1.05rem] leading-relaxed text-white/82">{suggestion.title}</span>
+                    <span className="mt-3 block text-narrative text-[0.78rem] leading-relaxed text-white/42">{suggestion.subtitle}</span>
+                    <span className="mt-5 block text-[0.62rem] tracking-wider text-amber-100/42">この組み合わせを使う</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 flex items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => moveTo(activeIndex - 1)}
+                disabled={activeIndex === 0}
+                aria-label="前の候補"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-white/45 disabled:opacity-20"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <div className="flex items-center gap-2" aria-label={`${activeIndex + 1} / ${visibleSuggestions.length}`}>
+                {visibleSuggestions.map((_, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => moveTo(index)}
+                    aria-label={`${index + 1}番目の候補`}
+                    className={`h-1.5 rounded-full transition-all ${index === activeIndex ? "w-6 bg-white/58" : "w-1.5 bg-white/18"}`}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => moveTo(activeIndex + 1)}
+                disabled={activeIndex === visibleSuggestions.length - 1}
+                aria-label="次の候補"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-white/45 disabled:opacity-20"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={onRegenerate}
+          disabled={status === "loading"}
+          className="mt-5 w-full py-2 text-center text-[0.68rem] text-white/38 disabled:opacity-30"
+        >
+          ほかの候補をつくる
+        </button>
+        {message && <p className="mt-2 text-center text-[0.65rem] leading-relaxed text-rose-200/58">{message}</p>}
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -11281,11 +11434,13 @@ export function Scene_BookBuilder({
   const [coverStyle, setCoverStyle] = useState("cloth");
   const [bookTitle, setBookTitle] = useState("わたしの物語");
   const [bookSubtitle, setBookSubtitle] = useState("");
+  const [bookFooterText, setBookFooterText] = useState("");
   const [coverPhotoCorrectionOpen, setCoverPhotoCorrectionOpen] = useState(false);
   const [coverSettingsReady, setCoverSettingsReady] = useState(false);
-  const [coverSettingsSaving, setCoverSettingsSaving] = useState(false);
+  const [coverSettingsSaveError, setCoverSettingsSaveError] = useState("");
   const [coverPhotoSaving, setCoverPhotoSaving] = useState(false);
   const [coverSuggestions, setCoverSuggestions] = useState([]);
+  const [coverSuggestionPickerOpen, setCoverSuggestionPickerOpen] = useState(false);
   const [coverSuggestionStatus, setCoverSuggestionStatus] = useState("idle");
   const [coverSuggestionMessage, setCoverSuggestionMessage] = useState("");
   const coverSuggestionRequestedRef = useRef(false);
@@ -11307,6 +11462,7 @@ export function Scene_BookBuilder({
       book_project_id: bookProjectId,
       title: Object.prototype.hasOwnProperty.call(overrides, "title") ? overrides.title : bookTitle,
       subtitle: Object.prototype.hasOwnProperty.call(overrides, "subtitle") ? overrides.subtitle : bookSubtitle,
+      footer_text: Object.prototype.hasOwnProperty.call(overrides, "footerText") ? overrides.footerText : bookFooterText,
       cover_style: Object.prototype.hasOwnProperty.call(overrides, "coverStyle") ? overrides.coverStyle : coverStyle,
       cloth_color: Object.prototype.hasOwnProperty.call(overrides, "clothColor") ? overrides.clothColor : clothCoverColor,
       print_color: Object.prototype.hasOwnProperty.call(overrides, "printColor") ? overrides.printColor : printCoverColor,
@@ -11379,7 +11535,7 @@ export function Scene_BookBuilder({
       try {
         const { data, error } = await supabaseClient
           .from("book_cover_settings")
-          .select("title, subtitle, cover_style, cloth_color, print_color, cover_photo_path, cover_photo_transform, suggestions")
+          .select("title, subtitle, footer_text, cover_style, cloth_color, print_color, cover_photo_path, cover_photo_transform, suggestions")
           .eq("book_project_id", bookProjectId)
           .maybeSingle();
         if (error) throw error;
@@ -11388,6 +11544,7 @@ export function Scene_BookBuilder({
         if (data) {
           setBookTitle(data.title || "わたしの物語");
           setBookSubtitle(data.subtitle || "");
+          setBookFooterText(data.footer_text || "");
           setCoverStyle(data.cover_style === "print" ? "print" : "cloth");
           setClothCoverColor(data.cloth_color || CLOTH_COVER_COLORS[0].value);
           setPrintCoverColor(data.print_color || PRINT_COVER_COLORS[0].value);
@@ -11434,12 +11591,11 @@ export function Scene_BookBuilder({
     if (!coverSettingsReady || readOnly || !bookProjectId) return undefined;
     const timer = window.setTimeout(async () => {
       try {
-        setCoverSettingsSaving(true);
+        setCoverSettingsSaveError("");
         await persistCoverSettings();
       } catch (error) {
         console.error("book cover settings save error", error);
-      } finally {
-        setCoverSettingsSaving(false);
+        setCoverSettingsSaveError("表紙設定を保存できませんでした。");
       }
     }, 700);
     return () => window.clearTimeout(timer);
@@ -11449,6 +11605,7 @@ export function Scene_BookBuilder({
     bookProjectId,
     bookTitle,
     bookSubtitle,
+    bookFooterText,
     coverStyle,
     clothCoverColor,
     printCoverColor,
@@ -11456,6 +11613,16 @@ export function Scene_BookBuilder({
     coverPhoto?.transform,
     coverSuggestions
   ]);
+
+  const retryCoverSettingsSave = async () => {
+    try {
+      setCoverSettingsSaveError("");
+      await persistCoverSettings();
+    } catch (error) {
+      console.error("book cover settings retry error", error);
+      setCoverSettingsSaveError("表紙設定を保存できませんでした。");
+    }
+  };
 
   const getQuestionForAnswer = (answer) => {
     return (questionSet || []).find(q =>
@@ -11779,6 +11946,7 @@ export function Scene_BookBuilder({
               <BookCoverPreview
                 title={bookTitle}
                 subtitle={bookSubtitle}
+                footerText={bookFooterText}
                 coverPhoto={coverPhoto}
                 coverColor={coverColor}
                 coverStyle={coverStyle}
@@ -11902,50 +12070,58 @@ export function Scene_BookBuilder({
                   />
                 </div>
 
+                <button
+                  type="button"
+                  onClick={() => setCoverSuggestionPickerOpen(true)}
+                  className="flex w-full items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.018] px-4 py-3 text-left transition hover:bg-white/[0.04]"
+                >
+                  <span>
+                    <span className="block text-[0.75rem] text-white/62">おすすめから選ぶ</span>
+                    <span className="mt-0.5 block text-[0.62rem] text-white/28">タイトルとサブタイトルの組み合わせ</span>
+                  </span>
+                  <ChevronRight size={16} className="shrink-0 text-white/30" />
+                </button>
+
                 <div className="border-t border-white/[0.07] pt-5">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-white/40 text-xs tracking-widest">
-                      タイトルとサブタイトルの候補
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => generateCoverSuggestions({ regenerate: true })}
-                      disabled={coverSuggestionStatus === "loading"}
-                      className="text-[0.66rem] text-white/35 disabled:opacity-40"
-                    >
-                      {coverSuggestionStatus === "loading" ? "候補を考えています…" : "ほかの候補を見る"}
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {(coverSuggestions.length ? coverSuggestions : DEFAULT_COVER_SUGGESTIONS).slice(0, 5).map((suggestion, index) => (
-                      <button
-                        key={`${suggestion.title}-${index}`}
-                        type="button"
-                        onClick={() => {
-                          setBookTitle(suggestion.title);
-                          setBookSubtitle(suggestion.subtitle);
-                        }}
-                        className="w-full rounded-2xl border border-white/[0.07] bg-white/[0.018] px-4 py-3 text-left transition hover:bg-white/[0.045]"
-                      >
-                        <span className="block text-[0.78rem] leading-relaxed text-white/68">{suggestion.title}</span>
-                        <span className="mt-0.5 block text-[0.65rem] leading-relaxed text-white/32">{suggestion.subtitle}</span>
-                      </button>
-                    ))}
-                  </div>
-                  {coverSuggestionMessage && (
-                    <p className="mt-3 text-[0.65rem] leading-relaxed text-rose-200/58">
-                      {coverSuggestionMessage}
-                    </p>
-                  )}
+                  <p className="text-white/40 text-xs tracking-widest mb-2">
+                    表紙下部の一行（任意）
+                  </p>
+                  <input
+                    type="text"
+                    value={bookFooterText}
+                    onChange={e => setBookFooterText(e.target.value)}
+                    placeholder="例：2026年8月"
+                    maxLength={30}
+                    className="quiet-input"
+                  />
                 </div>
 
-                {bookProjectId && (
-                  <p className="text-right text-[0.58rem] tracking-wider text-white/22">
-                    {coverSettingsSaving ? "保存中…" : "自動保存"}
-                  </p>
+                {coverSettingsSaveError && (
+                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose-200/15 bg-rose-300/[0.04] px-4 py-3">
+                    <p className="text-[0.65rem] text-rose-100/60">{coverSettingsSaveError}</p>
+                    <button type="button" onClick={retryCoverSettingsSave} className="shrink-0 text-[0.65rem] text-white/58">
+                      もう一度保存
+                    </button>
+                  </div>
                 )}
               </div>
             </div>}
+
+            {!readOnly && (
+              <CoverSuggestionPicker
+                open={coverSuggestionPickerOpen}
+                suggestions={coverSuggestions}
+                status={coverSuggestionStatus}
+                message={coverSuggestionMessage}
+                onClose={() => setCoverSuggestionPickerOpen(false)}
+                onSelect={suggestion => {
+                  setBookTitle(suggestion.title);
+                  setBookSubtitle(suggestion.subtitle);
+                  setCoverSuggestionPickerOpen(false);
+                }}
+                onRegenerate={() => generateCoverSuggestions({ regenerate: true })}
+              />
+            )}
           </div>
         )}
 
