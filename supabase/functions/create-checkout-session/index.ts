@@ -128,19 +128,23 @@ serve(async request => {
     const orderType = body.orderType === "gift" ? "gift" : "self";
     const discountCode = String(body.discountCode || "").trim();
     const includeGiftPackage = orderType === "gift" && body.includeGiftPackage !== false;
+    const includePremiumHardcover = orderType === "self" && body.includePremiumHardcover === true;
+    const returnContext = body.returnContext === "book_builder" ? "book_builder" : "purchase";
     const gift = typeof body.gift === "object" && body.gift ? body.gift : {};
 
     let project: any = null;
     if (orderType === "self") {
       if (!projectId) return json({ success: false, error: "物語が見つかりません" }, 400);
       const result = await admin.from("book_projects")
-        .select("id, owner_user_id, access_status, product_code")
+        .select("id, owner_user_id, access_status, product_code, premium_hardcover_status, premium_hardcover_purchased_at")
         .eq("id", projectId).maybeSingle();
       project = result.data;
       if (result.error || !project || project.owner_user_id !== authData.user.id) {
         return json({ success: false, error: "この物語の購入手続きを開始できません" }, 403);
       }
-      if (["paid", "gifted", "legacy"].includes(project.access_status)) {
+      const basePurchased = ["paid", "gifted", "legacy"].includes(project.access_status);
+      const premiumPurchased = project.premium_hardcover_status === "paid" || Boolean(project.premium_hardcover_purchased_at);
+      if (basePurchased && (!includePremiumHardcover || premiumPurchased)) {
         return json({ success: true, alreadyPurchased: true });
       }
     } else {
@@ -153,29 +157,43 @@ serve(async request => {
       }
     }
 
-    const { data: created, error: createError } = await admin.rpc("create_commerce_order", {
-      input_purchaser_user_id: authData.user.id,
-      input_book_project_id: orderType === "self" ? projectId : null,
-      input_order_type: orderType,
-      input_product_code: project?.product_code || "self_book_v1",
-      input_discount_code: discountCode || null,
-      input_include_gift_package: includeGiftPackage,
-      input_gift: gift
-    });
+    const createRequest = orderType === "self"
+      ? admin.rpc("create_book_commerce_order", {
+          input_purchaser_user_id: authData.user.id,
+          input_book_project_id: projectId,
+          input_discount_code: discountCode || null,
+          input_include_premium_hardcover: includePremiumHardcover
+        })
+      : admin.rpc("create_commerce_order", {
+          input_purchaser_user_id: authData.user.id,
+          input_book_project_id: null,
+          input_order_type: orderType,
+          input_product_code: "self_book_v1",
+          input_discount_code: discountCode || null,
+          input_include_gift_package: includeGiftPackage,
+          input_gift: gift
+        });
+    const { data: created, error: createError } = await createRequest;
     if (createError) throw createError;
     const order = created?.order;
     const quote = created?.quote;
     orderId = String(order?.id || "");
     if (!orderId || !quote) throw new Error("注文を作成できませんでした");
 
-    const requestedCodes = includeGiftPackage ? [order.product_code, "gift_package_v1"] : [order.product_code];
+    const requestedCodes = [
+      ...(Number(order.base_book_amount ?? quote.base_book_amount ?? 0) > 0 ? ["self_book_v1"] : []),
+      ...(Number(order.premium_hardcover_amount ?? quote.premium_hardcover_amount ?? 0) > 0 ? ["premium_hardcover_v1"] : []),
+      ...(includeGiftPackage ? ["gift_package_v1"] : [])
+    ];
     const { data: products, error: productError } = await admin.from("commerce_products").select("*").in("product_code", requestedCodes);
     if (productError) throw productError;
-    const bookProduct = products?.find((item: any) => item.product_code === order.product_code);
+    const bookProduct = products?.find((item: any) => item.product_code === "self_book_v1");
+    const premiumProduct = products?.find((item: any) => item.product_code === "premium_hardcover_v1");
     const packageProduct = products?.find((item: any) => item.product_code === "gift_package_v1");
-    if (!bookProduct) throw new Error("商品が見つかりませんでした");
+    if (!bookProduct && !premiumProduct) throw new Error("商品が見つかりませんでした");
 
-    const bookStripe = await ensureStripePrice(admin, stripeSecretKey, bookProduct);
+    const bookStripe = bookProduct ? await ensureStripePrice(admin, stripeSecretKey, bookProduct) : null;
+    const premiumStripe = premiumProduct ? await ensureStripePrice(admin, stripeSecretKey, premiumProduct) : null;
     const packageStripe = includeGiftPackage && Number(quote.gift_package_amount) > 0
       ? await ensureStripePrice(admin, stripeSecretKey, packageProduct)
       : null;
@@ -184,6 +202,7 @@ serve(async request => {
     if (quote.campaign_id && Number(quote.discount_amount) > 0) {
       const { data: campaign, error: campaignError } = await admin.from("discount_campaigns").select("*").eq("id", quote.campaign_id).single();
       if (campaignError) throw campaignError;
+      if (!bookStripe) throw new Error("割引対象の商品が見つかりませんでした");
       couponId = await ensureStripeCoupon(admin, stripeSecretKey, campaign, bookStripe.productId);
     }
 
@@ -192,11 +211,20 @@ serve(async request => {
     form.set("locale", "ja");
     form.set("payment_method_types[0]", "card");
     form.set("customer_creation", "always");
-    form.set("line_items[0][price]", bookStripe.priceId);
-    form.set("line_items[0][quantity]", "1");
+    let lineIndex = 0;
+    if (bookStripe) {
+      form.set(`line_items[${lineIndex}][price]`, bookStripe.priceId);
+      form.set(`line_items[${lineIndex}][quantity]`, "1");
+      lineIndex += 1;
+    }
+    if (premiumStripe) {
+      form.set(`line_items[${lineIndex}][price]`, premiumStripe.priceId);
+      form.set(`line_items[${lineIndex}][quantity]`, "1");
+      lineIndex += 1;
+    }
     if (packageStripe) {
-      form.set("line_items[1][price]", packageStripe.priceId);
-      form.set("line_items[1][quantity]", "1");
+      form.set(`line_items[${lineIndex}][price]`, packageStripe.priceId);
+      form.set(`line_items[${lineIndex}][quantity]`, "1");
     }
     if (couponId) form.set("discounts[0][coupon]", couponId);
     form.set("client_reference_id", order.id);
@@ -206,9 +234,12 @@ serve(async request => {
     form.set("metadata[user_id]", authData.user.id);
     form.set("metadata[order_type]", orderType);
     form.set("metadata[product_code]", order.product_code);
+    form.set("metadata[return_context]", returnContext);
+    form.set("metadata[includes_base_book]", String(Boolean(order.includes_base_book)));
+    form.set("metadata[includes_premium_hardcover]", String(Boolean(order.includes_premium_hardcover)));
     form.set("expires_at", String(Math.floor(Date.now() / 1000) + 60 * 60));
-    form.set("success_url", appReturnUrl({ app: "1", entry: "purchase", purchase_for: orderType, checkout: "success", session_id: "{CHECKOUT_SESSION_ID}" }));
-    form.set("cancel_url", appReturnUrl({ app: "1", entry: "purchase", purchase_for: orderType, checkout: "cancelled" }));
+    form.set("success_url", appReturnUrl({ app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout_premium: includePremiumHardcover ? "1" : "0", checkout: "success", session_id: "{CHECKOUT_SESSION_ID}" }));
+    form.set("cancel_url", appReturnUrl({ app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout_premium: includePremiumHardcover ? "1" : "0", checkout: "cancelled" }));
 
     const checkout = await stripeRequest(stripeSecretKey, "checkout/sessions", form);
     if (!checkout?.id || !checkout?.url) throw new Error("購入画面を開けませんでした");
@@ -221,12 +252,18 @@ serve(async request => {
     if (orderUpdateError) throw orderUpdateError;
 
     if (orderType === "self") {
-      const { error: projectUpdateError } = await admin.from("book_projects").update({
-        access_status: "checkout_pending",
-        stripe_checkout_session_id: checkout.id,
-        purchaser_user_id: authData.user.id,
-        commerce_order_id: order.id
-      }).eq("id", project.id).eq("owner_user_id", authData.user.id);
+      const projectUpdate: Record<string, unknown> = {};
+      if (order.includes_base_book) {
+        projectUpdate.access_status = "checkout_pending";
+        projectUpdate.commerce_order_id = order.id;
+        projectUpdate.stripe_checkout_session_id = checkout.id;
+        projectUpdate.purchaser_user_id = authData.user.id;
+      }
+      if (order.includes_premium_hardcover) {
+        projectUpdate.premium_hardcover_status = "checkout_pending";
+      }
+      const { error: projectUpdateError } = await admin.from("book_projects").update(projectUpdate)
+        .eq("id", project.id).eq("owner_user_id", authData.user.id);
       if (projectUpdateError) throw projectUpdateError;
     }
 

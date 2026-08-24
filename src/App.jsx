@@ -52,7 +52,9 @@ function getCheckoutReturnFromUrl() {
   return {
     status: params.get("checkout") || null,
     sessionId: params.get("session_id") || null,
-    purchaseFor: params.get("purchase_for") === "gift" ? "gift" : "self"
+    purchaseFor: params.get("purchase_for") === "gift" ? "gift" : "self",
+    context: params.get("checkout_context") === "book_builder" ? "book_builder" : "purchase",
+    premium: params.get("checkout_premium") === "1"
   };
 }
 
@@ -212,6 +214,11 @@ function getAuthReturnUrlFromCurrentLocation() {
   const checkoutSessionId = params.get("session_id");
   if (checkoutSessionId) url.searchParams.set("session_id", checkoutSessionId);
 
+  const checkoutContext = params.get("checkout_context");
+  if (checkoutContext) url.searchParams.set("checkout_context", checkoutContext);
+  const checkoutPremium = params.get("checkout_premium");
+  if (checkoutPremium) url.searchParams.set("checkout_premium", checkoutPremium);
+
   return url.toString();
 }
 
@@ -224,6 +231,17 @@ async function loadCommerceQuote({ discountCode = "", includeGiftPackage = false
     input_product_code: "self_book_v1",
     input_discount_code: discountCode || null,
     input_include_gift_package: Boolean(includeGiftPackage)
+  });
+  if (error) throw error;
+  return data;
+}
+
+async function loadBookOrderQuote({ projectId, discountCode = "", includePremiumHardcover = false }) {
+  if (!projectId) return null;
+  const { data, error } = await supabaseClient.rpc("get_book_order_quote", {
+    input_book_project_id: projectId,
+    input_discount_code: discountCode || null,
+    input_include_premium_hardcover: Boolean(includePremiumHardcover)
   });
   if (error) throw error;
   return data;
@@ -4320,7 +4338,7 @@ useEffect(() => {
     setPurchaseStatus("paid");
     setPurchaseError("");
     replaceCommercialEntryUrl("purchased");
-    setScene("purchase_success");
+    setScene(checkoutReturn.context === "book_builder" ? "book_builder" : "purchase_success");
   };
 
   const finishGiftCheckoutAsPaid = data => {
@@ -4342,6 +4360,7 @@ useEffect(() => {
       // there is no need to depend on a second Stripe lookup.
       if (
         checkoutReturn.purchaseFor === "self" &&
+        checkoutReturn.context !== "book_builder" &&
         hasFullProjectAccess(foundation.project)
       ) {
         finishSelfCheckoutAsPaid(foundation.project);
@@ -4385,7 +4404,12 @@ useEffect(() => {
             .eq("id", foundation.project.id)
             .maybeSingle();
 
-        if (!refreshError && hasFullProjectAccess(refreshedProject)) {
+        const checkoutFinished = checkoutReturn.context === "book_builder"
+          ? checkoutReturn.premium
+            ? refreshedProject?.premium_hardcover_status === "paid"
+            : hasFullProjectAccess(refreshedProject)
+          : hasFullProjectAccess(refreshedProject);
+        if (!refreshError && checkoutFinished) {
           finishSelfCheckoutAsPaid(refreshedProject);
           return;
         }
@@ -4415,6 +4439,8 @@ const startPurchase = async ({
   orderType = "self",
   discountCode = "",
   includeGiftPackage = false,
+  includePremiumHardcover = false,
+  returnContext = "purchase",
   gift = {}
 } = {}) => {
   if (orderType === "self" && !foundation?.project?.id) {
@@ -4435,6 +4461,8 @@ const startPurchase = async ({
           orderType,
           discountCode,
           includeGiftPackage,
+          includePremiumHardcover,
+          returnContext,
           gift
         }
       }
@@ -4449,7 +4477,7 @@ const startPurchase = async ({
       setFoundation(refreshedFoundation);
       setPurchaseStatus("paid");
       replaceCommercialEntryUrl("purchased");
-      setScene("purchase_success");
+      setScene(returnContext === "book_builder" ? "book_builder" : "purchase_success");
       return;
     }
 
@@ -5710,6 +5738,7 @@ let sceneAfterInvite = nextScene;
         <Scene_BookBuilder
           user={user}
           bookProjectId={supportContext.project.book_project_id || supportContext.project.id}
+          project={supportContext.project}
           questionSet={supportContext.questionSet}
           initialBookStories={supportContext.storyRows}
           initialBookMediaByAnswerId={supportContext.mediaByAnswerId}
@@ -5721,7 +5750,11 @@ let sceneAfterInvite = nextScene;
         <Scene_BookBuilder
           user={user}
           bookProjectId={foundation?.project?.id}
+          project={foundation?.project}
           questionSet={questionsDB}
+          purchaseStatus={purchaseStatus}
+          purchaseError={purchaseError}
+          onPurchase={startPurchase}
           onBack={() => setScene("home")}
         />
       )}
@@ -8974,10 +9007,10 @@ const CLOTH_COVER_COLORS = [
 ];
 
 const PRINT_COVER_COLORS = [
-  { label: "セージグリーン", value: "#a9bcb6", ink: "#294b43", image: "/site/book-covers/print-sage-green.png" },
-  { label: "ダスティローズ", value: "#c9aaa7", ink: "#4e3540", image: "/site/book-covers/print-dusty-rose.png" },
-  { label: "アイボリー", value: "#e8e0d6", ink: "#26394a", image: "/site/book-covers/print-ivory.png" },
-  { label: "ネイビー", value: "#182b48", ink: "#f1e9dc", image: "/site/book-covers/print-navy.png" }
+  { label: "セージグリーン", value: "#a9bcb6", ink: "#294b43", image: "/site/book-covers/print-sage-green.png", softcoverImage: "/site/book-covers/softcover-sage-green.png" },
+  { label: "ダスティローズ", value: "#c9aaa7", ink: "#4e3540", image: "/site/book-covers/print-dusty-rose.png", softcoverImage: "/site/book-covers/softcover-dusty-rose.png" },
+  { label: "アイボリー", value: "#e8e0d6", ink: "#26394a", image: "/site/book-covers/print-ivory.png", softcoverImage: "/site/book-covers/softcover-ivory.png" },
+  { label: "ネイビー", value: "#182b48", ink: "#f1e9dc", image: "/site/book-covers/print-navy.png", softcoverImage: "/site/book-covers/softcover-navy.png" }
 ];
 
 const DEFAULT_COVER_PHOTO_TRANSFORM = {
@@ -9146,7 +9179,7 @@ function getCoverPlaneTransform(width, height) {
   return `matrix3d(${scaleX / width},${scaleYFromX / width},0,${projectiveX / width},${skewX / height},${scaleY / height},0,${projectiveY / height},0,0,1,0,${topLeft.x},${topLeft.y},0,1)`;
 }
 
-function CoverPerspectivePlane({ children }) {
+function CoverPerspectivePlane({ children, bindingType = "hardcover" }) {
   const frameRef = useRef(null);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
 
@@ -9163,8 +9196,12 @@ function CoverPerspectivePlane({ children }) {
     return () => observer.disconnect();
   }, []);
 
+  const planeClass = bindingType === "softcover"
+    ? "absolute left-[29.7%] top-[11.1%] h-[79.9%] w-[43.5%]"
+    : "absolute left-[32.15%] top-[9.77%] h-[83.71%] w-[38.67%]";
+
   return (
-    <div className="absolute left-[32.15%] top-[9.77%] h-[83.71%] w-[38.67%]">
+    <div className={planeClass}>
       <div
         ref={frameRef}
         className="absolute inset-0"
@@ -9445,9 +9482,11 @@ function BookCoverPreview({
   footerText,
   coverPhoto,
   coverColor = CLOTH_COVER_COLORS[0].value,
-  coverStyle = "cloth"
+  coverStyle = "cloth",
+  bindingType = "hardcover"
 }) {
-  const isPrint = coverStyle === "print";
+  const isSoftcover = bindingType === "softcover";
+  const isPrint = isSoftcover || coverStyle === "print";
   const normalizedColor = String(coverColor || "").toLowerCase();
   const coverOptions = isPrint ? PRINT_COVER_COLORS : CLOTH_COVER_COLORS;
   const selectedCover = coverOptions.find(
@@ -9494,13 +9533,13 @@ function BookCoverPreview({
         style={{ containerType: "inline-size" }}
       >
         <img
-          src={selectedCover.image}
-          alt={`${isPrint ? "プリント" : "布張り"}ハードカバー・${selectedCover.label}の完成イメージ`}
+          src={isSoftcover ? selectedCover.softcoverImage : selectedCover.image}
+          alt={`${isSoftcover ? "ソフトカバー" : isPrint ? "プリント高級製本版" : "布張り高級製本版"}・${selectedCover.label}の完成イメージ`}
           className="absolute left-[-20.34%] top-[-16.07%] h-[125.96%] w-[144.61%] max-w-none"
           loading="eager"
         />
 
-        <CoverPerspectivePlane>
+        <CoverPerspectivePlane bindingType={bindingType}>
           {isPrint && coverPhoto?.url && (
             <CoverPhotoFrame
               photo={coverPhoto}
@@ -11428,18 +11467,31 @@ function Scene_SupportRecordingAssist({
 export function Scene_BookBuilder({
   user,
   bookProjectId = null,
+  project = null,
   questionSet = [],
   initialBookStories = null,
   initialBookMediaByAnswerId = null,
   readOnly = false,
+  purchaseStatus = "idle",
+  purchaseError = "",
+  onPurchase = null,
   onBack
 }) {
-  const steps = readOnly ? ["表紙", "収録", "紙面"] : ["表紙", "収録", "紙面", "注文", "完了"];
+  const steps = readOnly || !onPurchase
+    ? ["表紙", "収録", "紙面"]
+    : ["表紙", "収録", "紙面", "注文", "完了"];
   const [stepIndex, setStepIndex] = useState(0);
   const [coverPhoto, setCoverPhoto] = useState(null);
   const [clothCoverColor, setClothCoverColor] = useState(CLOTH_COVER_COLORS[0].value);
   const [printCoverColor, setPrintCoverColor] = useState(PRINT_COVER_COLORS[0].value);
-  const [coverStyle, setCoverStyle] = useState("cloth");
+  const [coverStyle, setCoverStyle] = useState("print");
+  const [previewBinding, setPreviewBinding] = useState("softcover");
+  const [premiumHardcoverSelected, setPremiumHardcoverSelected] = useState(false);
+  const [orderQuote, setOrderQuote] = useState(null);
+  const [orderQuoteStatus, setOrderQuoteStatus] = useState("idle");
+  const [orderQuoteError, setOrderQuoteError] = useState("");
+  const [orderDiscountDraft, setOrderDiscountDraft] = useState("");
+  const [orderDiscountCode, setOrderDiscountCode] = useState("");
   const [bookTitle, setBookTitle] = useState("わたしの物語");
   const [bookSubtitle, setBookSubtitle] = useState("");
   const [bookFooterText, setBookFooterText] = useState("");
@@ -11460,6 +11512,8 @@ export function Scene_BookBuilder({
 
   const coverColor = coverStyle === "cloth" ? clothCoverColor : printCoverColor;
   const colors = coverStyle === "cloth" ? CLOTH_COVER_COLORS : PRINT_COVER_COLORS;
+  const previewCoverStyle = previewBinding === "softcover" ? "print" : coverStyle;
+  const previewCoverColor = previewBinding === "softcover" ? printCoverColor : coverColor;
 
   const persistCoverSettings = async (overrides = {}) => {
     if (!bookProjectId || readOnly) return;
@@ -11474,6 +11528,9 @@ export function Scene_BookBuilder({
       cover_style: Object.prototype.hasOwnProperty.call(overrides, "coverStyle") ? overrides.coverStyle : coverStyle,
       cloth_color: Object.prototype.hasOwnProperty.call(overrides, "clothColor") ? overrides.clothColor : clothCoverColor,
       print_color: Object.prototype.hasOwnProperty.call(overrides, "printColor") ? overrides.printColor : printCoverColor,
+      premium_hardcover_selected: Object.prototype.hasOwnProperty.call(overrides, "premiumHardcoverSelected")
+        ? Boolean(overrides.premiumHardcoverSelected)
+        : premiumHardcoverSelected,
       cover_photo_path: nextPhoto?.storagePath || null,
       cover_photo_transform: normalizeCoverPhotoTransform(nextPhoto?.transform),
       suggestions: Object.prototype.hasOwnProperty.call(overrides, "suggestions")
@@ -11529,7 +11586,7 @@ export function Scene_BookBuilder({
       try {
         const { data, error } = await supabaseClient
           .from("book_cover_settings")
-          .select("title, subtitle, footer_text, cover_style, cloth_color, print_color, cover_photo_path, cover_photo_transform, suggestions")
+          .select("title, subtitle, footer_text, cover_style, cloth_color, print_color, premium_hardcover_selected, cover_photo_path, cover_photo_transform, suggestions")
           .eq("book_project_id", bookProjectId)
           .maybeSingle();
         if (error) throw error;
@@ -11539,7 +11596,12 @@ export function Scene_BookBuilder({
           setBookTitle(data.title || "わたしの物語");
           setBookSubtitle(data.subtitle || "");
           setBookFooterText(data.footer_text || "");
-          setCoverStyle(data.cover_style === "print" ? "print" : "cloth");
+          const premiumPurchased = project?.premium_hardcover_status === "paid"
+            || Boolean(project?.premium_hardcover_purchased_at);
+          const premiumSelected = Boolean(data.premium_hardcover_selected) || premiumPurchased;
+          const savedStyle = data.cover_style === "cloth" ? "cloth" : "print";
+          setPremiumHardcoverSelected(premiumSelected);
+          setCoverStyle(savedStyle === "cloth" && !premiumSelected ? "print" : savedStyle);
           setClothCoverColor(data.cloth_color || CLOTH_COVER_COLORS[0].value);
           setPrintCoverColor(data.print_color || PRINT_COVER_COLORS[0].value);
           if (Array.isArray(data.suggestions) && data.suggestions.length) {
@@ -11573,7 +11635,7 @@ export function Scene_BookBuilder({
     coverSuggestionRequestedRef.current = false;
     loadCoverSettings();
     return () => { cancelled = true; };
-  }, [bookProjectId]);
+  }, [bookProjectId, project?.premium_hardcover_status, project?.premium_hardcover_purchased_at]);
 
   useEffect(() => {
     if (!coverSettingsReady || readOnly || !bookProjectId || coverSuggestionRequestedRef.current) return;
@@ -11601,12 +11663,74 @@ export function Scene_BookBuilder({
     bookSubtitle,
     bookFooterText,
     coverStyle,
+    premiumHardcoverSelected,
     clothCoverColor,
     printCoverColor,
     coverPhoto?.storagePath,
     coverPhoto?.transform,
     coverSuggestions
   ]);
+
+  useEffect(() => {
+    if (readOnly || !onPurchase || !bookProjectId) return undefined;
+    let cancelled = false;
+    const loadQuote = async () => {
+      try {
+        setOrderQuoteStatus("loading");
+        setOrderQuoteError("");
+        const quote = await loadBookOrderQuote({
+          projectId: bookProjectId,
+          discountCode: orderDiscountCode,
+          includePremiumHardcover: premiumHardcoverSelected
+        });
+        if (!cancelled) {
+          setOrderQuote(quote);
+          setOrderQuoteStatus("ready");
+          if (quote?.premium_already_purchased) setPremiumHardcoverSelected(true);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setOrderQuote(null);
+          setOrderQuoteStatus("error");
+          setOrderQuoteError(error?.message || "金額を確認できませんでした。");
+        }
+      }
+    };
+    loadQuote();
+    return () => { cancelled = true; };
+  }, [readOnly, onPurchase, bookProjectId, orderDiscountCode, premiumHardcoverSelected]);
+
+  const premiumHardcoverPurchased = orderQuote?.premium_already_purchased
+    || project?.premium_hardcover_status === "paid"
+    || Boolean(project?.premium_hardcover_purchased_at);
+  const premiumHardcoverIncluded = premiumHardcoverSelected || premiumHardcoverPurchased;
+  const baseBookPurchased = orderQuote?.base_already_purchased ?? hasFullProjectAccess(project);
+
+  useEffect(() => {
+    if (project?.premium_hardcover_status === "paid" || project?.premium_hardcover_purchased_at) {
+      setPremiumHardcoverSelected(true);
+    }
+  }, [project?.premium_hardcover_status, project?.premium_hardcover_purchased_at]);
+
+  const selectPremiumHardcover = () => {
+    setPremiumHardcoverSelected(true);
+    setPreviewBinding("hardcover");
+  };
+
+  const removePremiumHardcover = () => {
+    if (premiumHardcoverPurchased) return;
+    setPremiumHardcoverSelected(false);
+    setPreviewBinding("softcover");
+    if (coverStyle === "cloth") setCoverStyle("print");
+  };
+
+  const selectCoverStyle = nextStyle => {
+    if (nextStyle === "cloth") {
+      setPremiumHardcoverSelected(true);
+      setPreviewBinding("hardcover");
+    }
+    setCoverStyle(nextStyle);
+  };
 
   const retryCoverSettingsSave = async () => {
     try {
@@ -11936,14 +12060,78 @@ export function Scene_BookBuilder({
         {stepIndex === 0 && (
           <div className="space-y-7">
 
+            <div className="grid grid-cols-2 gap-2" aria-label="完成イメージの切り替え">
+              <button
+                type="button"
+                onClick={() => setPreviewBinding("softcover")}
+                className={`relative rounded-2xl border px-3 py-4 text-left transition ${
+                  previewBinding === "softcover"
+                    ? "border-white/45 bg-white/[0.075]"
+                    : "border-white/[0.09] bg-white/[0.018]"
+                }`}
+              >
+                <span className="mb-3 flex items-center gap-2 text-[0.66rem] text-emerald-100/72">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/18 text-[0.7rem]">✓</span>
+                  基本セット
+                </span>
+                <span className="block text-[0.82rem] leading-relaxed text-white/82">ソフトカバー版 1冊</span>
+                <span className="mt-1 block text-[0.62rem] text-white/36">
+                  {baseBookPurchased ? "購入済み・追加料金なし" : "49,800円"}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => premiumHardcoverIncluded
+                  ? setPreviewBinding("hardcover")
+                  : selectPremiumHardcover()}
+                className={`relative rounded-2xl border px-3 py-4 text-left transition ${
+                  previewBinding === "hardcover"
+                    ? "border-amber-100/45 bg-amber-50/[0.085]"
+                    : "border-white/[0.09] bg-white/[0.018]"
+                }`}
+              >
+                <span className="mb-3 flex items-center gap-2 text-[0.66rem] text-amber-100/70">
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full border text-[0.7rem] ${
+                    premiumHardcoverIncluded
+                      ? "border-amber-200/20 bg-amber-300/18"
+                      : "border-white/22 text-transparent"
+                  }`}>✓</span>
+                  追加オプション
+                </span>
+                <span className="block text-[0.82rem] leading-relaxed text-white/82">高級製本版をもう1冊追加</span>
+                <span className="mt-1 block text-[0.62rem] text-white/36">
+                  {premiumHardcoverPurchased ? "購入済み・追加料金なし" : "＋30,000円"}
+                </span>
+              </button>
+            </div>
+
+            <div className="flex min-h-6 items-center justify-between gap-3 px-1">
+              <p className="text-[0.65rem] leading-relaxed text-white/34">
+                {premiumHardcoverIncluded
+                  ? "ソフトカバー版と高級製本版の計2冊を、同じ住所へまとめてお届けします。"
+                  : "ソフトカバー版は基本セットに含まれます。"}
+              </p>
+              {premiumHardcoverIncluded && !premiumHardcoverPurchased && !readOnly && (
+                <button
+                  type="button"
+                  onClick={removePremiumHardcover}
+                  className="shrink-0 text-[0.65rem] text-white/46 underline decoration-white/20 underline-offset-4"
+                >
+                  追加を取り消す
+                </button>
+              )}
+            </div>
+
             <div className="relative overflow-hidden">
               <BookCoverPreview
                 title={bookTitle}
                 subtitle={bookSubtitle}
                 footerText={bookFooterText}
                 coverPhoto={coverPhoto}
-                coverColor={coverColor}
-                coverStyle={coverStyle}
+                coverColor={previewCoverColor}
+                coverStyle={previewCoverStyle}
+                bindingType={previewBinding}
               />
             </div>
 
@@ -11960,19 +12148,19 @@ export function Scene_BookBuilder({
                   {[
                     {
                       value: "cloth",
-                      label: "布張りハードカバー",
-                      detail: "布の質感と金の箔押し"
+                      label: "布張り表紙",
+                      detail: "高級製本版のみ"
                     },
                     {
                       value: "print",
-                      label: "プリントハードカバー",
-                      detail: "滑らかな表紙・写真は任意"
+                      label: "プリント表紙",
+                      detail: "ソフトカバー・高級製本版"
                     }
                   ].map(style => (
                     <button
                       key={style.value}
                       type="button"
-                      onClick={() => setCoverStyle(style.value)}
+                      onClick={() => selectCoverStyle(style.value)}
                       className={`rounded-2xl border px-2 py-4 text-center transition ${
                         coverStyle === style.value
                           ? "border-amber-100/35 bg-amber-50/[0.08]"
@@ -11984,6 +12172,9 @@ export function Scene_BookBuilder({
                     </button>
                   ))}
                 </div>
+                <p className="mt-3 text-[0.64rem] leading-relaxed text-white/30">
+                  高級製本版は、厚みのある表紙と丁寧な仕立てによる、特別感のある1冊です。
+                </p>
               </div>
 
               {coverStyle === "print" && (
@@ -12289,14 +12480,168 @@ export function Scene_BookBuilder({
           </div>
         )}
 
-        {stepIndex >= 3 && (
-          <div className="glass-card p-6 text-center opacity-60">
-            <p className="text-white/82 text-[1.05rem] text-narrative mb-5">
-              {steps[stepIndex]}
-            </p>
+        {stepIndex === 3 && !readOnly && (
+          <div className="space-y-4">
+            <div className="glass-card p-5">
+              <p className="text-white/82 text-[1.05rem] text-narrative">注文内容</p>
+              <p className="mt-2 text-[0.66rem] leading-relaxed text-white/34">
+                税込・国内送料込み。同じ住所へまとめてお届けします。
+              </p>
+            </div>
 
-            <p className="text-white/40 text-sm leading-loose">
-              準備中
+            <div className="glass-card divide-y divide-white/[0.07] px-5">
+              <div className="flex items-start justify-between gap-4 py-5">
+                <div>
+                  <p className="text-[0.68rem] text-white/38">基本セット</p>
+                  <p className="mt-1 text-[0.86rem] text-white/78">ソフトカバー版 1冊</p>
+                </div>
+                <p className="shrink-0 pt-1 text-right text-[0.76rem] text-white/58">
+                  {baseBookPurchased ? "購入済み・追加料金なし" : formatYen(orderQuote?.base_book_amount ?? 49800)}
+                </p>
+              </div>
+
+              {premiumHardcoverIncluded ? (
+                <div className="flex items-start justify-between gap-4 py-5">
+                  <div>
+                    <p className="text-[0.68rem] text-amber-100/48">追加オプション</p>
+                    <p className="mt-1 text-[0.86rem] text-white/78">高級製本版 1冊</p>
+                    <p className="mt-1 text-[0.62rem] text-white/32">
+                      {coverStyle === "cloth" ? "布張り表紙" : "プリント表紙"}
+                    </p>
+                  </div>
+                  <p className="shrink-0 pt-1 text-right text-[0.76rem] text-white/58">
+                    {premiumHardcoverPurchased
+                      ? "購入済み・追加料金なし"
+                      : formatYen(orderQuote?.premium_hardcover_amount ?? 30000)}
+                  </p>
+                </div>
+              ) : (
+                <div className="py-5">
+                  <p className="text-[0.72rem] text-white/34">高級製本版は追加していません。</p>
+                </div>
+              )}
+            </div>
+
+            {!baseBookPurchased && (
+              <div className="glass-card p-5">
+                <p className="mb-3 text-[0.7rem] text-white/42">割引コード（任意）</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={orderDiscountDraft}
+                    onChange={event => setOrderDiscountDraft(event.target.value)}
+                    placeholder="コードを入力"
+                    className="quiet-input min-w-0 flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setOrderDiscountCode(orderDiscountDraft.trim())}
+                    className="shrink-0 rounded-full border border-white/12 px-4 text-[0.7rem] text-white/58"
+                  >
+                    適用
+                  </button>
+                </div>
+                {orderDiscountCode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOrderDiscountDraft("");
+                      setOrderDiscountCode("");
+                    }}
+                    className="mt-3 text-[0.65rem] text-white/40 underline decoration-white/20 underline-offset-4"
+                  >
+                    割引コードを外す
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="glass-card p-5">
+              {orderQuoteStatus === "loading" && (
+                <p className="py-4 text-center text-sm text-white/34 animate-pulse">金額を確認しています…</p>
+              )}
+
+              {orderQuoteStatus === "error" && (
+                <div className="rounded-2xl border border-rose-200/15 bg-rose-300/[0.04] px-4 py-4">
+                  <p className="text-[0.72rem] leading-relaxed text-rose-100/68">{orderQuoteError}</p>
+                  {orderDiscountCode && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrderDiscountDraft("");
+                        setOrderDiscountCode("");
+                      }}
+                      className="mt-3 text-[0.66rem] text-white/50 underline underline-offset-4"
+                    >
+                      コードを外して再確認
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {orderQuoteStatus === "ready" && orderQuote && (
+                <>
+                  {Number(orderQuote.discount_amount || 0) > 0 && (
+                    <div className="mb-4 flex items-center justify-between text-[0.72rem] text-emerald-100/60">
+                      <span>割引</span>
+                      <span>−{formatYen(orderQuote.discount_amount)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-end justify-between gap-4 border-t border-white/[0.08] pt-4">
+                    <div>
+                      <p className="text-[0.68rem] text-white/38">今回のお支払い</p>
+                      <p className="mt-1 text-[0.66rem] text-white/30">
+                        お届けする本：{orderQuote.book_count || (premiumHardcoverIncluded ? 2 : 1)}冊
+                      </p>
+                    </div>
+                    <p className="text-[1.25rem] text-white/88">{formatYen(orderQuote.amount_total)}</p>
+                  </div>
+
+                  {Number(orderQuote.amount_total || 0) > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => onPurchase?.({
+                        orderType: "self",
+                        discountCode: orderDiscountCode,
+                        includePremiumHardcover: premiumHardcoverIncluded,
+                        returnContext: "book_builder"
+                      })}
+                      disabled={!onPurchase || purchaseStatus === "starting"}
+                      className="btn-quiet mt-5 w-full rounded-full bg-white/10 py-4 text-white/88 disabled:opacity-40"
+                    >
+                      {purchaseStatus === "starting"
+                        ? "購入画面を準備しています…"
+                        : `${formatYen(orderQuote.amount_total)}の購入手続きへ`}
+                    </button>
+                  ) : (
+                    <p className="mt-5 rounded-2xl border border-emerald-200/12 bg-emerald-300/[0.04] px-4 py-4 text-center text-[0.74rem] leading-relaxed text-emerald-100/62">
+                      追加のお支払いはありません。
+                    </p>
+                  )}
+                </>
+              )}
+
+              {purchaseStatus === "error" && purchaseError && (
+                <p className="mt-4 text-[0.7rem] leading-relaxed text-rose-100/65">{purchaseError}</p>
+              )}
+            </div>
+
+            <p className="px-2 text-[0.64rem] leading-relaxed text-white/30">
+              注文確定時の表紙デザインを製作用データとして保存します。高級製本版は基本セットの置き換えではなく、追加の1冊です。
+            </p>
+          </div>
+        )}
+
+        {stepIndex === 4 && !readOnly && (
+          <div className="glass-card p-7 text-center">
+            <p className="text-white/82 text-[1.05rem] text-narrative">表紙の準備ができました</p>
+            <p className="mt-5 text-sm leading-loose text-white/42">
+              選んだ内容は保存されています。<br />いつでも表紙・収録・紙面へ戻って確認できます。
+            </p>
+            <p className="mt-5 text-[0.68rem] leading-relaxed text-white/30">
+              {premiumHardcoverIncluded
+                ? "ソフトカバー版1冊と、高級製本版1冊の計2冊です。"
+                : "基本セットのソフトカバー版1冊です。"}
             </p>
           </div>
         )}
@@ -12313,9 +12658,17 @@ export function Scene_BookBuilder({
           <button
             type="button"
             onClick={() => setStepIndex(prev => Math.min(prev + 1, steps.length - 1))}
-            disabled={stepIndex >= steps.length - 1}
+            disabled={stepIndex >= steps.length - 1 || (
+              stepIndex === 3 && (
+                orderQuoteStatus !== "ready" || Number(orderQuote?.amount_total || 0) > 0
+              )
+            )}
             className={`flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm ${
-              stepIndex >= steps.length - 1 ? "opacity-40" : ""
+              stepIndex >= steps.length - 1 || (
+                stepIndex === 3 && (
+                  orderQuoteStatus !== "ready" || Number(orderQuote?.amount_total || 0) > 0
+                )
+              ) ? "opacity-40" : ""
             }`}
             >
               次へ
