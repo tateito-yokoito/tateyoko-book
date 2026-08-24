@@ -9006,6 +9006,11 @@ const ALTERNATE_COVER_SUGGESTIONS = [
   { title: "風景を抱いて", subtitle: "忘れたくない時間の記録" }
 ];
 
+const ALL_DEFAULT_COVER_SUGGESTIONS = [
+  ...DEFAULT_COVER_SUGGESTIONS,
+  ...ALTERNATE_COVER_SUGGESTIONS
+];
+
 function normalizeCoverPhotoTransform(value = {}) {
   const panX = Number(value?.pan_x);
   const panY = Number(value?.pan_y);
@@ -9111,7 +9116,37 @@ function CoverPhotoFrame({ photo, showGrid = false, backgroundColor = "rgba(0,0,
   );
 }
 
-function CoverPhotoPerspectiveFrame({ photo }) {
+function getCoverPlaneTransform(width, height) {
+  if (!width || !height) return "none";
+
+  // The generated mockups share one photographed cover plane. Mapping every
+  // overlay through this quadrilateral keeps photos and all typography on the
+  // same physical surface instead of giving each element an independent tilt.
+  const points = [
+    { x: 0, y: height * 0.0075 },
+    { x: width, y: 0 },
+    { x: width, y: height },
+    { x: 0, y: height * 0.964 }
+  ];
+  const [topLeft, topRight, bottomRight, bottomLeft] = points;
+  const dx1 = topRight.x - bottomRight.x;
+  const dx2 = bottomLeft.x - bottomRight.x;
+  const dx3 = topLeft.x - topRight.x + bottomRight.x - bottomLeft.x;
+  const dy1 = topRight.y - bottomRight.y;
+  const dy2 = bottomLeft.y - bottomRight.y;
+  const dy3 = topLeft.y - topRight.y + bottomRight.y - bottomLeft.y;
+  const denominator = dx1 * dy2 - dx2 * dy1;
+  const projectiveX = (dx3 * dy2 - dx2 * dy3) / denominator;
+  const projectiveY = (dx1 * dy3 - dx3 * dy1) / denominator;
+  const scaleX = topRight.x - topLeft.x + projectiveX * topRight.x;
+  const skewX = bottomLeft.x - topLeft.x + projectiveY * bottomLeft.x;
+  const scaleYFromX = topRight.y - topLeft.y + projectiveX * topRight.y;
+  const scaleY = bottomLeft.y - topLeft.y + projectiveY * bottomLeft.y;
+
+  return `matrix3d(${scaleX / width},${scaleYFromX / width},0,${projectiveX / width},${skewX / height},${scaleY / height},0,${projectiveY / height},0,0,1,0,${topLeft.x},${topLeft.y},0,1)`;
+}
+
+function CoverPerspectivePlane({ children }) {
   const frameRef = useRef(null);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
 
@@ -9128,34 +9163,18 @@ function CoverPhotoPerspectiveFrame({ photo }) {
     return () => observer.disconnect();
   }, []);
 
-  const { width, height } = frameSize;
-  // The printed area follows the photographed cover plane: its upper edge falls
-  // slightly to the right, while the lower edge falls more strongly.
-  const topRightDrop = 0.011;
-  const bottomLeftHeight = 0.947;
-  const perspectiveScale = bottomLeftHeight / (1 - topRightDrop);
-  const perspectiveX = width ? (perspectiveScale - 1) / width : 0;
-  const perspectiveY = width ? topRightDrop * height * perspectiveScale / width : 0;
-  const perspectiveTransform = width && height
-    ? `matrix3d(${perspectiveScale},${perspectiveY},0,${perspectiveX},0,${bottomLeftHeight},0,0,0,0,1,0,0,0,0,1)`
-    : "none";
-
   return (
-    <div className="absolute left-[33.82%] top-[37.97%] h-[34.73%] w-[33.77%]">
+    <div className="absolute left-[32.15%] top-[9.77%] h-[83.71%] w-[38.67%]">
       <div
         ref={frameRef}
-        className="absolute inset-0 overflow-hidden"
+        className="absolute inset-0"
         style={{
-          transform: perspectiveTransform,
+          transform: getCoverPlaneTransform(frameSize.width, frameSize.height),
           transformOrigin: "0 0",
           willChange: "transform"
         }}
       >
-        <CoverPhotoFrame
-          photo={photo}
-          backgroundColor="transparent"
-          className="h-full w-full"
-        />
+        {children}
       </div>
     </div>
   );
@@ -9456,17 +9475,17 @@ function BookCoverPreview({
         ? "1.7cqw"
         : "2.05cqw";
   const subtitleFontSize = subtitleLength > 44
-    ? ".72cqw"
+    ? ".77cqw"
     : subtitleLength > 30
-      ? ".84cqw"
+      ? ".9cqw"
       : subtitleLength > 18
-        ? ".98cqw"
-        : "1.12cqw";
+        ? "1.05cqw"
+        : "1.2cqw";
   const footerFontSize = footerLength > 24
-    ? ".62cqw"
+    ? ".72cqw"
     : footerLength > 16
-      ? ".74cqw"
-      : ".88cqw";
+      ? ".86cqw"
+      : "1.03cqw";
 
   return (
     <div className="flex justify-center" aria-label="表紙プレビュー">
@@ -9481,37 +9500,43 @@ function BookCoverPreview({
           loading="eager"
         />
 
-        {isPrint && coverPhoto?.url && (
-          <CoverPhotoPerspectiveFrame photo={coverPhoto} />
-        )}
+        <CoverPerspectivePlane>
+          {isPrint && coverPhoto?.url && (
+            <CoverPhotoFrame
+              photo={coverPhoto}
+              backgroundColor="transparent"
+              className="absolute left-[4.32%] top-[33.69%] h-[41.49%] w-[87.33%]"
+            />
+          )}
 
-        <div
-          className={`absolute text-center ${isPrint ? "left-[33.17%] top-[22.35%] w-[37.6%]" : "left-[34.61%] top-[35.57%] w-[34.71%]"}`}
-        >
-          <p
-            className="line-clamp-2 whitespace-pre-wrap text-balance text-narrative leading-[1.45] tracking-[0.08em]"
-            style={{ ...coverTextStyle, fontSize: titleFontSize }}
+          <div
+            className={`absolute text-center ${isPrint ? "left-[2.64%] top-[15.03%] w-[97.23%]" : "left-[6.36%] top-[30.82%] w-[89.76%]"}`}
           >
-            {titleValue}
-          </p>
-          {subtitle && (
             <p
-              className="line-clamp-2 whitespace-pre-wrap text-balance text-narrative leading-[1.45] tracking-[0.07em] opacity-85"
-              style={{ ...coverTextStyle, fontSize: subtitleFontSize, marginTop: ".9cqw" }}
+              className="line-clamp-2 whitespace-pre-wrap text-balance text-narrative leading-[1.45] tracking-[0.08em]"
+              style={{ ...coverTextStyle, fontSize: titleFontSize }}
             >
-              {subtitle}
+              {titleValue}
+            </p>
+            {subtitle && (
+              <p
+                className="line-clamp-2 whitespace-pre-wrap text-balance text-narrative leading-[1.45] tracking-[0.07em] opacity-85"
+                style={{ ...coverTextStyle, fontSize: subtitleFontSize, marginTop: ".9cqw" }}
+              >
+                {subtitle}
+              </p>
+            )}
+          </div>
+
+          {footerText && (
+            <p
+              className={`absolute line-clamp-1 whitespace-nowrap text-center text-narrative leading-none tracking-[0.08em] opacity-85 ${isPrint ? "bottom-[12.4%] left-[2.64%] w-[97.23%]" : "bottom-[11.92%] left-[6.36%] w-[89.76%]"}`}
+              style={{ ...coverTextStyle, fontSize: footerFontSize }}
+            >
+              {footerText}
             </p>
           )}
-        </div>
-
-        {footerText && (
-          <p
-            className={`absolute line-clamp-1 whitespace-nowrap text-center text-narrative leading-none tracking-[0.08em] opacity-85 ${isPrint ? "bottom-[16.9%] left-[33.17%] w-[37.6%]" : "bottom-[16.5%] left-[34.61%] w-[34.71%]"}`}
-            style={{ ...coverTextStyle, fontSize: footerFontSize }}
-          >
-            {footerText}
-          </p>
-        )}
+        </CoverPerspectivePlane>
       </div>
     </div>
   );
@@ -9523,12 +9548,11 @@ function CoverSuggestionPicker({
   status,
   message,
   onClose,
-  onSelect,
-  onRegenerate
+  onSelect
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollerRef = useRef(null);
-  const visibleSuggestions = (suggestions.length ? suggestions : DEFAULT_COVER_SUGGESTIONS).slice(0, 5);
+  const visibleSuggestions = (suggestions.length ? suggestions : ALL_DEFAULT_COVER_SUGGESTIONS).slice(0, 10);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -9563,9 +9587,9 @@ function CoverSuggestionPicker({
         className="w-full rounded-t-[2rem] border border-white/[0.1] bg-[#101a30] px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 shadow-2xl md:max-w-[34rem] md:rounded-[2rem] md:p-7"
         onMouseDown={event => event.stopPropagation()}
       >
-        <div className="mb-5 flex items-center justify-between gap-4">
+        <div className="mb-5 flex items-center justify-between gap-3 md:gap-4">
           <div>
-            <p id="cover-suggestion-title" className="text-narrative text-[1rem] text-white/82">おすすめから選ぶ</p>
+            <p id="cover-suggestion-title" className="text-narrative text-[0.88rem] text-white/82 md:text-[1rem]">タイトル/サブタイトルのおすすめ</p>
             <p className="mt-1 text-[0.65rem] text-white/30">左右に送って、組み合わせを選べます</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-full border border-white/10 px-4 py-2 text-xs text-white/42">
@@ -9615,17 +9639,9 @@ function CoverSuggestionPicker({
               >
                 <ChevronLeft size={16} />
               </button>
-              <div className="flex items-center gap-2" aria-label={`${activeIndex + 1} / ${visibleSuggestions.length}`}>
-                {visibleSuggestions.map((_, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => moveTo(index)}
-                    aria-label={`${index + 1}番目の候補`}
-                    className={`h-1.5 rounded-full transition-all ${index === activeIndex ? "w-6 bg-white/58" : "w-1.5 bg-white/18"}`}
-                  />
-                ))}
-              </div>
+              <p className="min-w-[3.5rem] text-center text-[0.68rem] tabular-nums text-white/42" aria-label={`${activeIndex + 1} / ${visibleSuggestions.length}`}>
+                {activeIndex + 1} / {visibleSuggestions.length}
+              </p>
               <button
                 type="button"
                 onClick={() => moveTo(activeIndex + 1)}
@@ -9639,14 +9655,6 @@ function CoverSuggestionPicker({
           </>
         )}
 
-        <button
-          type="button"
-          onClick={onRegenerate}
-          disabled={status === "loading"}
-          className="mt-5 w-full py-2 text-center text-[0.68rem] text-white/38 disabled:opacity-30"
-        >
-          ほかの候補をつくる
-        </button>
         {message && <p className="mt-2 text-center text-[0.65rem] leading-relaxed text-rose-200/58">{message}</p>}
       </div>
     </div>,
@@ -11480,17 +11488,11 @@ export function Scene_BookBuilder({
     if (error) throw error;
   };
 
-  const generateCoverSuggestions = async ({ regenerate = false } = {}) => {
+  const generateCoverSuggestions = async () => {
     if (coverSuggestionStatus === "loading") return;
     setCoverSuggestionMessage("");
     if (!bookProjectId) {
-      const currentSignature = JSON.stringify(coverSuggestions);
-      const defaultSignature = JSON.stringify(DEFAULT_COVER_SUGGESTIONS);
-      setCoverSuggestions(
-        regenerate && currentSignature === defaultSignature
-          ? ALTERNATE_COVER_SUGGESTIONS
-          : DEFAULT_COVER_SUGGESTIONS
-      );
+      setCoverSuggestions(ALL_DEFAULT_COVER_SUGGESTIONS);
       setCoverSuggestionStatus("ready");
       return;
     }
@@ -11499,28 +11501,20 @@ export function Scene_BookBuilder({
       setCoverSuggestionStatus("loading");
       const { data, error } = await supabaseClient.functions.invoke("suggest-book-cover", {
         body: {
-          bookProjectId,
-          regenerate,
-          excludeSuggestions: regenerate ? coverSuggestions : []
+          bookProjectId
         }
       });
       if (error) throw error;
       const suggestions = Array.isArray(data?.suggestions) && data.suggestions.length
-        ? data.suggestions.slice(0, 5)
-        : DEFAULT_COVER_SUGGESTIONS;
-      if (regenerate && JSON.stringify(suggestions) === JSON.stringify(coverSuggestions)) {
-        throw new Error("Suggestion response did not change");
-      }
+        ? data.suggestions.slice(0, 10)
+        : ALL_DEFAULT_COVER_SUGGESTIONS;
       setCoverSuggestions(suggestions);
       setCoverSuggestionStatus("ready");
     } catch (error) {
       console.warn("cover suggestions fallback", error);
       setCoverSuggestionStatus("error");
-      if (regenerate) {
-        setCoverSuggestionMessage("候補を更新できませんでした。時間をおいて、もう一度お試しください。");
-      } else {
-        setCoverSuggestions(DEFAULT_COVER_SUGGESTIONS);
-      }
+      setCoverSuggestionMessage("物語に合わせた候補を用意できなかったため、標準の候補を表示しています。");
+      setCoverSuggestions(ALL_DEFAULT_COVER_SUGGESTIONS);
     }
   };
 
@@ -11549,8 +11543,8 @@ export function Scene_BookBuilder({
           setClothCoverColor(data.cloth_color || CLOTH_COVER_COLORS[0].value);
           setPrintCoverColor(data.print_color || PRINT_COVER_COLORS[0].value);
           if (Array.isArray(data.suggestions) && data.suggestions.length) {
-            setCoverSuggestions(data.suggestions.slice(0, 5));
-            coverSuggestionRequestedRef.current = true;
+            setCoverSuggestions(data.suggestions.slice(0, 10));
+            coverSuggestionRequestedRef.current = data.suggestions.length >= 10;
           }
 
           if (data.cover_photo_path) {
@@ -12076,8 +12070,8 @@ export function Scene_BookBuilder({
                   className="flex w-full items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.018] px-4 py-3 text-left transition hover:bg-white/[0.04]"
                 >
                   <span>
-                    <span className="block text-[0.75rem] text-white/62">おすすめから選ぶ</span>
-                    <span className="mt-0.5 block text-[0.62rem] text-white/28">タイトルとサブタイトルの組み合わせ</span>
+                    <span className="block text-[0.75rem] text-white/62">タイトル/サブタイトルのおすすめを見る</span>
+                    <span className="mt-0.5 block text-[0.62rem] text-white/28">物語に合わせた10通りの組み合わせ</span>
                   </span>
                   <ChevronRight size={16} className="shrink-0 text-white/30" />
                 </button>
@@ -12119,7 +12113,6 @@ export function Scene_BookBuilder({
                   setBookSubtitle(suggestion.subtitle);
                   setCoverSuggestionPickerOpen(false);
                 }}
-                onRegenerate={() => generateCoverSuggestions({ regenerate: true })}
               />
             )}
           </div>
