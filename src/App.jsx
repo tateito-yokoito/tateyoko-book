@@ -12071,7 +12071,6 @@ export function Scene_BookBuilder({
                 >
                   <span>
                     <span className="block text-[0.75rem] text-white/62">タイトル/サブタイトルのおすすめを見る</span>
-                    <span className="mt-0.5 block text-[0.62rem] text-white/28">物語に合わせた10通りの組み合わせ</span>
                   </span>
                   <ChevronRight size={16} className="shrink-0 text-white/30" />
                 </button>
