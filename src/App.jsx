@@ -9111,6 +9111,56 @@ function CoverPhotoFrame({ photo, showGrid = false, backgroundColor = "rgba(0,0,
   );
 }
 
+function CoverPhotoPerspectiveFrame({ photo }) {
+  const frameRef = useRef(null);
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const node = frameRef.current;
+    if (!node) return undefined;
+    const update = () => setFrameSize({
+      width: node.offsetWidth,
+      height: node.offsetHeight
+    });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const { width, height } = frameSize;
+  // The printed area follows the photographed cover plane: its upper edge falls
+  // slightly to the right, while the lower edge falls more strongly.
+  const topRightDrop = 0.011;
+  const bottomLeftHeight = 0.947;
+  const perspectiveScale = bottomLeftHeight / (1 - topRightDrop);
+  const perspectiveX = width ? (perspectiveScale - 1) / width : 0;
+  const perspectiveY = width ? topRightDrop * height * perspectiveScale / width : 0;
+  const perspectiveTransform = width && height
+    ? `matrix3d(${perspectiveScale},${perspectiveY},0,${perspectiveX},0,${bottomLeftHeight},0,0,0,0,1,0,0,0,0,1)`
+    : "none";
+
+  return (
+    <div className="absolute left-[33.82%] top-[37.97%] h-[34.73%] w-[33.77%]">
+      <div
+        ref={frameRef}
+        className="absolute inset-0 overflow-hidden"
+        style={{
+          transform: perspectiveTransform,
+          transformOrigin: "0 0",
+          willChange: "transform"
+        }}
+      >
+        <CoverPhotoFrame
+          photo={photo}
+          backgroundColor="transparent"
+          className="h-full w-full"
+        />
+      </div>
+    </div>
+  );
+}
+
 function CoverPhotoCorrectionFlow({
   open,
   photo,
@@ -9425,13 +9475,7 @@ function BookCoverPreview({
         />
 
         {isPrint && coverPhoto?.url && (
-          <div className="absolute left-[33.82%] top-[37.97%] h-[33.38%] w-[33.77%] overflow-hidden shadow-[0_3px_8px_rgba(0,0,0,.12)] [clip-path:polygon(0_0,99.2%_.5%,99.2%_99.2%,0_98.8%)]">
-            <CoverPhotoFrame
-              photo={coverPhoto}
-              backgroundColor="transparent"
-              className="h-full w-full"
-            />
-          </div>
+          <CoverPhotoPerspectiveFrame photo={coverPhoto} />
         )}
 
         <div
