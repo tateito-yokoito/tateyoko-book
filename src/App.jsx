@@ -9114,7 +9114,6 @@ function CoverPhotoFrame({ photo, showGrid = false, backgroundColor = "rgba(0,0,
 function CoverPhotoCorrectionFlow({
   open,
   photo,
-  coverColor,
   onClose,
   onComplete,
   onRemove,
@@ -9272,7 +9271,7 @@ function CoverPhotoCorrectionFlow({
                 <CoverPhotoFrame
                   photo={draft}
                   showGrid
-                  backgroundColor={coverColor}
+                  backgroundColor="#000"
                   className="absolute inset-0 h-full w-full"
                 />
               </div>
@@ -9429,7 +9428,7 @@ function BookCoverPreview({
           <div className="absolute left-[33.82%] top-[37.97%] h-[33.38%] w-[33.77%] overflow-hidden shadow-[0_3px_8px_rgba(0,0,0,.12)] [clip-path:polygon(0_0,99.2%_.5%,99.2%_99.2%,0_98.8%)]">
             <CoverPhotoFrame
               photo={coverPhoto}
-              backgroundColor={selectedCover.value}
+              backgroundColor="transparent"
               className="h-full w-full"
             />
           </div>
@@ -11671,7 +11670,6 @@ export function Scene_BookBuilder({
         <CoverPhotoCorrectionFlow
           open={coverPhotoCorrectionOpen}
           photo={coverPhoto}
-          coverColor={printCoverColor}
           onClose={() => setCoverPhotoCorrectionOpen(false)}
           onComplete={handleCoverPhotoSelect}
           onRemove={clearCoverPhoto}
