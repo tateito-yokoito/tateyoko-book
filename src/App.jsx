@@ -10993,12 +10993,34 @@ function Scene_SupporterManagement({
 function Scene_ProfileSettings({ user, onSaved, onBack }) {
   const [familyName, setFamilyName] = useState(user?.family_name || "");
   const [givenName, setGivenName] = useState(user?.given_name || "");
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const structuredNameRegistered = Boolean(user?.family_name?.trim() && user?.given_name?.trim());
+  const registeredName = structuredNameRegistered
+    ? `${user.family_name.trim()} ${user.given_name.trim()}`
+    : String(user?.display_name || user?.name || "").trim() || "未登録";
+
+  useEffect(() => {
+    if (editing) return;
+    setFamilyName(user?.family_name || "");
+    setGivenName(user?.given_name || "");
+  }, [user?.family_name, user?.given_name, editing]);
+
+  const cancelEdit = () => {
+    setFamilyName(user?.family_name || "");
+    setGivenName(user?.given_name || "");
+    setEditing(false);
+  };
 
   const save = async () => {
     const normalizedFamily = familyName.trim();
     const normalizedGiven = givenName.trim();
     if (!normalizedFamily || !normalizedGiven) return;
+    const nextName = `${normalizedFamily} ${normalizedGiven}`;
+    const confirmed = window.confirm(
+      `アカウントの登録氏名を変更します。\n\n変更前：${registeredName}\n変更後：${nextName}\n\n物語の主体名は変更されません。よろしいですか？`
+    );
+    if (!confirmed) return;
     try {
       setSaving(true);
       const { data, error } = await supabaseClient.rpc("update_own_profile_name", {
@@ -11008,6 +11030,7 @@ function Scene_ProfileSettings({ user, onSaved, onBack }) {
       if (error) throw error;
       const saved = Array.isArray(data) ? data[0] : data;
       onSaved?.({ ...user, ...saved, name: saved?.display_name || `${normalizedFamily} ${normalizedGiven}` });
+      setEditing(false);
     } catch (error) {
       console.error("profile settings save error", error);
       alert("プロフィールを保存できませんでした。");
@@ -11026,20 +11049,39 @@ function Scene_ProfileSettings({ user, onSaved, onBack }) {
       </div>
       <div className="space-y-6">
         <div>
-          <p className="ui-label mb-2">登録氏名</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div><p className="text-white/28 text-xs mb-2">姓</p><input type="text" value={familyName} onChange={event => setFamilyName(event.target.value)} className="quiet-input" /></div>
-            <div><p className="text-white/28 text-xs mb-2">名</p><input type="text" value={givenName} onChange={event => setGivenName(event.target.value)} className="quiet-input" /></div>
+          <div className="flex items-center justify-between gap-4 mb-2">
+            <p className="ui-label">アカウントの登録氏名</p>
+            {!editing && (
+              <button type="button" onClick={() => setEditing(true)} className="text-white/48 text-xs underline underline-offset-4">
+                変更する
+              </button>
+            )}
           </div>
-          <p className="text-white/28 text-xs leading-loose mt-3">本や共有の案内に使うため、正確なお名前を登録してください。</p>
+          {editing ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div><p className="text-white/28 text-xs mb-2">姓</p><input type="text" value={familyName} onChange={event => setFamilyName(event.target.value)} className="quiet-input" autoComplete="family-name" /></div>
+                <div><p className="text-white/28 text-xs mb-2">名</p><input type="text" value={givenName} onChange={event => setGivenName(event.target.value)} className="quiet-input" autoComplete="given-name" /></div>
+              </div>
+              <p className="text-white/28 text-xs leading-loose">ここで変わるのは利用アカウントの氏名だけです。物語の主体名や過去の注文者名は変わりません。</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={cancelEdit} disabled={saving} className="btn-quiet border border-white/10 w-full py-3 rounded-full text-white/55 text-sm disabled:opacity-35">キャンセル</button>
+                <button type="button" onClick={save} disabled={saving || !familyName.trim() || !givenName.trim()} className="btn-quiet bg-white/10 w-full py-3 rounded-full text-white text-sm disabled:opacity-35">
+                  {saving ? "保存中..." : "変更内容を確認"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="quiet-input text-white/72">{registeredName}</div>
+          )}
+          {!editing && !structuredNameRegistered && (
+            <p className="text-amber-100/55 text-xs leading-loose mt-3">姓・名がまだ分かれて登録されていません。必要なときに「変更する」から登録できます。</p>
+          )}
         </div>
         <div>
           <p className="ui-label mb-2">メールアドレス</p>
           <div className="quiet-input text-white/42">{user?.email || ""}</div>
         </div>
-        <button type="button" onClick={save} disabled={saving || !familyName.trim() || !givenName.trim()} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm disabled:opacity-35">
-          {saving ? "保存中..." : "プロフィールを保存"}
-        </button>
       </div>
     </div>
   );

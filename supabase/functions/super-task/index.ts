@@ -22,7 +22,7 @@ const TWILIO_MESSAGING_SERVICE_SID = Deno.env.get("TWILIO_MESSAGING_SERVICE_SID"
 type DeliveryChannel = "email" | "sms";
 
 type DueDelivery = {
-  notification_schedule_id: string;
+  notification_schedule_id: string | null;
   user_id: string;
   book_project_id: string;
   email: string | null;
@@ -225,6 +225,7 @@ async function claimDeliveryChannel(
   delivery: DueDelivery,
   channel: DeliveryChannel,
   questionUrl: string,
+  retryOfDeliveryId: string | null = null,
 ) {
   const { data: log, error: logError } = await supabase
     .from("question_delivery_logs")
@@ -235,6 +236,7 @@ async function claimDeliveryChannel(
       recipient_phone: channel === "sms" ? delivery.phone_number : null,
       user_question_id: delivery.user_question_id,
       notification_schedule_id: delivery.notification_schedule_id,
+      retry_of_delivery_id: retryOfDeliveryId,
       delivery_channel: channel,
       delivery_status: "sending",
       scheduled_for: delivery.scheduled_for,
@@ -325,8 +327,9 @@ async function deliverChannel(
   delivery: DueDelivery,
   channel: DeliveryChannel,
   questionUrl: string,
+  retryOfDeliveryId: string | null = null,
 ): Promise<ChannelResult> {
-  const claim = await claimDeliveryChannel(delivery, channel, questionUrl);
+  const claim = await claimDeliveryChannel(delivery, channel, questionUrl, retryOfDeliveryId);
 
   if (!claim) return { sent: false, skipped: true };
 
@@ -353,6 +356,81 @@ Deno.serve(async (request) => {
   }
 
   try {
+    const body = await request.json().catch(() => ({}));
+
+    if (body?.action === "retry") {
+      const authorization = request.headers.get("Authorization") || "";
+      const token = authorization.replace(/^Bearer\s+/i, "").trim();
+      const deliveryId = String(body?.delivery_id || "").trim();
+
+      if (!token || !deliveryId) {
+        return jsonResponse({ success: false, error: "Admin authentication and delivery_id are required" }, 400);
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !authData?.user) {
+        return jsonResponse({ success: false, error: "Admin authentication is required" }, 401);
+      }
+
+      const { data: adminRow, error: adminError } = await supabase
+        .from("admin_users")
+        .select("user_id")
+        .eq("user_id", authData.user.id)
+        .maybeSingle();
+
+      if (adminError || !adminRow) {
+        return jsonResponse({ success: false, error: "Admin access is required" }, 403);
+      }
+
+      const { data: retryRows, error: retryError } = await supabase.rpc(
+        "get_admin_retry_question_delivery_for_worker",
+        { input_delivery_id: deliveryId },
+      );
+
+      if (retryError) {
+        console.error("admin delivery retry fetch failed", retryError);
+        return jsonResponse({ success: false, error: "Retry target could not be loaded" }, 500);
+      }
+
+      const retryDelivery = (Array.isArray(retryRows) ? retryRows[0] : retryRows) as
+        | (DueDelivery & { question_url: string | null })
+        | undefined;
+
+      if (!retryDelivery) {
+        return jsonResponse({ success: false, error: "Failed delivery was not found" }, 404);
+      }
+
+      if (!retryDelivery.question_url) {
+        return jsonResponse({ success: false, error: "The original question URL is unavailable" }, 409);
+      }
+
+      const channel = retryDelivery.delivery_channel as DeliveryChannel;
+      const result = await deliverChannel(
+        retryDelivery,
+        channel,
+        retryDelivery.question_url,
+        deliveryId,
+      );
+
+      await supabase.from("admin_audit_logs").insert({
+        admin_user_id: authData.user.id,
+        action: "retry_question_delivery",
+        entity_type: "question_delivery_log",
+        entity_id: deliveryId,
+        metadata: {
+          channel,
+          success: result.sent,
+          error: result.error || null,
+        },
+      });
+
+      if (!result.sent) {
+        return jsonResponse({ success: false, error: result.error || "Retry failed" }, 502);
+      }
+
+      return jsonResponse({ success: true, delivery_id: deliveryId, channel });
+    }
+
     const { data, error } = await supabase.rpc("get_due_question_deliveries_v2");
 
     if (error) {

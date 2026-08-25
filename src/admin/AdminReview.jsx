@@ -47,7 +47,8 @@ const ACTIVITY_LABELS = {
   answer_updated: "回答を更新",
   question_answered: "問いへの回答を完了",
   question_skipped: "問いをスキップ",
-  delivery_settings_changed: "問いの配信設定を変更"
+  delivery_settings_changed: "問いの配信設定を変更",
+  account_name_changed: "アカウントの登録氏名を変更"
 };
 
 const DELIVERY_KIND_LABELS = {
@@ -1066,15 +1067,11 @@ function ProjectRow({ project, onOpen }) {
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="truncate font-medium text-slate-900">{displayName}</p>
-          {project.attention_reason && <StatusPill tone="neutral">物語</StatusPill>}
+          <p className="truncate font-medium text-slate-900">物語の主体：{displayName}</p>
           {project.attention_reason && <StatusPill tone={tone}>{project.attention_reason}</StatusPill>}
         </div>
         <p className="mt-1 truncate text-xs text-slate-500">
-          {uniqueIdentityLine(
-            sameIdentity(ownerName, displayName) ? null : ownerName,
-            project.owner_email
-          ) || "連絡先未登録"}
+          利用アカウント：{uniqueIdentityLine(ownerName, project.owner_email) || "連絡先未登録"}
         </p>
       </div>
       <div className="flex flex-wrap gap-2 text-xs">
@@ -1115,7 +1112,11 @@ function ActivityTimeline({ rows, emptyText = "利用履歴はまだありませ
           <div className="min-w-0">
             <p className="text-slate-700">{activityLabel(activity)}</p>
             {(activity.project_name || activity.actor_name) && (
-              <p className="mt-1 truncate text-xs text-slate-400">{uniqueIdentityLine(withoutHonorific(activity.project_name), activity.actor_name)}</p>
+              <p className="mt-1 truncate text-xs text-slate-400">
+                {activity.project_name ? `物語：${withoutHonorific(activity.project_name)}` : ""}
+                {activity.project_name && activity.actor_name ? "｜" : ""}
+                {activity.actor_name ? `操作アカウント：${withoutHonorific(activity.actor_name)}` : ""}
+              </p>
             )}
           </div>
           <span className="shrink-0 text-xs text-slate-400">{formatDate(activity.created_at)}</span>
@@ -1136,7 +1137,12 @@ function DeliveryHistoryList({ rows, emptyText = "配信履歴はまだありま
               <p className="text-sm text-slate-700">{deliveryKindLabel(item.delivery_kind)}</p>
               <StatusPill tone={deliveryStatusTone(item.delivery_status)}>{deliveryStatusLabel(item.delivery_status)}</StatusPill>
             </div>
-            <p className="mt-1 truncate text-xs text-slate-400">{uniqueIdentityLine(withoutHonorific(item.project_name), item.resolved_recipient_email || item.recipient_email, item.subject)}</p>
+            <p className="mt-1 truncate text-xs text-slate-400">
+              {item.project_name ? `物語：${withoutHonorific(item.project_name)}` : ""}
+              {item.project_name && (item.resolved_recipient_email || item.recipient_email) ? "｜" : ""}
+              {(item.resolved_recipient_email || item.recipient_email) ? `送信先：${item.resolved_recipient_email || item.recipient_email}` : ""}
+              {item.subject ? `｜${item.subject}` : ""}
+            </p>
             {item.error_message && <p className="mt-2 text-xs leading-5 text-rose-600">{item.error_message}</p>}
           </div>
           <span className="text-xs text-slate-400">{formatDate(deliveryEventAt(item))}</span>
@@ -1278,6 +1284,97 @@ function AccountDetailPanel({
   );
 }
 
+const ATTENTION_RESOLUTION_REASONS = [
+  { value: "system_fixed", label: "システムを修正した" },
+  { value: "contacted_elsewhere", label: "別の方法で連絡した" },
+  { value: "no_action_needed", label: "対応不要と判断した" }
+];
+
+function AttentionItemCard({ item, busy, onRetry, onResolve }) {
+  const [showResolution, setShowResolution] = useState(false);
+  const [reason, setReason] = useState("system_fixed");
+  const [note, setNote] = useState("");
+  const recipient = item.delivery_channel === "sms"
+    ? item.recipient_phone
+    : item.recipient_email;
+
+  return (
+    <article className="rounded-2xl border border-rose-200 bg-rose-50/70 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusPill tone="error">{item.title || "配信失敗"}</StatusPill>
+            <span className="text-xs text-slate-500">
+              {item.delivery_channel === "sms" ? "SMS" : "メール"}
+            </span>
+          </div>
+          {item.question_text && <p className="mt-3 text-sm leading-6 text-slate-700">{item.question_text}</p>}
+          <p className="mt-2 text-xs text-slate-500">送信先：{recipient || "未登録"}</p>
+          <p className="mt-1 text-xs text-slate-400">発生：{formatDate(item.last_occurred_at || item.scheduled_for)}</p>
+        </div>
+      </div>
+
+      {(item.error_message || item.details?.error_message) && (
+        <p className="mt-4 rounded-xl border border-rose-100 bg-white/70 px-4 py-3 text-xs leading-5 text-rose-700">
+          {item.error_message || item.details?.error_message}
+        </p>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onRetry(item)}
+          className="inline-flex items-center gap-2 rounded-xl bg-[#10203a] px-4 py-2.5 text-sm text-white disabled:opacity-40"
+        >
+          {busy ? <LoaderCircle size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+          再送する
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setShowResolution(current => !current)}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 disabled:opacity-40"
+        >
+          <CheckCircle2 size={15} />対応済みにする
+        </button>
+      </div>
+
+      {showResolution && (
+        <div className="mt-4 space-y-3 border-t border-rose-100 pt-4">
+          <label className="block text-xs text-slate-500">
+            対応内容
+            <select
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-slate-400"
+            >
+              {ATTENTION_RESOLUTION_REASONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          <label className="block text-xs text-slate-500">
+            メモ（任意）
+            <textarea
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              rows={2}
+              className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-slate-400"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onResolve(item, reason, note)}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 disabled:opacity-40"
+          >
+            対応完了を記録
+          </button>
+        </div>
+      )}
+    </article>
+  );
+}
+
 function DetailPanel({
   detail,
   loading,
@@ -1290,7 +1387,10 @@ function DetailPanel({
   trashLoading,
   onOpenStoryPreview,
   onOpenBookPreview,
-  previewLoading
+  previewLoading,
+  attentionBusy,
+  onRetryAttention,
+  onResolveAttention
 }) {
   const purchase = detail?.purchase || {};
   const preference = detail?.notifications?.preference || null;
@@ -1317,14 +1417,9 @@ function DetailPanel({
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-xl font-medium">{projectDisplayName(detail.project)}</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {uniqueIdentityLine(
-                      sameIdentity(withoutHonorific(detail.project?.owner_name), projectDisplayName(detail.project))
-                        ? null
-                        : withoutHonorific(detail.project?.owner_name),
-                      detail.project?.owner_email
-                    ) || "連絡先未登録"}
+                  <h3 className="text-xl font-medium">物語の主体：{projectDisplayName(detail.project)}</h3>
+                  <p className="mt-2 text-sm text-slate-500">
+                    利用アカウント：{uniqueIdentityLine(withoutHonorific(detail.project?.owner_name), detail.project?.owner_email) || "連絡先未登録"}
                   </p>
                 </div>
                 <StatusPill tone={accessTone(detail.project?.access_status)}>{accessLabel(detail.project?.access_status)}</StatusPill>
@@ -1371,6 +1466,25 @@ function DetailPanel({
                 </button>
               </div>
             </section>
+
+            {!!detail.attention_items?.length && (
+              <section>
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-rose-700">
+                  <AlertCircle size={16} />要対応
+                </h3>
+                <div className="space-y-3">
+                  {detail.attention_items.map(item => (
+                    <AttentionItemCard
+                      key={item.id}
+                      item={item}
+                      busy={attentionBusy === item.id}
+                      onRetry={onRetryAttention}
+                      onResolve={onResolveAttention}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
               <div className="flex items-center justify-between gap-3">
@@ -1500,6 +1614,7 @@ export default function AdminReview({ supabaseClient }) {
   const [detailId, setDetailId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [attentionActionId, setAttentionActionId] = useState("");
   const [accountDetailId, setAccountDetailId] = useState(null);
   const [accountDetail, setAccountDetail] = useState(null);
   const [accountDetailLoading, setAccountDetailLoading] = useState(false);
@@ -2130,6 +2245,53 @@ export default function AdminReview({ supabaseClient }) {
     }
   }
 
+  async function retryAttentionDelivery(item) {
+    if (!item?.source_id || !detailId) return;
+    setAttentionActionId(item.id);
+    setError("");
+    setNotice("");
+    try {
+      const { data, error: retryError } = await supabaseClient.functions.invoke("super-task", {
+        body: { action: "retry", delivery_id: item.source_id }
+      });
+      if (retryError || data?.success === false) {
+        const details = await functionErrorDetails(retryError, data);
+        throw new Error(details?.error || "再送できませんでした。");
+      }
+      setNotice(`${item.delivery_channel === "sms" ? "SMS" : "メール"}を再送しました。`);
+      await loadDashboard();
+      await openDetail(detailId);
+    } catch (retryError) {
+      console.error("admin attention retry error", retryError);
+      setError(retryError?.message || "再送できませんでした。");
+    } finally {
+      setAttentionActionId("");
+    }
+  }
+
+  async function resolveAttention(item, reason, note) {
+    if (!item?.id || !detailId) return;
+    setAttentionActionId(item.id);
+    setError("");
+    setNotice("");
+    try {
+      const { error: resolveError } = await supabaseClient.rpc("resolve_admin_attention_item", {
+        input_attention_id: item.id,
+        input_reason: reason,
+        input_note: note?.trim() || null
+      });
+      if (resolveError) throw resolveError;
+      setNotice("対応完了を記録しました。");
+      await loadDashboard();
+      await openDetail(detailId);
+    } catch (resolveError) {
+      console.error("admin attention resolve error", resolveError);
+      setError(resolveError?.message || "対応完了を記録できませんでした。");
+    } finally {
+      setAttentionActionId("");
+    }
+  }
+
   async function openAccountDetail(accountId, allowHidden = false) {
     const hiddenAccount = trashEntries.find(item => item.entity_type === "account" && item.entity_id === accountId);
     if (hiddenAccount && (!allowHidden || !organizationModeActive)) return;
@@ -2426,6 +2588,9 @@ export default function AdminReview({ supabaseClient }) {
           onRestore={restoreFromTrash}
           onOpenStoryPreview={() => openPreview("stories")}
           onOpenBookPreview={() => openPreview("book")}
+          attentionBusy={attentionActionId}
+          onRetryAttention={retryAttentionDelivery}
+          onResolveAttention={resolveAttention}
           onClose={() => { closePreview(); setDetailId(null); setDetail(null); }}
         />
       )}
