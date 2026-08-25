@@ -11587,6 +11587,21 @@ export function Scene_BookBuilder({
     ? premiumClothCoverColor
     : (premiumPrintCoverColor || printCoverColor);
   const premiumColors = premiumCoverStyle === "cloth" ? CLOTH_COVER_COLORS : PRINT_COVER_COLORS;
+  const bulkReprintInquiryHref = `mailto:sugawara@saltlight.co.jp?subject=${encodeURIComponent(
+    "縦糸横糸ブック 31冊以上の増刷について"
+  )}&body=${encodeURIComponent([
+    "縦糸横糸ブックの増刷について問い合わせます。",
+    "",
+    `氏名：${user?.display_name || user?.name || "未登録"}`,
+    `登録メールアドレス：${user?.email || "未登録"}`,
+    `アカウントID：${user?.id || "未登録"}`,
+    `物語名：${project?.subject_name || bookTitle || "未登録"}`,
+    `物語ID：${bookProjectId || project?.id || "未登録"}`,
+    `スタンダード冊子の増刷選択数：${standardExtraCopyCount}冊`,
+    `プレミアム冊子の増刷選択数：${premiumCopyCount}冊`,
+    "",
+    "希望冊数・ご相談内容："
+  ].join("\n"))}`;
 
   const persistCoverSettings = async (overrides = {}) => {
     if (!bookProjectId || readOnly) return;
@@ -12238,9 +12253,6 @@ export function Scene_BookBuilder({
                 >
                   {coverPhoto ? "写真を調整" : "写真を添える"}
                 </button>
-                <p className="mt-2 text-[0.66rem] leading-relaxed text-white/28">
-                  写真を載せず、文字だけでも仕上げられます。
-                </p>
               </div>
 
               <div className="mb-6">
@@ -12527,9 +12539,10 @@ export function Scene_BookBuilder({
 
         {stepIndex === 3 && !readOnly && (
           <div className="space-y-5">
+            <p className="px-1 text-white/82 text-[1.05rem] text-narrative">基本パッケージ</p>
+
             <div className="glass-card p-5">
-              <p className="text-white/82 text-[1.05rem] text-narrative">基本パッケージ</p>
-              <div className="mt-4 flex items-start justify-between gap-4 rounded-2xl border border-emerald-200/10 bg-emerald-200/[0.025] p-4">
+              <div className="flex items-start justify-between gap-4 rounded-2xl border border-emerald-200/10 bg-emerald-200/[0.025] p-4">
                 <div>
                   <p className="text-[0.82rem] text-white/76">縦糸横糸ブック 基本パッケージ</p>
                   <p className="mt-2 text-[0.64rem] leading-relaxed text-white/35">
@@ -12581,7 +12594,7 @@ export function Scene_BookBuilder({
                     className="rounded-xl border border-white/12 bg-[#111b30] px-3 py-2 text-[0.76rem] text-white/72"
                     aria-label="スタンダード冊子の増刷冊数"
                   >
-                    {[0, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(count => (
+                    {[0, ...Array.from({ length: 29 }, (_, index) => index + 2)].map(count => (
                       <option key={count} value={count} disabled={count < Number(orderQuote?.standard_extra_copy_count_already_purchased || 0)}>
                         {count === 0 ? "増刷なし" : `${count}冊増刷`}
                       </option>
@@ -12606,25 +12619,24 @@ export function Scene_BookBuilder({
                     className="rounded-xl border border-white/12 bg-[#111b30] px-3 py-2 text-[0.76rem] text-white/72"
                     aria-label="プレミアム冊子の冊数"
                   >
-                    {Array.from({ length: 11 }, (_, count) => count).map(count => (
+                    {Array.from({ length: 31 }, (_, count) => count).map(count => (
                       <option key={count} value={count} disabled={count < Number(orderQuote?.premium_copy_count_already_purchased || 0)}>
                         {count === 0 ? "追加なし" : `${count}冊`}
                       </option>
                     ))}
                   </select>
                 </div>
-                <div className="mt-3 flex items-center justify-between text-[0.66rem] text-white/38">
-                  <span>選択した冊数</span>
-                  <span>{formatYen(orderQuote?.premium_catalog_amount || premiumCopyCount * 30000)}</span>
+                <div className="mt-3 text-right text-[0.66rem] text-white/38">
+                  {formatYen(orderQuote?.premium_catalog_amount || premiumCopyCount * 30000)}
                 </div>
               </div>
 
             </div>
 
             <p className="px-1 text-[0.62rem] leading-relaxed text-white/30">
-              11冊以上をご希望の場合は、個別にお問い合わせください。
+              31冊以上をご希望の場合は、お気軽にご連絡ください。
               <a
-                href="mailto:sugawara@saltlight.co.jp?subject=%E7%B8%A6%E7%B3%B8%E6%A8%AA%E7%B3%B8%E3%83%96%E3%83%83%E3%82%AF%E3%81%AE%E5%A2%97%E5%88%B7%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6"
+                href={bulkReprintInquiryHref}
                 className="ml-2 text-white/55 underline decoration-white/25 underline-offset-4"
               >
                 メール
@@ -12633,6 +12645,8 @@ export function Scene_BookBuilder({
 
             {premiumCopyCount > 0 && (
               <div className="space-y-5">
+                <p className="px-1 text-white/82 text-[1.05rem] text-narrative">「増刷プレミアム冊子」仕様</p>
+
                 <div className="relative overflow-hidden">
                   <BookCoverPreview
                     title={premiumTitle}

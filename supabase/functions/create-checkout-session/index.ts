@@ -153,11 +153,11 @@ serve(async request => {
         return json({ success: false, error: "この物語の購入手続きを開始できません" }, 403);
       }
       if (!Number.isInteger(standardExtraCopyCount)
-        || (standardExtraCopyCount !== 0 && (standardExtraCopyCount < 2 || standardExtraCopyCount > 10))) {
-        return json({ success: false, error: "スタンダード冊子の増刷は2冊から10冊で指定してください" }, 400);
+        || (standardExtraCopyCount !== 0 && (standardExtraCopyCount < 2 || standardExtraCopyCount > 30))) {
+        return json({ success: false, error: "スタンダード冊子の増刷は2冊から30冊で指定してください" }, 400);
       }
-      if (!Number.isInteger(premiumCopyCount) || premiumCopyCount < 0 || premiumCopyCount > 10) {
-        return json({ success: false, error: "プレミアム冊子は0冊から10冊で指定してください" }, 400);
+      if (!Number.isInteger(premiumCopyCount) || premiumCopyCount < 0 || premiumCopyCount > 30) {
+        return json({ success: false, error: "プレミアム冊子は0冊から30冊で指定してください" }, 400);
       }
       if (![shippingAddress.recipient_name, shippingAddress.postal_code, shippingAddress.prefecture, shippingAddress.city, shippingAddress.line1]
         .every(value => String(value || "").trim())) {
