@@ -128,6 +128,15 @@ function isLastFreeTrialQuestion(questionSet, currentQuestion) {
 }
 
 function getCommercialEntryScene({ project, questionSet, defaultScene }) {
+  const checkoutReturn = getCheckoutReturnFromUrl();
+
+  if (
+    checkoutReturn.status === "cancelled" &&
+    checkoutReturn.context === "book_builder"
+  ) {
+    return "book_builder";
+  }
+
   if (
     getEntryModeFromUrl() === "trial" &&
     hasFullProjectAccess(project)
@@ -138,7 +147,6 @@ function getCommercialEntryScene({ project, questionSet, defaultScene }) {
   if (!hasRestrictedProjectAccess(project)) return defaultScene;
 
   const entryMode = getEntryModeFromUrl();
-  const checkoutReturn = getCheckoutReturnFromUrl();
 
   if (entryMode === "purchase" || checkoutReturn.status) {
     return "purchase_start";
@@ -2506,6 +2514,24 @@ function App() {
     returnQuestionIndex: null,
     editReturnScene: null
   });
+
+  useEffect(() => {
+    const checkoutReturn = getCheckoutReturnFromUrl();
+    if (
+      checkoutReturn.status !== "cancelled" ||
+      checkoutReturn.context !== "book_builder"
+    ) {
+      return undefined;
+    }
+
+    const closeTimer = window.setTimeout(() => {
+      try {
+        window.close();
+      } catch (_error) {}
+    }, 0);
+
+    return () => window.clearTimeout(closeTimer);
+  }, []);
 
   useEffect(() => {
     const initApp = async () => {
@@ -5838,6 +5864,16 @@ let sceneAfterInvite = nextScene;
           purchaseStatus={purchaseStatus}
           purchaseError={purchaseError}
           orderCompletedAt={bookBuilderOrderCompletedAt}
+          initialStepIndex={
+            getCheckoutReturnFromUrl().status === "cancelled" &&
+            getCheckoutReturnFromUrl().context === "book_builder"
+              ? 4
+              : 0
+          }
+          checkoutWasCancelled={
+            getCheckoutReturnFromUrl().status === "cancelled" &&
+            getCheckoutReturnFromUrl().context === "book_builder"
+          }
           onPurchase={startPurchase}
           onReopenCheckout={reopenCheckout}
           onBack={() => setScene("home")}
@@ -9138,6 +9174,24 @@ const ALL_DEFAULT_COVER_SUGGESTIONS = [
   ...ALTERNATE_COVER_SUGGESTIONS
 ];
 
+const EMPTY_BOOK_SHIPPING_ADDRESS = {
+  recipient_name: "",
+  postal_code: "",
+  prefecture: "",
+  city: "",
+  line1: "",
+  line2: ""
+};
+
+function normalizeBookShippingAddress(value = {}) {
+  return Object.fromEntries(
+    Object.keys(EMPTY_BOOK_SHIPPING_ADDRESS).map(key => [
+      key,
+      typeof value?.[key] === "string" ? value[key] : ""
+    ])
+  );
+}
+
 function normalizeCoverPhotoTransform(value = {}) {
   const panX = Number(value?.pan_x);
   const panY = Number(value?.pan_y);
@@ -11569,6 +11623,8 @@ export function Scene_BookBuilder({
   purchaseStatus = "idle",
   purchaseError = "",
   orderCompletedAt = null,
+  initialStepIndex = 0,
+  checkoutWasCancelled = false,
   onPurchase = null,
   onReopenCheckout = null,
   onBack
@@ -11576,7 +11632,10 @@ export function Scene_BookBuilder({
   const steps = readOnly || !onPurchase
     ? ["表紙", "収録", "紙面"]
     : ["表紙", "収録内容", "紙面確認", "オプション", "注文"];
-  const [stepIndex, setStepIndex] = useState(0);
+  const [stepIndex, setStepIndex] = useState(() => Math.max(
+    0,
+    Math.min(Number(initialStepIndex || 0), steps.length - 1)
+  ));
   const [coverPhoto, setCoverPhoto] = useState(null);
   const [premiumCoverPhoto, setPremiumCoverPhoto] = useState(null);
   const [clothCoverColor, setClothCoverColor] = useState(CLOTH_COVER_COLORS[0].value);
@@ -11607,14 +11666,8 @@ export function Scene_BookBuilder({
   const [bookFooterText, setBookFooterText] = useState("");
   const [coverPhotoCorrectionOpen, setCoverPhotoCorrectionOpen] = useState(false);
   const [coverPhotoCorrectionTarget, setCoverPhotoCorrectionTarget] = useState("standard");
-  const [shippingAddress, setShippingAddress] = useState({
-    recipient_name: "",
-    postal_code: "",
-    prefecture: "",
-    city: "",
-    line1: "",
-    line2: ""
-  });
+  const [shippingAddress, setShippingAddress] = useState(() => normalizeBookShippingAddress());
+  const [showCheckoutCancelled, setShowCheckoutCancelled] = useState(checkoutWasCancelled);
   const [orderCompleted, setOrderCompleted] = useState(false);
   const [coverSettingsReady, setCoverSettingsReady] = useState(false);
   const [coverSettingsSaveError, setCoverSettingsSaveError] = useState("");
@@ -11696,6 +11749,11 @@ export function Scene_BookBuilder({
       premium_cover_photo_transform: normalizeCoverPhotoTransform(nextPremiumPhoto?.transform),
       cover_photo_path: nextPhoto?.storagePath || null,
       cover_photo_transform: normalizeCoverPhotoTransform(nextPhoto?.transform),
+      shipping_address: normalizeBookShippingAddress(
+        Object.prototype.hasOwnProperty.call(overrides, "shippingAddress")
+          ? overrides.shippingAddress
+          : shippingAddress
+      ),
       suggestions: Object.prototype.hasOwnProperty.call(overrides, "suggestions")
         ? overrides.suggestions
         : coverSuggestions,
@@ -11749,7 +11807,7 @@ export function Scene_BookBuilder({
       try {
         const { data, error } = await supabaseClient
           .from("book_cover_settings")
-          .select("title, subtitle, footer_text, cover_style, cloth_color, print_color, cover_photo_path, cover_photo_transform, suggestions, standard_extra_copy_count, premium_copy_count, include_gift_package, premium_title, premium_subtitle, premium_footer_text, premium_cover_style, premium_cloth_color, premium_print_color, premium_cover_photo_mode, premium_cover_photo_path, premium_cover_photo_transform")
+          .select("title, subtitle, footer_text, cover_style, cloth_color, print_color, cover_photo_path, cover_photo_transform, suggestions, standard_extra_copy_count, premium_copy_count, include_gift_package, premium_title, premium_subtitle, premium_footer_text, premium_cover_style, premium_cloth_color, premium_print_color, premium_cover_photo_mode, premium_cover_photo_path, premium_cover_photo_transform, shipping_address")
           .eq("book_project_id", bookProjectId)
           .maybeSingle();
         if (error) throw error;
@@ -11774,6 +11832,7 @@ export function Scene_BookBuilder({
           setPremiumCoverPhotoMode(["inherit", "custom", "none"].includes(data.premium_cover_photo_mode)
             ? data.premium_cover_photo_mode
             : "inherit");
+          setShippingAddress(normalizeBookShippingAddress(data.shipping_address));
           if (Array.isArray(data.suggestions) && data.suggestions.length) {
             setCoverSuggestions(data.suggestions.slice(0, 10));
             coverSuggestionRequestedRef.current = data.suggestions.length >= 10;
@@ -11835,7 +11894,7 @@ export function Scene_BookBuilder({
         await persistCoverSettings();
       } catch (error) {
         console.error("book cover settings save error", error);
-        setCoverSettingsSaveError("表紙設定を保存できませんでした。");
+        setCoverSettingsSaveError("入力内容を保存できませんでした。");
       }
     }, 700);
     return () => window.clearTimeout(timer);
@@ -11863,6 +11922,7 @@ export function Scene_BookBuilder({
     premiumCoverPhoto?.transform,
     coverPhoto?.storagePath,
     coverPhoto?.transform,
+    shippingAddress,
     coverSuggestions
   ]);
 
@@ -11904,7 +11964,7 @@ export function Scene_BookBuilder({
       await persistCoverSettings();
     } catch (error) {
       console.error("book cover settings retry error", error);
-      setCoverSettingsSaveError("表紙設定を保存できませんでした。");
+      setCoverSettingsSaveError("入力内容を保存できませんでした。");
     }
   };
 
@@ -12140,6 +12200,7 @@ export function Scene_BookBuilder({
 
   const submitBookOrder = async () => {
     if (!shippingAddressComplete || !orderQuote || !onPurchase) return;
+    setShowCheckoutCancelled(false);
     const noPaymentRequired = Number(orderQuote.amount_total || 0) === 0;
     const checkoutWindow = noPaymentRequired ? null : prepareCheckoutWindow();
     try {
@@ -12616,7 +12677,7 @@ export function Scene_BookBuilder({
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-[0.78rem] text-white/65">49,800円</p>
+                  <p className="text-[0.78rem] text-white/78">49,800円</p>
                   {baseBookPurchased && <p className="mt-1 text-[0.6rem] text-emerald-100/55">お支払い済み</p>}
                 </div>
               </div>
@@ -12641,7 +12702,7 @@ export function Scene_BookBuilder({
                   </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-3">
-                  <span className="text-[0.7rem] text-white/48">3,000円</span>
+                  <span className="text-[0.7rem] text-white/78">3,000円</span>
                   <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-[0.72rem] ${
                     includeGiftPackage ? "border-emerald-200/25 bg-emerald-300/15 text-emerald-100" : "border-white/18 text-transparent"
                   }`}>✓</span>
@@ -12692,7 +12753,7 @@ export function Scene_BookBuilder({
                     ))}
                   </select>
                 </div>
-                <div className="mt-3 text-right text-[0.66rem] text-white/38">
+                <div className="mt-3 text-right text-[0.66rem] text-white/78">
                   {formatYen(orderQuote?.premium_catalog_amount || premiumCopyCount * 30000)}
                 </div>
               </div>
@@ -12842,6 +12903,13 @@ export function Scene_BookBuilder({
             </div>
           ) : (
             <div className="space-y-5">
+              {showCheckoutCancelled && (
+                <div className="rounded-2xl border border-amber-200/15 bg-amber-300/[0.04] px-4 py-3">
+                  <p className="text-[0.68rem] leading-relaxed text-amber-50/62">
+                    決済は確定していません。内容を確認して、いつでも再開できます。
+                  </p>
+                </div>
+              )}
               <div className="glass-card p-5">
                 <p className="text-white/82 text-[1.05rem] text-narrative">お届け先</p>
                 <div className="mt-5 space-y-3">
@@ -12855,16 +12923,24 @@ export function Scene_BookBuilder({
                   <input type="text" value={shippingAddress.line2} onChange={event => updateShippingAddress("line2", event.target.value)} placeholder="建物名・部屋番号（任意）" className="quiet-input" />
                 </div>
                 <p className="mt-3 text-[0.62rem] leading-relaxed text-white/28">選択した冊子とギフトパッケージを、このお届け先へ発送します。</p>
+                {coverSettingsSaveError && (
+                  <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-rose-200/15 bg-rose-300/[0.04] px-4 py-3">
+                    <p className="text-[0.65rem] text-rose-100/60">{coverSettingsSaveError}</p>
+                    <button type="button" onClick={retryCoverSettingsSave} className="shrink-0 text-[0.65rem] text-white/58">
+                      もう一度保存
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="glass-card divide-y divide-white/[0.07] px-5">
                 <div className="flex items-start justify-between gap-4 py-4">
                   <div><p className="text-[0.78rem] text-white/72">基本パッケージ</p><p className="mt-1 text-[0.6rem] text-white/30">縦糸横糸ブック-スタンダード冊子1冊を含む</p></div>
-                  <p className="text-[0.7rem] text-white/50">{baseBookPurchased ? "お支払い済み" : "49,800円"}</p>
+                  <p className="text-[0.7rem] text-white/78">{baseBookPurchased ? "お支払い済み" : "49,800円"}</p>
                 </div>
                 {standardExtraCopyCount > 0 && <div className="flex items-center justify-between py-4 text-[0.72rem] text-white/58"><span>縦糸横糸ブック-スタンダード冊子 増刷{standardExtraCopyCount}冊</span><span>{formatYen(orderQuote?.standard_reprint_catalog_amount || 0)}</span></div>}
-                {premiumCopyCount > 0 && <div className="flex items-start justify-between gap-4 py-4"><div><p className="text-[0.72rem] text-white/58">縦糸横糸ブック-プレミアム冊子 {premiumCopyCount}冊</p><p className="mt-1 text-[0.58rem] text-white/28">{premiumCoverStyle === "cloth" ? "布張りハードカバー" : "プリントハードカバー"}</p></div><span className="text-[0.7rem] text-white/50">{formatYen(orderQuote?.premium_catalog_amount || premiumCopyCount * 30000)}</span></div>}
-                {includeGiftPackage && <div className="flex items-center justify-between py-4 text-[0.72rem] text-white/58"><span>ギフトパッケージ</span><span>3,000円</span></div>}
+                {premiumCopyCount > 0 && <div className="flex items-start justify-between gap-4 py-4"><div><p className="text-[0.72rem] text-white/58">縦糸横糸ブック-プレミアム冊子 {premiumCopyCount}冊</p><p className="mt-1 text-[0.58rem] text-white/28">{premiumCoverStyle === "cloth" ? "布張りハードカバー" : "プリントハードカバー"}</p></div><span className="text-[0.7rem] text-white/78">{formatYen(orderQuote?.premium_catalog_amount || premiumCopyCount * 30000)}</span></div>}
+                {includeGiftPackage && <div className="flex items-center justify-between py-4 text-[0.72rem] text-white/58"><span>ギフトパッケージ</span><span className="text-white/78">3,000円</span></div>}
               </div>
 
               {!baseBookPurchased && (
