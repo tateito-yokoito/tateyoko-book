@@ -12224,7 +12224,7 @@ export function Scene_BookBuilder({
 
             {!readOnly && <div className="glass-card p-5">
               <p className="text-white/82 text-[1.05rem] text-narrative mb-5">
-                縦糸横糸ブック-スタンダード冊子の表紙
+                基本パッケージ「スタンダード冊子」の表紙仕様
               </p>
               <div className="mb-6">
                 <p className="text-white/40 text-xs tracking-widest mb-3">表紙写真（任意）</p>
@@ -12528,12 +12528,12 @@ export function Scene_BookBuilder({
         {stepIndex === 3 && !readOnly && (
           <div className="space-y-5">
             <div className="glass-card p-5">
-              <p className="text-white/82 text-[1.05rem] text-narrative">基本パッケージとオプション</p>
+              <p className="text-white/82 text-[1.05rem] text-narrative">基本パッケージ</p>
               <div className="mt-4 flex items-start justify-between gap-4 rounded-2xl border border-emerald-200/10 bg-emerald-200/[0.025] p-4">
                 <div>
                   <p className="text-[0.82rem] text-white/76">縦糸横糸ブック 基本パッケージ</p>
                   <p className="mt-2 text-[0.64rem] leading-relaxed text-white/35">
-                    語り体験・縦糸横糸ブック-スタンダード冊子1冊・電子冊子・QR音声再生
+                    語り体験・スタンダード冊子1冊・電子冊子・QR音声再生
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
@@ -12543,7 +12543,32 @@ export function Scene_BookBuilder({
               </div>
             </div>
 
+            <p className="px-1 text-white/82 text-[1.05rem] text-narrative">オプション</p>
+
             <div className="glass-card divide-y divide-white/[0.07] px-5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (project?.gift_package_purchased) return;
+                  setIncludeGiftPackage(current => !current);
+                }}
+                className="flex w-full items-start justify-between gap-4 py-5 text-left"
+                aria-pressed={includeGiftPackage}
+              >
+                <span>
+                  <span className="block text-[0.82rem] text-white/76">ギフトパッケージ</span>
+                  <span className="mt-1 block text-[0.62rem] leading-relaxed text-white/32">
+                    コンセプトブック・使い方・メッセージカード・包装
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-3">
+                  <span className="text-[0.7rem] text-white/48">3,000円</span>
+                  <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-[0.72rem] ${
+                    includeGiftPackage ? "border-emerald-200/25 bg-emerald-300/15 text-emerald-100" : "border-white/18 text-transparent"
+                  }`}>✓</span>
+                </span>
+              </button>
+
               <div className="py-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
@@ -12572,7 +12597,7 @@ export function Scene_BookBuilder({
               <div className="py-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-[0.82rem] text-white/76">縦糸横糸ブック-プレミアム冊子</p>
+                    <p className="text-[0.82rem] text-white/76">縦糸横糸ブック-プレミアム冊子の増刷</p>
                     <p className="mt-1 text-[0.62rem] text-white/32">ハードカバー上製本・1冊 30,000円</p>
                   </div>
                   <select
@@ -12594,32 +12619,16 @@ export function Scene_BookBuilder({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  if (project?.gift_package_purchased) return;
-                  setIncludeGiftPackage(current => !current);
-                }}
-                className="flex w-full items-start justify-between gap-4 py-5 text-left"
-                aria-pressed={includeGiftPackage}
-              >
-                <span>
-                  <span className="block text-[0.82rem] text-white/76">ギフトパッケージ</span>
-                  <span className="mt-1 block text-[0.62rem] leading-relaxed text-white/32">
-                    コンセプトブック・使い方・メッセージカード・包装
-                  </span>
-                </span>
-                <span className="flex shrink-0 items-center gap-3">
-                  <span className="text-[0.7rem] text-white/48">3,000円</span>
-                  <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-[0.72rem] ${
-                    includeGiftPackage ? "border-emerald-200/25 bg-emerald-300/15 text-emerald-100" : "border-white/18 text-transparent"
-                  }`}>✓</span>
-                </span>
-              </button>
             </div>
 
             <p className="px-1 text-[0.62rem] leading-relaxed text-white/30">
               11冊以上をご希望の場合は、個別にお問い合わせください。
+              <a
+                href="mailto:sugawara@saltlight.co.jp?subject=%E7%B8%A6%E7%B3%B8%E6%A8%AA%E7%B3%B8%E3%83%96%E3%83%83%E3%82%AF%E3%81%AE%E5%A2%97%E5%88%B7%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6"
+                className="ml-2 text-white/55 underline decoration-white/25 underline-offset-4"
+              >
+                メール
+              </a>
             </p>
 
             {premiumCopyCount > 0 && (
@@ -12637,24 +12646,8 @@ export function Scene_BookBuilder({
                 </div>
 
                 <div className="glass-card p-5">
-                  <div className="mb-5 flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-white/82 text-[1rem] text-narrative">縦糸横糸ブック-プレミアム冊子の設定</p>
-                      <p className="mt-1 text-[0.62rem] text-white/30">全冊を同じ仕様で製本します</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPremiumTitleOverride(null);
-                        setPremiumSubtitleOverride(null);
-                        setPremiumFooterOverride(null);
-                        setPremiumPrintCoverColor(null);
-                        setPremiumCoverPhotoMode("inherit");
-                      }}
-                      className="shrink-0 text-[0.62rem] text-white/42 underline decoration-white/20 underline-offset-4"
-                    >
-                      表紙設定を引き継ぐ
-                    </button>
+                  <div className="mb-5">
+                    <p className="text-white/82 text-[1rem] text-narrative">縦糸横糸ブック-プレミアム冊子の設定</p>
                   </div>
 
                   <div className="mb-6 grid grid-cols-2 gap-2">
@@ -12701,18 +12694,6 @@ export function Scene_BookBuilder({
                           {premiumCoverPhoto ? "別の写真を調整" : "別の写真にする"}
                         </button>
                       </div>
-                      {premiumCoverPhotoMode === "custom" && premiumCoverPhoto && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCoverPhotoCorrectionTarget("premium");
-                            setCoverPhotoCorrectionOpen(true);
-                          }}
-                          className="mt-2 w-full text-center text-[0.64rem] text-white/42 underline decoration-white/20 underline-offset-4"
-                        >
-                          写真の配置を調整
-                        </button>
-                      )}
                     </div>
                   )}
 
