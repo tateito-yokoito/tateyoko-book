@@ -187,6 +187,26 @@ function accessTone(value) {
   return "neutral";
 }
 
+function orderStatusLabel(value) {
+  return {
+    draft: "下書き",
+    checkout_pending: "決済待ち",
+    paid: "決済済み",
+    zero_paid: "決済済み",
+    refund_pending: "返金処理中",
+    refunded: "返金済み",
+    cancelled: "キャンセル済み",
+    expired: "期限切れ"
+  }[value] || "不明";
+}
+
+function orderStatusTone(value) {
+  if (["paid", "zero_paid"].includes(value)) return "success";
+  if (["checkout_pending", "refund_pending"].includes(value)) return "warning";
+  if (["refunded", "cancelled"].includes(value)) return "error";
+  return "neutral";
+}
+
 function projectTypeLabel(value) {
   return {
     koebook: "縦糸横糸ブック",
@@ -687,7 +707,7 @@ function CommercePanel({
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h3 className="font-medium">注文履歴</h3>
         <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-left text-sm"><thead className="border-b border-slate-100 text-xs text-slate-400"><tr><th className="pb-3 pr-4 font-normal">日時</th><th className="pb-3 pr-4 font-normal">購入者</th><th className="pb-3 pr-4 font-normal">注文内容</th><th className="pb-3 pr-4 font-normal">コード</th><th className="pb-3 pr-4 font-normal">合計</th><th className="pb-3 font-normal">状態</th></tr></thead><tbody className="divide-y divide-slate-100">{orders.slice(0, 200).map(item => <tr key={item.id}><td className="whitespace-nowrap py-3 pr-4 text-xs text-slate-500">{formatDate(item.created_at)}</td><td className="py-3 pr-4"><p>{item.purchaser_name || "名称未登録"}</p><p className="text-xs text-slate-400">{item.purchaser_email}</p></td><td className="py-3 pr-4"><p>{item.order_type === "gift" ? "ギフト" : "本人"}</p><p className="mt-1 max-w-[15rem] text-xs leading-5 text-slate-400">{item.item_summary || "基本セット"}</p></td><td className="py-3 pr-4 font-mono text-xs">{item.discount_code || "—"}</td><td className="py-3 pr-4">{formatAdminYen(item.amount_total)}</td><td className="py-3"><StatusPill tone={["paid", "zero_paid"].includes(item.status) ? "success" : item.status === "refunded" ? "error" : "neutral"}>{item.status}</StatusPill></td></tr>)}</tbody></table>
+          <table className="min-w-full text-left text-sm"><thead className="border-b border-slate-100 text-xs text-slate-400"><tr><th className="pb-3 pr-4 font-normal">日時</th><th className="pb-3 pr-4 font-normal">購入者</th><th className="pb-3 pr-4 font-normal">注文内容</th><th className="pb-3 pr-4 font-normal">コード</th><th className="pb-3 pr-4 font-normal">合計</th><th className="pb-3 font-normal">状態</th></tr></thead><tbody className="divide-y divide-slate-100">{orders.slice(0, 200).map(item => <tr key={item.id}><td className="whitespace-nowrap py-3 pr-4 text-xs text-slate-500">{formatDate(item.created_at)}</td><td className="py-3 pr-4"><p>{item.purchaser_name || "名称未登録"}</p><p className="text-xs text-slate-400">{item.purchaser_email}</p></td><td className="py-3 pr-4"><p>{item.order_type === "gift" ? "ギフト" : "本人"}</p><p className="mt-1 max-w-[15rem] text-xs leading-5 text-slate-400">{item.item_summary || "基本セット"}</p></td><td className="py-3 pr-4 font-mono text-xs">{item.discount_code || "—"}</td><td className="py-3 pr-4">{formatAdminYen(item.amount_total)}</td><td className="py-3"><StatusPill tone={orderStatusTone(item.status)}>{orderStatusLabel(item.status)}</StatusPill></td></tr>)}</tbody></table>
           {!orders.length && <p className="py-8 text-center text-sm text-slate-400">注文はまだありません。</p>}
         </div>
       </section>
