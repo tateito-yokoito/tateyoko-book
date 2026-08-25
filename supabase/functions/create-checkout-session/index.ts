@@ -127,10 +127,20 @@ serve(async request => {
     const projectId = String(body.projectId || "").trim();
     const orderType = body.orderType === "gift" ? "gift" : "self";
     const discountCode = String(body.discountCode || "").trim();
-    const includeGiftPackage = orderType === "gift" && body.includeGiftPackage !== false;
-    const includePremiumHardcover = orderType === "self" && body.includePremiumHardcover === true;
+    const standardExtraCopyCount = orderType === "self"
+      ? Number.parseInt(String(body.standardExtraCopyCount ?? "0"), 10)
+      : 0;
+    const premiumCopyCount = orderType === "self"
+      ? Number.parseInt(String(body.premiumCopyCount ?? (body.includePremiumHardcover === true ? "1" : "0")), 10)
+      : 0;
+    const includeGiftPackage = orderType === "gift"
+      ? body.includeGiftPackage !== false
+      : body.includeGiftPackage === true;
     const returnContext = body.returnContext === "book_builder" ? "book_builder" : "purchase";
     const gift = typeof body.gift === "object" && body.gift ? body.gift : {};
+    const shippingAddress = typeof body.shippingAddress === "object" && body.shippingAddress
+      ? body.shippingAddress
+      : {};
 
     let project: any = null;
     if (orderType === "self") {
@@ -142,10 +152,16 @@ serve(async request => {
       if (result.error || !project || project.owner_user_id !== authData.user.id) {
         return json({ success: false, error: "この物語の購入手続きを開始できません" }, 403);
       }
-      const basePurchased = ["paid", "gifted", "legacy"].includes(project.access_status);
-      const premiumPurchased = project.premium_hardcover_status === "paid" || Boolean(project.premium_hardcover_purchased_at);
-      if (basePurchased && (!includePremiumHardcover || premiumPurchased)) {
-        return json({ success: true, alreadyPurchased: true });
+      if (!Number.isInteger(standardExtraCopyCount)
+        || (standardExtraCopyCount !== 0 && (standardExtraCopyCount < 2 || standardExtraCopyCount > 10))) {
+        return json({ success: false, error: "スタンダード冊子の増刷は2冊から10冊で指定してください" }, 400);
+      }
+      if (!Number.isInteger(premiumCopyCount) || premiumCopyCount < 0 || premiumCopyCount > 10) {
+        return json({ success: false, error: "プレミアム冊子は0冊から10冊で指定してください" }, 400);
+      }
+      if (![shippingAddress.recipient_name, shippingAddress.postal_code, shippingAddress.prefecture, shippingAddress.city, shippingAddress.line1]
+        .every(value => String(value || "").trim())) {
+        return json({ success: false, error: "お届け先を入力してください" }, 400);
       }
     } else {
       if (!String(gift.recipient_name || "").trim()) {
@@ -162,7 +178,10 @@ serve(async request => {
           input_purchaser_user_id: authData.user.id,
           input_book_project_id: projectId,
           input_discount_code: discountCode || null,
-          input_include_premium_hardcover: includePremiumHardcover
+          input_standard_extra_copy_count: standardExtraCopyCount,
+          input_premium_copy_count: premiumCopyCount,
+          input_include_gift_package: includeGiftPackage,
+          input_shipping_address: shippingAddress
         })
       : admin.rpc("create_commerce_order", {
           input_purchaser_user_id: authData.user.id,
@@ -180,30 +199,58 @@ serve(async request => {
     orderId = String(order?.id || "");
     if (!orderId || !quote) throw new Error("注文を作成できませんでした");
 
-    const requestedCodes = [
-      ...(Number(order.base_book_amount ?? quote.base_book_amount ?? 0) > 0 ? ["self_book_v1"] : []),
-      ...(Number(order.premium_hardcover_amount ?? quote.premium_hardcover_amount ?? 0) > 0 ? ["premium_hardcover_v1"] : []),
-      ...(includeGiftPackage ? ["gift_package_v1"] : [])
-    ];
-    const { data: products, error: productError } = await admin.from("commerce_products").select("*").in("product_code", requestedCodes);
-    if (productError) throw productError;
+    const lineRequests = orderType === "self"
+      ? [
+          { code: "self_book_v1", quantity: Number(order.base_book_amount ?? quote.base_book_amount ?? 0) > 0 ? 1 : 0 },
+          { code: "standard_reprint_pair_v1", quantity: Number(quote.standard_reprint_pair_quantity || 0) },
+          { code: "standard_reprint_additional_v1", quantity: Number(quote.standard_reprint_additional_quantity || 0) },
+          { code: "premium_hardcover_v1", quantity: Number(quote.premium_copy_count_due || 0) },
+          { code: "gift_package_v1", quantity: Number(quote.gift_package_amount || 0) > 0 ? 1 : 0 }
+        ]
+      : [
+          { code: "self_book_v1", quantity: Number(order.base_book_amount ?? quote.base_book_amount ?? 0) > 0 ? 1 : 0 },
+          { code: "gift_package_v1", quantity: Number(quote.gift_package_amount || 0) > 0 ? 1 : 0 }
+        ];
+    const activeLineRequests = lineRequests.filter(item => item.quantity > 0);
+    const requestedCodes = activeLineRequests.map(item => item.code);
+    const productResult = requestedCodes.length
+      ? await admin.from("commerce_products").select("*").in("product_code", requestedCodes)
+      : { data: [], error: null };
+    const products = productResult.data;
+    if (productResult.error) throw productResult.error;
     const bookProduct = products?.find((item: any) => item.product_code === "self_book_v1");
-    const premiumProduct = products?.find((item: any) => item.product_code === "premium_hardcover_v1");
-    const packageProduct = products?.find((item: any) => item.product_code === "gift_package_v1");
-    if (!bookProduct && !premiumProduct) throw new Error("商品が見つかりませんでした");
+    if (products?.length !== requestedCodes.length) throw new Error("商品が見つかりませんでした");
 
-    const bookStripe = bookProduct ? await ensureStripePrice(admin, stripeSecretKey, bookProduct) : null;
-    const premiumStripe = premiumProduct ? await ensureStripePrice(admin, stripeSecretKey, premiumProduct) : null;
-    const packageStripe = includeGiftPackage && Number(quote.gift_package_amount) > 0
-      ? await ensureStripePrice(admin, stripeSecretKey, packageProduct)
-      : null;
+    const stripeLines = [];
+    for (const line of activeLineRequests) {
+      const product = products?.find((item: any) => item.product_code === line.code);
+      const stripe = await ensureStripePrice(admin, stripeSecretKey, product);
+      stripeLines.push({ ...line, ...stripe });
+    }
 
     let couponId = "";
     if (quote.campaign_id && Number(quote.discount_amount) > 0) {
       const { data: campaign, error: campaignError } = await admin.from("discount_campaigns").select("*").eq("id", quote.campaign_id).single();
       if (campaignError) throw campaignError;
+      const bookStripe = stripeLines.find(item => item.code === "self_book_v1");
       if (!bookStripe) throw new Error("割引対象の商品が見つかりませんでした");
       couponId = await ensureStripeCoupon(admin, stripeSecretKey, campaign, bookStripe.productId);
+    }
+
+    if (Number(order.amount_total) === 0) {
+      const completionId = `zero-${order.id}`;
+      const { error: finalizeError } = await admin.rpc("finalize_commerce_order", {
+        input_order_id: order.id,
+        input_checkout_session_id: completionId,
+        input_customer_id: "",
+        input_payment_intent_id: "",
+        input_payment_status: "no_payment_required",
+        input_amount_total: 0,
+        input_stripe_mode: stripeMode(stripeSecretKey),
+        input_purchased_at: new Date().toISOString()
+      });
+      if (finalizeError) throw finalizeError;
+      return json({ success: true, completed: true, orderId: order.id, quote });
     }
 
     const form = new URLSearchParams();
@@ -211,21 +258,10 @@ serve(async request => {
     form.set("locale", "ja");
     form.set("payment_method_types[0]", "card");
     form.set("customer_creation", "always");
-    let lineIndex = 0;
-    if (bookStripe) {
-      form.set(`line_items[${lineIndex}][price]`, bookStripe.priceId);
-      form.set(`line_items[${lineIndex}][quantity]`, "1");
-      lineIndex += 1;
-    }
-    if (premiumStripe) {
-      form.set(`line_items[${lineIndex}][price]`, premiumStripe.priceId);
-      form.set(`line_items[${lineIndex}][quantity]`, "1");
-      lineIndex += 1;
-    }
-    if (packageStripe) {
-      form.set(`line_items[${lineIndex}][price]`, packageStripe.priceId);
-      form.set(`line_items[${lineIndex}][quantity]`, "1");
-    }
+    stripeLines.forEach((line, lineIndex) => {
+      form.set(`line_items[${lineIndex}][price]`, line.priceId);
+      form.set(`line_items[${lineIndex}][quantity]`, String(line.quantity));
+    });
     if (couponId) form.set("discounts[0][coupon]", couponId);
     form.set("client_reference_id", order.id);
     form.set("customer_email", authData.user.email || "");
@@ -236,10 +272,12 @@ serve(async request => {
     form.set("metadata[product_code]", order.product_code);
     form.set("metadata[return_context]", returnContext);
     form.set("metadata[includes_base_book]", String(Boolean(order.includes_base_book)));
-    form.set("metadata[includes_premium_hardcover]", String(Boolean(order.includes_premium_hardcover)));
+    form.set("metadata[standard_extra_copy_count]", String(order.standard_extra_copy_count || 0));
+    form.set("metadata[premium_copy_count]", String(order.premium_copy_count || 0));
+    form.set("metadata[gift_package_selected]", String(Boolean(order.gift_package_selected)));
     form.set("expires_at", String(Math.floor(Date.now() / 1000) + 60 * 60));
-    form.set("success_url", appReturnUrl({ app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout_premium: includePremiumHardcover ? "1" : "0", checkout: "success", session_id: "{CHECKOUT_SESSION_ID}" }));
-    form.set("cancel_url", appReturnUrl({ app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout_premium: includePremiumHardcover ? "1" : "0", checkout: "cancelled" }));
+    form.set("success_url", appReturnUrl({ app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout: "success", session_id: "{CHECKOUT_SESSION_ID}" }));
+    form.set("cancel_url", appReturnUrl({ app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout: "cancelled" }));
 
     const checkout = await stripeRequest(stripeSecretKey, "checkout/sessions", form);
     if (!checkout?.id || !checkout?.url) throw new Error("購入画面を開けませんでした");
@@ -259,12 +297,14 @@ serve(async request => {
         projectUpdate.stripe_checkout_session_id = checkout.id;
         projectUpdate.purchaser_user_id = authData.user.id;
       }
-      if (order.includes_premium_hardcover) {
+      if (Number(order.premium_copy_count || 0) > 0) {
         projectUpdate.premium_hardcover_status = "checkout_pending";
       }
-      const { error: projectUpdateError } = await admin.from("book_projects").update(projectUpdate)
-        .eq("id", project.id).eq("owner_user_id", authData.user.id);
-      if (projectUpdateError) throw projectUpdateError;
+      if (Object.keys(projectUpdate).length > 0) {
+        const { error: projectUpdateError } = await admin.from("book_projects").update(projectUpdate)
+          .eq("id", project.id).eq("owner_user_id", authData.user.id);
+        if (projectUpdateError) throw projectUpdateError;
+      }
     }
 
     return json({ success: true, checkoutUrl: checkout.url, orderId: order.id, quote });
