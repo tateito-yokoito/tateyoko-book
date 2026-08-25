@@ -226,6 +226,30 @@ function formatYen(value) {
   return `${new Intl.NumberFormat("ja-JP").format(Number(value || 0))}円`;
 }
 
+function prepareCheckoutWindow() {
+  try {
+    const checkoutWindow = window.open("about:blank", "_blank");
+    if (!checkoutWindow) return null;
+
+    checkoutWindow.opener = null;
+    checkoutWindow.document.title = "決済画面を準備しています";
+    checkoutWindow.document.body.style.cssText =
+      "margin:0;display:grid;min-height:100vh;place-items:center;background:#0f172a;color:#e2e8f0;font-family:system-ui,sans-serif;";
+    checkoutWindow.document.body.textContent = "決済画面を準備しています…";
+    return checkoutWindow;
+  } catch (error) {
+    console.warn("checkout window preparation error", error);
+    return null;
+  }
+}
+
+function closeCheckoutWindow(checkoutWindow) {
+  if (!checkoutWindow || checkoutWindow.closed) return;
+  try {
+    checkoutWindow.close();
+  } catch (_error) {}
+}
+
 async function loadCommerceQuote({ discountCode = "", includeGiftPackage = false } = {}) {
   const { data, error } = await supabaseClient.rpc("get_commerce_quote", {
     input_product_code: "self_book_v1",
@@ -2444,6 +2468,7 @@ function App() {
   const [bookBuilderOrderCompletedAt, setBookBuilderOrderCompletedAt] = useState(null);
   const [giftClaimPreview, setGiftClaimPreview] = useState(null);
   const checkoutSyncAttemptedRef = useRef(false);
+  const checkoutUrlRef = useRef("");
 
   const [voiceData, setVoiceData] = useState({
     duration: 0,
@@ -4466,9 +4491,11 @@ const startPurchase = async ({
   premiumCopyCount = 0,
   shippingAddress = {},
   returnContext = "purchase",
-  gift = {}
+  gift = {},
+  checkoutWindow = null
 } = {}) => {
   if (orderType === "self" && !foundation?.project?.id) {
+    closeCheckoutWindow(checkoutWindow);
     setPurchaseError("物語の準備が完了していません。画面を再読み込みしてください。");
     return false;
   }
@@ -4500,6 +4527,7 @@ const startPurchase = async ({
     }
 
     if (data.completed || data.alreadyPurchased) {
+      closeCheckoutWindow(checkoutWindow);
       const refreshedFoundation = await ensureUserFoundation(user.id, user);
       setFoundation(refreshedFoundation);
       setPurchaseStatus("paid");
@@ -4512,12 +4540,21 @@ const startPurchase = async ({
     }
 
     if (!data.checkoutUrl) {
+      closeCheckoutWindow(checkoutWindow);
       throw new Error("購入画面を開けませんでした");
+    }
+
+    checkoutUrlRef.current = data.checkoutUrl;
+    if (checkoutWindow && !checkoutWindow.closed) {
+      checkoutWindow.location.replace(data.checkoutUrl);
+      setPurchaseStatus("checkout_opened");
+      return true;
     }
 
     window.location.assign(data.checkoutUrl);
     return true;
   } catch (error) {
+    closeCheckoutWindow(checkoutWindow);
     console.error("checkout start error", error);
     setPurchaseStatus("error");
     setPurchaseError(
@@ -4526,6 +4563,19 @@ const startPurchase = async ({
     );
     return false;
   }
+};
+
+const reopenCheckout = () => {
+  const checkoutUrl = checkoutUrlRef.current;
+  if (!checkoutUrl) return false;
+
+  const checkoutWindow = window.open(checkoutUrl, "_blank");
+  if (checkoutWindow) {
+    checkoutWindow.opener = null;
+  } else {
+    window.location.assign(checkoutUrl);
+  }
+  return true;
 };
 
 const handleSaveAnswer = async (tag = null) => {
@@ -5128,6 +5178,7 @@ let sceneAfterInvite = nextScene;
           status={purchaseStatus}
           error={purchaseError}
           onPurchase={startPurchase}
+          onReopenCheckout={reopenCheckout}
           onTryFree={() => {
             setPurchaseStatus("idle");
             setPurchaseError("");
@@ -5788,6 +5839,7 @@ let sceneAfterInvite = nextScene;
           purchaseError={purchaseError}
           orderCompletedAt={bookBuilderOrderCompletedAt}
           onPurchase={startPurchase}
+          onReopenCheckout={reopenCheckout}
           onBack={() => setScene("home")}
         />
       )}
@@ -6861,9 +6913,12 @@ function Scene_PurchaseStart({
   status,
   error,
   onPurchase,
+  onReopenCheckout,
   onTryFree
 }) {
-  const isWorking = status === "starting" || status === "checking";
+  const isPreparingCheckout = status === "starting" || status === "checking";
+  const checkoutOpened = status === "checkout_opened";
+  const isWorking = isPreparingCheckout || checkoutOpened;
   const [orderType, setOrderType] = useState(initialOrderType === "gift" ? "gift" : "self");
   const [includeGiftPackage, setIncludeGiftPackage] = useState(true);
   const [discountCode, setDiscountCode] = useState("");
@@ -6940,11 +6995,15 @@ function Scene_PurchaseStart({
       setQuoteError("ギフトパッケージの配送先を入力してください。");
       return;
     }
+    const checkoutWindow = Number(quote.amount_total || 0) > 0
+      ? prepareCheckoutWindow()
+      : null;
     onPurchase({
       orderType,
       discountCode: appliedCode,
       includeGiftPackage: orderType === "gift" && includeGiftPackage,
-      gift
+      gift,
+      checkoutWindow
     });
   };
 
@@ -7153,11 +7212,13 @@ function Scene_PurchaseStart({
 
         <button
           type="button"
-          onClick={handlePurchase}
-          disabled={isWorking || quoteStatus !== "ready"}
+          onClick={checkoutOpened ? onReopenCheckout : handlePurchase}
+          disabled={isPreparingCheckout || quoteStatus !== "ready"}
           className="btn-quiet mt-7 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-45"
         >
-          {isWorking
+          {checkoutOpened
+            ? "決済画面を開き直す"
+            : isPreparingCheckout
             ? "購入画面を準備しています…"
             : orderType === "gift"
               ? "この内容で贈る"
@@ -11509,6 +11570,7 @@ export function Scene_BookBuilder({
   purchaseError = "",
   orderCompletedAt = null,
   onPurchase = null,
+  onReopenCheckout = null,
   onBack
 }) {
   const steps = readOnly || !onPurchase
@@ -11539,6 +11601,7 @@ export function Scene_BookBuilder({
   const [orderQuoteError, setOrderQuoteError] = useState("");
   const [orderDiscountDraft, setOrderDiscountDraft] = useState("");
   const [orderDiscountCode, setOrderDiscountCode] = useState("");
+  const [orderDiscountExpanded, setOrderDiscountExpanded] = useState(false);
   const [bookTitle, setBookTitle] = useState("わたしの物語");
   const [bookSubtitle, setBookSubtitle] = useState("");
   const [bookFooterText, setBookFooterText] = useState("");
@@ -11595,10 +11658,6 @@ export function Scene_BookBuilder({
     `氏名：${user?.display_name || user?.name || "未登録"}`,
     `登録メールアドレス：${user?.email || "未登録"}`,
     `アカウントID：${user?.id || "未登録"}`,
-    `物語名：${project?.subject_name || bookTitle || "未登録"}`,
-    `物語ID：${bookProjectId || project?.id || "未登録"}`,
-    `スタンダード冊子の増刷選択数：${standardExtraCopyCount}冊`,
-    `プレミアム冊子の増刷選択数：${premiumCopyCount}冊`,
     "",
     "希望冊数・ご相談内容："
   ].join("\n"))}`;
@@ -12082,6 +12141,7 @@ export function Scene_BookBuilder({
   const submitBookOrder = async () => {
     if (!shippingAddressComplete || !orderQuote || !onPurchase) return;
     const noPaymentRequired = Number(orderQuote.amount_total || 0) === 0;
+    const checkoutWindow = noPaymentRequired ? null : prepareCheckoutWindow();
     try {
       setCoverSettingsSaveError("");
       await persistCoverSettings();
@@ -12092,10 +12152,16 @@ export function Scene_BookBuilder({
         premiumCopyCount,
         includeGiftPackage,
         shippingAddress,
-        returnContext: "book_builder"
+        returnContext: "book_builder",
+        checkoutWindow
       });
-      if (noPaymentRequired && started) setOrderCompleted(true);
+      if (noPaymentRequired && started) {
+        setOrderCompleted(true);
+      } else if (!started) {
+        closeCheckoutWindow(checkoutWindow);
+      }
     } catch (error) {
+      closeCheckoutWindow(checkoutWindow);
       console.error("book order settings save error", error);
       setCoverSettingsSaveError("注文内容を保存できませんでした。もう一度お試しください。");
     }
@@ -12542,7 +12608,7 @@ export function Scene_BookBuilder({
             <p className="px-1 text-white/82 text-[1.05rem] text-narrative">基本パッケージ</p>
 
             <div className="glass-card p-5">
-              <div className="flex items-start justify-between gap-4 rounded-2xl border border-emerald-200/10 bg-emerald-200/[0.025] p-4">
+              <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[0.82rem] text-white/76">縦糸横糸ブック 基本パッケージ</p>
                   <p className="mt-2 text-[0.64rem] leading-relaxed text-white/35">
@@ -12802,13 +12868,47 @@ export function Scene_BookBuilder({
               </div>
 
               {!baseBookPurchased && (
-                <div className="glass-card p-5">
-                  <p className="mb-3 text-[0.7rem] text-white/42">割引コード（任意）</p>
-                  <div className="flex gap-2">
-                    <input type="text" value={orderDiscountDraft} onChange={event => setOrderDiscountDraft(event.target.value)} placeholder="コードを入力" className="quiet-input min-w-0 flex-1" />
-                    <button type="button" onClick={() => setOrderDiscountCode(orderDiscountDraft.trim())} className="shrink-0 rounded-full border border-white/12 px-4 text-[0.7rem] text-white/58">適用</button>
-                  </div>
-                  {orderDiscountCode && <button type="button" onClick={() => { setOrderDiscountDraft(""); setOrderDiscountCode(""); }} className="mt-3 text-[0.65rem] text-white/40 underline decoration-white/20 underline-offset-4">割引コードを外す</button>}
+                <div className="px-1">
+                  {!orderDiscountExpanded ? (
+                    <button
+                      type="button"
+                      onClick={() => setOrderDiscountExpanded(true)}
+                      className="text-[0.62rem] text-white/25 underline decoration-white/10 underline-offset-4 transition hover:text-white/42"
+                    >
+                      割引コードをお持ちの方
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={orderDiscountDraft}
+                          onChange={event => setOrderDiscountDraft(event.target.value)}
+                          placeholder="割引コード"
+                          className="min-w-0 flex-1 border-b border-white/10 bg-transparent px-1 py-2 text-[0.72rem] text-white/62 outline-none placeholder:text-white/20 focus:border-white/22"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setOrderDiscountCode(orderDiscountDraft.trim())}
+                          className="shrink-0 rounded-full border border-white/10 px-4 text-[0.65rem] text-white/42"
+                        >
+                          適用
+                        </button>
+                      </div>
+                      {orderDiscountCode && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOrderDiscountDraft("");
+                            setOrderDiscountCode("");
+                          }}
+                          className="text-[0.62rem] text-white/30 underline decoration-white/10 underline-offset-4"
+                        >
+                          割引コードを外す
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -12824,11 +12924,13 @@ export function Scene_BookBuilder({
                     </div>
                     <button
                       type="button"
-                      onClick={submitBookOrder}
-                      disabled={!shippingAddressComplete || purchaseStatus === "starting"}
+                      onClick={purchaseStatus === "checkout_opened" ? onReopenCheckout : submitBookOrder}
+                      disabled={!shippingAddressComplete || purchaseStatus === "starting" || purchaseStatus === "checking"}
                       className="btn-quiet mt-5 w-full rounded-full bg-white/10 py-4 text-white/88 disabled:opacity-40"
                     >
-                      {purchaseStatus === "starting"
+                      {purchaseStatus === "checkout_opened"
+                        ? "決済画面を開き直す"
+                        : purchaseStatus === "starting" || purchaseStatus === "checking"
                         ? "注文を準備しています…"
                         : Number(orderQuote.amount_total || 0) > 0
                           ? `${formatYen(orderQuote.amount_total)}の購入手続きへ`
