@@ -24,3 +24,6 @@ verify_jwt = false
 
 [functions.super-task]
 verify_jwt = false
+
+[functions.twilio-status-webhook]
+verify_jwt = false

@@ -43,6 +43,13 @@ type ProviderResult = {
   providerStatus?: string | null;
 };
 
+type ChannelResult = {
+  sent: boolean;
+  skipped: boolean;
+  provider?: ProviderResult;
+  error?: string;
+};
+
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -148,6 +155,7 @@ async function sendSms(delivery: DueDelivery, questionUrl: string): Promise<Prov
   body.set("MessagingServiceSid", TWILIO_MESSAGING_SERVICE_SID);
   body.set("To", delivery.phone_number);
   body.set("Body", `縦糸横糸ブックです。今週の問いが届きました。\n${questionUrl}`);
+  body.set("StatusCallback", `${supabaseUrl}/functions/v1/twilio-status-webhook`);
 
   const response = await fetch(endpoint, {
     method: "POST",
@@ -170,16 +178,61 @@ async function sendSms(delivery: DueDelivery, questionUrl: string): Promise<Prov
   };
 }
 
-async function claimDelivery(delivery: DueDelivery, channel: DeliveryChannel, token: string) {
+async function claimQuestionAccess(delivery: DueDelivery, token: string) {
   const questionUrl = buildQuestionUrl(token);
   const tokenExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
+  const { data: legacy, error: legacyError } = await supabase
+    .from("notification_deliveries")
+    .insert({
+      user_id: delivery.user_id,
+      user_question_id: delivery.user_question_id,
+      question_id: delivery.user_question_id,
+      book_project_id: delivery.book_project_id,
+      email: delivery.email,
+      sequence_order: delivery.sequence_order,
+      user_name: delivery.user_name,
+      channel: "email",
+      delivery_channel: "email",
+      status: "sending",
+      sent_at: null,
+      scheduled_for: delivery.scheduled_for,
+      delivery_token: token,
+      token_expires_at: tokenExpiresAt,
+      meta_json: {
+        brand: "縦糸横糸ブック",
+        access_mode: "delivery_token",
+        question_url: questionUrl,
+        question_id: delivery.question_id,
+        channels: delivery.sms_enabled && delivery.phone_number ? ["email", "sms"] : ["email"],
+      },
+    })
+    .select("id")
+    .single();
+
+  if (legacyError) {
+    if (legacyError.code === "23505") return null;
+    throw new Error(`legacy delivery claim failed: ${legacyError.message}`);
+  }
+
+  return {
+    legacyId: legacy.id as string,
+    questionUrl,
+  };
+}
+
+async function claimDeliveryChannel(
+  delivery: DueDelivery,
+  channel: DeliveryChannel,
+  questionUrl: string,
+) {
   const { data: log, error: logError } = await supabase
     .from("question_delivery_logs")
     .insert({
       book_project_id: delivery.book_project_id,
       recipient_user_id: delivery.user_id,
       recipient_email: delivery.email,
+      recipient_phone: channel === "sms" ? delivery.phone_number : null,
       user_question_id: delivery.user_question_id,
       notification_schedule_id: delivery.notification_schedule_id,
       delivery_channel: channel,
@@ -190,6 +243,7 @@ async function claimDelivery(delivery: DueDelivery, channel: DeliveryChannel, to
         brand: "縦糸横糸ブック",
         access_mode: "delivery_token",
         question_url: questionUrl,
+        question_id: delivery.question_id,
       },
     })
     .select("id")
@@ -200,73 +254,14 @@ async function claimDelivery(delivery: DueDelivery, channel: DeliveryChannel, to
     throw new Error(`question delivery claim failed: ${logError.message}`);
   }
 
-  const { data: legacy, error: legacyError } = await supabase
-    .from("notification_deliveries")
-    .insert({
-      user_id: delivery.user_id,
-      user_question_id: delivery.user_question_id,
-      question_id: delivery.question_id,
-      book_project_id: delivery.book_project_id,
-      email: delivery.email,
-      sequence_order: delivery.sequence_order,
-      user_name: delivery.user_name,
-      channel,
-      delivery_channel: channel,
-      status: "sending",
-      sent_at: null,
-      scheduled_for: delivery.scheduled_for,
-      delivery_token: token,
-      token_expires_at: tokenExpiresAt,
-      meta_json: {
-        brand: "縦糸横糸ブック",
-        access_mode: "delivery_token",
-        question_url: questionUrl,
-        channel,
-      },
-    })
-    .select("id")
-    .single();
-
-  if (legacyError) {
-    await supabase
-      .from("question_delivery_logs")
-      .update({
-        delivery_status: "failed",
-        failed_at: new Date().toISOString(),
-        error_code: legacyError.code || "legacy_log_error",
-        error_message: legacyError.message,
-      })
-      .eq("id", log.id);
-
-    if (legacyError.code === "23505") return null;
-    throw new Error(`legacy delivery claim failed: ${legacyError.message}`);
-  }
-
-  return {
-    logId: log.id as string,
-    legacyId: legacy.id as string,
-    questionUrl,
-  };
+  return { logId: log.id as string };
 }
 
 async function markDeliverySent(
-  claim: { logId: string; legacyId: string },
+  claim: { logId: string },
   provider: ProviderResult,
 ) {
   const sentAt = new Date().toISOString();
-
-  const { error: legacyError } = await supabase
-    .from("notification_deliveries")
-    .update({
-      status: "sent",
-      sent_at: sentAt,
-      provider_message_id: provider.providerMessageId,
-      resend_id: provider.providerMessageId,
-      error_message: null,
-    })
-    .eq("id", claim.legacyId);
-
-  if (legacyError) throw new Error(`legacy delivery update failed: ${legacyError.message}`);
 
   const { error: logError } = await supabase
     .from("question_delivery_logs")
@@ -283,49 +278,72 @@ async function markDeliverySent(
 }
 
 async function markDeliveryFailed(
-  claim: { logId: string; legacyId: string },
+  claim: { logId: string },
   error: unknown,
 ) {
   const failedAt = new Date().toISOString();
   const details = errorDetails(error);
 
-  await Promise.all([
-    supabase
-      .from("notification_deliveries")
-      .update({ status: "failed", sent_at: null, error_message: details.message })
-      .eq("id", claim.legacyId),
-    supabase
-      .from("question_delivery_logs")
-      .update({
-        delivery_status: "failed",
-        failed_at: failedAt,
-        error_code: details.code,
-        error_message: details.message,
-      })
-      .eq("id", claim.logId),
-  ]);
+  await supabase
+    .from("question_delivery_logs")
+    .update({
+      delivery_status: "failed",
+      failed_at: failedAt,
+      error_code: details.code,
+      error_message: details.message,
+    })
+    .eq("id", claim.logId);
 }
 
-async function deliverChannel(delivery: DueDelivery, channel: DeliveryChannel) {
-  const token = createDeliveryToken();
-  const claim = await claimDelivery(delivery, channel, token);
+async function markQuestionAccess(
+  legacyId: string,
+  results: ChannelResult[],
+) {
+  const successful = results.find((result) => result.sent);
+  const sentAt = new Date().toISOString();
+  const errorMessage = results.map((result) => result.error).filter(Boolean).join(" | ") || null;
+
+  const { error } = await supabase
+    .from("notification_deliveries")
+    .update(successful ? {
+      status: "sent",
+      sent_at: sentAt,
+      provider_message_id: successful.provider?.providerMessageId || null,
+      resend_id: successful.provider?.providerMessageId || null,
+      error_message: errorMessage,
+    } : {
+      status: "failed",
+      sent_at: null,
+      error_message: errorMessage || "No delivery channel was available",
+    })
+    .eq("id", legacyId);
+
+  if (error) throw new Error(`legacy delivery update failed: ${error.message}`);
+}
+
+async function deliverChannel(
+  delivery: DueDelivery,
+  channel: DeliveryChannel,
+  questionUrl: string,
+): Promise<ChannelResult> {
+  const claim = await claimDeliveryChannel(delivery, channel, questionUrl);
 
   if (!claim) return { sent: false, skipped: true };
 
   try {
     const provider = channel === "email"
-      ? await sendEmail(delivery, claim.questionUrl)
-      : await sendSms(delivery, claim.questionUrl);
+      ? await sendEmail(delivery, questionUrl)
+      : await sendSms(delivery, questionUrl);
 
     await markDeliverySent(claim, provider);
-    return { sent: true, skipped: false };
+    return { sent: true, skipped: false, provider };
   } catch (error) {
     console.error(`${channel} delivery failed`, {
       userQuestionId: delivery.user_question_id,
       error: errorDetails(error).message,
     });
     await markDeliveryFailed(claim, error);
-    return { sent: false, skipped: false };
+    return { sent: false, skipped: false, error: errorDetails(error).message };
   }
 }
 
@@ -348,14 +366,39 @@ Deno.serve(async (request) => {
     let skippedCount = 0;
 
     for (const delivery of deliveries) {
-      const results = [];
+      const token = createDeliveryToken();
+      let access;
+
+      try {
+        access = await claimQuestionAccess(delivery, token);
+      } catch (claimError) {
+        console.error("question delivery access claim failed", {
+          userQuestionId: delivery.user_question_id,
+          error: errorDetails(claimError).message,
+        });
+        failedCount += 1;
+        continue;
+      }
+
+      if (!access) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const results: ChannelResult[] = [];
 
       if (delivery.email_enabled && delivery.email) {
-        results.push(await deliverChannel(delivery, "email"));
+        results.push(await deliverChannel(delivery, "email", access.questionUrl));
       }
 
       if (delivery.sms_enabled && delivery.phone_number) {
-        results.push(await deliverChannel(delivery, "sms"));
+        results.push(await deliverChannel(delivery, "sms", access.questionUrl));
+      }
+
+      try {
+        await markQuestionAccess(access.legacyId, results);
+      } catch (accessError) {
+        console.error("question access status update failed", accessError);
       }
 
       const delivered = results.some((result) => result.sent);

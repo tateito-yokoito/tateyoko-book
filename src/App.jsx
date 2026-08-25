@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bell, BookOpen, ChevronLeft, ChevronRight, Files, Home, Image as ImageIcon, Lock, Mic, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings, Square, UserCircle, UserCog, Users } from "lucide-react";
+import { Bell, BookOpen, Check, ChevronLeft, ChevronRight, Files, Home, Image as ImageIcon, Lock, Mail, Mic, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings, Smartphone, Square, UserCircle, UserCog, Users } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import { logActivity } from "./lib/activityLog.js";
 
@@ -827,10 +827,13 @@ function formatNextNotificationLabel(preference, now = new Date()) {
   const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
   const targetHour = String(hour).padStart(2, "0");
   const targetMinute = String(minute).padStart(2, "0");
+  const deliveryLabel = preference?.sms_enabled && preference?.phone_verified_at && preference?.phone_number
+    ? "メール・SMS"
+    : "メール";
 
   return (
     `次の問い　${targetDate.getUTCMonth() + 1}/${targetDate.getUTCDate()}` +
-    `（${weekdayLabels[targetDate.getUTCDay()]}）${targetHour}:${targetMinute}ごろ（メール）`
+    `（${weekdayLabels[targetDate.getUTCDay()]}）${targetHour}:${targetMinute}ごろ（${deliveryLabel}）`
   );
 }
 
@@ -16818,12 +16821,42 @@ function Scene_NotificationSetup({
   ));
   const [saveState, setSaveState] = useState("idle");
   const [removedSchedule, setRemovedSchedule] = useState(null);
+  const initialPhoneVerified = Boolean(
+    initialPreference?.phone_number && initialPreference?.phone_verified_at
+  );
+  const initialSmsEnabled = Boolean(initialPhoneVerified && initialPreference?.sms_enabled);
+  const [smsEnabled, setSmsEnabled] = useState(initialSmsEnabled);
+  const [verifiedPhone, setVerifiedPhone] = useState(
+    initialPhoneVerified ? initialPreference.phone_number : ""
+  );
+  const [phoneNumber, setPhoneNumber] = useState(
+    initialPhoneVerified ? initialPreference.phone_number : ""
+  );
+  const [verificationCode, setVerificationCode] = useState("");
+  const [phoneSetupOpen, setPhoneSetupOpen] = useState(false);
+  const [phoneStep, setPhoneStep] = useState("phone");
+  const [phoneState, setPhoneState] = useState("idle");
+  const [phoneMessage, setPhoneMessage] = useState("");
+  const [maskedPhone, setMaskedPhone] = useState("");
   const saveQueueRef = useRef(Promise.resolve());
   const latestSaveRef = useRef(Promise.resolve());
   const saveRequestIdRef = useRef(0);
   const initialSaveStartedRef = useRef(false);
   const savedTimerRef = useRef(null);
   const undoTimerRef = useRef(null);
+  const preferenceRef = useRef(initialPreference || {});
+  const smsEnabledRef = useRef(initialSmsEnabled);
+
+  const publishPreference = (patch, nextSchedules = schedules) => {
+    const nextPreference = {
+      ...preferenceRef.current,
+      ...patch,
+      schedules: nextSchedules
+    };
+    preferenceRef.current = nextPreference;
+    onPreferenceSaved?.(nextPreference);
+    return nextPreference;
+  };
 
   const hasDuplicateSchedule = nextSchedules => {
     const keys = nextSchedules.map(schedule => String(schedule.weekday));
@@ -16859,17 +16892,17 @@ function Scene_NotificationSetup({
           is_active: schedule.is_active !== false
         }));
         const first = savedSchedules[0];
-        onPreferenceSaved?.({
-          ...(initialPreference || {}),
+        publishPreference({
           user_id: user?.id,
           weekday: first.weekday,
           hour: first.hour,
           minute: first.minute,
           timezone: "Asia/Tokyo",
-          delivery_channel: "email",
+          email_enabled: true,
+          sms_enabled: smsEnabledRef.current,
+          delivery_channel: smsEnabledRef.current ? "both" : "email",
           is_active: true,
-          schedules: savedSchedules
-        });
+        }, savedSchedules);
         await logActivity(supabaseClient, {
           actorUserId: user?.id,
           subjectUserId: user?.id,
@@ -16959,6 +16992,115 @@ function Scene_NotificationSetup({
     applySchedules(next);
   };
 
+  const saveSmsSetting = async enabled => {
+    setPhoneState("saving");
+    setPhoneMessage("");
+    const { data, error } = await supabaseClient.rpc("save_own_sms_delivery_setting", {
+      input_enabled: enabled
+    });
+    if (error) throw error;
+
+    const saved = Array.isArray(data) ? data[0] : data;
+    smsEnabledRef.current = enabled;
+    setSmsEnabled(enabled);
+    publishPreference({
+      ...(saved || {}),
+      email_enabled: true,
+      sms_enabled: enabled,
+      delivery_channel: enabled ? "both" : "email"
+    });
+    setPhoneState("idle");
+  };
+
+  const disableSms = async () => {
+    try {
+      await saveSmsSetting(false);
+    } catch (error) {
+      console.error("SMS setting save error", error);
+      setPhoneState("error");
+      setPhoneMessage("SMSの設定を変更できませんでした。もう一度お試しください。");
+    }
+  };
+
+  const enableVerifiedSms = async () => {
+    try {
+      await saveSmsSetting(true);
+    } catch (error) {
+      console.error("SMS setting save error", error);
+      setPhoneState("error");
+      setPhoneMessage("SMSの設定を変更できませんでした。もう一度お試しください。");
+    }
+  };
+
+  const openPhoneSetup = () => {
+    setPhoneNumber(verifiedPhone || "");
+    setVerificationCode("");
+    setMaskedPhone("");
+    setPhoneStep("phone");
+    setPhoneState("idle");
+    setPhoneMessage("");
+    setPhoneSetupOpen(true);
+  };
+
+  const closePhoneSetup = () => {
+    if (phoneState === "sending" || phoneState === "verifying") return;
+    setPhoneSetupOpen(false);
+    setPhoneState("idle");
+    setPhoneMessage("");
+  };
+
+  const startPhoneVerification = async () => {
+    setPhoneState("sending");
+    setPhoneMessage("");
+    const { data, error } = await supabaseClient.functions.invoke("start-phone-verification", {
+      body: { phoneNumber }
+    });
+
+    if (error || !data?.success) {
+      console.error("phone verification start error", error || data?.error);
+      setPhoneState("error");
+      setPhoneMessage(data?.error || "認証コードを送信できませんでした。");
+      return;
+    }
+
+    setMaskedPhone(data.maskedPhone || phoneNumber);
+    setVerificationCode("");
+    setPhoneStep("code");
+    setPhoneState("idle");
+  };
+
+  const verifyPhoneNumber = async () => {
+    setPhoneState("verifying");
+    setPhoneMessage("");
+    const { data, error } = await supabaseClient.functions.invoke("verify-phone-number", {
+      body: { code: verificationCode }
+    });
+
+    if (error || !data?.success || !data?.preference) {
+      console.error("phone verification error", error || data?.error);
+      setPhoneState("error");
+      setPhoneMessage(data?.error || "認証コードを確認できませんでした。");
+      return;
+    }
+
+    const saved = data.preference;
+    const nextPhone = saved.phone_number || phoneNumber;
+    setVerifiedPhone(nextPhone);
+    setPhoneNumber(nextPhone);
+    smsEnabledRef.current = true;
+    setSmsEnabled(true);
+    publishPreference({
+      ...saved,
+      email_enabled: true,
+      sms_enabled: true,
+      delivery_channel: "both"
+    });
+    setPhoneStep("phone");
+    setPhoneState("idle");
+    setPhoneMessage("");
+    setPhoneSetupOpen(false);
+  };
+
   const finishAndContinue = async () => {
     try {
       await latestSaveRef.current;
@@ -16978,7 +17120,7 @@ function Scene_NotificationSetup({
   };
 
   return (
-    <div className="h-full flex flex-col fade-enter px-4 py-8">
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
       {onBack ? (
         <div className="relative flex items-center justify-center h-10 mb-8 shrink-0">
           <button
@@ -16995,7 +17137,7 @@ function Scene_NotificationSetup({
         <OnboardingProgress current="weekly" outlineComplete />
       )}
 
-      <div className="flex-1 flex flex-col justify-center">
+      <div className="flex-1 flex flex-col justify-start">
         <div className="text-center mb-10">
           <p className="text-white/90 text-[1.1rem] text-narrative mb-4">
             選んだ曜日に、問いをお届けします
@@ -17044,9 +17186,166 @@ function Scene_NotificationSetup({
           )}
         </div>
 
+        <div className="mt-8 pt-7 border-t border-white/[0.08]">
+          <p className="mb-4 text-white/68 text-sm text-narrative">受け取り方法</p>
+
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-white/[0.07] flex items-center justify-center shrink-0">
+                <Mail size={17} className="text-white/62" strokeWidth={1.7} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-white/82 text-sm">メール</p>
+                  <Check size={14} className="text-emerald-200/70" strokeWidth={2} />
+                </div>
+                <p className="mt-1 text-white/34 text-xs truncate">{user?.email || "登録メールアドレス"}</p>
+              </div>
+              <span className="text-white/30 text-xs">常に受け取る</span>
+            </div>
+
+            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-white/[0.07] flex items-center justify-center shrink-0">
+                  <Smartphone size={17} className="text-white/62" strokeWidth={1.7} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-white/82 text-sm">SMS</p>
+                    {smsEnabled && <Check size={14} className="text-emerald-200/70" strokeWidth={2} />}
+                  </div>
+                  <p className="mt-1 text-white/34 text-xs truncate">
+                    {verifiedPhone || "メールに加えて、SMSでも受け取れます"}
+                  </p>
+                </div>
+
+                {smsEnabled ? (
+                  <button
+                    type="button"
+                    onClick={disableSms}
+                    disabled={phoneState === "saving"}
+                    className="px-3 py-2 rounded-full border border-white/10 text-white/42 text-xs disabled:opacity-40"
+                  >
+                    停止
+                  </button>
+                ) : verifiedPhone ? (
+                  <button
+                    type="button"
+                    onClick={enableVerifiedSms}
+                    disabled={phoneState === "saving"}
+                    className="px-3 py-2 rounded-full border border-white/14 text-white/68 text-xs disabled:opacity-40"
+                  >
+                    再開
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={openPhoneSetup}
+                    className="px-3 py-2 rounded-full border border-white/14 text-white/68 text-xs"
+                  >
+                    追加
+                  </button>
+                )}
+              </div>
+
+              {verifiedPhone && !phoneSetupOpen && (
+                <button
+                  type="button"
+                  onClick={openPhoneSetup}
+                  className="mt-3 ml-12 text-white/30 text-xs underline underline-offset-4"
+                >
+                  電話番号を変更
+                </button>
+              )}
+
+              {phoneSetupOpen && (
+                <div className="mt-5 pt-5 border-t border-white/[0.07]">
+                  {phoneStep === "phone" ? (
+                    <>
+                      <label className="block text-white/48 text-xs mb-2" htmlFor="notification-phone-number">
+                        携帯電話番号
+                      </label>
+                      <input
+                        id="notification-phone-number"
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        value={phoneNumber}
+                        onChange={event => setPhoneNumber(event.target.value)}
+                        placeholder="09012345678"
+                        className="w-full rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3 text-white/88 placeholder:text-white/20 outline-none focus:border-white/25"
+                      />
+                      <p className="mt-2 text-white/28 text-[0.7rem] leading-relaxed">
+                        認証後、問いのお知らせをSMSでもお届けします。
+                      </p>
+                      <div className="mt-4 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={closePhoneSetup}
+                          className="flex-1 py-3 rounded-full border border-white/10 text-white/42 text-xs"
+                        >
+                          キャンセル
+                        </button>
+                        <button
+                          type="button"
+                          onClick={startPhoneVerification}
+                          disabled={phoneState === "sending" || !phoneNumber.trim()}
+                          className="flex-[1.5] py-3 rounded-full bg-white/10 text-white/82 text-xs disabled:opacity-35"
+                        >
+                          {phoneState === "sending" ? "送信しています..." : "認証コードを送る"}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-white/48 text-xs leading-relaxed">
+                        {maskedPhone} に届いた6桁のコードを入力してください
+                      </p>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        value={verificationCode}
+                        onChange={event => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="000000"
+                        aria-label="SMS認証コード"
+                        className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3 text-center tracking-[0.35em] text-white/88 placeholder:text-white/20 outline-none focus:border-white/25"
+                      />
+                      <div className="mt-4 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPhoneStep("phone");
+                            setPhoneState("idle");
+                            setPhoneMessage("");
+                          }}
+                          className="flex-1 py-3 rounded-full border border-white/10 text-white/42 text-xs"
+                        >
+                          戻る
+                        </button>
+                        <button
+                          type="button"
+                          onClick={verifyPhoneNumber}
+                          disabled={phoneState === "verifying" || verificationCode.length !== 6}
+                          className="flex-[1.5] py-3 rounded-full bg-white/10 text-white/82 text-xs disabled:opacity-35"
+                        >
+                          {phoneState === "verifying" ? "確認しています..." : "確認して追加"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {phoneMessage && <p className="mt-3 text-rose-200/70 text-xs leading-relaxed">{phoneMessage}</p>}
+            </div>
+          </div>
+        </div>
+
         <div className="mt-6 text-center min-h-[70px]">
           <p className="text-white/40 text-sm leading-loose">
-            登録したメールアドレスに届きます
+            メールは必ず届き、SMSは追加で受け取れます
           </p>
 
           {saveState === "saving" && <p className="mt-3 text-white/28 text-xs">保存しています...</p>}
