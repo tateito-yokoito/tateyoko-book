@@ -21,6 +21,42 @@ const STORY_RELATIONSHIP_LABELS = {
   other: "その他"
 };
 
+const STORY_THEMES = [
+  { code: "ty_theme_childhood", label: "幼い頃", order: 1 },
+  { code: "ty_theme_youth", label: "学生時代・若い頃", order: 2 },
+  { code: "ty_theme_likes", label: "好きなこと", order: 3 },
+  { code: "ty_theme_living", label: "暮らし", order: 4 },
+  { code: "ty_theme_work", label: "仕事・役割", order: 5 },
+  { code: "ty_theme_connections", label: "人とのつながり", order: 6 },
+  { code: "ty_theme_family", label: "家族の記憶", order: 7 },
+  { code: "ty_theme_turning_points", label: "人生の転機", order: 8 },
+  { code: "ty_theme_now_future", label: "今とこれから", order: 9 }
+];
+
+const ONBOARDING_EXPECTATION_OPTIONS = [
+  "自分の歩みを振り返りたい",
+  "家族や大切な人に残したい",
+  "思い出を整理したい",
+  "気軽に話してみたい",
+  "本になるのを楽しみたい",
+  "まだよく分からない"
+];
+
+const ONBOARDING_PEOPLE_OPTIONS = [
+  "母",
+  "父",
+  "祖父母",
+  "きょうだい",
+  "配偶者・パートナー",
+  "子ども",
+  "孫",
+  "その他の家族・親戚",
+  "友人",
+  "恩師・仕事仲間",
+  "その他",
+  "今回は選ばない"
+];
+
 function getSequenceFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const seq = parseInt(params.get("sequence"), 10);
@@ -152,8 +188,15 @@ function getCommercialEntryScene({ project, questionSet, defaultScene }) {
     return "purchase_start";
   }
 
-  if (hasCompletedFreeTrial(questionSet)) {
+  if (
+    hasCompletedFreeTrial(questionSet) &&
+    project?.onboarding_status === "completed"
+  ) {
     return "trial_complete";
+  }
+
+  if (hasCompletedFreeTrial(questionSet)) {
+    return defaultScene;
   }
 
   // The free taste should open quickly, without the full 10–15 minute
@@ -720,6 +763,8 @@ function isFormalOnboardingQuestion(question) {
   return (
     question?.flow_type === "onboarding" ||
     question?.flow_phase === "onboarding" ||
+    question?.onboarding_group === "starting_conversation" ||
+    question?.onboarding_group === "starting_motivation" ||
     question?.onboarding_group === "voice_intro" ||
     question?.onboarding_group === "life_outline"
   );
@@ -746,6 +791,39 @@ function getFirstMainStoryIndex(questionSet) {
   return (questionSet || []).findIndex(
     question => question?.include_in_story_list !== false
   );
+}
+
+function getStoryThemeProgress(questionSet, currentIndex = 0) {
+  const storyQuestions = (questionSet || []).filter(question =>
+    question?.include_in_story_list !== false &&
+    Number.isFinite(Number(question?.theme_order))
+  );
+
+  if (storyQuestions.length === 0) return null;
+
+  const currentQuestion = questionSet?.[currentIndex];
+  const currentThemeOrder = Number(currentQuestion?.theme_order) ||
+    Number(storyQuestions.find(question => question?.status !== "answered")?.theme_order) ||
+    Number(storyQuestions[storyQuestions.length - 1]?.theme_order) || 1;
+  const themeQuestions = storyQuestions.filter(
+    question => Number(question.theme_order) === currentThemeOrder
+  );
+  const answeredInTheme = themeQuestions.filter(
+    question => question?.status === "answered"
+  ).length;
+  const currentTheme = STORY_THEMES.find(theme => theme.order === currentThemeOrder) || {
+    label: currentQuestion?.theme_label || currentQuestion?.chapter_label || "物語",
+    order: currentThemeOrder
+  };
+  const nextTheme = STORY_THEMES.find(theme => theme.order === currentThemeOrder + 1) || null;
+
+  return {
+    currentTheme,
+    nextTheme,
+    answeredInTheme,
+    questionCount: themeQuestions.length,
+    themeCount: STORY_THEMES.length
+  };
 }
 
 function getNotificationSchedules(preference) {
@@ -1434,6 +1512,10 @@ function normalizeUserQuestions(rows) {
       onboarding_group: meta.onboarding_group || null,
       onboarding_order: meta.onboarding_order ?? null,
       question_role: meta.question_role || null,
+      theme_code: meta.theme_code || null,
+      theme_label: meta.theme_label || null,
+      theme_order: meta.theme_order ?? null,
+      angle: meta.angle || null,
 
       include_in_profile_text:
         meta.include_in_profile_text === true,
@@ -1547,6 +1629,18 @@ function getInitialSceneForProject({
     project?.onboarding_status === "life_outline_completed" ||
     project?.onboarding_status === "first_story"
   ) {
+    if (!project?.onboarding_preferences_completed_at) {
+      return "onboarding_preferences";
+    }
+
+    if (!project?.starting_motivation_completed_at) {
+      return "starting_motivation_prompt";
+    }
+
+    if (!project?.theme_guide_completed_at) {
+      return "theme_guide";
+    }
+
     return "life_outline_complete";
   }
 
@@ -4290,7 +4384,127 @@ const completeLifeOutlineReview = async () => {
   }
 };
 
-const leaveLifeOutlineMilestone = async ({ continueNow }) => {
+const saveOnboardingPreferences = async preferences => {
+  if (!foundation?.project?.id) return;
+
+  setIsInitializing(true);
+
+  try {
+    const { data: updatedProject, error } = await supabaseClient
+      .from("book_projects")
+      .update({
+        onboarding_preferences: {
+          expectations: preferences?.expectations || [],
+          preferred_themes: preferences?.preferredThemes || [],
+          people: preferences?.people || [],
+          version: 1
+        },
+        onboarding_preferences_completed_at: new Date().toISOString()
+      })
+      .eq("id", foundation.project.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    setFoundation(prev => ({
+      ...prev,
+      project: updatedProject
+    }));
+    setScene("starting_motivation_prompt");
+  } catch (error) {
+    console.error("onboarding preferences save error", error);
+    alert("選んだ内容を保存できませんでした。");
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
+const startOnboardingMotivation = async () => {
+  const motivationIndex = questionsDB.findIndex(
+    question => question?.onboarding_group === "starting_motivation"
+  );
+
+  if (motivationIndex < 0) {
+    setScene("theme_guide");
+    return;
+  }
+
+  const motivationQuestion = questionsDB[motivationIndex];
+
+  try {
+    if (foundation?.project?.id) {
+      const { data: updatedProject, error } = await supabaseClient
+        .from("book_projects")
+        .update({
+          onboarding_status: "life_outline_completed",
+          current_onboarding_user_question_id:
+            motivationQuestion?.user_question_id || null
+        })
+        .eq("id", foundation.project.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setFoundation(prev => ({
+        ...prev,
+        project: updatedProject
+      }));
+    }
+
+    setProgress(prev => ({
+      ...prev,
+      currentIndex: motivationIndex
+    }));
+    resetVoiceData();
+    setScene(1);
+  } catch (error) {
+    console.error("starting motivation start error", error);
+    alert("録音画面を開けませんでした。");
+  }
+};
+
+const skipOnboardingMotivation = async () => {
+  if (!foundation?.project?.id) {
+    setScene("theme_guide");
+    return;
+  }
+
+  setIsInitializing(true);
+
+  try {
+    const firstStoryIndex = getFirstMainStoryIndex(questionsDB);
+    const firstStoryQuestion = questionsDB[firstStoryIndex] || null;
+    const completedAt = new Date().toISOString();
+    const { data: updatedProject, error } = await supabaseClient
+      .from("book_projects")
+      .update({
+        onboarding_status: "life_outline_completed",
+        current_onboarding_user_question_id:
+          firstStoryQuestion?.user_question_id || null,
+        starting_motivation_completed_at: completedAt
+      })
+      .eq("id", foundation.project.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    setFoundation(prev => ({
+      ...prev,
+      project: updatedProject
+    }));
+    setScene("theme_guide");
+  } catch (error) {
+    console.error("starting motivation skip error", error);
+    alert("次の案内へ進めませんでした。");
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
+const leaveLifeOutlineMilestone = async ({ continueNow, completeThemeGuide = false }) => {
   if (!foundation?.project?.id) return;
 
   setIsInitializing(true);
@@ -4310,7 +4524,10 @@ const leaveLifeOutlineMilestone = async ({ continueNow }) => {
         onboarding_completed_at: new Date().toISOString(),
         life_outline_completed_at:
           foundation.project.life_outline_completed_at ||
-          new Date().toISOString()
+          new Date().toISOString(),
+        theme_guide_completed_at: completeThemeGuide
+          ? new Date().toISOString()
+          : foundation.project.theme_guide_completed_at || null
       })
       .eq("id", foundation.project.id)
       .select()
@@ -4328,11 +4545,21 @@ const leaveLifeOutlineMilestone = async ({ continueNow }) => {
       currentIndex: nextIndex
     }));
 
-    if (continueNow && firstStoryQuestion) {
+    if (firstStoryQuestion) {
       await supabaseClient
         .from("profiles")
         .update({ current_sequence: firstStoryQuestion.sequence_order })
         .eq("id", user.id);
+    }
+
+    if (hasRestrictedProjectAccess(updatedProject)) {
+      resetVoiceData();
+      replaceCommercialEntryUrl("trial");
+      setScene("trial_complete");
+      return;
+    }
+
+    if (continueNow && firstStoryQuestion) {
 
       resetVoiceData();
 
@@ -4831,12 +5058,31 @@ if (mediaStoragePaths.length > 0) {
       }
 
       await markUserQuestionAnswered(currentQ?.user_question_id);
+      setQuestionsDB(current => current.map(question =>
+        question.user_question_id === currentQ?.user_question_id
+          ? {
+              ...question,
+              status: "answered",
+              answered_at: new Date().toISOString()
+            }
+          : question
+      ));
 
       if (
   foundation?.project?.id &&
   foundation?.project?.onboarding_status !== "completed"
 ) {
   const nextQuestion = questionsDB[progress.currentIndex + 1] || null;
+
+  const isCompletingStartingConversation =
+    currentQ?.onboarding_group === "starting_conversation" &&
+    (
+      !nextQuestion ||
+      nextQuestion?.onboarding_group !== "starting_conversation"
+    );
+
+  const isCompletingStartingMotivation =
+    currentQ?.onboarding_group === "starting_motivation";
 
   const isCompletingLifeOutline =
     currentQ?.onboarding_group === "life_outline" &&
@@ -4845,7 +5091,21 @@ if (mediaStoragePaths.length > 0) {
       nextQuestion?.onboarding_group !== "life_outline"
     );
 
-  const onboardingUpdate = isCompletingLifeOutline
+  const onboardingUpdate = isCompletingStartingMotivation
+    ? {
+        onboarding_status: "life_outline_completed",
+        current_onboarding_user_question_id:
+          nextQuestion?.user_question_id || null,
+        starting_motivation_completed_at: new Date().toISOString()
+      }
+    : isCompletingStartingConversation
+    ? {
+        onboarding_status: "life_outline_completed",
+        current_onboarding_user_question_id:
+          nextQuestion?.user_question_id || null,
+        life_outline_completed_at: new Date().toISOString()
+      }
+    : isCompletingLifeOutline
       ? {
           onboarding_status: "introduction_review",
           current_onboarding_user_question_id:
@@ -4932,6 +5192,35 @@ if (mediaStoragePaths.length > 0) {
 
 localStorage.setItem("koe_last_visit", Date.now().toString());
 
+const completedLifeOutline =
+  currentQ?.onboarding_group === "life_outline" &&
+  (
+    !questionsDB[progress.currentIndex + 1] ||
+    questionsDB[progress.currentIndex + 1]?.onboarding_group !== "life_outline"
+  );
+
+const completedStartingConversation =
+  currentQ?.onboarding_group === "starting_conversation" &&
+  (
+    !questionsDB[progress.currentIndex + 1] ||
+    questionsDB[progress.currentIndex + 1]?.onboarding_group !== "starting_conversation"
+  );
+
+const completedStartingMotivation =
+  currentQ?.onboarding_group === "starting_motivation";
+
+if (completedStartingConversation) {
+  resetVoiceData();
+  setScene("onboarding_preferences");
+  return;
+}
+
+if (completedStartingMotivation) {
+  resetVoiceData();
+  setScene("theme_guide");
+  return;
+}
+
 const reachedFreeTrialLimit =
   hasRestrictedProjectAccess(foundation?.project) &&
   isLastFreeTrialQuestion(questionsDB, currentQ);
@@ -4942,13 +5231,6 @@ if (reachedFreeTrialLimit) {
   setScene("trial_complete");
   return;
 }
-
-const completedLifeOutline =
-  currentQ?.onboarding_group === "life_outline" &&
-  (
-    !questionsDB[progress.currentIndex + 1] ||
-    questionsDB[progress.currentIndex + 1]?.onboarding_group !== "life_outline"
-  );
 
 const betaSurvey = isBetaMode()
   ? getBetaSurveyForSequence(currentSeq)
@@ -5237,7 +5519,10 @@ let sceneAfterInvite = nextScene;
           onContinue={() => {
             setPurchaseStatus("idle");
             if (hasCompletedFreeTrial(questionsDB)) {
-              setScene(1);
+              setScene(getInitialSceneForProject({
+                project: foundation?.project,
+                notificationPref
+              }));
               return;
             }
             setScene("onboarding_overview");
@@ -5354,6 +5639,33 @@ let sceneAfterInvite = nextScene;
               setIsInitializing(false);
             }
           }}
+        />
+      )}
+
+      {scene === "onboarding_preferences" && (
+        <Scene_OnboardingPreferences
+          initialValue={foundation?.project?.onboarding_preferences}
+          onComplete={saveOnboardingPreferences}
+        />
+      )}
+
+      {scene === "starting_motivation_prompt" && (
+        <Scene_StartingMotivationPrompt
+          onRecord={startOnboardingMotivation}
+          onSkip={skipOnboardingMotivation}
+        />
+      )}
+
+      {scene === "theme_guide" && (
+        <Scene_ThemeGuide
+          onContinue={() => leaveLifeOutlineMilestone({
+            continueNow: true,
+            completeThemeGuide: true
+          })}
+          onEndToday={() => leaveLifeOutlineMilestone({
+            continueNow: false,
+            completeThemeGuide: true
+          })}
         />
       )}
 
@@ -5639,6 +5951,8 @@ let sceneAfterInvite = nextScene;
       {scene === "home" && (
        <Scene_Home
          userName={user?.name || "あなた"}
+         questionSet={questionsDB}
+         currentIndex={progress.currentIndex}
          supportedProjects={supportedProjects}
          receivedProjects={receivedProjects}
          onStartTalking={() => {
@@ -7549,10 +7863,10 @@ function Scene_BetaIntro({ onNext }) {
 
 function OnboardingProgress({ current = "entry", outlineComplete = false }) {
   const steps = [
-    { key: "registered", label: "登録" },
-    { key: "entry", label: "入口" },
-    { key: "outline", label: "輪郭" },
-    { key: "weekly", label: "毎週" }
+    { key: "registered", label: "準備" },
+    { key: "entry", label: "はじめ" },
+    { key: "outline", label: "テーマ" },
+    { key: "weekly", label: "語り" }
   ];
   const activeIndex = steps.findIndex(step => step.key === current);
 
@@ -7612,18 +7926,18 @@ function Scene_OnboardingOverview({ onNext }) {
     <div className="h-full flex flex-col fade-enter px-4 py-8">
       <OnboardingProgress current="entry" />
       <div className="flex-1 flex flex-col justify-center">
-        <div className="text-center mb-10">
+        <div className="text-center mb-9">
           <p className="text-white/38 text-xs tracking-[0.22em] mb-4">
             縦糸横糸の進め方
           </p>
 
           <p className="text-white/90 text-[1.12rem] leading-loose text-narrative">
-            声で語りながら、<br />
-            あなたの物語を重ねていきます
+            今のことから、<br />
+            ゆっくりお話を始めます
           </p>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="glass-card p-5 flex items-center gap-5">
             <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white/70 text-lg shrink-0">
               1
@@ -7631,12 +7945,12 @@ function Scene_OnboardingOverview({ onNext }) {
 
             <div className="text-left">
               <p className="text-white/82 text-[1rem] text-narrative mb-1">
-                初回の語り
+                はじめの会話
               </p>
 
               <p className="text-white/48 text-sm leading-loose">
-                目安 10〜15分<br />
-                4つの問いから、人生の輪郭をまとめます
+                お名前や最近の過ごし方など、<br />
+                答えやすい3つの問いから始めます
               </p>
             </div>
           </div>
@@ -7652,11 +7966,11 @@ function Scene_OnboardingOverview({ onNext }) {
 
             <div className="text-left">
               <p className="text-white/82 text-[1rem] text-narrative mb-1">
-                その後は毎週
+                テーマを一つずつ
               </p>
 
               <p className="text-white/48 text-sm leading-loose">
-                届いた問いに、ご自身のペースで語ります
+                幼い頃から今まで、9つのテーマをたどります
               </p>
             </div>
           </div>
@@ -7682,8 +7996,9 @@ function Scene_OnboardingOverview({ onNext }) {
           </div>
         </div>
 
-        <p className="mt-9 text-center text-white/42 text-sm leading-loose">
-          毎週の問いは全部で23問あります
+        <p className="mt-8 text-center text-white/42 text-sm leading-loose">
+          録音画面は、その後の問いでも同じです。<br />
+          まずは声に出す感覚を試してみてください。
         </p>
       </div>
 
@@ -7692,7 +8007,7 @@ function Scene_OnboardingOverview({ onNext }) {
         onClick={onNext}
         className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
       >
-        進め方を見る
+        もう少し見る
       </button>
     </div>
   );
@@ -7704,17 +8019,17 @@ function Scene_OnboardingPace({ onNext }) {
     <div className="h-full flex flex-col fade-enter px-4 py-8">
       <OnboardingProgress current="entry" />
       <div className="flex-1 flex flex-col justify-center">
-        <div className="text-center mb-9">
+        <div className="text-center mb-8">
           <p className="text-white/90 text-[1.1rem] text-narrative">
-            ご自身のペースで進められます
+            一つのテーマを、数回に分けて
           </p>
         </div>
 
         <div className="glass-card p-5 space-y-5 mb-6">
           {[
-            "毎週、新しい問いが届きます",
-            "答えにくい問いは、飛ばして大丈夫です",
-            "あとから語り直したり、問いを加えたりできます"
+            "答えやすい問いから、少しずつ深めます",
+            "話し足りないときは、そのまま続けられます",
+            "答えにくい問いは飛ばせて、いつでも休めます"
           ].map(item => (
             <div key={item} className="flex gap-4 items-start">
               <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white/65 shrink-0 mt-0.5">
@@ -7728,49 +8043,13 @@ function Scene_OnboardingPace({ onNext }) {
           ))}
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-7">
-          <div className="glass-card p-5 text-center">
-            <p className="text-white/38 text-xs tracking-widest mb-3">
-              ゆっくり
-            </p>
-
-            <p className="text-white/80 text-[1rem] mb-2">
-              週に2問
-            </p>
-
-            <p className="text-white/48 text-sm">
-              約3か月
-            </p>
-          </div>
-
-          <div className="glass-card p-5 text-center">
-            <p className="text-white/38 text-xs tracking-widest mb-3">
-              しっかり
-            </p>
-
-            <p className="text-white/80 text-[1rem] mb-2">
-              週に6問
-            </p>
-
-            <p className="text-white/48 text-sm">
-              約1か月
-            </p>
-          </div>
-        </div>
-
-        <div className="text-center space-y-3">
-          <p className="text-white/62 text-[0.94rem] text-narrative">
-            問いが届くまでの時間も、物語の一部です
+        <div className="glass-card px-5 py-5 text-center space-y-3">
+          <p className="text-white/68 text-[0.94rem] text-narrative">
+            写真を見ながら話してもかまいません
           </p>
-
-          <div className="flex justify-center gap-5 text-white/42 text-xs">
-            <span>▧ 昔の写真</span>
-            <span>♪ 好きだった音楽</span>
-            <span>✦ ふと思い出す</span>
-          </div>
-
           <p className="text-white/38 text-xs leading-loose">
-            記憶がよみがえる瞬間も、楽しんでみてください
+            昔の写真や卒業アルバムなどがあれば、あとで見返しながら<br className="hidden sm:block" />
+            お話しいただくのもおすすめです。なくても、そのまま進められます。
           </p>
         </div>
       </div>
@@ -7780,8 +8059,270 @@ function Scene_OnboardingPace({ onNext }) {
         onClick={onNext}
         className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
       >
-        人生の輪郭を始める
+        はじめの会話へ
       </button>
+    </div>
+  );
+}
+
+function OnboardingChoice({ label, selected, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`rounded-full border px-4 py-2.5 text-sm leading-relaxed transition-colors ${
+        selected
+          ? "border-amber-100/38 bg-amber-100/10 text-amber-50/90"
+          : "border-white/10 bg-white/[0.025] text-white/55"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function toggleOnboardingChoice(current, value, exclusiveValue) {
+  if (value === exclusiveValue) {
+    return current.includes(value) ? [] : [value];
+  }
+
+  const withoutExclusive = current.filter(item => item !== exclusiveValue);
+  return withoutExclusive.includes(value)
+    ? withoutExclusive.filter(item => item !== value)
+    : [...withoutExclusive, value];
+}
+
+function Scene_OnboardingPreferences({ initialValue, onComplete }) {
+  const [step, setStep] = useState(1);
+  const [expectations, setExpectations] = useState(
+    Array.isArray(initialValue?.expectations) ? initialValue.expectations : []
+  );
+  const [preferredThemes, setPreferredThemes] = useState(
+    Array.isArray(initialValue?.preferred_themes) ? initialValue.preferred_themes : []
+  );
+  const [people, setPeople] = useState(
+    Array.isArray(initialValue?.people) ? initialValue.people : []
+  );
+
+  return (
+    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+      <OnboardingProgress current="outline" />
+      <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
+        <div className="flex-1 py-6">
+          {step === 1 ? (
+            <>
+              <div className="mb-8 text-center">
+                <p className="text-white/90 text-[1.16rem] text-narrative">
+                  どんな時間にしたいですか
+                </p>
+                <p className="mt-3 text-sm leading-loose text-white/42">
+                  近いものを選んでください。いくつでも選べます。
+                </p>
+              </div>
+
+              <div className="glass-card p-5">
+                <div className="flex flex-wrap justify-center gap-2.5">
+                  {ONBOARDING_EXPECTATION_OPTIONS.map(option => (
+                    <OnboardingChoice
+                      key={option}
+                      label={option}
+                      selected={expectations.includes(option)}
+                      onClick={() => setExpectations(current =>
+                        toggleOnboardingChoice(current, option, "まだよく分からない")
+                      )}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-8 mb-5 text-center">
+                <p className="text-white/82 text-[1rem] text-narrative">
+                  特に話してみたいテーマ
+                </p>
+                <p className="mt-2 text-xs leading-loose text-white/36">
+                  テーマの順番は変わりません。話を深める参考にします。
+                </p>
+              </div>
+
+              <div className="flex flex-wrap justify-center gap-2.5">
+                {[...STORY_THEMES.map(theme => theme.label), "まだ決めていない"].map(option => (
+                  <OnboardingChoice
+                    key={option}
+                    label={option}
+                    selected={preferredThemes.includes(option)}
+                    onClick={() => setPreferredThemes(current =>
+                      toggleOnboardingChoice(current, option, "まだ決めていない")
+                    )}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mb-8 text-center">
+                <p className="text-white/90 text-[1.16rem] text-narrative">
+                  ご家族や大切な方
+                </p>
+                <p className="mt-3 text-sm leading-loose text-white/42">
+                  今後、話題にしてもよい方を選んでください
+                </p>
+              </div>
+
+              <div className="glass-card p-5">
+                <div className="flex flex-wrap justify-center gap-2.5">
+                  {ONBOARDING_PEOPLE_OPTIONS.map(option => (
+                    <OnboardingChoice
+                      key={option}
+                      label={option}
+                      selected={people.includes(option)}
+                      onClick={() => setPeople(current =>
+                        toggleOnboardingChoice(current, option, "今回は選ばない")
+                      )}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <p className="mt-7 text-center text-xs leading-loose text-white/32">
+                お名前などを入力する必要はありません。<br />
+                あとから話したくなったときに、自由にお話しいただけます。
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="flex gap-3 pt-5">
+          {step === 2 && (
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="btn-quiet w-1/3 rounded-full border border-white/10 py-4 text-white/55"
+            >
+              戻る
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (step === 1) {
+                setStep(2);
+                return;
+              }
+              onComplete?.({ expectations, preferredThemes, people });
+            }}
+            className="btn-quiet flex-1 rounded-full bg-white/10 py-4 text-white"
+          >
+            {step === 1 ? "次へ" : "この内容で進む"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Scene_StartingMotivationPrompt({ onRecord, onSkip }) {
+  return (
+    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+      <OnboardingProgress current="outline" />
+      <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
+        <div className="flex flex-1 items-center py-8">
+          <div className="w-full text-center">
+            <p className="text-white/90 text-[1.16rem] text-narrative">
+              今のお気持ちも、声で残しておきますか
+            </p>
+
+            <div className="glass-card mt-8 px-6 py-8">
+              <p className="text-[1.05rem] leading-[2.15] text-white/78 text-narrative">
+                今回、声でお話を残すことになったきっかけや、<br className="hidden sm:block" />
+                始める今のお気持ちを、よければ聞かせてください。
+              </p>
+            </div>
+
+            <p className="mt-6 text-xs leading-loose text-white/34">
+              今は残さず、そのまま次へ進むこともできます。
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-3 pt-5">
+          <button
+            type="button"
+            onClick={onRecord}
+            className="btn-quiet w-full rounded-full bg-white/10 py-4 text-white"
+          >
+            声で残す
+          </button>
+          <button
+            type="button"
+            onClick={onSkip}
+            className="btn-quiet w-full py-3 text-sm text-white/42"
+          >
+            今は残さない
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Scene_ThemeGuide({ onContinue, onEndToday }) {
+  return (
+    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+      <OnboardingProgress current="outline" />
+      <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
+        <div className="flex-1 py-6">
+          <div className="text-center">
+            <p className="text-white/90 text-[1.18rem] leading-loose text-narrative">
+              これからは、一つずつテーマをたどりながら、<br />
+              お話を残していきます
+            </p>
+            <p className="mt-5 text-sm leading-[2] text-white/45">
+              各テーマでは答えやすい問いから始まり、<br />
+              お話に合わせて少しずつ深めます。<br />
+              話し足りないときは続けられ、いつでも休めます。
+            </p>
+          </div>
+
+          <div className="mt-8 glass-card px-5 py-6">
+            <div className="flex flex-wrap justify-center gap-2.5">
+              {STORY_THEMES.map(theme => (
+                <span
+                  key={theme.code}
+                  className="rounded-full border border-white/10 bg-white/[0.025] px-4 py-2 text-sm text-white/55"
+                >
+                  {theme.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-7 rounded-2xl border border-white/[0.07] px-5 py-5 text-center">
+            <p className="text-sm leading-[2] text-white/42">
+              昔の写真や卒業アルバムなどがあれば、あとで見返しながら<br className="hidden sm:block" />
+              お話しいただくのもおすすめです。<br />
+              お手元になくても、そのまま進められます。
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-3 pt-5">
+          <button
+            type="button"
+            onClick={onContinue}
+            className="btn-quiet w-full rounded-full bg-white/10 py-4 text-white"
+          >
+            幼い頃から語る
+          </button>
+          <button
+            type="button"
+            onClick={onEndToday}
+            className="btn-quiet w-full py-3 text-sm text-white/42"
+          >
+            今日はここまで
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -10021,6 +10562,8 @@ function Scene_ConnectionsHome({
 
 function Scene_Home({
   userName,
+  questionSet = [],
+  currentIndex = 0,
   supportedProjects = [],
   receivedProjects = [],
   onStartTalking,
@@ -10033,6 +10576,8 @@ function Scene_Home({
   onOpenReceivedProject,
   onDevLogout
 }) {
+  const themeProgress = getStoryThemeProgress(questionSet, currentIndex);
+
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
       <div className="flex-1 flex flex-col justify-center min-h-fit">
@@ -10047,6 +10592,48 @@ function Scene_Home({
         </div>
 
         <div className="space-y-7">
+          {themeProgress && (
+            <section>
+              <div className="glass-card px-5 py-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-white/34 text-[0.68rem] tracking-[0.18em]">
+                      いまのテーマ
+                    </p>
+                    <p className="mt-2 text-white/86 text-[1.05rem] text-narrative">
+                      {themeProgress.currentTheme.label}
+                    </p>
+                  </div>
+                  <p className="text-white/36 text-xs">
+                    {themeProgress.currentTheme.order}/{themeProgress.themeCount} テーマ
+                  </p>
+                </div>
+
+                <div className="mt-5 h-1 overflow-hidden rounded-full bg-white/[0.07]">
+                  <div
+                    className="h-full rounded-full bg-white/35 transition-[width]"
+                    style={{
+                      width: `${Math.max(
+                        themeProgress.questionCount > 0
+                          ? (themeProgress.answeredInTheme / themeProgress.questionCount) * 100
+                          : 0,
+                        5
+                      )}%`
+                    }}
+                  />
+                </div>
+                <div className="mt-2 flex justify-between gap-4 text-[0.68rem] text-white/30">
+                  <span>
+                    このテーマ {themeProgress.answeredInTheme}/{themeProgress.questionCount}問
+                  </span>
+                  {themeProgress.nextTheme && (
+                    <span>次は「{themeProgress.nextTheme.label}」</span>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
           <section>
             <p className="text-white/34 text-xs tracking-[0.18em] px-1 mb-3">今日、語る</p>
             <div className="glass-card overflow-hidden">
@@ -13128,9 +13715,12 @@ function Scene1_MyPage({
   const isOnboardingQuestion = isFormalOnboarding;
 
   const sectionLabel = isFormalOnboarding
-    ? question.onboarding_group === "voice_intro"
-      ? "物語の入口"
-      : "人生の輪郭"
+    ? question.onboarding_group === "starting_conversation" ||
+      question.onboarding_group === "starting_motivation"
+      ? "はじめの会話"
+      : question.onboarding_group === "voice_intro"
+        ? "物語の入口"
+        : "人生の輪郭"
     : question.chapter_description || question.chapter || question.chapter_label;
 
   return (
@@ -13139,6 +13729,8 @@ function Scene1_MyPage({
         {isFormalOnboarding && (
           <OnboardingProgress
             current={
+              question.onboarding_group === "starting_conversation" ||
+              question.onboarding_group === "starting_motivation" ||
               question.onboarding_group === "voice_intro"
                 ? "entry"
                 : "outline"
@@ -13495,9 +14087,12 @@ function Scene_Recording({
   const isOnboardingQuestion = isFormalOnboarding;
 
   const sectionLabel = isFormalOnboarding
-    ? question.onboarding_group === "voice_intro"
-      ? "物語の入口"
-      : "人生の輪郭"
+    ? question.onboarding_group === "starting_conversation" ||
+      question.onboarding_group === "starting_motivation"
+      ? "はじめの会話"
+      : question.onboarding_group === "voice_intro"
+        ? "物語の入口"
+        : "人生の輪郭"
     : question.chapter_description || question.chapter || question.chapter_label;
 
   const isIOSLikeBrowser = () => {
@@ -14097,6 +14692,8 @@ return (
     {isFormalOnboarding && (
       <OnboardingProgress
         current={
+          question.onboarding_group === "starting_conversation" ||
+          question.onboarding_group === "starting_motivation" ||
           question.onboarding_group === "voice_intro"
             ? "entry"
             : "outline"
