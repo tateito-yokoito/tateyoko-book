@@ -55,7 +55,7 @@ function BrandMark({ compact = false }) {
       role="img"
       aria-label="縦糸横糸"
     >
-      <img className="landing-brand-lockup" src="/brand-logo-lockup.svg" alt="" />
+      <img className="landing-brand-lockup" src="/brand-logo-lockup-kyokasho.svg" alt="" />
       <img className="landing-brand-symbol" src="/brand-logo-symbol.svg" alt="" />
     </span>
   );
