@@ -4,23 +4,59 @@ import "./landing.css";
 const APP_ENTRY_URL = "/?app=1";
 const TRIAL_ENTRY_URL = "/?app=1&entry=trial";
 const PURCHASE_ENTRY_URL = "/?app=1&entry=purchase";
+const CONTACT_EMAIL = "sugawara@saltlight.co.jp";
+
+const INFORMATION_PANELS = {
+  contact: {
+    kicker: "CONTACT",
+    title: "お問い合わせ",
+    content: (
+      <>
+        <p>使い方、贈り方、製本やご注文について、メールでご相談いただけます。</p>
+        <a className="landing-primary-button" href={`mailto:${CONTACT_EMAIL}`}>
+          メールを送る <span aria-hidden="true">→</span>
+        </a>
+        <p className="landing-modal-address">{CONTACT_EMAIL}</p>
+      </>
+    )
+  },
+  privacy: {
+    kicker: "PRIVACY",
+    title: "プライバシーについて",
+    content: (
+      <>
+        <p>語り手が、物語を見せる相手を選べます。物語全体だけでなく、一つの語りごとに非公開を設定できます。</p>
+        <p>録音、文章、写真、アカウント情報は、サービスの提供とサポートに必要な範囲で取り扱います。取り扱いに関するご質問は、運営窓口へご連絡ください。</p>
+      </>
+    )
+  },
+  commerce: {
+    kicker: "LEGAL",
+    title: "特定商取引法に基づく表記",
+    content: (
+      <dl className="landing-legal-list">
+        <div><dt>販売事業者</dt><dd>株式会社SaltLight</dd></div>
+        <div><dt>運営責任者</dt><dd>菅原 英俊</dd></div>
+        <div><dt>連絡先</dt><dd><a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></dd></div>
+        <div><dt>販売価格</dt><dd>49,800円（税込・国内送料込み）。追加冊子等のオプションは注文前に表示します。</dd></div>
+        <div><dt>支払方法</dt><dd>クレジットカード決済（Stripe）</dd></div>
+        <div><dt>提供時期</dt><dd>購入後すぐに語りを始められます。冊子は内容確定後に製本し、発送時にご案内します。</dd></div>
+        <div><dt>取消・返金</dt><dd>適用条件を確認のうえ個別にご案内します。お申し込み前にご相談いただけます。</dd></div>
+        <div><dt>所在地・電話番号</dt><dd>請求があった場合、遅滞なく電子メールで開示します。</dd></div>
+      </dl>
+    )
+  }
+};
 
 function BrandMark({ compact = false }) {
   return (
-    <span className={`landing-brand ${compact ? "is-compact" : ""}`}>
-      <svg
-        className="landing-brand-mark"
-        viewBox="0 0 64 64"
-        aria-hidden="true"
-      >
-        <g fill="none" strokeLinecap="round" strokeWidth="3.2">
-          <path stroke="#173f70" d="M10 23h44M8 29h48M8 35h48M10 41h44" />
-          <path stroke="#c84b1d" d="M23 10v44M29 8v48M35 8v48M41 10v44" />
-          <rect x="13" y="13" width="38" height="38" rx="14" stroke="#173f70" />
-          <rect x="18" y="8" width="28" height="48" rx="12" stroke="#c84b1d" />
-        </g>
-      </svg>
-      <span>縦糸横糸</span>
+    <span
+      className={`landing-brand ${compact ? "is-compact" : ""}`}
+      role="img"
+      aria-label="縦糸横糸"
+    >
+      <img className="landing-brand-lockup" src="/brand-logo-lockup.svg" alt="" />
+      <img className="landing-brand-symbol" src="/brand-logo-symbol.svg" alt="" />
     </span>
   );
 }
@@ -31,11 +67,23 @@ function ArrowLink({ children }) {
 
 export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [informationPanel, setInformationPanel] = useState(null);
 
   useEffect(() => {
     document.body.classList.add("landing-page-active");
     return () => document.body.classList.remove("landing-page-active");
   }, []);
+
+  useEffect(() => {
+    if (!informationPanel) return undefined;
+
+    const closeOnEscape = event => {
+      if (event.key === "Escape") setInformationPanel(null);
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [informationPanel]);
 
   const closeMenu = () => setMenuOpen(false);
 
@@ -121,19 +169,42 @@ export default function LandingPage() {
             <article>
               <p className="landing-path-label">贈る</p>
               <h3>大切な人へ、<br />物語づくりを届ける</h3>
-              <p>まず無料で試してもらい、贈るだけでも、お手伝いしながら一緒につくる形にもできます。</p>
-              <a href="#gift"><ArrowLink>贈り方を見る</ArrowLink></a>
+              <p>贈る方が先に手続きをし、語る方へ届けます。一人で進めても、一緒につくってもかまいません。</p>
+              <a href="#gift-details"><ArrowLink>贈り方を見る</ArrowLink></a>
             </article>
             <article>
               <p className="landing-path-label">偲ぶ</p>
               <h3>故人の記憶を残す</h3>
               <p>家族や親しい方の記憶を集め、ひとつの物語に。複数の方に語ってもらうこともできます。</p>
-              <a href="#memorial"><ArrowLink>残し方を見る</ArrowLink></a>
+              <a href="#memorial-details"><ArrowLink>残し方を見る</ArrowLink></a>
+            </article>
+          </div>
+
+          <div className="landing-use-details" aria-label="贈る場合と故人の記憶を残す場合の進め方">
+            <article id="gift-details">
+              <p className="landing-path-label">大切な人へ贈る</p>
+              <h3>贈る人と、語る人を分けられます。</h3>
+              <ol>
+                <li><span>01</span><p>贈る方が購入し、専用の案内を届けます。</p></li>
+                <li><span>02</span><p>語る方は、ご自身のスマートフォンで始めます。</p></li>
+                <li><span>03</span><p>希望すれば、贈る方が進行や写真をお手伝いできます。</p></li>
+              </ol>
+              <a href={`${PURCHASE_ENTRY_URL}&purchase_for=gift`}><ArrowLink>贈る手続きを見る</ArrowLink></a>
+            </article>
+            <article id="memorial-details">
+              <p className="landing-path-label">故人を偲ぶ</p>
+              <h3>それぞれの記憶を、一つの物語へ。</h3>
+              <ol>
+                <li><span>01</span><p>まず一人が、残したい方の物語をつくります。</p></li>
+                <li><span>02</span><p>家族や親しい方を招き、それぞれの声を集めます。</p></li>
+                <li><span>03</span><p>語りと写真を確かめながら、一冊に整えます。</p></li>
+              </ol>
+              <a href={TRIAL_ENTRY_URL}><ArrowLink>自分の声で体験する</ArrowLink></a>
             </article>
           </div>
         </section>
 
-        <section className="landing-trial landing-section" id="gift">
+        <section className="landing-trial landing-section" id="trial">
           <div className="landing-shell landing-trial-grid">
             <div>
               <div className="landing-section-number">02</div>
@@ -196,7 +267,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="landing-book landing-shell landing-section" id="memorial">
+        <section className="landing-book landing-shell landing-section" id="book">
           <div className="landing-book-grid">
             <div>
               <div className="landing-section-number">05</div>
@@ -214,7 +285,7 @@ export default function LandingPage() {
             </div>
             <figure className="landing-figure landing-book-figure">
               <img src="/site/book-spread.jpg" alt="質問、写真、音声QRを収録した本の見開きイメージ" />
-              <figcaption>完成イメージ。写真素材は撮影予定のイメージです。</figcaption>
+              <figcaption>縦糸横糸ブックの仕上がりイメージ</figcaption>
             </figure>
           </div>
         </section>
@@ -251,10 +322,15 @@ export default function LandingPage() {
                 <a className="landing-secondary-link" href={TRIAL_ENTRY_URL}>先に無料で試す</a>
               </div>
             </div>
+            <div className="landing-purchase-facts" aria-label="購入前に確認できること">
+              <article><span>01</span><h3>進める期間</h3><p>1〜3か月を目安に、自分のペースで少しずつ語れます。</p></article>
+              <article><span>02</span><h3>完成まで</h3><p>文章と紙面を確認してから注文。国内送料は基本料金に含まれます。</p></article>
+              <article><span>03</span><h3>途中で休んでも</h3><p>保存済みの声と文章は残り、時間を置いて続きから再開できます。</p></article>
+            </div>
           </div>
         </section>
 
-        <section className="landing-privacy landing-shell landing-section">
+        <section className="landing-privacy landing-shell landing-section" id="privacy">
           <div className="landing-section-number">07</div>
           <div className="landing-privacy-grid">
             <div>
@@ -280,6 +356,9 @@ export default function LandingPage() {
               <details><summary>無料体験の後、自動で課金されますか？</summary><p>自動課金はありません。続けたい場合だけ、ご本人または贈り主が購入手続きへ進みます。</p></details>
               <details><summary>途中でやめた場合、録音は消えますか？</summary><p>保存済みの録音と文章は残ります。時間を置いて、前回の続きから再開できます。</p></details>
               <details><summary>家族以外に贈ることもできますか？</summary><p>できます。受け取った方がご自身で進める形と、贈り主がお手伝いする形を選べます。</p></details>
+              <details><summary>どのくらいの期間で完成しますか？</summary><p>1〜3か月を目安にしています。毎週届く問いに少しずつ答え、語り足りない時は多く残すことも、途中で休むこともできます。</p></details>
+              <details><summary>本はいつ注文しますか？</summary><p>語り終えた後、文章、写真、紙面を確認してから注文します。お届け先とオプションを選び、支払総額を確認して製本へ進みます。</p></details>
+              <details><summary>録音や写真を見せる相手は選べますか？</summary><p>選べます。物語全体の公開範囲に加え、一つの語りだけを非公開にすることもできます。</p></details>
             </div>
           </div>
         </section>
@@ -303,14 +382,38 @@ export default function LandingPage() {
       <footer className="landing-footer landing-shell">
         <BrandMark compact />
         <div className="landing-footer-links">
-          <a href="#experience">私たちについて</a>
+          <a href="#experience">縦糸横糸について</a>
           <a href="#faq">よくある質問</a>
-          <a href="#faq">お問い合わせ</a>
-          <a href="#faq">プライバシー</a>
-          <a href="#faq">特定商取引法</a>
+          <button type="button" onClick={() => setInformationPanel("contact")}>お問い合わせ</button>
+          <button type="button" onClick={() => setInformationPanel("privacy")}>プライバシー</button>
+          <button type="button" onClick={() => setInformationPanel("commerce")}>特定商取引法</button>
         </div>
         <p>© 縦糸横糸</p>
       </footer>
+
+      {informationPanel && (
+        <div
+          className="landing-modal-backdrop"
+          role="presentation"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget) setInformationPanel(null);
+          }}
+        >
+          <section className="landing-modal" role="dialog" aria-modal="true" aria-labelledby="landing-information-title">
+            <button
+              type="button"
+              className="landing-modal-close"
+              onClick={() => setInformationPanel(null)}
+              aria-label="閉じる"
+            >
+              ×
+            </button>
+            <p className="landing-kicker">{INFORMATION_PANELS[informationPanel].kicker}</p>
+            <h2 id="landing-information-title">{INFORMATION_PANELS[informationPanel].title}</h2>
+            <div className="landing-modal-content">{INFORMATION_PANELS[informationPanel].content}</div>
+          </section>
+        </div>
+      )}
 
     </div>
   );
