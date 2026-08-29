@@ -270,8 +270,11 @@ body.landing-page-active {
 @media (max-width: 620px) {
   .landing-shell { width: calc(100% - 36px); }
   .landing-header { height: 72px; padding: 0 18px; }
-  .landing-site .landing-header-brand .landing-brand-lockup { display: none; }
-  .landing-site .landing-header-brand .landing-brand-symbol { display: block; width: 31px; }
+  .landing-site .landing-header-brand .landing-brand.is-compact .landing-brand-lockup {
+    display: block;
+    width: clamp(132px, 40vw, 164px);
+  }
+  .landing-site .landing-header-brand .landing-brand-symbol { display: none; }
   .landing-menu-button > span:first-child { display: none; }
   .landing-menu-button { gap: 0; }
   .landing-navigation { top: 72px; padding: 30px 24px 40px; flex-direction: column; align-items: center; gap: 24px; }
