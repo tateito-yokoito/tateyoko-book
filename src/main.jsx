@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App, { supabaseClient as adminSupabaseClient } from "./App.jsx";
 import LandingPage from "./LandingPage.jsx";
 import AdminReview from "./admin/AdminReview.jsx";
+import VoicePlaybackPage from "./VoicePlaybackPage.jsx";
 import "./index.css";
 
 function shouldOpenApplication() {
@@ -23,6 +24,15 @@ function shouldOpenApplication() {
 
 function RootScreen() {
   const params = new URLSearchParams(window.location.search);
+
+  if (params.has("voice")) {
+    return (
+      <VoicePlaybackPage
+        supabaseClient={adminSupabaseClient}
+        publicId={params.get("voice") || ""}
+      />
+    );
+  }
 
   if (params.has("admin")) {
     return <AdminReview supabaseClient={adminSupabaseClient} />;

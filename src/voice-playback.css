@@ -1,0 +1,221 @@
+body.voice-page-active {
+  margin: 0;
+  min-width: 320px;
+  background: #f3f0e9;
+  color: #121d33;
+}
+
+.voice-page {
+  --voice-navy: #10213c;
+  --voice-muted: #6e7890;
+  --voice-line: #d9d8d1;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 80% 0%, rgba(199, 126, 82, 0.07), transparent 36rem),
+    #f3f0e9;
+  color: var(--voice-navy);
+  font-family: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", serif;
+}
+
+.voice-page-header {
+  display: flex;
+  align-items: center;
+  min-height: 84px;
+  padding: 0 6vw;
+  border-bottom: 1px solid rgba(16, 33, 60, 0.12);
+}
+
+.voice-page-header img {
+  display: block;
+  width: min(240px, 48vw);
+  height: 56px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.voice-page-intro,
+.voice-page-stories,
+.voice-page-footer {
+  width: min(820px, calc(100% - 40px));
+  margin-inline: auto;
+}
+
+.voice-page-intro {
+  padding: clamp(64px, 12vw, 112px) 0 clamp(52px, 9vw, 80px);
+}
+
+.voice-page-kicker {
+  margin: 0 0 18px;
+  color: #b25d35;
+  font-family: Georgia, serif;
+  font-size: 0.74rem;
+  letter-spacing: 0.28em;
+}
+
+.voice-page-intro h1 {
+  max-width: 14em;
+  margin: 0;
+  font-size: clamp(2.15rem, 7vw, 4.5rem);
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: 0.08em;
+}
+
+.voice-page-subtitle {
+  margin: 22px 0 0;
+  color: #3d4960;
+  font-size: clamp(1rem, 2.4vw, 1.3rem);
+  line-height: 1.9;
+}
+
+.voice-page-subject {
+  margin: 34px 0 0;
+  color: var(--voice-muted);
+  font-size: 0.92rem;
+  letter-spacing: 0.08em;
+}
+
+.voice-page-stories {
+  padding-bottom: 80px;
+}
+
+.voice-story {
+  padding: clamp(30px, 6vw, 52px) 0;
+  border-top: 1px solid var(--voice-line);
+}
+
+.voice-story-heading > p {
+  margin: 0 0 15px;
+  color: #9b6b51;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+}
+
+.voice-story-heading h2 {
+  max-width: 30em;
+  margin: 0 0 30px;
+  font-size: clamp(1.25rem, 3.7vw, 1.75rem);
+  font-weight: 400;
+  line-height: 1.65;
+}
+
+.voice-story-audio {
+  display: grid;
+  gap: 16px;
+}
+
+.voice-audio-part {
+  display: grid;
+  gap: 7px;
+}
+
+.voice-audio-part span {
+  color: var(--voice-muted);
+  font-size: 0.75rem;
+}
+
+.voice-audio-part audio {
+  display: block;
+  width: 100%;
+  height: 48px;
+}
+
+.voice-story-transcript {
+  margin-top: 28px;
+  color: #3b465b;
+}
+
+.voice-story-transcript summary {
+  width: max-content;
+  cursor: pointer;
+  color: #34435c;
+  font-size: 0.88rem;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+
+.voice-story-transcript p {
+  margin: 24px 0 0;
+  white-space: pre-wrap;
+  font-size: 1rem;
+  line-height: 2.05;
+}
+
+.voice-page-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 42px 0 68px;
+  border-top: 1px solid var(--voice-line);
+  color: var(--voice-muted);
+}
+
+.voice-page-footer img {
+  width: 34px;
+  height: 34px;
+}
+
+.voice-page-footer p {
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+}
+
+.voice-page-state {
+  display: flex;
+  min-height: 100vh;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.voice-page-state > img {
+  width: min(280px, 72vw);
+  max-height: 80px;
+  margin-bottom: 54px;
+}
+
+.voice-page-state h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 6vw, 2.4rem);
+  font-weight: 400;
+  line-height: 1.65;
+}
+
+.voice-page-state p {
+  max-width: 32em;
+  margin: 25px 0;
+  color: var(--voice-muted);
+  line-height: 1.9;
+}
+
+.voice-page-state a {
+  color: var(--voice-navy);
+  text-underline-offset: 6px;
+}
+
+@media (max-width: 560px) {
+  .voice-page-header {
+    min-height: 70px;
+    padding-inline: 20px;
+  }
+
+  .voice-page-header img {
+    width: 172px;
+    height: 44px;
+  }
+
+  .voice-page-intro,
+  .voice-page-stories,
+  .voice-page-footer {
+    width: calc(100% - 40px);
+  }
+
+  .voice-page-intro h1 {
+    letter-spacing: 0.04em;
+  }
+}

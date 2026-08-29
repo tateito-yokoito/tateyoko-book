@@ -27,3 +27,6 @@ verify_jwt = false
 
 [functions.twilio-status-webhook]
 verify_jwt = false
+
+[functions.public-voice]
+verify_jwt = false
