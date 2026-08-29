@@ -15091,12 +15091,18 @@ return (
       <button
         type="button"
         onClick={toggleAudioPreview}
-        className="w-8 h-8 flex items-center justify-center rounded-full opacity-70"
+        className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+          isAudioPlaying
+            ? "border-amber-300/[0.35] bg-amber-400/10"
+            : "border-white/[0.16] bg-white/[0.045] hover:border-white/[0.28] hover:bg-white/[0.07]"
+        }`}
         aria-label={isAudioPlaying ? "録音の再生を止める" : "録音を再生する"}
         title={isAudioPlaying ? "停止" : "録音を再生"}
       >
         <span
-          className="text-white/32 text-xs"
+          className={`text-xs ${
+            isAudioPlaying ? "text-amber-200/80" : "text-white/65"
+          }`}
           aria-hidden="true"
         >
           {isAudioPlaying ? "Ⅱ" : "▶"}
@@ -15108,12 +15114,12 @@ return (
       type="button"
       onClick={startTranscriptEdit}
       disabled={isPolishing}
-      className={`w-8 h-8 flex items-center justify-center rounded-full ${
+      className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-full border border-white/[0.16] bg-white/[0.045] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
         isPolishing ? "opacity-30" : "opacity-80"
       }`}
       aria-label="本文を修正する"
     >
-      <Pencil size={15} className="text-white/32" strokeWidth={1.7} />
+      <Pencil size={15} className="text-white/65" strokeWidth={1.7} />
     </button>
   </div>
 </div>
