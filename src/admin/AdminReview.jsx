@@ -687,7 +687,10 @@ function CommercePanel({
             <select value={codeMode} onChange={event => setCodeMode(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none"><option value="unique">個別コードを一括発行</option><option value="shared">共通コードを発行</option></select>
             {codeMode === "unique" ? <><input type="number" min="1" max="1000" value={codeQuantity} onChange={event => setCodeQuantity(event.target.value)} placeholder="発行数" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" /><input value={codePrefix} onChange={event => setCodePrefix(event.target.value.toUpperCase())} placeholder="接頭辞（例 CF26-）" className="rounded-xl border border-slate-200 px-3 py-3 text-sm uppercase outline-none" /></> : <input required value={commonCode} onChange={event => setCommonCode(event.target.value.toUpperCase())} placeholder="共通コード" className="rounded-xl border border-slate-200 px-3 py-3 text-sm uppercase outline-none md:col-span-2" />}
             <input type="number" min="1" value={codeMaxUses} onChange={event => setCodeMaxUses(event.target.value)} placeholder="コードごとの利用上限" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
-            <input type="datetime-local" value={codeExpiresAt} onChange={event => setCodeExpiresAt(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
+            <label className="grid gap-1.5 text-xs text-slate-500">
+              <span>コードの有効期限（任意）</span>
+              <input type="datetime-local" value={codeExpiresAt} onChange={event => setCodeExpiresAt(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm text-slate-900 outline-none" />
+            </label>
           </div>
           <button type="submit" disabled={busy || !codeCampaignId || (codeMode === "shared" && !commonCode)} className="mt-4 rounded-xl bg-[#10203a] px-4 py-3 text-sm text-white disabled:opacity-40">コードを発行</button>
         </form>
