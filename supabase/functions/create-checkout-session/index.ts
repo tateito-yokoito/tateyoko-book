@@ -159,7 +159,11 @@ serve(async request => {
       if (!Number.isInteger(premiumCopyCount) || premiumCopyCount < 0 || premiumCopyCount > 30) {
         return json({ success: false, error: "プレミアム冊子は0冊から30冊で指定してください" }, 400);
       }
-      if (![shippingAddress.recipient_name, shippingAddress.postal_code, shippingAddress.prefecture, shippingAddress.city, shippingAddress.line1]
+      // The initial purchase screen intentionally does not ask for a shipping
+      // address. It is collected when the customer finishes the book, while
+      // book-builder orders must already have a complete delivery address.
+      if (returnContext === "book_builder"
+        && ![shippingAddress.recipient_name, shippingAddress.postal_code, shippingAddress.prefecture, shippingAddress.city, shippingAddress.line1]
         .every(value => String(value || "").trim())) {
         return json({ success: false, error: "お届け先を入力してください" }, 400);
       }
@@ -199,6 +203,24 @@ serve(async request => {
     orderId = String(order?.id || "");
     if (!orderId || !quote) throw new Error("注文を作成できませんでした");
 
+    // A fully discounted order does not need Stripe products, coupons, or a
+    // Checkout Session. Finalize it directly as a zero-yen purchase.
+    if (Number(order.amount_total) === 0) {
+      const completionId = `zero-${order.id}`;
+      const { error: finalizeError } = await admin.rpc("finalize_commerce_order", {
+        input_order_id: order.id,
+        input_checkout_session_id: completionId,
+        input_customer_id: "",
+        input_payment_intent_id: "",
+        input_payment_status: "no_payment_required",
+        input_amount_total: 0,
+        input_stripe_mode: stripeMode(stripeSecretKey),
+        input_purchased_at: new Date().toISOString()
+      });
+      if (finalizeError) throw finalizeError;
+      return json({ success: true, completed: true, orderId: order.id, quote });
+    }
+
     const lineRequests = orderType === "self"
       ? [
           { code: "self_book_v1", quantity: Number(order.base_book_amount ?? quote.base_book_amount ?? 0) > 0 ? 1 : 0 },
@@ -235,22 +257,6 @@ serve(async request => {
       const bookStripe = stripeLines.find(item => item.code === "self_book_v1");
       if (!bookStripe) throw new Error("割引対象の商品が見つかりませんでした");
       couponId = await ensureStripeCoupon(admin, stripeSecretKey, campaign, bookStripe.productId);
-    }
-
-    if (Number(order.amount_total) === 0) {
-      const completionId = `zero-${order.id}`;
-      const { error: finalizeError } = await admin.rpc("finalize_commerce_order", {
-        input_order_id: order.id,
-        input_checkout_session_id: completionId,
-        input_customer_id: "",
-        input_payment_intent_id: "",
-        input_payment_status: "no_payment_required",
-        input_amount_total: 0,
-        input_stripe_mode: stripeMode(stripeSecretKey),
-        input_purchased_at: new Date().toISOString()
-      });
-      if (finalizeError) throw finalizeError;
-      return json({ success: true, completed: true, orderId: order.id, quote });
     }
 
     const form = new URLSearchParams();
