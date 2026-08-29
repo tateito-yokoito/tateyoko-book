@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 const AUDIO_BUCKET = "audio";
+const PHOTO_BUCKET = "photos";
 const APP_URL = (Deno.env.get("APP_URL") || "https://www.tateito-yokoito.jp").replace(/\/$/, "");
 
 class HttpError extends Error {
@@ -39,7 +40,7 @@ serve(async (req) => {
     const action = String(body.action || "publish").trim();
     const serviceClient = createClient(supabaseUrl, serviceRoleKey);
 
-    if (action === "disable") {
+    if (action === "disable" || action === "set_access") {
       const publicationId = String(body.publicationId || "").trim();
       if (!isUuid(publicationId)) throw new HttpError("publicationId is required", 400);
 
@@ -52,6 +53,25 @@ serve(async (req) => {
       if (!publication) throw new HttpError("Publication not found", 404);
 
       await requireProjectAccess(serviceClient, publication.book_project_id, user.id);
+      if (action === "set_access") {
+        const accessCode = String(body.accessCode || "").trim();
+        if (accessCode && !/^[0-9]{4,8}$/.test(accessCode)) {
+          throw new HttpError("暗証番号は4〜8桁の数字で入力してください", 400);
+        }
+
+        const { error: accessError } = await serviceClient.rpc("set_voice_publication_access_code", {
+          input_publication_id: publicationId,
+          input_code: accessCode
+        });
+        if (accessError) throw accessError;
+
+        return jsonResponse({
+          success: true,
+          publicationId,
+          accessMode: accessCode ? "code" : "link"
+        });
+      }
+
       const disabledAt = new Date().toISOString();
       const { error: disableError } = await serviceClient
         .from("voice_publications")
@@ -121,7 +141,11 @@ serve(async (req) => {
     if (answerIds.length === 0) throw new HttpError("公開できる語りがありません", 409);
 
     const questionIds = Array.from(new Set(answers.map((answer) => answer.user_question_id).filter(Boolean)));
-    const [{ data: questionRows, error: questionsError }, { data: mediaRows, error: mediaError }] = await Promise.all([
+    const [
+      { data: questionRows, error: questionsError },
+      { data: audioRows, error: audioError },
+      { data: photoRows, error: photoError }
+    ] = await Promise.all([
       questionIds.length > 0
         ? serviceClient
           .from("user_questions")
@@ -134,14 +158,23 @@ serve(async (req) => {
         .eq("book_project_id", bookProjectId)
         .eq("asset_type", "audio")
         .in("answer_id", answerIds)
+        .order("created_at", { ascending: true }),
+      serviceClient
+        .from("media_assets")
+        .select("id, answer_id, storage_path, meta_json, created_at")
+        .eq("book_project_id", bookProjectId)
+        .eq("asset_type", "photo")
+        .in("answer_id", answerIds)
         .order("created_at", { ascending: true })
     ]);
     if (questionsError) throw questionsError;
-    if (mediaError) throw mediaError;
+    if (audioError) throw audioError;
+    if (photoError) throw photoError;
 
     const questionsById = new Map((questionRows || []).map((question) => [question.id, question]));
-    const mediaByAnswerId = groupAndSortMedia(mediaRows || []);
-    const publishableAnswers = answers.filter((answer) => (mediaByAnswerId.get(answer.id) || []).length > 0);
+    const audioByAnswerId = groupAndSortMedia(audioRows || []);
+    const photosByAnswerId = groupAndSortMedia(photoRows || []);
+    const publishableAnswers = answers.filter((answer) => (audioByAnswerId.get(answer.id) || []).length > 0);
     if (publishableAnswers.length === 0) throw new HttpError("公開できる音声がありません", 409);
 
     const publicId = randomHex(24);
@@ -154,7 +187,7 @@ serve(async (req) => {
         book_title: String(cover?.title || project.title || "").trim(),
         book_subtitle: String(cover?.subtitle || "").trim(),
         subject_name: String(subject?.display_name || subject?.preferred_name || "").trim(),
-        snapshot_schema_version: 1,
+        snapshot_schema_version: 2,
         snapshot_metadata: {
           footerText: String(cover?.footer_text || "").trim(),
           sourceAnswerCount: publishableAnswers.length,
@@ -171,8 +204,10 @@ serve(async (req) => {
     for (const answer of publishableAnswers) {
       itemOrder += 1;
       const question = questionsById.get(answer.user_question_id) || null;
-      const sourceMedia = mediaByAnswerId.get(answer.id) || [];
+      const sourceMedia = audioByAnswerId.get(answer.id) || [];
+      const sourcePhotos = photosByAnswerId.get(answer.id) || [];
       const copiedAssets = [];
+      const copiedPhotos = [];
 
       for (let index = 0; index < sourceMedia.length; index += 1) {
         const media = sourceMedia[index];
@@ -192,6 +227,24 @@ serve(async (req) => {
         });
       }
 
+      for (let index = 0; index < sourcePhotos.length; index += 1) {
+        const media = sourcePhotos[index];
+        const extension = safeExtension(media.storage_path, ".jpg");
+        const destinationPath = `published/${publication.id}/${String(itemOrder).padStart(3, "0")}/${media.id}${extension}`;
+        const { error: copyError } = await serviceClient.storage
+          .from(PHOTO_BUCKET)
+          .copy(media.storage_path, destinationPath);
+        if (copyError) throw new Error(`写真の固定コピーに失敗しました: ${copyError.message}`);
+
+        copiedPhotos.push({
+          storagePath: destinationPath,
+          sourceMediaId: media.id,
+          width: finiteNumber(media.meta_json?.width),
+          height: finiteNumber(media.meta_json?.height),
+          caption: String(media.meta_json?.caption || "").trim()
+        });
+      }
+
       itemRows.push({
         publication_id: publication.id,
         item_order: itemOrder,
@@ -202,6 +255,7 @@ serve(async (req) => {
         ).trim(),
         transcript_text: pickPublishedTranscript(answer),
         audio_assets: copiedAssets,
+        photo_assets: copiedPhotos,
         metadata: {
           sourceSequenceOrder: answer.sequence_order,
           hidePromptInBook: Boolean(answer.meta_json?.hide_prompt_in_book)
@@ -310,9 +364,9 @@ function finiteNumber(value: unknown) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function safeExtension(path: string) {
+function safeExtension(path: string, fallback = ".webm") {
   const match = String(path || "").match(/(\.[a-zA-Z0-9]{1,8})$/);
-  return match ? match[1].toLowerCase() : ".webm";
+  return match ? match[1].toLowerCase() : fallback;
 }
 
 function randomHex(byteLength: number) {

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App, { supabaseClient as adminSupabaseClient } from "./App.jsx";
 import LandingPage from "./LandingPage.jsx";
 import AdminReview from "./admin/AdminReview.jsx";
+import VoiceLibraryPage from "./VoiceLibraryPage.jsx";
 import VoicePlaybackPage from "./VoicePlaybackPage.jsx";
 import "./index.css";
 
@@ -32,6 +33,10 @@ function RootScreen() {
         publicId={params.get("voice") || ""}
       />
     );
+  }
+
+  if (params.has("library")) {
+    return <VoiceLibraryPage supabaseClient={adminSupabaseClient} />;
   }
 
   if (params.has("admin")) {
