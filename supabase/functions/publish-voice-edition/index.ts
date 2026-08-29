@@ -40,6 +40,31 @@ serve(async (req) => {
     const action = String(body.action || "publish").trim();
     const serviceClient = createClient(supabaseUrl, serviceRoleKey);
 
+    if (action === "status") {
+      const bookProjectId = String(body.bookProjectId || "").trim();
+      if (!isUuid(bookProjectId)) throw new HttpError("bookProjectId is required", 400);
+      await requireProjectAccess(serviceClient, bookProjectId, user.id);
+
+      const { data: publications, error: statusError } = await serviceClient
+        .from("voice_publications")
+        .select("id, public_id, status, access_mode, book_title, book_subtitle, subject_name, published_at, disabled_at, created_at")
+        .eq("book_project_id", bookProjectId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (statusError) throw statusError;
+
+      const publication = (publications || []).find((row) => row.status === "published") || publications?.[0] || null;
+      return jsonResponse({
+        success: true,
+        publication: publication
+          ? {
+            ...publication,
+            publicUrl: `${APP_URL}/?voice=${encodeURIComponent(publication.public_id)}`
+          }
+          : null
+      });
+    }
+
     if (action === "disable" || action === "set_access") {
       const publicationId = String(body.publicationId || "").trim();
       if (!isUuid(publicationId)) throw new HttpError("publicationId is required", 400);
@@ -281,6 +306,7 @@ serve(async (req) => {
       publicationId: publication.id,
       publicId,
       publicUrl: `${APP_URL}/?voice=${encodeURIComponent(publicId)}`,
+      accessMode: "link",
       publishedAt,
       itemCount: itemRows.length
     });

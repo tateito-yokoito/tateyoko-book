@@ -1388,6 +1388,9 @@ function DetailPanel({
   onOpenStoryPreview,
   onOpenBookPreview,
   previewLoading,
+  voicePublicationBusy,
+  onPublishVoiceEdition,
+  onDisableVoiceEdition,
   attentionBusy,
   onRetryAttention,
   onResolveAttention
@@ -1465,6 +1468,54 @@ function DetailPanel({
                   <ChevronRight size={16} className="text-slate-300" />
                 </button>
               </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="flex items-center gap-2 text-sm font-medium"><BookOpen size={16} className="text-slate-400" />Web冊子・音声プレイヤー</h3>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">公開すると、URLを知っている方だけが語りと写真を閲覧できます。検索結果には表示されません。</p>
+                </div>
+                {detail.voice_publication?.status === "published" ? (
+                  <StatusPill tone="success">限定公開中</StatusPill>
+                ) : detail.voice_publication?.status === "disabled" ? (
+                  <StatusPill tone="warning">公開停止</StatusPill>
+                ) : (
+                  <StatusPill tone="neutral">未公開</StatusPill>
+                )}
+              </div>
+
+              {detail.voice_publication?.status === "published" ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <a
+                    href={detail.voice_publication.publicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <BookOpen size={15} />プレイヤーを開く
+                  </a>
+                  <button
+                    type="button"
+                    disabled={voicePublicationBusy}
+                    onClick={onDisableVoiceEdition}
+                    className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-4 py-2.5 text-sm text-rose-700 transition hover:bg-rose-50 disabled:opacity-40"
+                  >
+                    {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <EyeOff size={15} />}
+                    公開を停止
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={voicePublicationBusy}
+                  onClick={onPublishVoiceEdition}
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white transition hover:bg-slate-800 disabled:opacity-40"
+                >
+                  {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <BookOpen size={15} />}
+                  限定公開を生成
+                </button>
+              )}
             </section>
 
             {!!detail.attention_items?.length && (
@@ -1614,6 +1665,7 @@ export default function AdminReview({ supabaseClient }) {
   const [detailId, setDetailId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [voicePublicationBusy, setVoicePublicationBusy] = useState(false);
   const [attentionActionId, setAttentionActionId] = useState("");
   const [accountDetailId, setAccountDetailId] = useState(null);
   const [accountDetail, setAccountDetail] = useState(null);
@@ -2202,16 +2254,23 @@ export default function AdminReview({ supabaseClient }) {
     setDetailLoading(true);
 
     try {
-      const [detailResult, purchaseResult, activityResult, deliveryResult] = await Promise.all([
+      const [detailResult, purchaseResult, activityResult, deliveryResult, publicationResult] = await Promise.all([
         supabaseClient.rpc("get_admin_project_detail", { input_project_id: projectId }),
         supabaseClient.rpc("get_admin_project_purchase", { input_project_id: projectId }),
         supabaseClient.rpc("get_admin_usage_history", { input_project_id: projectId, input_limit: 100 }),
-        supabaseClient.rpc("get_admin_delivery_history", { input_project_id: projectId, input_limit: 100 })
+        supabaseClient.rpc("get_admin_delivery_history", { input_project_id: projectId, input_limit: 100 }),
+        supabaseClient.functions.invoke("publish-voice-edition", {
+          body: { action: "status", bookProjectId: projectId }
+        })
       ]);
       if (detailResult.error) throw detailResult.error;
       if (purchaseResult.error) throw purchaseResult.error;
       if (activityResult.error) throw activityResult.error;
       if (deliveryResult.error) throw deliveryResult.error;
+      if (publicationResult.error || publicationResult.data?.success === false) {
+        const publicationError = await functionErrorDetails(publicationResult.error, publicationResult.data);
+        console.warn("voice publication status could not be loaded", publicationError);
+      }
       const data = detailResult.data;
       const dashboardProject = (dashboard?.projects || []).find(project => project.id === projectId);
       const resolvedProjectName = dashboardProject?.subject_name || data?.project?.subject_name || data?.project?.title;
@@ -2220,6 +2279,7 @@ export default function AdminReview({ supabaseClient }) {
       );
       setDetail({
         ...data,
+        voice_publication: publicationResult.data?.publication || null,
         purchase: purchaseResult.data || {},
         activities: (activityResult.data || []).map(activity => ({
           ...activity,
@@ -2242,6 +2302,77 @@ export default function AdminReview({ supabaseClient }) {
       setDetail(null);
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  async function publishVoiceEdition() {
+    if (!detailId || voicePublicationBusy) return;
+    const confirmed = window.confirm(
+      "この物語の語り・音声・写真・氏名を、URLを知っている方が閲覧できる限定公開として生成します。続けますか？"
+    );
+    if (!confirmed) return;
+
+    setVoicePublicationBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const { data, error: publishError } = await supabaseClient.functions.invoke("publish-voice-edition", {
+        body: { action: "publish", bookProjectId: detailId }
+      });
+      if (publishError || data?.success === false) {
+        const details = await functionErrorDetails(publishError, data);
+        throw new Error(details?.error || "限定公開を生成できませんでした。");
+      }
+      setDetail(current => current ? {
+        ...current,
+        voice_publication: {
+          id: data.publicationId,
+          public_id: data.publicId,
+          publicUrl: data.publicUrl,
+          status: "published",
+          access_mode: data.accessMode || "link",
+          published_at: data.publishedAt
+        }
+      } : current);
+      setNotice(`Web冊子・音声プレイヤーを限定公開しました（語り${Number(data.itemCount || 0)}件）。`);
+    } catch (publishError) {
+      console.error("voice publication error", publishError);
+      setError(publishError?.message || "限定公開を生成できませんでした。");
+    } finally {
+      setVoicePublicationBusy(false);
+    }
+  }
+
+  async function disableVoiceEdition() {
+    const publication = detail?.voice_publication;
+    if (!publication?.id || voicePublicationBusy) return;
+    if (!window.confirm("このWeb冊子・音声プレイヤーの公開を停止しますか？印刷済みQRからも開けなくなります。")) return;
+
+    setVoicePublicationBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const { data, error: disableError } = await supabaseClient.functions.invoke("publish-voice-edition", {
+        body: { action: "disable", publicationId: publication.id, reason: "admin_manual" }
+      });
+      if (disableError || data?.success === false) {
+        const details = await functionErrorDetails(disableError, data);
+        throw new Error(details?.error || "公開を停止できませんでした。");
+      }
+      setDetail(current => current ? {
+        ...current,
+        voice_publication: {
+          ...current.voice_publication,
+          status: "disabled",
+          disabled_at: data.disabledAt
+        }
+      } : current);
+      setNotice("Web冊子・音声プレイヤーの公開を停止しました。");
+    } catch (disableError) {
+      console.error("voice publication disable error", disableError);
+      setError(disableError?.message || "公開を停止できませんでした。");
+    } finally {
+      setVoicePublicationBusy(false);
     }
   }
 
@@ -2588,6 +2719,9 @@ export default function AdminReview({ supabaseClient }) {
           onRestore={restoreFromTrash}
           onOpenStoryPreview={() => openPreview("stories")}
           onOpenBookPreview={() => openPreview("book")}
+          voicePublicationBusy={voicePublicationBusy}
+          onPublishVoiceEdition={publishVoiceEdition}
+          onDisableVoiceEdition={disableVoiceEdition}
           attentionBusy={attentionActionId}
           onRetryAttention={retryAttentionDelivery}
           onResolveAttention={resolveAttention}
