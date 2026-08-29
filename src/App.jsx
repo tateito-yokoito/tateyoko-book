@@ -6361,12 +6361,16 @@ onRetry={() => {
           data={voiceData}
           onEditedTextChange={handleEditedTextChange}
           onPhotoStoryTitleChange={title => setVoiceData(prev => ({ ...prev, photoStoryTitle: title, photoStoryTitleSource: "user" }))}
-          onPhotoStoryCaptionChange={caption => setVoiceData(prev => ({ ...prev, photoStoryCaption: caption }))}
-          onAddPhotos={handlePhotoSelect}
-          onRemovePhoto={handleRemovePhoto}
-          onNext={() => handleSaveAnswer(null)}
-        />
-      )}
+        onPhotoStoryCaptionChange={caption => setVoiceData(prev => ({ ...prev, photoStoryCaption: caption }))}
+        onAddPhotos={handlePhotoSelect}
+        onRemovePhoto={handleRemovePhoto}
+        hidePhotoAttachment={
+          currentQ?.onboarding_group === "starting_conversation" ||
+          currentQ?.onboarding_group === "starting_motivation"
+        }
+        onNext={() => handleSaveAnswer(null)}
+      />
+    )}
 
 {scene === "beta_survey_prompt" && (
   <Scene_BetaSurveyPrompt
@@ -15233,7 +15237,7 @@ return (
 }
 
 
-function Scene4_AIMirror({ data, onEditedTextChange, onPhotoStoryTitleChange, onPhotoStoryCaptionChange, onAddPhotos, onRemovePhoto, onNext }) {
+function Scene4_AIMirror({ data, onEditedTextChange, onPhotoStoryTitleChange, onPhotoStoryCaptionChange, onAddPhotos, onRemovePhoto, hidePhotoAttachment = false, onNext }) {
   const [isEditingText, setIsEditingText] = useState(false);
   const [draftText, setDraftText] = useState(data.editedText || "");
   const [photoCorrectionOpen, setPhotoCorrectionOpen] = useState(false);
@@ -15318,6 +15322,7 @@ function Scene4_AIMirror({ data, onEditedTextChange, onPhotoStoryTitleChange, on
             </button>
           </>
         )}
+      {!hidePhotoAttachment && (
         <div className="glass-card p-5 mt-10">
           {data.photoItems && data.photoItems.length > 0 && (
 
@@ -15341,40 +15346,42 @@ function Scene4_AIMirror({ data, onEditedTextChange, onPhotoStoryTitleChange, on
             </div>
           )}
 
-           {data.storyOrigin !== "photo" && <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setPhotoCorrectionOpen(true)}
-              className="btn-quiet flex-1 py-4 rounded-full text-white/80"
-            >
-              写真を添える
-            </button>
+          {data.storyOrigin !== "photo" && (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setPhotoCorrectionOpen(true)}
+                className="btn-quiet flex-1 py-4 rounded-full text-white/80"
+              >
+                写真を添える
+              </button>
 
-            <p className="text-white/32 text-xs whitespace-nowrap">
-              後でもできます
-            </p>
-          </div>}
-        </div>
-
-        {data.audioSegments && data.audioSegments.length > 0 && (
-          <div className="glass-card p-5 mt-10">
-
-            <div className="space-y-4">
-              {data.audioSegments.map((segment, index) => (
-                <div key={segment.createdAt || index}>
-                  {data.audioSegments.length > 1 && (
-                    <p className="text-white/35 text-xs mb-2">
-                      音声 {index + 1}
-                    </p>
-                  )}
-
-                  <audio src={segment.url} controls className="w-full" />
-                </div>
-              ))}
+              <p className="text-white/32 text-xs whitespace-nowrap">
+                後でもできます
+              </p>
             </div>
+          )}
+        </div>
+      )}
+
+      {data.audioSegments && data.audioSegments.length > 0 && (
+        <div className="glass-card p-5 mt-10">
+
+          <div className="space-y-4">
+            {data.audioSegments.map((segment, index) => (
+              <div key={segment.createdAt || index}>
+                {data.audioSegments.length > 1 && (
+                  <p className="text-white/35 text-xs mb-2">
+                    音声 {index + 1}
+                  </p>
+                )}
+
+                <audio src={segment.url} controls className="w-full" />
+              </div>
+            ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="pt-6 border-t border-white/10">
         <button onClick={onNext} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white">
@@ -15382,6 +15389,7 @@ function Scene4_AIMirror({ data, onEditedTextChange, onPhotoStoryTitleChange, on
         </button>
       </div>
     </div>
+  </div>
   );
 }
 
