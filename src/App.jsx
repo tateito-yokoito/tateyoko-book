@@ -2745,6 +2745,13 @@ nextScene = getCommercialEntryScene({
   defaultScene: nextScene
 });
 
+if (
+  getEntryModeFromUrl() === "login" &&
+  !currentUser?.__isNewProfile
+) {
+  nextScene = "home";
+}
+
 if (initialGiftClaimToken && (initialGiftPreview?.valid || initialGiftPreview?.claimed)) {
   nextScene = "gift_received";
 }
@@ -5412,6 +5419,13 @@ nextScene = getCommercialEntryScene({
   questionSet,
   defaultScene: nextScene
 });
+
+if (
+  getEntryModeFromUrl() === "login" &&
+  !u?.__isNewProfile
+) {
+  nextScene = "home";
+}
 
 if (loginGiftClaimToken && (loginGiftPreview?.valid || loginGiftPreview?.claimed)) {
   nextScene = "gift_received";

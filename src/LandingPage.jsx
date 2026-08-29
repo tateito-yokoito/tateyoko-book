@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "./landing.css";
 
-const APP_ENTRY_URL = "/?app=1";
+const APP_ENTRY_URL = "/?app=1&entry=login";
 const TRIAL_ENTRY_URL = "/?app=1&entry=trial";
 const PURCHASE_ENTRY_URL = "/?app=1&entry=purchase";
 const CONTACT_EMAIL = "sugawara@saltlight.co.jp";
