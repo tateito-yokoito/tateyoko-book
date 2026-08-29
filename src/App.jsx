@@ -13725,11 +13725,11 @@ function Scene1_MyPage({
       : question.onboarding_group === "voice_intro"
         ? "物語の入口"
         : "人生の輪郭"
-    : question.chapter_description || question.chapter || question.chapter_label;
+    : question.chapter_label || question.chapter || question.chapter_description;
 
   return (
-    <div className="h-full flex flex-col fade-enter recording-scroll-reserve">
-      <header className="mb-8 pt-2">
+    <div className="h-full flex flex-col fade-enter overflow-y-auto pb-4">
+      <header className="mb-5 pt-2">
         {isFormalOnboarding && (
           <OnboardingProgress
             current={
@@ -13746,7 +13746,7 @@ function Scene1_MyPage({
           <OnboardingProgress current="weekly" />
         )}
 
-        <h1 className="text-white/70 text-sm tracking-widest mb-6">
+        <h1 className="text-white/70 text-sm tracking-widest mb-4">
           {withHonorific(userName)}の物語
         </h1>
 
@@ -13776,8 +13776,8 @@ function Scene1_MyPage({
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col justify-center">
-        <div className="glass-card p-6 text-center space-y-6">
+      <div className="flex flex-col">
+        <div className="glass-card p-5 text-center space-y-4">
           <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
             {question.content}
           </p>
@@ -13800,27 +13800,7 @@ function Scene1_MyPage({
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 mt-8 pb-4">
-        {!isTokenMode() && !isOnboardingQuestion && (
-          <button
-            onClick={onSkip}
-            className="w-full py-3 text-white/40 text-sm underline underline-offset-4"
-          >
-            スキップ
-          </button>
-        )}
-
-        {!isTokenMode() && (
-          <button
-            onClick={onEndToday}
-            className="w-full py-3 text-white/40 text-sm underline underline-offset-4"
-          >
-            今日はここまで
-          </button>
-        )}
-      </div>
-
-      <div className="recording-control-dock recording-control-dock--start">
+      <div className="recording-control-dock recording-control-dock--start mt-5">
         <button
           type="button"
           onClick={onNext}
@@ -13830,6 +13810,26 @@ function Scene1_MyPage({
           <Mic size={30} strokeWidth={1.55} aria-hidden="true" />
         </button>
       </div>
+
+      {!isTokenMode() && (
+        <div className="mt-3 flex items-center justify-center gap-8 pb-2">
+          {!isOnboardingQuestion && (
+            <button
+              onClick={onSkip}
+              className="px-2 py-2 text-white/38 text-xs underline underline-offset-4"
+            >
+              スキップ
+            </button>
+          )}
+
+          <button
+            onClick={onEndToday}
+            className="px-2 py-2 text-white/38 text-xs underline underline-offset-4"
+          >
+            今日はここまで
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -14101,7 +14101,7 @@ function Scene_Recording({
       : question.onboarding_group === "voice_intro"
         ? "物語の入口"
         : "人生の輪郭"
-    : question.chapter_description || question.chapter || question.chapter_label;
+    : question.chapter_label || question.chapter || question.chapter_description;
 
   const isIOSLikeBrowser = () => {
     const ua = navigator.userAgent || "";
@@ -14695,11 +14695,10 @@ const stop = () => {
 };
 
 const isRecordingActive = step === 1;
-const hasFixedRecordingControls = step === 0 || isRecordingActive;
 
 return (
-<div className={`h-full flex flex-col text-center pt-2 overflow-y-auto ${hasFixedRecordingControls ? "recording-scroll-reserve" : ""}`}>
-  <header className={`${isRecordingActive ? "mb-3" : "mb-6"} text-left`}>
+<div className="h-full flex flex-col text-center pt-2 pb-4 overflow-y-auto">
+  <header className={`${isRecordingActive ? "mb-3" : "mb-5"} text-left`}>
     {!isRecordingActive && isFormalOnboarding && (
       <OnboardingProgress
         current={
@@ -14759,8 +14758,8 @@ return (
     )}
   </header>
 
-  <div className="flex-1 flex flex-col justify-center">
-    <div className={`glass-card text-center ${isRecordingActive ? "p-5 space-y-4" : "p-6 space-y-6"}`}>
+  <div className="flex flex-col">
+    <div className="glass-card p-5 space-y-4 text-center">
       <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
         {question.content}
       </p>
@@ -14784,7 +14783,7 @@ return (
   </div>
 
 {step === 0 && (
-  <div className="recording-control-dock recording-control-dock--start">
+  <div className="recording-control-dock recording-control-dock--start mt-5">
     <button
       type="button"
       onClick={start}
@@ -14797,7 +14796,7 @@ return (
 )}
 
       {step === "checking_mic" && (
-        <div className="pb-16 text-center fade-enter">
+        <div className="py-6 text-center fade-enter">
           <p className="text-white/70 text-[1.05rem] text-narrative">
             マイクを確認しています
           </p>
@@ -14805,7 +14804,7 @@ return (
       )}
 
       {step === "mic_error" && (
-        <div className="pb-12 text-center fade-enter">
+        <div className="pt-5 text-center fade-enter">
           <div className="glass-card p-6 mb-8">
             <p className="text-white/85 text-[1.05rem] text-narrative mb-4">
               マイクが使えませんでした
@@ -14826,7 +14825,7 @@ return (
       )}
 
       {step === "countdown" && (
-        <div className="pb-10 pt-12 text-center fade-enter">
+        <div className="py-6 text-center fade-enter">
           <p className="text-white/82 text-[4.2rem] leading-none font-light">
             {countdown}
           </p>
@@ -14869,7 +14868,7 @@ return (
       )}
 
 {step === 2 && (
-  <div className="pb-10 pt-12">
+  <div className="py-6">
     <p className="text-white/38 text-sm tracking-widest">
       声を、言葉にしています...
     </p>

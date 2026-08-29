@@ -36,34 +36,23 @@ body {
 }
 
 .recording-scroll-reserve {
-  padding-bottom: calc(env(safe-area-inset-bottom) + 14rem);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 1rem);
 }
 
 .recording-control-dock {
-  position: fixed;
-  left: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 5.75rem);
-  z-index: 60;
-  width: min(calc(100% - 2rem), 552px);
+  position: relative;
+  width: 100%;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0.55rem;
-  padding: 0.65rem 1rem 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 2rem;
-  background: rgba(15, 23, 42, 0.9);
-  box-shadow: 0 18px 45px rgba(2, 6, 23, 0.42);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  padding: 0.3rem 0;
 }
 
 .recording-control-dock--start {
-  width: auto;
-  padding: 0.55rem;
-  border-radius: 999px;
+  padding: 0.25rem 0;
 }
 
 .recording-status-row {
@@ -142,11 +131,7 @@ body {
 
 @media (min-width: 768px) {
   .recording-scroll-reserve {
-    padding-bottom: calc(env(safe-area-inset-bottom) + 10rem);
-  }
-
-  .recording-control-dock {
-    bottom: calc(env(safe-area-inset-bottom) + 1rem);
+    padding-bottom: calc(env(safe-area-inset-bottom) + 1rem);
   }
 }
     .fade-enter { animation: fadeIn 1.2s ease-out forwards; }
