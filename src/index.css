@@ -55,6 +55,13 @@ body {
   padding: 0.25rem 0;
 }
 
+.recording-guidance {
+  padding: 0.75rem 1rem;
+  border-left: 2px solid rgba(201, 135, 90, 0.32);
+  border-radius: 0 0.8rem 0.8rem 0;
+  background: rgba(255, 255, 255, 0.016);
+}
+
 .recording-status-row {
   min-height: 1.1rem;
   display: flex;

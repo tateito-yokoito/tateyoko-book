@@ -13705,6 +13705,43 @@ function Scene0_Door({ onNext }) {
   );
 }
 
+function RecordingQuestionPrompt({ question }) {
+  const hasGuidance = !!(
+    question.prompt_hint ||
+    question.reassurance_text
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="glass-card px-5 py-6 text-center">
+        <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
+          {question.content}
+        </p>
+      </div>
+
+      {hasGuidance && (
+        <aside className="recording-guidance text-left" aria-label="話すヒント">
+          <p className="mb-2 text-[0.66rem] tracking-[0.16em] text-white/34">
+            話すヒント
+          </p>
+
+          {question.prompt_hint && (
+            <p className="text-white/55 text-sm leading-loose">
+              {question.prompt_hint}
+            </p>
+          )}
+
+          {question.reassurance_text && (
+            <p className={`${question.prompt_hint ? "mt-1" : ""} text-white/40 text-xs leading-loose`}>
+              {question.reassurance_text}
+            </p>
+          )}
+        </aside>
+      )}
+    </div>
+  );
+}
+
 function Scene1_MyPage({
   progress,
   storyProgress = progress,
@@ -13776,29 +13813,7 @@ function Scene1_MyPage({
         </div>
       </header>
 
-      <div className="flex flex-col">
-        <div className="glass-card p-5 text-center space-y-4">
-          <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
-            {question.content}
-          </p>
-
-          {(question.prompt_hint || question.reassurance_text) && (
-            <div className="pt-1 space-y-2">
-              {question.prompt_hint && (
-                <p className="text-white/55 text-sm leading-loose">
-                  {question.prompt_hint}
-                </p>
-              )}
-
-              {question.reassurance_text && (
-                <p className="text-white/38 text-xs leading-loose">
-                  {question.reassurance_text}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      <RecordingQuestionPrompt question={question} />
 
       <div className="recording-control-dock recording-control-dock--start mt-5">
         <button
@@ -13812,11 +13827,11 @@ function Scene1_MyPage({
       </div>
 
       {!isTokenMode() && (
-        <div className="mt-3 flex items-center justify-center gap-8 pb-2">
+        <div className="mt-5 flex items-center justify-center gap-3 pb-2">
           {!isOnboardingQuestion && (
             <button
               onClick={onSkip}
-              className="px-2 py-2 text-white/38 text-xs underline underline-offset-4"
+              className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-sm underline underline-offset-4"
             >
               スキップ
             </button>
@@ -13824,7 +13839,7 @@ function Scene1_MyPage({
 
           <button
             onClick={onEndToday}
-            className="px-2 py-2 text-white/38 text-xs underline underline-offset-4"
+            className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-sm underline underline-offset-4"
           >
             今日はここまで
           </button>
@@ -14716,7 +14731,7 @@ return (
     )}
 
     {isRecordingActive ? (
-      <div className="flex items-center justify-between gap-4 px-1">
+      <div className="flex items-center justify-between gap-4 pl-1 pr-14">
         <p className="text-white/50 text-xs tracking-widest truncate">
           {sectionLabel}
         </p>
@@ -14758,29 +14773,7 @@ return (
     )}
   </header>
 
-  <div className="flex flex-col">
-    <div className="glass-card p-5 space-y-4 text-center">
-      <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
-        {question.content}
-      </p>
-
-      {(question.prompt_hint || question.reassurance_text) && (
-        <div className="pt-1 space-y-2">
-          {question.prompt_hint && (
-            <p className="text-white/55 text-sm leading-loose">
-              {question.prompt_hint}
-            </p>
-          )}
-
-          {question.reassurance_text && (
-            <p className="text-white/38 text-xs leading-loose">
-              {question.reassurance_text}
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  </div>
+  <RecordingQuestionPrompt question={question} />
 
 {step === 0 && (
   <div className="recording-control-dock recording-control-dock--start mt-5">
@@ -14833,7 +14826,7 @@ return (
       )}
 
 {step === 1 && (
-  <div className="recording-control-dock">
+  <div className="recording-control-dock mt-4">
           <div className="recording-status-row" aria-live="polite">
             <span className={`recording-live-dot ${isPaused ? "is-paused" : ""}`} aria-hidden="true" />
             <span className="text-white/50 text-[0.78rem] tracking-[0.18em] tabular-nums">
