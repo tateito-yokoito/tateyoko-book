@@ -17531,7 +17531,9 @@ function Scene_NotificationSetup({
   };
 
   const hasDuplicateSchedule = nextSchedules => {
-    const keys = nextSchedules.map(schedule => String(schedule.weekday));
+    const keys = nextSchedules.map(schedule => (
+      `${Number(schedule.weekday)}:${Number(schedule.hour)}:${Number(schedule.minute || 0)}`
+    ));
     return new Set(keys).size !== keys.length;
   };
 
@@ -17614,7 +17616,7 @@ function Scene_NotificationSetup({
 
   const applySchedules = nextSchedules => {
     if (hasDuplicateSchedule(nextSchedules)) {
-      alert("同じ曜日は1件だけ登録できます。");
+      alert("同じ曜日・同じ時刻は重ねて登録できません。");
       return;
     }
     const ordered = nextSchedules.map((schedule, index) => ({ ...schedule, sort_order: index + 1 }));
@@ -17631,17 +17633,23 @@ function Scene_NotificationSetup({
   const addSchedule = () => {
     if (schedules.length >= 3) return;
     const last = schedules[schedules.length - 1];
-    let weekday = (Number(last.weekday) + 3) % 7;
-    for (let offset = 0; offset < 7; offset += 1) {
-      const candidate = (weekday + offset) % 7;
-      const duplicated = schedules.some(schedule => Number(schedule.weekday) === candidate);
-      if (!duplicated) { weekday = candidate; break; }
+    const weekday = Number(last.weekday);
+    const minute = Number(last.minute || 0);
+    let hour = (Number(last.hour) + 1) % 24;
+    for (let offset = 1; offset <= 24; offset += 1) {
+      const candidate = (Number(last.hour) + offset) % 24;
+      const duplicated = schedules.some(schedule => (
+        Number(schedule.weekday) === weekday &&
+        Number(schedule.hour) === candidate &&
+        Number(schedule.minute || 0) === minute
+      ));
+      if (!duplicated) { hour = candidate; break; }
     }
     applySchedules([...schedules, {
       localId: `schedule-${Date.now()}`,
       weekday,
-      hour: Number(last.hour),
-      minute: Number(last.minute),
+      hour,
+      minute,
       is_active: true
     }]);
   };
@@ -17812,11 +17820,14 @@ function Scene_NotificationSetup({
       <div className="flex-1 flex flex-col justify-start">
         <div className="text-center mb-10">
           <p className="text-white/90 text-[1.1rem] text-narrative mb-4">
-            選んだ曜日に、問いをお届けします
+            選んだ時間に、問いをひとつ届けます
           </p>
 
           <p className="text-white/48 text-sm leading-loose">
-            週1〜3回、受け取りやすい時間を選べます
+            テーマに沿って、少しずつ進みます
+          </p>
+          <p className="mt-1 text-white/48 text-sm leading-loose">
+            週1〜3回、語りやすい時間を選んでください
           </p>
         </div>
 
@@ -17856,6 +17867,11 @@ function Scene_NotificationSetup({
               受け取り時間を追加
             </button>
           )}
+        </div>
+
+        <div className="mt-4 space-y-1 text-center text-xs leading-relaxed text-white/30">
+          <p>時間はあとで変更できます。</p>
+          <p>届くのを待たず、いつでも語れます。</p>
         </div>
 
         <div className="mt-8 pt-7 border-t border-white/[0.08]">
