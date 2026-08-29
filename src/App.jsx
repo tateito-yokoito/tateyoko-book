@@ -13724,7 +13724,7 @@ function Scene1_MyPage({
     : question.chapter_description || question.chapter || question.chapter_label;
 
   return (
-    <div className="h-full flex flex-col fade-enter">
+    <div className="h-full flex flex-col fade-enter recording-scroll-reserve">
       <header className="mb-8 pt-2">
         {isFormalOnboarding && (
           <OnboardingProgress
@@ -13796,14 +13796,7 @@ function Scene1_MyPage({
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 mt-8 pb-8">
-        <button
-          onClick={onNext}
-          className="btn-quiet bg-white/10 w-full py-4 rounded-full tracking-widest text-white"
-        >
-          録音を始める
-        </button>
-
+      <div className="flex flex-col gap-4 mt-8 pb-4">
         {!isTokenMode() && !isOnboardingQuestion && (
           <button
             onClick={onSkip}
@@ -13821,6 +13814,17 @@ function Scene1_MyPage({
             今日はここまで
           </button>
         )}
+      </div>
+
+      <div className="recording-control-dock recording-control-dock--start">
+        <button
+          type="button"
+          onClick={onNext}
+          className="recording-icon-button recording-icon-button--start"
+          aria-label="録音を始める"
+        >
+          <Mic size={30} strokeWidth={1.55} aria-hidden="true" />
+        </button>
       </div>
     </div>
   );
@@ -14686,10 +14690,13 @@ const stop = () => {
   }, 1200);
 };
 
+const isRecordingActive = step === 1;
+const hasFixedRecordingControls = step === 0 || isRecordingActive;
+
 return (
-<div className="h-full flex flex-col text-center pt-2 overflow-y-auto">
-  <header className="mb-6 text-left">
-    {isFormalOnboarding && (
+<div className={`h-full flex flex-col text-center pt-2 overflow-y-auto ${hasFixedRecordingControls ? "recording-scroll-reserve" : ""}`}>
+  <header className={`${isRecordingActive ? "mb-3" : "mb-6"} text-left`}>
+    {!isRecordingActive && isFormalOnboarding && (
       <OnboardingProgress
         current={
           question.onboarding_group === "starting_conversation" ||
@@ -14701,42 +14708,55 @@ return (
       />
     )}
 
-    {isFirstStory && !isFormalOnboarding && (
+    {!isRecordingActive && isFirstStory && !isFormalOnboarding && (
       <OnboardingProgress current="weekly" />
     )}
 
-    <h1 className="text-white/70 text-sm tracking-widest mb-5">
-      {withHonorific(userName)}の物語
-    </h1>
-
-    <div className="space-y-2">
-      <p className="text-white/60 text-sm tracking-widest">
-        {sectionLabel}
-      </p>
-
-      {!isOnboardingQuestion && (
-        <>
-          <div className="w-full h-[2px] bg-white/10 rounded-full">
-            <div
-              className="h-full bg-white/40"
-              style={{
-                width: `${((storyProgress.currentIndex + 1) / Math.max(storyProgress.total, 1)) * 100}%`
-              }}
-            />
-          </div>
-        </>
-      )}
-
-      {isFormalOnboarding && question.progress_label && (
-        <p className="text-white/55 text-sm tracking-widest mt-2">
-          {question.progress_label}
+    {isRecordingActive ? (
+      <div className="flex items-center justify-between gap-4 px-1">
+        <p className="text-white/50 text-xs tracking-widest truncate">
+          {sectionLabel}
         </p>
-      )}
-    </div>
+        <p className="text-white/35 text-xs tracking-widest shrink-0">
+          {question.progress_label || (!isOnboardingQuestion
+            ? `${storyProgress.currentIndex + 1}/${storyProgress.total}`
+            : "")}
+        </p>
+      </div>
+    ) : (
+      <>
+        <h1 className="text-white/70 text-sm tracking-widest mb-5">
+          {withHonorific(userName)}の物語
+        </h1>
+
+        <div className="space-y-2">
+          <p className="text-white/60 text-sm tracking-widest">
+            {sectionLabel}
+          </p>
+
+          {!isOnboardingQuestion && (
+            <div className="w-full h-[2px] bg-white/10 rounded-full">
+              <div
+                className="h-full bg-white/40"
+                style={{
+                  width: `${((storyProgress.currentIndex + 1) / Math.max(storyProgress.total, 1)) * 100}%`
+                }}
+              />
+            </div>
+          )}
+
+          {isFormalOnboarding && question.progress_label && (
+            <p className="text-white/55 text-sm tracking-widest mt-2">
+              {question.progress_label}
+            </p>
+          )}
+        </div>
+      </>
+    )}
   </header>
 
   <div className="flex-1 flex flex-col justify-center">
-    <div className="glass-card p-6 text-center space-y-6">
+    <div className={`glass-card text-center ${isRecordingActive ? "p-5 space-y-4" : "p-6 space-y-6"}`}>
       <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
         {question.content}
       </p>
@@ -14760,12 +14780,14 @@ return (
   </div>
 
 {step === 0 && (
-  <div className="pb-12 pt-10">
+  <div className="recording-control-dock recording-control-dock--start">
     <button
+      type="button"
       onClick={start}
-      className="btn-quiet bg-white/10 w-full py-5 rounded-full text-white"
+      className="recording-icon-button recording-icon-button--start"
+      aria-label="録音を始める"
     >
-      録音をはじめる
+      <Mic size={30} strokeWidth={1.55} aria-hidden="true" />
     </button>
   </div>
 )}
@@ -14808,41 +14830,38 @@ return (
       )}
 
 {step === 1 && (
-  <div className="space-y-6 pb-8 pt-3">
+  <div className="recording-control-dock">
+          <div className="recording-status-row" aria-live="polite">
+            <span className={`recording-live-dot ${isPaused ? "is-paused" : ""}`} aria-hidden="true" />
+            <span className="text-white/50 text-[0.78rem] tracking-[0.18em] tabular-nums">
+              {Math.floor(time / 60)}:{String(time % 60).padStart(2, "0")}
+            </span>
+          </div>
 
-<div className="py-5 px-4">
-  <QuietRecordingCircle seconds={time} isPaused={isPaused} />
-
-  <p className="mt-5 text-white/42 text-[0.82rem] tracking-[0.18em]">
-    {Math.floor(time / 60)}:{String(time % 60).padStart(2, "0")}
-  </p>
-</div>
-
-          <div className="flex items-center justify-center gap-10">
+          <div className="flex items-center justify-center gap-7">
           <button
             type="button"
             onClick={isPaused ? resumeRecording : pauseRecording}
-            className="w-20 h-20 rounded-full border border-white/16 bg-white/[0.09] text-white/88 shadow-lg flex items-center justify-center"
+            className="recording-icon-button recording-icon-button--pause"
             aria-label={isPaused ? "録音を再開" : "録音を一時停止"}
           >
             {isPaused ? (
-              <Play size={29} strokeWidth={1.5} fill="currentColor" aria-hidden="true" />
+              <Play size={25} strokeWidth={1.5} fill="currentColor" aria-hidden="true" />
             ) : (
-              <Pause size={29} strokeWidth={1.5} fill="currentColor" aria-hidden="true" />
+              <Pause size={25} strokeWidth={1.5} fill="currentColor" aria-hidden="true" />
             )}
           </button>
 
 <button
   type="button"
   onClick={stop}
-  className="w-16 h-16 rounded-full border border-white/12 bg-white/[0.035] text-white/55 shadow-lg flex items-center justify-center"
+  className="recording-icon-button recording-icon-button--stop"
   aria-label="録音を終了"
 >
-  <Square size={21} strokeWidth={1.5} fill="currentColor" aria-hidden="true" />
+  <Square size={17} strokeWidth={1.45} fill="currentColor" aria-hidden="true" />
 </button>
           </div>
-
-        </div>
+  </div>
       )}
 
 {step === 2 && (
