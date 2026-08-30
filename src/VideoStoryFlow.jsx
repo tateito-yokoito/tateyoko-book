@@ -77,10 +77,11 @@ async function resumableUpload({ supabaseClient, file, path, onProgress }) {
   const supabaseUrl = String(supabaseClient.supabaseUrl || "").replace(/\/$/, "");
   const anonKey = String(supabaseClient.supabaseKey || "");
   if (!supabaseUrl || !anonKey) throw new Error("保存先を確認できませんでした");
+  const storageUrl = supabaseUrl.replace(/\.supabase\.co$/i, ".storage.supabase.co");
 
   return await new Promise((resolve, reject) => {
     const upload = new Upload(file, {
-      endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
+      endpoint: `${storageUrl}/storage/v1/upload/resumable`,
       headers: {
         authorization: `Bearer ${session.access_token}`,
         apikey: anonKey,
