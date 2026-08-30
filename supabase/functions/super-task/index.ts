@@ -28,6 +28,8 @@ type DueDelivery = {
   email: string | null;
   phone_number: string | null;
   user_name: string | null;
+  subject_name: string | null;
+  delivery_role: string | null;
   user_question_id: string;
   question_id: string | null;
   sequence_order: number | null;
@@ -107,8 +109,13 @@ async function sendEmail(delivery: DueDelivery, questionUrl: string): Promise<Pr
   if (!delivery.email) throw new Error("email is empty");
 
   const userName = escapeHtml(displayUserName(delivery.user_name));
+  const subjectName = escapeHtml(displayUserName(delivery.subject_name));
   const questionText = escapeHtml(delivery.question_text);
   const safeQuestionUrl = escapeHtml(questionUrl);
+  const isFacilitator = delivery.delivery_role === "facilitator";
+  const mailSubject = isFacilitator
+    ? `【縦糸横糸】${displayUserName(delivery.subject_name)}の物語｜今週の問い`
+    : "縦糸横糸ブック｜今週の問いが届きました";
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -119,11 +126,13 @@ async function sendEmail(delivery: DueDelivery, questionUrl: string): Promise<Pr
     body: JSON.stringify({
       from: DELIVERY_FROM,
       to: delivery.email,
-      subject: "縦糸横糸ブック｜今週の問いが届きました",
+      subject: mailSubject,
       html: `
         <div style="font-family: serif; padding: 40px; line-height: 1.8;">
           <p>${userName}</p>
-          <p>縦糸横糸ブックから、今週の問いが届きました。</p>
+          <p>${isFacilitator
+            ? `これは、${subjectName}の物語への問いです。ご一緒に話せるときに開いてください。`
+            : "縦糸横糸ブックから、今週の問いが届きました。"}</p>
           <blockquote style="font-size: 22px; margin: 40px 0;">${questionText}</blockquote>
           <p>ゆっくりと思い出してみてください。</p>
           <p style="margin-top: 32px;">
@@ -160,7 +169,12 @@ async function sendSms(delivery: DueDelivery, questionUrl: string): Promise<Prov
   const body = new URLSearchParams();
   body.set("MessagingServiceSid", TWILIO_MESSAGING_SERVICE_SID);
   body.set("To", delivery.phone_number);
-  body.set("Body", `縦糸横糸ブックです。今週の問いが届きました。\n${questionUrl}`);
+  body.set(
+    "Body",
+    delivery.delivery_role === "facilitator"
+      ? `縦糸横糸です。${displayUserName(delivery.subject_name)}の物語への問いです。ご一緒に話せるときに開いてください。\n${questionUrl}`
+      : `縦糸横糸ブックです。今週の問いが届きました。\n${questionUrl}`,
+  );
   body.set("StatusCallback", `${supabaseUrl}/functions/v1/twilio-status-webhook`);
 
   const response = await fetch(endpoint, {

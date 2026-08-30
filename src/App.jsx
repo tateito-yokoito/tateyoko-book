@@ -15,6 +15,7 @@ const FREE_TRIAL_QUESTION_COUNT = 3;
 const STORY_RELATIONSHIP_LABELS = {
   child: "子",
   parent: "親",
+  grandparent: "祖父母",
   spouse: "配偶者",
   sibling: "きょうだい",
   grandchild: "孫",
@@ -915,8 +916,19 @@ function formatNextNotificationLabel(preference, now = new Date()) {
   );
 }
 
-async function loadNotificationPreference(userId) {
+async function loadNotificationPreference(userId, bookProjectId = null) {
   if (!userId) return null;
+
+  let schedulesQuery = supabaseClient
+    .from("notification_schedules")
+    .select("id, book_project_id, weekday, hour, minute, delivery_channel, enabled, sort_order")
+    .eq("user_id", userId)
+    .eq("enabled", true)
+    .order("sort_order", { ascending: true });
+
+  if (bookProjectId) {
+    schedulesQuery = schedulesQuery.eq("book_project_id", bookProjectId);
+  }
 
   const [preferenceResult, schedulesResult] = await Promise.all([
     supabaseClient
@@ -924,12 +936,7 @@ async function loadNotificationPreference(userId) {
       .select("*")
       .eq("user_id", userId)
       .maybeSingle(),
-    supabaseClient
-      .from("notification_schedules")
-      .select("id, weekday, hour, minute, delivery_channel, enabled, sort_order")
-      .eq("user_id", userId)
-      .eq("enabled", true)
-      .order("sort_order", { ascending: true })
+    schedulesQuery
   ]);
 
   if (preferenceResult.error) throw preferenceResult.error;
@@ -954,6 +961,17 @@ async function loadNotificationPreference(userId) {
     is_active: preference?.is_active !== false,
     schedules: normalizedSchedules
   };
+}
+
+async function createChildLedFamilyStory({ subjectName, relationshipLabel, creationKey }) {
+  const { data, error } = await supabaseClient.rpc("create_child_led_family_story", {
+    input_subject_name: subjectName,
+    input_relationship_label: relationshipLabel,
+    input_creation_key: creationKey
+  });
+
+  if (error) throw error;
+  return Array.isArray(data) ? data[0] : data;
 }
 
 function getMainStoryProgress(questionSet, currentIndex) {
@@ -2550,6 +2568,7 @@ function App() {
   const [supportedProjects, setSupportedProjects] = useState([]);
   const [receivedProjects, setReceivedProjects] = useState([]);
   const [supportContext, setSupportContext] = useState(null);
+  const [supportNotificationPref, setSupportNotificationPref] = useState(null);
   const [receivedContext, setReceivedContext] = useState(null);
   const [acceptedConnection, setAcceptedConnection] = useState(null);
   const [pendingSupporterInvites, setPendingSupporterInvites] = useState([]);
@@ -2674,7 +2693,7 @@ if (!session) {
 
         const profile = await ensureProfileExists(session.user);
 
-        const notificationData = await loadNotificationPreference(session.user.id);
+        let notificationData = await loadNotificationPreference(session.user.id);
 
         setNotificationPref(notificationData || null);
 
@@ -2728,6 +2747,12 @@ let activeFoundationData = await ensureLifeOutlineReviewPhase({
 
 setFoundation(activeFoundationData);
 
+notificationData = await loadNotificationPreference(
+  session.user.id,
+  activeFoundationData?.project?.id || null
+);
+setNotificationPref(notificationData || null);
+
 const sharingPreferenceData = await loadStorySharingPreference(
   activeFoundationData?.project?.id
 );
@@ -2757,10 +2782,12 @@ if (initialGiftClaimToken && (initialGiftPreview?.valid || initialGiftPreview?.c
 }
 
 const currentQuestion = questionSet[currentIndex] || null;
+let resolvedDeliveryTokenData = null;
 
 if (deliveryToken) {
   try {
     const tokenData = await resolveDeliveryToken(deliveryToken);
+    resolvedDeliveryTokenData = tokenData;
 
     if (tokenData?.sequence_order) {
       setAccessMode("session");
@@ -2802,6 +2829,29 @@ setSupportedProjects(supportedStoryProjects);
 setReceivedProjects(receivedStoryProjects);
 setPendingSupporterInvites(orderedPendingInvites);
 setPendingStoryRelationshipInvites(pendingRelationshipInvites);
+
+if (
+  deliveryToken &&
+  resolvedDeliveryTokenData?.book_project_id &&
+  resolvedDeliveryTokenData.book_project_id !== activeFoundationData?.project?.id
+) {
+  const deliveredProject = supportedStoryProjects.find(project => (
+    project.book_project_id === resolvedDeliveryTokenData.book_project_id
+  ));
+
+  if (deliveredProject) {
+    const [bookData, projectNotificationData] = await Promise.all([
+      loadSupporterBookData(deliveredProject),
+      loadNotificationPreference(session.user.id, deliveredProject.book_project_id)
+    ]);
+    setSupportContext({ project: deliveredProject, ...bookData });
+    setSupportNotificationPref(projectNotificationData || null);
+    nextScene = "support_recording_assist";
+  } else {
+    nextScene = "token_invalid";
+  }
+}
+
 setProgress({
   currentIndex,
   total: questionSet.length
@@ -2812,10 +2862,10 @@ await logActivity(supabaseClient, {
   subjectUserId: session.user.id,
   action: deliveryToken ? "delivery_link_opened" : "app_opened",
   entityType: "book_project",
-  entityId: activeFoundationData?.project?.id || null,
-  bookProjectId: activeFoundationData?.project?.id || null,
+  entityId: resolvedDeliveryTokenData?.book_project_id || activeFoundationData?.project?.id || null,
+  bookProjectId: resolvedDeliveryTokenData?.book_project_id || activeFoundationData?.project?.id || null,
   metadata: deliveryToken
-    ? { entry: "delivery_token", sequence_order: Number(deliveryTokenData?.sequence_order || currentQuestion?.sequence_order || 0) || null }
+    ? { entry: "delivery_token", sequence_order: Number(resolvedDeliveryTokenData?.sequence_order || currentQuestion?.sequence_order || 0) || null }
     : { entry: getEntryModeFromUrl() || "direct" }
 });
 
@@ -3012,18 +3062,138 @@ const openSupportedProject = async (supportedProject) => {
   try {
     setIsInitializing(true);
 
-    const bookData = await loadSupporterBookData(supportedProject);
+    const [bookData, notificationData] = await Promise.all([
+      loadSupporterBookData(supportedProject),
+      loadNotificationPreference(user?.id, supportedProject.book_project_id)
+    ]);
 
     setSupportContext({
       project: supportedProject,
       ...bookData
     });
+    setSupportNotificationPref(notificationData || null);
     setScene("support_project_home");
   } catch (error) {
     console.error("supported project open error", error);
     alert("お手伝いする物語を開けませんでした。");
   } finally {
     setIsInitializing(false);
+  }
+};
+
+const createFamilyStoryWithFacilitator = async ({ subjectName, relationshipLabel, creationKey }) => {
+  if (!user?.id) return false;
+
+  const stableCreationKey = creationKey || crypto.randomUUID();
+
+  try {
+    setIsInitializing(true);
+
+    const createdProject = await createChildLedFamilyStory({
+      subjectName,
+      relationshipLabel,
+      creationKey: stableCreationKey
+    });
+    const refreshedSupportedProjects = await loadSupportedStoryProjects();
+    setSupportedProjects(refreshedSupportedProjects);
+
+    const supportedProject = refreshedSupportedProjects.find(project => (
+      project.book_project_id === createdProject?.book_project_id
+    ));
+
+    if (!supportedProject) {
+      throw new Error("作成した物語を開けませんでした");
+    }
+
+    const [bookData, notificationData] = await Promise.all([
+      loadSupporterBookData(supportedProject),
+      loadNotificationPreference(user.id, supportedProject.book_project_id)
+    ]);
+
+    setSupportContext({ project: supportedProject, ...bookData });
+    setSupportNotificationPref(notificationData || null);
+    setScene("family_story_delivery_choice");
+    return true;
+  } catch (error) {
+    console.error("child-led family story creation error", error);
+    alert("家族の物語を追加できませんでした。もう一度お試しください。");
+    return false;
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
+const openSupportDeliverySettings = async () => {
+  if (!user?.id || !supportContext?.project?.book_project_id) return;
+
+  setScene("support_project_delivery_choice");
+};
+
+const setSupportDeliveryMode = async (mode, nextScene) => {
+  if (!user?.id || !supportContext?.project?.book_project_id) return false;
+
+  try {
+    setIsInitializing(true);
+    const { error } = await supabaseClient.rpc("set_family_story_delivery_mode", {
+      input_book_project_id: supportContext.project.book_project_id,
+      input_mode: mode
+    });
+    if (error) throw error;
+
+    const refreshedSupportedProjects = await loadSupportedStoryProjects();
+    setSupportedProjects(refreshedSupportedProjects);
+    const refreshedProject = refreshedSupportedProjects.find(project => (
+      project.book_project_id === supportContext.project.book_project_id
+    ));
+    setSupportContext(previous => ({
+      ...previous,
+      project: refreshedProject || {
+        ...previous.project,
+        notification_recipient: mode
+      }
+    }));
+
+    if (mode === "manual") {
+      setSupportNotificationPref(null);
+    } else {
+      const notificationData = await loadNotificationPreference(
+        user.id,
+        supportContext.project.book_project_id
+      );
+      setSupportNotificationPref(notificationData || null);
+    }
+
+    setScene(nextScene);
+    return true;
+  } catch (error) {
+    console.error("support delivery mode save error", error);
+    alert("問いの受け取り方を保存できませんでした。");
+    return false;
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
+const shareServiceWithFriend = async () => {
+  const shareData = {
+    title: "縦糸横糸",
+    text: "声で残す、家族の物語。縦糸横糸を紹介します。",
+    url: `${window.location.origin}${window.location.pathname}`
+  };
+
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+      return;
+    }
+
+    await navigator.clipboard.writeText(shareData.url);
+    alert("紹介ページのリンクをコピーしました。");
+  } catch (error) {
+    if (error?.name !== "AbortError") {
+      console.error("service share error", error);
+      alert("紹介リンクを共有できませんでした。");
+    }
   }
 };
 
@@ -3171,7 +3341,10 @@ const continueAfterTokenAuth = async () => {
       foundationData
     );
 
-    const notificationData = await loadNotificationPreference(session.user.id);
+    const notificationData = await loadNotificationPreference(
+      session.user.id,
+      tokenData?.book_project_id || foundationData?.project?.id || null
+    );
 
     const resumeIndex = getResumeQuestionIndexFromToken(questionSet, tokenData);
 
@@ -3185,6 +3358,25 @@ const continueAfterTokenAuth = async () => {
       currentIndex: resumeIndex,
       total: questionSet.length
     });
+
+    if (
+      tokenData?.book_project_id &&
+      tokenData.book_project_id !== foundationData?.project?.id
+    ) {
+      const refreshedSupportedProjects = await loadSupportedStoryProjects();
+      setSupportedProjects(refreshedSupportedProjects);
+      const deliveredProject = refreshedSupportedProjects.find(project => (
+        project.book_project_id === tokenData.book_project_id
+      ));
+      if (!deliveredProject) {
+        throw new Error("この問いの物語を開けませんでした");
+      }
+      const bookData = await loadSupporterBookData(deliveredProject);
+      setSupportContext({ project: deliveredProject, ...bookData });
+      setSupportNotificationPref(notificationData || null);
+      setScene("support_recording_assist");
+      return;
+    }
 
     setScene(hasRecentMicCheck() ? 1 : "daily_mic_check");
   } catch (e) {
@@ -5384,7 +5576,10 @@ if (loginGiftClaimToken && refreshedFoundationData?.project?.id) {
   setGiftClaimPreview(loginGiftPreview);
 }
 
-const notificationData = await loadNotificationPreference(u.id);
+const notificationData = await loadNotificationPreference(
+  u.id,
+  refreshedFoundationData?.project?.id || null
+);
 
 setNotificationPref(notificationData || null);
 
@@ -5829,7 +6024,10 @@ let sceneAfterInvite = nextScene;
         const refreshedFoundationData =
           await ensureUserFoundation(user.id, user);
 
-        const notificationData = await loadNotificationPreference(user.id);
+        const notificationData = await loadNotificationPreference(
+          user.id,
+          refreshedFoundationData?.project?.id || null
+        );
 
         setFoundation(refreshedFoundationData);
         setNotificationPref(notificationData || null);
@@ -5987,8 +6185,49 @@ let sceneAfterInvite = nextScene;
          onOpenSettings={() => setScene("settings")}
          onOpenSupportedProject={openSupportedProject}
          onOpenReceivedProject={openReceivedProject}
+         onAddFamilyStory={() => setScene("family_story_mode")}
+         onShareWithFriend={shareServiceWithFriend}
          onDevLogout={isDevMode() ? handleDevLogout : null}
       />
+      )}
+
+      {scene === "family_story_mode" && (
+        <Scene_FamilyStoryMode
+          onChooseFacilitator={() => setScene("family_story_facilitator_setup")}
+          onBack={() => setScene("home")}
+        />
+      )}
+
+      {scene === "family_story_facilitator_setup" && (
+        <Scene_ChildLedFamilyStorySetup
+          onCreate={createFamilyStoryWithFacilitator}
+          onBack={() => setScene("family_story_mode")}
+        />
+      )}
+
+      {scene === "family_story_delivery_choice" && supportContext && (
+        <Scene_FamilyStoryDeliveryChoice
+          storyName={supportContext.project.subject_name}
+          selectedMode={supportContext.project.notification_recipient || "manual"}
+          onChooseManual={() => setSupportDeliveryMode("manual", "support_project_home")}
+          onChooseDelivery={() => setSupportDeliveryMode("facilitator", "family_story_delivery")}
+          onBack={() => setScene("support_project_home")}
+        />
+      )}
+
+      {scene === "family_story_delivery" && supportContext && (
+        <Scene_NotificationSetup
+          user={user}
+          bookProjectId={supportContext.project.book_project_id}
+          storyName={supportContext.project.subject_name}
+          recipientMode="facilitator"
+          initialPreference={supportNotificationPref}
+          onPreferenceSaved={setSupportNotificationPref}
+          onBack={() => setScene("family_story_mode")}
+          onComplete={() => setScene("support_project_home")}
+          completeLabel="この内容で始める"
+          showCompleteButton
+        />
       )}
 
       {scene === "connections_home" && (
@@ -6133,10 +6372,37 @@ let sceneAfterInvite = nextScene;
           onOpenQuestions={() => setScene("support_recording_assist")}
           onOpenStories={() => setScene("support_story_pages")}
           onOpenBookBuilder={() => setScene("support_book_builder")}
+          onOpenDelivery={
+            supportContext.project.support_mode === "child_led"
+              ? openSupportDeliverySettings
+              : null
+          }
           onBack={() => {
             setSupportContext(null);
             setScene("home");
           }}
+        />
+      )}
+
+      {scene === "support_project_delivery_choice" && supportContext && (
+        <Scene_FamilyStoryDeliveryChoice
+          storyName={supportContext.project.subject_name}
+          selectedMode={supportContext.project.notification_recipient || "manual"}
+          onChooseManual={() => setSupportDeliveryMode("manual", "support_project_home")}
+          onChooseDelivery={() => setSupportDeliveryMode("facilitator", "support_project_delivery")}
+          onBack={() => setScene("support_project_home")}
+        />
+      )}
+
+      {scene === "support_project_delivery" && supportContext && (
+        <Scene_NotificationSetup
+          user={user}
+          bookProjectId={supportContext.project.book_project_id}
+          storyName={supportContext.project.subject_name}
+          recipientMode="facilitator"
+          initialPreference={supportNotificationPref}
+          onPreferenceSaved={setSupportNotificationPref}
+          onBack={() => setScene("support_project_home")}
         />
       )}
 
@@ -9468,7 +9734,7 @@ function Scene_SupporterInviteReceived({
   );
 }
 
-function HomeMenuButton({ icon: Icon, label, onClick }) {
+function HomeMenuButton({ icon: Icon, label, detail, onClick }) {
   return (
     <button
       type="button"
@@ -9479,9 +9745,10 @@ function HomeMenuButton({ icon: Icon, label, onClick }) {
         <Icon size={22} className="text-white/78" strokeWidth={1.8} />
       </div>
 
-      <p className="flex-1 text-white/88 text-[1.05rem] text-narrative">
-        {label}
-      </p>
+      <div className="flex-1 min-w-0">
+        <p className="text-white/88 text-[1.05rem] text-narrative">{label}</p>
+        {detail && <p className="mt-1 text-white/34 text-xs leading-relaxed">{detail}</p>}
+      </div>
 
       <ChevronRight size={20} className="text-white/35 shrink-0" strokeWidth={1.8} />
     </button>
@@ -10578,6 +10845,255 @@ function Scene_ConnectionsHome({
   );
 }
 
+function Scene_FamilyStoryMode({ onChooseFacilitator, onBack }) {
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+      <div className="relative flex items-center justify-center h-10 mb-10 shrink-0">
+        <button
+          type="button"
+          onClick={onBack}
+          className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"
+          aria-label="ホームへ戻る"
+        >
+          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+        </button>
+        <p className="text-white/88 text-[1.02rem] text-narrative">家族の物語を追加する</p>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center space-y-5">
+        <div className="text-center mb-4 space-y-2">
+          <p className="text-white/82 text-[1.08rem] text-narrative">どのように進めますか？</p>
+          <p className="text-white/38 text-sm leading-loose">物語の本人は、どちらを選んでも親御さんです。</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onChooseFacilitator}
+          className="glass-card w-full p-6 text-left"
+        >
+          <div className="flex items-start gap-4">
+            <div className="w-11 h-11 rounded-full bg-white/[0.09] flex items-center justify-center shrink-0">
+              <Users size={21} className="text-white/76" strokeWidth={1.7} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white/90 text-[1.02rem] text-narrative">私が一緒に進める</p>
+              <p className="mt-3 text-white/46 text-sm leading-loose">
+                このスマートフォンで、一緒に進めます。問いはホームから開けます。
+              </p>
+              <p className="mt-2 text-white/32 text-xs leading-relaxed">
+                必要な場合だけ、あなたへの配信も設定できます。
+              </p>
+            </div>
+            <ChevronRight size={19} className="mt-2 text-white/28 shrink-0" strokeWidth={1.7} />
+          </div>
+        </button>
+
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.018] p-6 opacity-60">
+          <div className="flex items-start gap-4">
+            <div className="w-11 h-11 rounded-full bg-white/[0.06] flex items-center justify-center shrink-0">
+              <Smartphone size={20} className="text-white/58" strokeWidth={1.7} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-white/72 text-[1.02rem] text-narrative">本人に進めてもらう</p>
+                <span className="rounded-full border border-white/10 px-2 py-1 text-[0.62rem] text-white/36">準備中</span>
+              </div>
+              <p className="mt-3 text-white/38 text-sm leading-loose">
+                親御さんへ問いを届け、あなたのスマートフォンからお手伝いできる方法です。
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Scene_ChildLedFamilyStorySetup({ onCreate, onBack }) {
+  const [subjectName, setSubjectName] = useState("");
+  const [relationshipLabel, setRelationshipLabel] = useState("parent");
+  const [saving, setSaving] = useState(false);
+  const creationKeyRef = useRef(crypto.randomUUID());
+  const relationOptions = [
+    ["parent", "親"],
+    ["grandparent", "祖父母"],
+    ["spouse", "配偶者・パートナー"],
+    ["sibling", "きょうだい"],
+    ["child", "子ども"],
+    ["other", "その他"]
+  ];
+
+  const create = async () => {
+    if (!subjectName.trim() || saving) return;
+    setSaving(true);
+    const succeeded = await onCreate?.({
+      subjectName: subjectName.trim(),
+      relationshipLabel,
+      creationKey: creationKeyRef.current
+    });
+    if (!succeeded) setSaving(false);
+  };
+
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+      <div className="relative flex items-center justify-center h-10 mb-10 shrink-0">
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={saving}
+          className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center disabled:opacity-35"
+          aria-label="進め方の選択へ戻る"
+        >
+          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+        </button>
+        <p className="text-white/88 text-[1.02rem] text-narrative">物語の本人</p>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center">
+        <div className="text-center mb-9 space-y-3">
+          <p className="text-white/84 text-[1.08rem] text-narrative">どなたの物語ですか？</p>
+          <p className="text-white/38 text-sm leading-loose">ここで登録する方が、物語の本人になります。</p>
+        </div>
+
+        <div className="space-y-6">
+          <label className="block">
+            <span className="block text-white/46 text-xs mb-2">お名前</span>
+            <input
+              type="text"
+              value={subjectName}
+              onChange={event => setSubjectName(event.target.value)}
+              placeholder="例：菅原 花子"
+              maxLength={80}
+              autoComplete="off"
+              className="quiet-input"
+            />
+          </label>
+
+          <label className="block">
+            <span className="block text-white/46 text-xs mb-2">あなたとの関係</span>
+            <select
+              value={relationshipLabel}
+              onChange={event => setRelationshipLabel(event.target.value)}
+              className="quiet-input"
+            >
+              {relationOptions.map(([value, label]) => (
+                <option key={value} value={value} className="bg-slate-900">{label}</option>
+              ))}
+            </select>
+          </label>
+
+          <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] px-5 py-4">
+            <p className="text-white/58 text-sm leading-loose">
+              あなたが進行役になります。問いの受け取り、録音、写真、本の準備をこのアカウントで行います。
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={create}
+            disabled={saving || !subjectName.trim()}
+            className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white disabled:opacity-35"
+          >
+            {saving ? "物語を用意しています..." : "この方の物語を追加する"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Scene_FamilyStoryDeliveryChoice({
+  storyName,
+  selectedMode = "manual",
+  onChooseManual,
+  onChooseDelivery,
+  onBack
+}) {
+  const [savingMode, setSavingMode] = useState("");
+
+  const choose = async (mode, handler) => {
+    if (savingMode) return;
+    setSavingMode(mode);
+    const succeeded = await handler?.();
+    if (!succeeded) setSavingMode("");
+  };
+
+  return (
+    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+      <div className="relative flex items-center justify-center h-10 mb-10 shrink-0">
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={Boolean(savingMode)}
+          className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center disabled:opacity-35"
+          aria-label="前の画面へ戻る"
+        >
+          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+        </button>
+        <p className="text-white/88 text-[1.02rem] text-narrative">問いの受け取り方</p>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center space-y-5">
+        <div className="text-center mb-4 space-y-2">
+          <p className="text-white/84 text-[1.08rem] text-narrative">
+            {withHonorific(storyName || "ご家族")}の問い
+          </p>
+          <p className="text-white/38 text-sm leading-loose">物語の本人のスマートフォンには届きません。</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => choose("manual", onChooseManual)}
+          disabled={Boolean(savingMode)}
+          className={`w-full rounded-2xl border p-6 text-left disabled:opacity-50 ${
+            selectedMode === "manual"
+              ? "border-white/25 bg-white/[0.075]"
+              : "border-white/[0.08] bg-white/[0.025]"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-white/90 text-[1.02rem] text-narrative">好きな時に開く</p>
+                <span className="rounded-full border border-emerald-200/20 bg-emerald-200/[0.06] px-2 py-1 text-[0.62rem] text-emerald-100/65">おすすめ</span>
+              </div>
+              <p className="mt-3 text-white/44 text-sm leading-loose">
+                配信はしません。会える時にホームから問いを開きます。
+              </p>
+            </div>
+            {selectedMode === "manual" && <Check size={19} className="mt-1 text-white/62 shrink-0" strokeWidth={1.8} />}
+          </div>
+          {savingMode === "manual" && <p className="mt-3 text-white/32 text-xs">保存しています...</p>}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => choose("facilitator", onChooseDelivery)}
+          disabled={Boolean(savingMode)}
+          className={`w-full rounded-2xl border p-6 text-left disabled:opacity-50 ${
+            selectedMode === "facilitator"
+              ? "border-white/25 bg-white/[0.075]"
+              : "border-white/[0.08] bg-white/[0.025]"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-white/90 text-[1.02rem] text-narrative">自分のスマートフォンに届ける</p>
+              <p className="mt-3 text-white/44 text-sm leading-loose">
+                あなたが選んだ曜日と時間に、この物語の問いを届けます。
+              </p>
+            </div>
+            {selectedMode === "facilitator" && <Check size={19} className="mt-1 text-white/62 shrink-0" strokeWidth={1.8} />}
+          </div>
+          {savingMode === "facilitator" && <p className="mt-3 text-white/32 text-xs">保存しています...</p>}
+        </button>
+
+        <p className="text-center text-white/30 text-xs leading-loose">あとから、この物語のホームで変更できます。</p>
+      </div>
+    </div>
+  );
+}
+
 function Scene_Home({
   userName,
   questionSet = [],
@@ -10592,6 +11108,8 @@ function Scene_Home({
   onOpenSettings,
   onOpenSupportedProject,
   onOpenReceivedProject,
+  onAddFamilyStory,
+  onShareWithFriend,
   onDevLogout
 }) {
   const themeProgress = getStoryThemeProgress(questionSet, currentIndex);
@@ -10712,7 +11230,7 @@ function Scene_Home({
           {supportedProjects.length > 0 && (
             <div className="pt-7 border-t border-white/10 space-y-4">
               <p className="text-white/45 text-xs tracking-[0.18em] px-1">
-                お手伝いしている物語
+                家族の物語
               </p>
 
               {supportedProjects.map(project => (
@@ -10720,6 +11238,11 @@ function Scene_Home({
                   key={project.supporter_id}
                   icon={Users}
                   label={`${project.subject_name || "ご家族"}の物語`}
+                  detail={
+                    project.support_role === "facilitator"
+                      ? "進行役として開いています"
+                      : "お手伝いする人として開いています"
+                  }
                   onClick={() => onOpenSupportedProject?.(project)}
                 />
               ))}
@@ -10739,6 +11262,40 @@ function Scene_Home({
               ))}
             </div>
           )}
+
+          <section className="pt-7 border-t border-white/10 space-y-3">
+            <p className="text-white/45 text-xs tracking-[0.18em] px-1 mb-4">
+              物語を追加する
+            </p>
+
+            <HomeMenuButton
+              icon={Users}
+              label="家族の物語を追加する"
+              detail="親御さんと一緒に進めることもできます"
+              onClick={onAddFamilyStory}
+            />
+
+            <button
+              type="button"
+              disabled
+              className="w-full rounded-2xl border border-white/[0.06] bg-white/[0.018] px-5 py-4 flex items-center gap-4 text-left opacity-55"
+            >
+              <div className="w-10 h-10 rounded-full bg-white/[0.05] flex items-center justify-center shrink-0">
+                <UserCircle size={20} className="text-white/52" strokeWidth={1.7} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white/64 text-sm text-narrative">自分の物語を追加する</p>
+                <p className="mt-1 text-white/30 text-xs">今の物語が完成すると追加できます</p>
+              </div>
+            </button>
+
+            <HomeMenuButton
+              icon={Mail}
+              label="友人に紹介する"
+              detail="紹介ページのリンクを送ります"
+              onClick={onShareWithFriend}
+            />
+          </section>
 
           {onDevLogout && (
             <button
@@ -11815,8 +12372,11 @@ function Scene_SupportProjectHome({
   onOpenQuestions,
   onOpenStories,
   onOpenBookBuilder,
+  onOpenDelivery,
   onBack
 }) {
+  const isFacilitator = project?.support_role === "facilitator";
+
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8">
       <div className="shrink-0">
@@ -11833,7 +12393,7 @@ function Scene_SupportProjectHome({
       <div className="flex-1 flex flex-col justify-center">
         <div className="text-center mb-12 space-y-3">
           <p className="text-white/38 text-xs tracking-[0.18em]">
-            物語づくりをお手伝い中
+            {isFacilitator ? "進行役として開いています" : "物語づくりをお手伝い中"}
           </p>
 
           <p className="text-white/86 text-[1.08rem] text-narrative">
@@ -11845,7 +12405,7 @@ function Scene_SupportProjectHome({
           {project?.can_operate_recording && (
             <HomeMenuButton
               icon={Mic}
-              label="問いの録音を手伝う"
+              label={isFacilitator ? "届いた問いから語る" : "問いの録音を手伝う"}
               onClick={onOpenQuestions}
             />
           )}
@@ -11863,6 +12423,19 @@ function Scene_SupportProjectHome({
               icon={BookOpen}
               label="本に仕上げる"
               onClick={onOpenBookBuilder}
+            />
+          )}
+
+          {onOpenDelivery && (
+            <HomeMenuButton
+              icon={Bell}
+              label="問いの受け取り方"
+              detail={
+                project.notification_recipient === "facilitator"
+                  ? "あなたのスマートフォンに届けます"
+                  : "配信せず、好きな時に開きます"
+              }
+              onClick={onOpenDelivery}
             />
           )}
         </div>
@@ -11976,6 +12549,7 @@ function Scene_SupportRecordingAssist({
   onSaved,
   onBack
 }) {
+  const isFacilitator = project?.support_role === "facilitator";
   const storyQuestions = (questionSet || []).filter(question =>
     question?.flow_type === "story" ||
     question?.onboarding_group === "first_story"
@@ -12150,7 +12724,9 @@ function Scene_SupportRecordingAssist({
             </div>
 
             <p className="text-white/38 text-xs leading-loose">
-              語り手ご本人のそばで、録音の開始と終了をお手伝いしてください。
+              {isFacilitator
+                ? "ご本人と一緒に話せるときに、このスマートフォンで録音してください。"
+                : "語り手ご本人のそばで、録音の開始と終了をお手伝いしてください。"}
             </p>
 
             <button
@@ -12169,7 +12745,9 @@ function Scene_SupportRecordingAssist({
               すべての問いに語りがあります
             </p>
             <p className="text-white/42 text-sm leading-loose">
-              語り直しは、語り手ご本人の画面から行えます。
+              {isFacilitator
+                ? "語りを見る画面から、これまでの内容を確認できます。"
+                : "語り直しは、語り手ご本人の画面から行えます。"}
             </p>
           </div>
         )}
@@ -17475,10 +18053,14 @@ return (
 function Scene_NotificationSetup({
   user,
   bookProjectId,
+  storyName,
+  recipientMode = "subject",
   initialPreference,
   onPreferenceSaved,
   onBack,
-  onComplete
+  onComplete,
+  completeLabel = "次へ",
+  showCompleteButton = false
 }) {
   const weekdayOptions = [
     "日曜日",
@@ -17558,9 +18140,13 @@ function Scene_NotificationSetup({
     const request = saveQueueRef.current
       .catch(() => undefined)
       .then(async () => {
-        const { data, error } = await supabaseClient.rpc("save_own_notification_schedules", {
-          input_schedules: payload
-        });
+        const rpcName = bookProjectId
+          ? "save_project_notification_schedules"
+          : "save_own_notification_schedules";
+        const rpcArguments = bookProjectId
+          ? { input_book_project_id: bookProjectId, input_schedules: payload }
+          : { input_schedules: payload };
+        const { data, error } = await supabaseClient.rpc(rpcName, rpcArguments);
         if (error) throw error;
 
         const savedSchedules = (data || payload).map((schedule, index) => ({
@@ -17826,11 +18412,15 @@ function Scene_NotificationSetup({
       <div className="flex-1 flex flex-col justify-start">
         <div className="text-center mb-10">
           <p className="text-white/90 text-[1.1rem] text-narrative mb-4">
-            選んだ時間に、問いをひとつ届けます
+            {recipientMode === "facilitator" && storyName
+              ? `${withHonorific(storyName)}の問いを、あなたに届けます`
+              : "選んだ時間に、問いをひとつ届けます"}
           </p>
 
           <p className="text-white/48 text-sm leading-loose">
-            テーマに沿って、少しずつ進みます
+            {recipientMode === "facilitator"
+              ? "親御さんへの登録や配信はありません"
+              : "テーマに沿って、少しずつ進みます"}
           </p>
           <p className="mt-1 text-white/48 text-sm leading-loose">
             週1〜3回、語りやすい時間を選んでください
@@ -18050,9 +18640,9 @@ function Scene_NotificationSetup({
         </div>
       </div>
 
-      {!onBack && (
+      {onComplete && (!onBack || showCompleteButton) && (
         <button type="button" onClick={finishAndContinue} disabled={saveState === "saving"} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white disabled:opacity-40">
-          次へ
+          {completeLabel}
         </button>
       )}
     </div>
