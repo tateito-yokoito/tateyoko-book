@@ -3483,30 +3483,6 @@ const handleRecordComplete = (txt, dur, url, blob) => {
 };
 
 
-const handlePhotoSelect = (files) => {
-    const selectedFiles = Array.from(files || [])
-      .filter(file => file && file.type && file.type.startsWith("image/"));
-
-    if (selectedFiles.length === 0) return;
-
-    setVoiceData(prev => {
-      const existing = prev.photoItems || [];
-
-      const additions = selectedFiles.map(file => ({
-        file,
-        url: URL.createObjectURL(file),
-        name: file.name || "photo",
-        type: file.type || "image/jpeg",
-        createdAt: Date.now() + Math.random()
-      }));
-
-      return {
-        ...prev,
-        photoItems: [...existing, ...additions]
-      };
-    });
-  };
-
   const startPhotoStory = async photo => {
     if (!photo?.file) return;
     try {
@@ -3536,29 +3512,6 @@ const handlePhotoSelect = (files) => {
       console.error("photo story start error", error);
       alert("写真から語る準備ができませんでした。");
     } finally { setIsInitializing(false); }
-  };
-
-  const handleRemovePhoto = (createdAt) => {
-    setVoiceData(prev => {
-      const remaining = (prev.photoItems || []).filter(photo => photo.createdAt !== createdAt);
-      const removed = (prev.photoItems || []).find(photo => photo.createdAt === createdAt);
-
-      if (removed?.url) {
-        try { URL.revokeObjectURL(removed.url); } catch (e) {}
-      }
-
-      return {
-        ...prev,
-        photoItems: remaining
-      };
-    });
-  };
-
-  const handleEditedTextChange = (nextText) => {
-    setVoiceData(prev => ({
-      ...prev,
-      editedText: nextText
-    }));
   };
 
 const getAnswerTextForEditRecording = (answer) => (
@@ -3797,7 +3750,7 @@ const firstData = {
   selectedStyle: "readable",
   editedText: transcriptRaw,
 
-  aiMirror: "ひとつの時間が、形になっています",
+  aiMirror: "",
   extractedSnippet:
     transcriptRaw
       ? `「${transcriptRaw.slice(0, 45)}${transcriptRaw.length > 45 ? "…" : ""}」`
@@ -3843,11 +3796,6 @@ try {
         polishResult.transcript_essay ||
         prev.transcriptEssay ||
         "",
-
-      aiMirror:
-        polishResult.ai_mirror_text ||
-        prev.aiMirror ||
-        "ひとつの時間が、形になっています",
 
       extractedSnippet:
         polishResult.extracted_snippet ||
@@ -5064,7 +5012,7 @@ const handleSaveAnswer = async (tag = null) => {
 
           selected_style: voiceData.selectedStyle || "readable",
 
-          ai_mirror: voiceData.aiMirror,
+          ai_mirror: null,
 
           snippet: voiceData.extractedSnippet,
           meta_json: {
@@ -5485,7 +5433,7 @@ setScene(6);
     } catch (error) {
       console.error(error);
       alert("保存に失敗しました。");
-      setScene(4);
+      setScene(3.5);
     } finally {
       setIsInitializing(false);
     }
@@ -6623,34 +6571,12 @@ onRetry={() => {
       return next;
     });
   }}
-  onProceed={() => {
-    if (currentQ?.onboarding_group === "life_outline") {
-      handleSaveAnswer("人生の輪郭");
-      return;
-    }
-
-    setScene(4);
-  }}
+  onProceed={() => handleSaveAnswer(
+    currentQ?.onboarding_group === "life_outline" ? "人生の輪郭" : null
+  )}
 />
 
       )}
-
-
-      {scene === 4 && (
-        <Scene4_AIMirror
-          data={voiceData}
-          onEditedTextChange={handleEditedTextChange}
-          onPhotoStoryTitleChange={title => setVoiceData(prev => ({ ...prev, photoStoryTitle: title, photoStoryTitleSource: "user" }))}
-        onPhotoStoryCaptionChange={caption => setVoiceData(prev => ({ ...prev, photoStoryCaption: caption }))}
-        onAddPhotos={handlePhotoSelect}
-        onRemovePhoto={handleRemovePhoto}
-        hidePhotoAttachment={
-          currentQ?.onboarding_group === "starting_conversation" ||
-          currentQ?.onboarding_group === "starting_motivation"
-        }
-        onNext={() => handleSaveAnswer(null)}
-      />
-    )}
 
 {scene === "beta_survey_prompt" && (
   <Scene_BetaSurveyPrompt
@@ -15687,9 +15613,9 @@ return (
 
         <button
           onClick={onProceed}
-          disabled={isProcessing || !displayText}
+          disabled={isProcessing || isPolishing || !displayText}
           className={`btn-quiet w-full py-4 rounded-full text-white ${
-            isProcessing || !displayText ? "opacity-40" : ""
+            isProcessing || isPolishing || !displayText ? "opacity-40" : ""
           }`}
         >
           {isLifeOutline
@@ -15713,162 +15639,6 @@ return (
   );
 }
 
-
-function Scene4_AIMirror({ data, onEditedTextChange, onPhotoStoryTitleChange, onPhotoStoryCaptionChange, onAddPhotos, onRemovePhoto, hidePhotoAttachment = false, onNext }) {
-  const [isEditingText, setIsEditingText] = useState(false);
-  const [draftText, setDraftText] = useState(data.editedText || "");
-  const [photoCorrectionOpen, setPhotoCorrectionOpen] = useState(false);
-
-  useEffect(() => {
-    setDraftText(data.editedText || "");
-  }, [data.editedText]);
-
-  const saveDraftText = () => {
-    onEditedTextChange(draftText);
-    setIsEditingText(false);
-  };
-
-  return (
-    <div className="h-full flex flex-col fade-enter">
-      <PhotoCorrectionFlow
-        open={photoCorrectionOpen}
-        onClose={() => setPhotoCorrectionOpen(false)}
-        onComplete={(file) => onAddPhotos([file])}
-      />
-      <div className="flex-1 overflow-y-auto pb-10">
-        {data.storyOrigin === "photo" && (
-          <div className="glass-card p-5 mb-8 space-y-5">
-            <div>
-              <p className="text-white/38 text-xs tracking-widest mb-2">本に載せるタイトル</p>
-              <input value={data.photoStoryTitle || "この一枚のこと"} onChange={event => onPhotoStoryTitleChange?.(event.target.value)} className="quiet-input" maxLength={40} />
-              <p className="text-white/27 text-xs leading-loose mt-2">語りから仮のタイトルをつけました。変更しなくても進めます。</p>
-            </div>
-            <div>
-              <p className="text-white/38 text-xs tracking-widest mb-2">日付・場所など（任意）</p>
-              <input value={data.photoStoryCaption || ""} onChange={event => onPhotoStoryCaptionChange?.(event.target.value)} className="quiet-input" placeholder="例：1998年ごろ・鎌倉" maxLength={60} />
-            </div>
-          </div>
-        )}
-            <div className="mb-8 p-4 bg-white/5 border-l-2 border-amber-600/50 rounded-r-lg">
-          <p className="text-amber-50/90 text-[0.95rem] tracking-widest leading-loose">
-            {data.aiMirror}
-          </p>
-        </div>
-
-        {isEditingText ? (
-          <div className="glass-card p-5">
-
-            <textarea
-              value={draftText}
-              onChange={e => setDraftText(e.target.value)}
-              className="w-full min-h-[220px] bg-transparent text-white/85 text-[1.02rem] leading-[2.05] outline-none resize-none text-narrative"
-              autoFocus
-            />
-
-            <div className="flex gap-3 mt-5">
-              <button
-                onClick={() => {
-                  setDraftText(data.editedText || "");
-                  setIsEditingText(false);
-                }}
-                className="flex-1 py-3 rounded-full border border-white/10 text-white/45 text-sm"
-              >
-                キャンセル
-              </button>
-
-              <button
-                onClick={saveDraftText}
-                className="flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm"
-              >
-                修正を保存する
-              </button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="text-white/80 text-[1.05rem] text-narrative whitespace-pre-wrap">
-              {data.editedText}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsEditingText(true)}
-              className="mt-6 text-white/45 text-sm underline underline-offset-4"
-            >
-              本文を修正する
-            </button>
-          </>
-        )}
-      {!hidePhotoAttachment && (
-        <div className="glass-card p-5 mt-10">
-          {data.photoItems && data.photoItems.length > 0 && (
-
-            <div className={`${data.storyOrigin === "photo" ? "grid grid-cols-1" : "grid grid-cols-2"} gap-3 mb-5`}>
-              {data.photoItems.map((photo, index) => (
-                <div
-                  key={photo.createdAt || index}
-                  className="relative rounded-2xl overflow-hidden bg-white/5 border border-white/10"
-                >
-                  <img src={photo.url} alt={`写真 ${index + 1}`} className={`w-full ${data.storyOrigin === "photo" ? "max-h-[420px] object-contain" : "aspect-square object-cover"}`} />
-
-                  <button
-                    type="button"
-                    onClick={() => onRemovePhoto(photo.createdAt)}
-                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white/80 text-sm"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {data.storyOrigin !== "photo" && (
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setPhotoCorrectionOpen(true)}
-                className="btn-quiet flex-1 py-4 rounded-full text-white/80"
-              >
-                写真を添える
-              </button>
-
-              <p className="text-white/32 text-xs whitespace-nowrap">
-                後でもできます
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {data.audioSegments && data.audioSegments.length > 0 && (
-        <div className="glass-card p-5 mt-10">
-
-          <div className="space-y-4">
-            {data.audioSegments.map((segment, index) => (
-              <div key={segment.createdAt || index}>
-                {data.audioSegments.length > 1 && (
-                  <p className="text-white/35 text-xs mb-2">
-                    音声 {index + 1}
-                  </p>
-                )}
-
-                <audio src={segment.url} controls className="w-full" />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="pt-6 border-t border-white/10">
-        <button onClick={onNext} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white">
-          次へ進む
-        </button>
-      </div>
-    </div>
-  </div>
-  );
-}
 
 function Scene_BetaSurveyPrompt({ survey, onOpenSurvey, onContinue }) {
   const sequenceOrder = Number(survey?.sequenceOrder || 0);

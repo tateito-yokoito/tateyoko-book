@@ -61,7 +61,6 @@ serve(async (req) => {
         transcript_clean: "",
         transcript_readable: "",
         transcript_essay: "",
-        ai_mirror_text: "ひとつの時間が、形になっています",
         extracted_snippet: "「静かな時間が流れていました」",
         proper_noun_candidate_count: 0
       });
@@ -115,9 +114,6 @@ serve(async (req) => {
       parsed.transcript_readable || transcriptClean || transcriptRaw
     ).trim();
     const transcriptEssay = String(parsed.transcript_essay || "").trim();
-    const aiMirrorText = String(
-      parsed.ai_mirror_text || "ひとつの時間が、形になっています"
-    ).trim();
     const extractedSnippet = String(
       parsed.extracted_snippet || makeSnippet(transcriptRaw)
     ).trim();
@@ -139,7 +135,6 @@ serve(async (req) => {
       transcript_clean: transcriptClean,
       transcript_readable: transcriptReadable,
       transcript_essay: transcriptEssay,
-      ai_mirror_text: aiMirrorText,
       extracted_snippet: extractedSnippet,
       proper_noun_candidate_count: savedCandidateCount
     });
@@ -190,7 +185,6 @@ ${buildCandidateRules()}
 {
   "transcript_readable": "本人の声を残した読みやすい人物紹介文",
   "transcript_essay": "事実を変えずに読み物として整えた人物紹介文",
-  "ai_mirror_text": "語りを受け止める短い一文",
   "extracted_snippet": "印象的な短い一文",
   "proper_noun_candidates": [
     {
@@ -246,7 +240,6 @@ ${buildCandidateRules()}
   "transcript_clean": "文字起こし確認用の文章",
   "transcript_readable": "語り調の文章",
   "transcript_essay": "作品調の文章",
-  "ai_mirror_text": "語りを受け止める短い一文",
   "extracted_snippet": "印象的な短い引用風の一文",
   "proper_noun_candidates": [
     {
