@@ -8145,70 +8145,9 @@ function Scene_BetaIntro({ onNext }) {
   );
 }
 
-function OnboardingProgress({ current = "entry", outlineComplete = false }) {
-  const steps = [
-    { key: "registered", label: "準備" },
-    { key: "entry", label: "はじめ" },
-    { key: "outline", label: "テーマ" },
-    { key: "weekly", label: "語り" }
-  ];
-  const activeIndex = steps.findIndex(step => step.key === current);
-
-  return (
-    <>
-      <div className="h-[54px] shrink-0" aria-hidden="true" />
-      <div
-        className="fixed top-0 left-1/2 z-40 w-full max-w-[600px] -translate-x-1/2 bg-[#0f172a]/95 px-6 pb-2 pt-[calc(env(safe-area-inset-top)+0.55rem)] backdrop-blur-md"
-        aria-label="初回体験の進み具合"
-      >
-      <div className="flex items-start opacity-75">
-        {steps.map((step, index) => {
-          const completed = outlineComplete
-            ? index <= 2
-            : index < activeIndex;
-          const active = !outlineComplete && index === activeIndex;
-
-          return (
-            <React.Fragment key={step.key}>
-              <div className="w-10 shrink-0 flex flex-col items-center gap-1.5">
-                <div
-                  className={`w-5 h-5 rounded-full border flex items-center justify-center text-[0.54rem] ${
-                    completed
-                      ? "bg-white/45 border-white/45 text-slate-900"
-                      : active
-                        ? "bg-amber-200/10 border-amber-100/45 text-amber-50"
-                        : "border-white/10 text-white/18"
-                  }`}
-                >
-                  {completed ? "✓" : active ? "●" : ""}
-                </div>
-                <span className={`text-[0.56rem] tracking-wider ${
-                  completed || active ? "text-white/45" : "text-white/18"
-                }`}>
-                  {step.label}
-                </span>
-              </div>
-
-              {index < steps.length - 1 && (
-                <div className={`mt-2.5 h-px flex-1 ${
-                  outlineComplete
-                    ? index < 2 ? "bg-white/25" : "bg-white/[0.07]"
-                    : index < activeIndex ? "bg-white/25" : "bg-white/[0.07]"
-                }`} />
-              )}
-            </React.Fragment>
-          );
-        })}
-      </div>
-      </div>
-    </>
-  );
-}
-
 function Scene_OnboardingOverview({ onNext }) {
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8">
-      <OnboardingProgress current="entry" />
       <div className="flex-1 flex flex-col justify-center">
         <div className="text-center mb-9">
           <p className="text-white/38 text-xs tracking-[0.22em] mb-4">
@@ -8301,7 +8240,6 @@ function Scene_OnboardingOverview({ onNext }) {
 function Scene_OnboardingPace({ onNext }) {
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8">
-      <OnboardingProgress current="entry" />
       <div className="flex-1 flex flex-col justify-center">
         <div className="text-center mb-8">
           <p className="text-white/90 text-[1.1rem] text-narrative">
@@ -8391,7 +8329,6 @@ function Scene_OnboardingPreferences({ initialValue, onComplete }) {
 
   return (
     <div className="h-full overflow-y-auto fade-enter px-4 py-8">
-      <OnboardingProgress current="outline" />
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
         <div className="flex-1 py-6">
           {step === 1 ? (
@@ -8508,7 +8445,6 @@ function Scene_OnboardingPreferences({ initialValue, onComplete }) {
 function Scene_StartingMotivationPrompt({ onRecord, onSkip }) {
   return (
     <div className="h-full overflow-y-auto fade-enter px-4 py-8">
-      <OnboardingProgress current="outline" />
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
         <div className="flex flex-1 items-center py-8">
           <div className="w-full text-center">
@@ -8553,7 +8489,6 @@ function Scene_StartingMotivationPrompt({ onRecord, onSkip }) {
 function Scene_ThemeGuide({ onContinue, onEndToday }) {
   return (
     <div className="h-full overflow-y-auto fade-enter px-4 py-8">
-      <OnboardingProgress current="outline" />
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
         <div className="flex-1 py-6">
           <div className="text-center">
@@ -8759,8 +8694,6 @@ function Scene_LifeOutlineSummary({
 
   return (
     <div className="h-full flex flex-col fade-enter px-4 pt-3 pb-8 overflow-hidden">
-      {!isRevisit && <OnboardingProgress current="outline" />}
-
       <div className="text-center mb-6">
         <p className="text-white/38 text-xs tracking-[0.22em] mb-3">
           人生の輪郭
@@ -9089,8 +9022,6 @@ function Scene_LifeOutlineComplete({
 }) {
   return (
     <div className="h-full flex flex-col fade-enter px-4 pt-5 pb-8 overflow-hidden">
-      <OnboardingProgress current="weekly" outlineComplete />
-
       <div className="flex-1 overflow-y-auto pb-6 text-center">
         <p className="text-white/38 text-xs tracking-[0.22em] mb-4">
           人生の輪郭がまとまりました
@@ -9320,8 +9251,6 @@ function Scene_SharingSetup({ initialScope = "family", onComplete }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
       <div className="w-full max-w-[340px] space-y-9">
-        <OnboardingProgress current="weekly" outlineComplete />
-
         <div className="space-y-5 text-narrative">
           <p className="text-[1.1rem] text-white/90 leading-loose">
             この物語を、<br />どなたと残していきますか？
@@ -9524,10 +9453,6 @@ function Scene_SupporterInvite({
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
       <div className="w-full max-w-[320px] space-y-9">
-        {isInitialSetup && (
-          <OnboardingProgress current="weekly" outlineComplete />
-        )}
-
         <div className="space-y-5 text-narrative">
           <p className="text-[1.1rem] text-white/90 leading-loose">
             物語づくりを、<br />ご家族に手伝ってもらいますか？
@@ -14344,7 +14269,6 @@ function Scene1_MyPage({
   onEndToday
 }) {
   const isFormalOnboarding = isFormalOnboardingQuestion(question);
-  const isFirstStory = isFirstStoryQuestion(question);
   const isOnboardingQuestion = isFormalOnboarding;
 
   const sectionLabel = isFormalOnboarding
@@ -14359,22 +14283,6 @@ function Scene1_MyPage({
   return (
     <div className="h-full flex flex-col fade-enter overflow-y-auto pb-4">
       <header className="mb-5 pt-2">
-        {isFormalOnboarding && (
-          <OnboardingProgress
-            current={
-              question.onboarding_group === "starting_conversation" ||
-              question.onboarding_group === "starting_motivation" ||
-              question.onboarding_group === "voice_intro"
-                ? "entry"
-                : "outline"
-            }
-          />
-        )}
-
-        {isFirstStory && !isFormalOnboarding && (
-          <OnboardingProgress current="weekly" />
-        )}
-
         <h1 className="text-white/70 text-sm tracking-widest mb-4">
           {withHonorific(userName)}の物語
         </h1>
@@ -14698,7 +14606,6 @@ function Scene_Recording({
   const interimRef = useRef("");
 
   const isFormalOnboarding = isFormalOnboardingQuestion(question);
-  const isFirstStory = isFirstStoryQuestion(question);
   const isOnboardingQuestion = isFormalOnboarding;
 
   const sectionLabel = isFormalOnboarding
@@ -15306,22 +15213,6 @@ const isRecordingActive = step === 1;
 return (
 <div className="h-full flex flex-col text-center pt-2 pb-4 overflow-y-auto">
   <header className={`${isRecordingActive ? "mb-3" : "mb-5"} text-left`}>
-    {!isRecordingActive && isFormalOnboarding && (
-      <OnboardingProgress
-        current={
-          question.onboarding_group === "starting_conversation" ||
-          question.onboarding_group === "starting_motivation" ||
-          question.onboarding_group === "voice_intro"
-            ? "entry"
-            : "outline"
-        }
-      />
-    )}
-
-    {!isRecordingActive && isFirstStory && !isFormalOnboarding && (
-      <OnboardingProgress current="weekly" />
-    )}
-
     {isRecordingActive ? (
       <div className="flex items-center justify-between gap-4 pl-1 pr-14">
         <p className="text-white/50 text-xs tracking-widest truncate">
@@ -18405,9 +18296,7 @@ function Scene_NotificationSetup({
           </button>
           <p className="text-white/88 text-[1.02rem] text-narrative">問いの届け方</p>
         </div>
-      ) : (
-        <OnboardingProgress current="weekly" outlineComplete />
-      )}
+      ) : null}
 
       <div className="flex-1 flex flex-col justify-start">
         <div className="text-center mb-10">
