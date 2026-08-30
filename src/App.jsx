@@ -16867,11 +16867,16 @@ function Scene_StoryPages({
     return question?.content || "";
   };
 
+  const isVisibleInStoryPages = (question) => (
+    question?.include_in_story_list !== false ||
+    question?.onboarding_group === "starting_conversation"
+  );
+
   const buildChapterSections = (answerRows) => {
     const sections = [];
 
     const storyQuestions = (questionSet || []).filter(
-      question => question?.include_in_story_list !== false
+      isVisibleInStoryPages
     );
 
     for (const question of storyQuestions) {
@@ -16892,7 +16897,7 @@ function Scene_StoryPages({
     for (const answer of answerRows || []) {
       const question = getQuestionForAnswer(answer);
 
-      if (question?.include_in_story_list === false) {
+      if (!isVisibleInStoryPages(question)) {
         continue;
       }
 
