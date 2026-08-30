@@ -306,7 +306,16 @@ serve(async request => {
       : orderType === "family_trial_package"
         ? [{ code: "gift_package_v1", quantity: 1 }]
         : [
-          { code: "self_book_v1", quantity: Number(order.base_book_amount ?? quote.base_book_amount ?? 0) > 0 ? 1 : 0 },
+          {
+            code: "self_book_v1",
+            quantity: Number(
+              order.base_book_amount
+              || quote.base_book_amount
+              || order.amount_subtotal
+              || quote.amount_subtotal
+              || 0
+            ) > 0 ? 1 : 0
+          },
           { code: "gift_package_v1", quantity: Number(quote.gift_package_amount || 0) > 0 ? 1 : 0 }
         ];
     const activeLineRequests = lineRequests.filter(item => item.quantity > 0);
