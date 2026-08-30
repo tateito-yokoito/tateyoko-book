@@ -14237,9 +14237,9 @@ function RecordingQuestionPrompt({ question }) {
       </div>
 
       {hasGuidance && (
-        <aside className="recording-guidance text-left" aria-label="話すヒント">
+        <aside className="recording-guidance text-left" aria-label="ヒント">
           <p className="mb-2 text-[0.66rem] tracking-[0.16em] text-white/34">
-            話すヒント
+            💡ヒント
           </p>
 
           {question.prompt_hint && (
@@ -14287,8 +14287,8 @@ function Scene1_MyPage({
           {withHonorific(userName)}の物語
         </h1>
 
-        <div className="space-y-2">
-          <p className="text-white/60 text-sm tracking-widest">
+        <div className={isFormalOnboarding ? "flex items-center justify-between gap-4" : "space-y-2"}>
+          <p className={`text-white/60 text-sm tracking-widest ${isFormalOnboarding ? "truncate" : ""}`}>
             {sectionLabel}
           </p>
 
@@ -14306,8 +14306,8 @@ function Scene1_MyPage({
           )}
 
           {isFormalOnboarding && question.progress_label && (
-            <p className="text-white/55 text-sm tracking-widest mt-2">
-              {question.progress_label}
+            <p className="shrink-0 text-white/55 text-sm tracking-widest">
+              {String(question.progress_label).replace(/\s*\/\s*/g, "/")}
             </p>
           )}
         </div>
@@ -15219,9 +15219,11 @@ return (
           {sectionLabel}
         </p>
         <p className="text-white/35 text-xs tracking-widest shrink-0">
-          {question.progress_label || (!isOnboardingQuestion
-            ? `${storyProgress.currentIndex + 1}/${storyProgress.total}`
-            : "")}
+          {question.progress_label
+            ? String(question.progress_label).replace(/\s*\/\s*/g, "/")
+            : !isOnboardingQuestion
+              ? `${storyProgress.currentIndex + 1}/${storyProgress.total}`
+              : ""}
         </p>
       </div>
     ) : (
@@ -15230,8 +15232,8 @@ return (
           {withHonorific(userName)}の物語
         </h1>
 
-        <div className="space-y-2">
-          <p className="text-white/60 text-sm tracking-widest">
+        <div className={isFormalOnboarding ? "flex items-center justify-between gap-4" : "space-y-2"}>
+          <p className={`text-white/60 text-sm tracking-widest ${isFormalOnboarding ? "truncate" : ""}`}>
             {sectionLabel}
           </p>
 
@@ -15247,8 +15249,8 @@ return (
           )}
 
           {isFormalOnboarding && question.progress_label && (
-            <p className="text-white/55 text-sm tracking-widest mt-2">
-              {question.progress_label}
+            <p className="shrink-0 text-white/55 text-sm tracking-widest">
+              {String(question.progress_label).replace(/\s*\/\s*/g, "/")}
             </p>
           )}
         </div>
