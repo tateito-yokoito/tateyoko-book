@@ -4,6 +4,7 @@ import { Bell, BookOpen, Check, ChevronLeft, ChevronRight, Files, Home, Image as
 import { createClient } from "@supabase/supabase-js";
 import { logActivity } from "./lib/activityLog.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
+import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumossjxehdop.supabase.co";
 
@@ -34,6 +35,70 @@ const STORY_THEMES = [
   { code: "ty_theme_turning_points", label: "人生の転機", order: 8 },
   { code: "ty_theme_now_future", label: "今とこれから", order: 9 }
 ];
+
+const STORY_QUESTION_CANDIDATES = {
+  ty_theme_childhood: [
+    "お名前の由来や、名前にまつわる思い出はありますか？",
+    "子どもの頃、家族からどんな子だと言われていましたか？",
+    "家族旅行や親戚との集まりで覚えていることはありますか？",
+    "子どもの頃、よく食べた思い出の味はありますか？"
+  ],
+  ty_theme_youth: [
+    "得意だった科目と苦手だった科目は何でしたか？",
+    "学生時代のアルバイトやお手伝いの思い出はありますか？",
+    "学生時代、どんな夢を持っていましたか？",
+    "もう一度会いたい先生や友人はいますか？"
+  ],
+  ty_theme_likes: [
+    "これまで夢中になった趣味や特技は、何がきっかけでしたか？",
+    "思い出に残る音楽や歌はありますか？",
+    "何度でも食べたい、忘れられない味はありますか？",
+    "好きな本や映画で、心に残っているものはありますか？"
+  ],
+  ty_theme_living: [
+    "これまで住んだ中で、特に思い出深い家はどこですか？",
+    "特に思い出深かった旅について教えてください。",
+    "暮らしの中にいたペットとの思い出はありますか？",
+    "家庭の味といえば、どんな料理を思い浮かべますか？"
+  ],
+  ty_theme_work: [
+    "その仕事を選んだ理由は何でしたか？",
+    "初めてのお給料は、何に使いましたか？",
+    "仕事で一番やりがいを感じた出来事は何ですか？",
+    "仕事で壁に当たったとき、どう乗り越えましたか？"
+  ],
+  ty_theme_connections: [
+    "あなたの人生に良い影響を与えた人は誰ですか？",
+    "もう一度会いたい友人や恩人はいますか？",
+    "忘れられない上司・同僚・仲間との思い出はありますか？",
+    "人付き合いで大切にしてきたことは何ですか？"
+  ],
+  ty_theme_family: [
+    "お母さまは、どんな方でしたか？",
+    "お父さまは、どんな方でしたか？",
+    "おじいさまやおばあさまについて、覚えていることはありますか？",
+    "兄弟姉妹や親戚との思い出を教えてください。"
+  ],
+  ty_theme_turning_points: [
+    "人生で大きな決断をしたのは、どんなときでしたか？",
+    "苦しい時期を支えてくれたものは何でしたか？",
+    "失敗から学んだ、今も大切にしていることはありますか？",
+    "過去の自分に、今伝えたい言葉はありますか？"
+  ],
+  ty_theme_now_future: [
+    "周りから、どんな人だと言われることが多いですか？",
+    "今、日々の中で楽しみにしていることは何ですか？",
+    "これから挑戦してみたいことはありますか？",
+    "家族や未来の人へ、残しておきたい言葉はありますか？"
+  ]
+};
+
+function normalizeQuestionText(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/\s+/g, "")
+    .replace(/[？?。、「」『』]/g, "");
+}
 
 const ONBOARDING_EXPECTATION_OPTIONS = [
   "自分の歩みを振り返りたい",
@@ -77,7 +142,8 @@ function getEntryModeFromUrl() {
 
 function getPurchaseForFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  return params.get("purchase_for") === "gift" ? "gift" : "self";
+  const value = params.get("purchase_for");
+  return value === "gift" || value === "family_trial_package" ? value : "self";
 }
 
 function getGiftClaimTokenFromUrl() {
@@ -85,14 +151,20 @@ function getGiftClaimTokenFromUrl() {
   return params.get("gift") || null;
 }
 
+function getFamilyInviteTokenFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("family_invite") || null;
+}
+
 function getCheckoutReturnFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return {
     status: params.get("checkout") || null,
     sessionId: params.get("session_id") || null,
-    purchaseFor: params.get("purchase_for") === "gift" ? "gift" : "self",
+    purchaseFor: ["gift", "family_trial_package"].includes(params.get("purchase_for")) ? params.get("purchase_for") : "self",
     context: params.get("checkout_context") === "book_builder" ? "book_builder" : "purchase",
-    premium: params.get("checkout_premium") === "1"
+    premium: params.get("checkout_premium") === "1",
+    familyInvitationId: params.get("family_invite_checkout") || null
   };
 }
 
@@ -212,6 +284,7 @@ function replaceCommercialEntryUrl(entry) {
   url.searchParams.set("entry", entry);
   url.searchParams.delete("checkout");
   url.searchParams.delete("session_id");
+  url.searchParams.delete("family_invite_checkout");
   window.history.replaceState({}, "", url.toString());
 }
 
@@ -261,6 +334,9 @@ function getAuthReturnUrlFromCurrentLocation() {
   const giftClaim = params.get("gift");
   if (giftClaim) url.searchParams.set("gift", giftClaim);
 
+  const familyInvite = params.get("family_invite");
+  if (familyInvite) url.searchParams.set("family_invite", familyInvite);
+
   const checkoutStatus = params.get("checkout");
   if (checkoutStatus) url.searchParams.set("checkout", checkoutStatus);
 
@@ -271,6 +347,8 @@ function getAuthReturnUrlFromCurrentLocation() {
   if (checkoutContext) url.searchParams.set("checkout_context", checkoutContext);
   const checkoutPremium = params.get("checkout_premium");
   if (checkoutPremium) url.searchParams.set("checkout_premium", checkoutPremium);
+  const familyInviteCheckout = params.get("family_invite_checkout");
+  if (familyInviteCheckout) url.searchParams.set("family_invite_checkout", familyInviteCheckout);
 
   return url.toString();
 }
@@ -301,6 +379,16 @@ function closeCheckoutWindow(checkoutWindow) {
   try {
     checkoutWindow.close();
   } catch (_error) {}
+}
+
+function openCheckoutWindow() {
+  try {
+    const checkoutWindow = window.open("", "_blank");
+    if (checkoutWindow) checkoutWindow.opener = null;
+    return checkoutWindow;
+  } catch (_error) {
+    return null;
+  }
 }
 
 async function loadCommerceQuote({ discountCode = "", includeGiftPackage = false } = {}) {
@@ -349,6 +437,35 @@ async function claimGiftForProject(token, projectId) {
   });
   if (error) throw error;
   return data;
+}
+
+async function loadFamilyInvitePreview(token) {
+  if (!token) return null;
+  const { data, error } = await supabaseClient.rpc("get_family_story_invitation_preview", {
+    input_claim_token: token
+  });
+  if (error) throw error;
+  return data;
+}
+
+async function loadSentFamilyInvitations() {
+  const { data, error } = await supabaseClient.rpc("list_sent_family_story_invitations");
+  if (error) {
+    console.warn("sent family invitations load error", error);
+    return [];
+  }
+  return Array.isArray(data) ? data : [];
+}
+
+async function loadReceivedFamilyInvitation(projectId) {
+  if (!projectId) return null;
+  const { data, error } = await supabaseClient.from("family_story_invitations")
+    .select("*").eq("recipient_project_id", projectId).maybeSingle();
+  if (error) {
+    console.warn("received family invitation load error", error);
+    return null;
+  }
+  return data || null;
 }
 
 async function resolveDeliveryToken(token) {
@@ -2635,6 +2752,9 @@ function App() {
   const [purchaseResult, setPurchaseResult] = useState(null);
   const [bookBuilderOrderCompletedAt, setBookBuilderOrderCompletedAt] = useState(null);
   const [giftClaimPreview, setGiftClaimPreview] = useState(null);
+  const [familyInvitePreview, setFamilyInvitePreview] = useState(null);
+  const [sentFamilyInvitations, setSentFamilyInvitations] = useState([]);
+  const [receivedFamilyInvitation, setReceivedFamilyInvitation] = useState(null);
   const checkoutSyncAttemptedRef = useRef(false);
   const checkoutUrlRef = useRef("");
 
@@ -2710,6 +2830,15 @@ if (!session) {
     }
   }
 
+  const initialFamilyInviteToken = getFamilyInviteTokenFromUrl();
+  if (initialFamilyInviteToken) {
+    try {
+      setFamilyInvitePreview(await loadFamilyInvitePreview(initialFamilyInviteToken));
+    } catch (familyInvitePreviewError) {
+      console.error("family invite preview init error", familyInvitePreviewError);
+    }
+  }
+
   if (initialDeliveryToken) {
     try {
       const tokenData = await resolveDeliveryToken(initialDeliveryToken);
@@ -2775,6 +2904,13 @@ if (initialGiftClaimToken && refreshedFoundationData?.project?.id) {
   setGiftClaimPreview(initialGiftPreview);
 }
 
+const initialFamilyInviteToken = getFamilyInviteTokenFromUrl();
+let initialFamilyPreview = null;
+if (initialFamilyInviteToken) {
+  initialFamilyPreview = await loadFamilyInvitePreview(initialFamilyInviteToken);
+  setFamilyInvitePreview(initialFamilyPreview);
+}
+
 const deliveryToken = getDeliveryTokenFromUrl();
 
 let currentIndex = getAuthenticatedQuestionIndex(
@@ -2814,6 +2950,10 @@ nextScene = getCommercialEntryScene({
   defaultScene: nextScene
 });
 
+if (getCheckoutReturnFromUrl().status === "cancelled" && getCheckoutReturnFromUrl().familyInvitationId) {
+  nextScene = "home";
+}
+
 if (
   getEntryModeFromUrl() === "login" &&
   !currentUser?.__isNewProfile
@@ -2823,6 +2963,10 @@ if (
 
 if (initialGiftClaimToken && (initialGiftPreview?.valid || initialGiftPreview?.claimed)) {
   nextScene = "gift_received";
+}
+
+if (initialFamilyInviteToken && (initialFamilyPreview?.valid || initialFamilyPreview?.claimed)) {
+  nextScene = "family_invite_received";
 }
 
 const currentQuestion = questionSet[currentIndex] || null;
@@ -2850,11 +2994,13 @@ if (deliveryToken) {
 
 setUser(currentUser);
 setQuestionsDB(questionSet);
-const [supportedStoryProjects, receivedStoryProjects, pendingInvites, pendingRelationshipInvites] = await Promise.all([
+const [supportedStoryProjects, receivedStoryProjects, pendingInvites, pendingRelationshipInvites, sentFamilyStories, receivedFamilyStory] = await Promise.all([
   loadSupportedStoryProjects(),
   loadReceivedStoryProjects(),
   loadPendingSupporterInvites(),
-  loadPendingStoryRelationshipInvites()
+  loadPendingStoryRelationshipInvites(),
+  loadSentFamilyInvitations(),
+  loadReceivedFamilyInvitation(activeFoundationData?.project?.id)
 ]);
 
 const supporterInviteReference = getSupporterInviteReferenceFromUrl();
@@ -2873,6 +3019,8 @@ setSupportedProjects(supportedStoryProjects);
 setReceivedProjects(receivedStoryProjects);
 setPendingSupporterInvites(orderedPendingInvites);
 setPendingStoryRelationshipInvites(pendingRelationshipInvites);
+setSentFamilyInvitations(sentFamilyStories);
+setReceivedFamilyInvitation(receivedFamilyStory);
 
 if (
   deliveryToken &&
@@ -2918,6 +3066,7 @@ let sceneAfterInvite = nextScene;
 const ownStoryStartedKey = `tateyoko:own-story-started:${session.user.id}`;
 if (
   !deliveryToken &&
+  !initialFamilyInviteToken &&
   (supportedStoryProjects.length > 0 || receivedStoryProjects.length > 0) &&
   nextScene !== "home" &&
   localStorage.getItem(ownStoryStartedKey) !== "1"
@@ -2927,6 +3076,7 @@ if (
 
 if (
   isBetaMode() &&
+  !initialFamilyInviteToken &&
   currentUser?.__isNewProfile &&
   session.user?.id &&
   supportedStoryProjects.length === 0 &&
@@ -2944,20 +3094,21 @@ if (
   !orderedPendingInvites.some(
     invite => invite.invite_id === targetedSupporterInviteId
   ) &&
-  !deliveryToken
+  !deliveryToken &&
+  !initialFamilyInviteToken
 ) {
   setPostSupporterInviteScene(sceneAfterInvite);
   setScene("supporter_invite_account_mismatch");
   return;
 }
 
-if (pendingRelationshipInvites.length > 0 && !deliveryToken) {
+if (pendingRelationshipInvites.length > 0 && !deliveryToken && !initialFamilyInviteToken) {
   setPostSupporterInviteScene(sceneAfterInvite);
   setScene("story_relationship_invite_received");
   return;
 }
 
-if (orderedPendingInvites.length > 0 && !deliveryToken) {
+if (orderedPendingInvites.length > 0 && !deliveryToken && !initialFamilyInviteToken) {
   setPostSupporterInviteScene(sceneAfterInvite);
   setHasAcceptedSupporterInvite(false);
   setScene("supporter_invite_received");
@@ -4869,6 +5020,19 @@ useEffect(() => {
         throw new Error("お支払いの完了をまだ確認できませんでした");
       }
 
+      if (["gift", "family_trial_package"].includes(data.orderType) && checkoutReturn.familyInvitationId) {
+        await supabaseClient.functions.invoke("send-family-story-invite", {
+          body: { invitationId: checkoutReturn.familyInvitationId }
+        });
+        setSentFamilyInvitations(await loadSentFamilyInvitations());
+        setPurchaseResult({ order: data.order, gift: data.gift, familyInvitationId: checkoutReturn.familyInvitationId });
+        setPurchaseStatus("paid");
+        setPurchaseError("");
+        replaceCommercialEntryUrl("purchased");
+        setScene("family_invite_purchase_success");
+        return;
+      }
+
       if (data.orderType === "gift") {
         finishGiftCheckoutAsPaid(data);
         return;
@@ -4944,6 +5108,7 @@ const startPurchase = async ({
   shippingAddress = {},
   returnContext = "purchase",
   gift = {},
+  familyInvitationId = null,
   checkoutWindow = null
 } = {}) => {
   if (orderType === "self" && !foundation?.project?.id) {
@@ -4969,7 +5134,8 @@ const startPurchase = async ({
           premiumCopyCount,
           shippingAddress,
           returnContext,
-          gift
+          gift,
+          familyInvitationId
         }
       }
     );
@@ -4980,6 +5146,17 @@ const startPurchase = async ({
 
     if (data.completed || data.alreadyPurchased) {
       closeCheckoutWindow(checkoutWindow);
+      if (familyInvitationId && orderType !== "self") {
+        await supabaseClient.functions.invoke("send-family-story-invite", {
+          body: { invitationId: familyInvitationId }
+        });
+        setSentFamilyInvitations(await loadSentFamilyInvitations());
+        setPurchaseResult({ order: { id: data.orderId }, familyInvitationId });
+        setPurchaseStatus("paid");
+        replaceCommercialEntryUrl("purchased");
+        setScene("family_invite_purchase_success");
+        return true;
+      }
       const refreshedFoundation = await ensureUserFoundation(user.id, user);
       setFoundation(refreshedFoundation);
       setPurchaseStatus("paid");
@@ -5422,6 +5599,20 @@ const reachedFreeTrialLimit =
   isLastFreeTrialQuestion(questionsDB, currentQ);
 
 if (reachedFreeTrialLimit) {
+  if (foundation?.project?.onboarding_preferences?.family_invitation_id) {
+    try {
+      await supabaseClient.functions.invoke("notify-family-story-inviter", {
+        body: { projectId: foundation.project.id }
+      });
+      setReceivedFamilyInvitation(previous => previous ? {
+        ...previous,
+        status: "trial_completed",
+        trial_completed_at: previous.trial_completed_at || new Date().toISOString()
+      } : previous);
+    } catch (familyMilestoneError) {
+      console.warn("family trial milestone notification error", familyMilestoneError);
+    }
+  }
   resetVoiceData();
   replaceCommercialEntryUrl("trial");
   setScene("trial_complete");
@@ -5510,6 +5701,9 @@ setScene(6);
     scene !== "home" &&
     scene !== -1 &&
     scene !== "supporter_invite_received" &&
+    scene !== "family_invite_received" &&
+    scene !== "family_story_invite_flow" &&
+    scene !== "family_invite_purchase_success" &&
     scene !== "story_relationship_invite_received" &&
     scene !== "supporter_invite_account_mismatch";
 
@@ -5549,6 +5743,7 @@ setScene(6);
       {scene === -1 && (
         <Scene_Login
           giftPreview={giftClaimPreview}
+          familyInvitePreview={familyInvitePreview}
           onLogin={async (u) => {
             setIsInitializing(true);
             try {
@@ -5571,6 +5766,13 @@ let loginGiftPreview = null;
 if (loginGiftClaimToken && refreshedFoundationData?.project?.id) {
   loginGiftPreview = await loadGiftClaimPreview(loginGiftClaimToken);
   setGiftClaimPreview(loginGiftPreview);
+}
+
+const loginFamilyInviteToken = getFamilyInviteTokenFromUrl();
+let loginFamilyInvitePreview = familyInvitePreview;
+if (loginFamilyInviteToken) {
+  loginFamilyInvitePreview = await loadFamilyInvitePreview(loginFamilyInviteToken);
+  setFamilyInvitePreview(loginFamilyInvitePreview);
 }
 
 const notificationData = await loadNotificationPreference(
@@ -5612,6 +5814,10 @@ nextScene = getCommercialEntryScene({
   defaultScene: nextScene
 });
 
+if (getCheckoutReturnFromUrl().status === "cancelled" && getCheckoutReturnFromUrl().familyInvitationId) {
+  nextScene = "home";
+}
+
 if (
   getEntryModeFromUrl() === "login" &&
   !u?.__isNewProfile
@@ -5623,10 +5829,16 @@ if (loginGiftClaimToken && (loginGiftPreview?.valid || loginGiftPreview?.claimed
   nextScene = "gift_received";
 }
 
-const [supportedStoryProjects, pendingInvites, pendingRelationshipInvites] = await Promise.all([
+if (loginFamilyInviteToken && (loginFamilyInvitePreview?.valid || loginFamilyInvitePreview?.claimed)) {
+  nextScene = "family_invite_received";
+}
+
+const [supportedStoryProjects, pendingInvites, pendingRelationshipInvites, sentFamilyStories, receivedFamilyStory] = await Promise.all([
   loadSupportedStoryProjects(),
   loadPendingSupporterInvites(),
-  loadPendingStoryRelationshipInvites()
+  loadPendingStoryRelationshipInvites(),
+  loadSentFamilyInvitations(),
+  loadReceivedFamilyInvitation(activeFoundationData?.project?.id)
 ]);
 
 const supporterInviteReference = getSupporterInviteReferenceFromUrl();
@@ -5644,10 +5856,12 @@ const orderedPendingInvites = targetedSupporterInviteId
 setSupportedProjects(supportedStoryProjects);
 setPendingSupporterInvites(orderedPendingInvites);
 setPendingStoryRelationshipInvites(pendingRelationshipInvites);
+setSentFamilyInvitations(sentFamilyStories);
+setReceivedFamilyInvitation(receivedFamilyStory);
 
 let sceneAfterInvite = nextScene;
 
-            if (isBetaMode() && u?.__isNewProfile && u?.id) {
+            if (isBetaMode() && !loginFamilyInviteToken && u?.__isNewProfile && u?.id) {
               const betaIntroSeenKey = getBetaIntroSeenKey(u.id);
 
               if (localStorage.getItem(betaIntroSeenKey) !== "1") {
@@ -5659,20 +5873,21 @@ let sceneAfterInvite = nextScene;
               targetedSupporterInviteId &&
               !orderedPendingInvites.some(
                 invite => invite.invite_id === targetedSupporterInviteId
-              )
+              ) &&
+              !loginFamilyInviteToken
             ) {
               setPostSupporterInviteScene(sceneAfterInvite);
               setScene("supporter_invite_account_mismatch");
               return;
             }
 
-            if (pendingRelationshipInvites.length > 0) {
+            if (pendingRelationshipInvites.length > 0 && !loginFamilyInviteToken) {
               setPostSupporterInviteScene(sceneAfterInvite);
               setScene("story_relationship_invite_received");
               return;
             }
 
-            if (orderedPendingInvites.length > 0) {
+            if (orderedPendingInvites.length > 0 && !loginFamilyInviteToken) {
               setPostSupporterInviteScene(sceneAfterInvite);
               setHasAcceptedSupporterInvite(false);
               setScene("supporter_invite_received");
@@ -5694,7 +5909,12 @@ let sceneAfterInvite = nextScene;
           checkoutWasCancelled={getCheckoutReturnFromUrl().status === "cancelled"}
           status={purchaseStatus}
           error={purchaseError}
-          onPurchase={startPurchase}
+          onPurchase={options => startPurchase({
+            ...options,
+            familyInvitationId: options?.orderType === "self"
+              ? receivedFamilyInvitation?.id || null
+              : options?.familyInvitationId || null
+          })}
           onReopenCheckout={reopenCheckout}
           onTryFree={() => {
             setPurchaseStatus("idle");
@@ -5709,6 +5929,7 @@ let sceneAfterInvite = nextScene;
         <Scene_TrialComplete
           status={purchaseStatus}
           error={purchaseError}
+          familyInvitation={receivedFamilyInvitation}
           onPurchase={() => {
             setPurchaseFor("self");
             setPurchaseStatus("idle");
@@ -5748,6 +5969,16 @@ let sceneAfterInvite = nextScene;
         />
       )}
 
+      {scene === "family_invite_purchase_success" && (
+        <Scene_FamilyInvitePurchaseSuccess
+          onFinish={() => {
+            setPurchaseStatus("idle");
+            setPurchaseResult(null);
+            setScene("home");
+          }}
+        />
+      )}
+
       {scene === "gift_received" && (
         <Scene_GiftReceived
           preview={giftClaimPreview}
@@ -5769,6 +6000,39 @@ let sceneAfterInvite = nextScene;
                 ? getFreeTrialResumeQuestionIndex(questionsDB)
                 : "onboarding_overview"
             );
+          }}
+        />
+      )}
+
+      {scene === "family_invite_received" && (
+        <Scene_FamilyInvitationReceived
+          preview={familyInvitePreview}
+          onContinue={async ({ acceptSupport }) => {
+            const claimToken = getFamilyInviteTokenFromUrl();
+            if (!claimToken || !foundation?.project?.id || !user?.id) {
+              throw new Error("家族招待を確認できませんでした。");
+            }
+            const { data: claim, error: claimError } = await supabaseClient.rpc("claim_family_story_invitation", {
+              input_claim_token: claimToken,
+              input_book_project_id: foundation.project.id,
+              input_accept_support: Boolean(acceptSupport)
+            });
+            if (claimError || !claim?.success) throw new Error(claimError?.message || "招待を受け取れませんでした");
+
+            if (familyInvitePreview?.offer_type === "full_gift" && familyInvitePreview?.gift_claim_token) {
+              await claimGiftForProject(familyInvitePreview.gift_claim_token, foundation.project.id);
+            }
+
+            const refreshedFoundation = await ensureUserFoundation(user.id, user);
+            setFoundation(refreshedFoundation);
+            setReceivedFamilyInvitation(await loadReceivedFamilyInvitation(refreshedFoundation?.project?.id));
+            const url = new URL(window.location.href);
+            url.searchParams.delete("family_invite");
+            url.searchParams.delete("gift");
+            url.searchParams.set("app", "1");
+            if (familyInvitePreview?.offer_type !== "full_gift") url.searchParams.set("entry", "trial");
+            window.history.replaceState({}, "", url.toString());
+            setScene(0);
           }}
         />
       )}
@@ -6164,6 +6428,7 @@ let sceneAfterInvite = nextScene;
          currentIndex={progress.currentIndex}
          supportedProjects={supportedProjects}
          receivedProjects={receivedProjects}
+         sentFamilyInvitations={sentFamilyInvitations}
          onStartTalking={() => {
            if (
              foundation?.project?.life_outline_completed_at &&
@@ -6182,10 +6447,82 @@ let sceneAfterInvite = nextScene;
          onOpenSettings={() => setScene("settings")}
          onOpenSupportedProject={openSupportedProject}
          onOpenReceivedProject={openReceivedProject}
-         onAddFamilyStory={() => setScene("family_story_mode")}
+         onAddFamilyStory={() => setScene("family_story_invite_flow")}
+         onContinueFamilyTrial={async invitation => {
+           if (!invitation?.invitation_id) return;
+           const checkoutWindow = openCheckoutWindow();
+           try {
+             if (invitation.status === "trial_completed") {
+               const { error: decisionError } = await supabaseClient.rpc("decide_family_invitation_continuation", {
+                 input_invitation_id: invitation.invitation_id,
+                 input_decision: "gift"
+               });
+               if (decisionError) throw decisionError;
+             }
+             const { data: decision, error: invitationError } = await supabaseClient.from("family_story_invitations")
+               .select("*").eq("id", invitation.invitation_id).maybeSingle();
+             if (invitationError || !decision) throw new Error("家族招待を確認できませんでした");
+             const isTrialPackage = decision.offer_type === "trial_gift" && decision.delivery_method === "package" && !decision.recipient_project_id;
+             const isContinuationGift = Boolean(decision.recipient_project_id);
+             const started = await startPurchase({
+               orderType: isTrialPackage ? "family_trial_package" : "gift",
+               includeGiftPackage: !isContinuationGift && decision.delivery_method === "package",
+               familyInvitationId: invitation.invitation_id,
+               gift: {
+                 recipient_name: decision.recipient_name,
+                 recipient_email: decision.recipient_email,
+                 gift_message: decision.personal_message || null,
+                 shipping_address: !isContinuationGift && decision.delivery_method === "package"
+                   ? decision.shipping_address || {}
+                   : {}
+               },
+               checkoutWindow
+             });
+             if (!started) throw new Error("購入画面を開けませんでした");
+           } catch (error) {
+             closeCheckoutWindow(checkoutWindow);
+             console.error("family continuation gift error", error);
+             alert(error?.message || "続きを贈る手続きを開始できませんでした。");
+           }
+         }}
+         onDeclineFamilyTrial={async invitation => {
+           if (!invitation?.invitation_id || !window.confirm("今回はここまでにしますか？\n相手の方には、ご自身で続ける選択肢が表示されます。")) return;
+           const { error } = await supabaseClient.rpc("decide_family_invitation_continuation", {
+             input_invitation_id: invitation.invitation_id,
+             input_decision: "decline"
+           });
+           if (error) {
+             alert("変更できませんでした。");
+             return;
+           }
+           setSentFamilyInvitations(await loadSentFamilyInvitations());
+         }}
          onShareWithFriend={shareServiceWithFriend}
          onDevLogout={isDevMode() ? handleDevLogout : null}
       />
+      )}
+
+      {scene === "family_story_invite_flow" && (
+        <FamilyStoryInviteFlow
+          supabaseClient={supabaseClient}
+          onBack={() => setScene("home")}
+          onStartCheckout={async ({ invitation, orderType, includeGiftPackage, gift }) => {
+            const checkoutWindow = openCheckoutWindow();
+            const started = await startPurchase({
+              orderType,
+              includeGiftPackage,
+              gift,
+              familyInvitationId: invitation.id,
+              checkoutWindow
+            });
+            if (!started) closeCheckoutWindow(checkoutWindow);
+            return started;
+          }}
+          onComplete={async () => {
+            setSentFamilyInvitations(await loadSentFamilyInvitations());
+            setScene("home");
+          }}
+        />
       )}
 
       {scene === "family_story_mode" && (
@@ -6904,13 +7241,16 @@ function Scene_TokenInvalid({ onBack }) {
 }
 
 
-function Scene_Login({ onLogin, giftPreview }) {
+function Scene_Login({ onLogin, giftPreview, familyInvitePreview }) {
   const supporterInvitationUrl = getSupporterInvitationUrlFromCurrentLocation();
   const authReturnUrl = getAuthReturnUrlFromCurrentLocation();
   const isSupporterInviteLogin = Boolean(supporterInvitationUrl);
   const isTrialEntry = getEntryModeFromUrl() === "trial";
   const isGiftEntry = Boolean(getGiftClaimTokenFromUrl()) && Boolean(
     giftPreview?.valid || giftPreview?.claimed
+  );
+  const isFamilyInviteEntry = Boolean(getFamilyInviteTokenFromUrl()) && Boolean(
+    familyInvitePreview?.valid || familyInvitePreview?.claimed
   );
   const [mode, setMode] = useState(
     isSupporterInviteLogin ? "supporter" : "entry"
@@ -7244,7 +7584,26 @@ if (isNewMode) {
       {mode === "entry" && (
         <div className="w-full max-w-[320px] space-y-8 py-10">
           <div className="space-y-5 text-narrative">
-            {isGiftEntry ? (
+            {isFamilyInviteEntry ? (
+              <>
+                <p className="text-amber-100/42 text-xs tracking-[0.18em]">
+                  家族の物語への招待
+                </p>
+                <p className="text-[1.15rem] text-white/90 leading-loose">
+                  {familyInvitePreview?.recipient_name || "あなた"}へ、<br />
+                  {familyInvitePreview?.inviter_name || "ご家族"}さんから届きました
+                </p>
+                {familyInvitePreview?.personal_message && (
+                  <p className="whitespace-pre-wrap rounded-2xl border border-amber-100/10 bg-amber-100/[0.035] px-5 py-4 text-[0.92rem] leading-loose text-amber-50/58">
+                    {familyInvitePreview.personal_message}
+                  </p>
+                )}
+                <p className="text-white/55 text-[0.95rem] leading-loose">
+                  まず三つの問いから始められます。<br />
+                  語りの中身は、ご本人の許可なく共有されません。
+                </p>
+              </>
+            ) : isGiftEntry ? (
               <>
                 <p className="text-amber-100/42 text-xs tracking-[0.18em]">
                   A GIFT FOR YOU
@@ -7304,7 +7663,7 @@ if (isNewMode) {
               disabled={loading}
               className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
             >
-              {isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
+              {isFamilyInviteEntry ? "招待を受け取る" : isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
             </button>
 
             <button
@@ -7313,7 +7672,7 @@ if (isNewMode) {
               disabled={loading}
               className="w-full py-4 rounded-full border border-white/10 text-white/65 text-sm"
             >
-              {isGiftEntry ? "登録済みの方はこちら" : isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
+              {isFamilyInviteEntry || isGiftEntry ? "登録済みの方はこちら" : isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
             </button>
 
             {isDevMode() && (
@@ -7334,7 +7693,7 @@ if (isNewMode) {
         <div className="w-full max-w-[320px] space-y-8 py-10 fade-enter">
           <div className="space-y-4 text-narrative">
             <p className="text-[1.1rem] text-white/90">
-              {isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
+              {isFamilyInviteEntry ? "招待を受け取る" : isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
             </p>
 
             <p className="ui-small">
@@ -7861,8 +8220,11 @@ function Scene_PurchaseStart({
   );
 }
 
-function Scene_TrialComplete({ status, error, onPurchase, onFinish }) {
+function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFinish }) {
   const isWorking = status === "starting" || status === "checking";
+  const waitsForGiftSender = familyInvitation?.offer_type === "trial_gift"
+    && ["trial_completed", "continuation_awaiting_payment"].includes(familyInvitation?.status);
+  const hasFamilyPrice = Boolean(familyInvitation);
 
   return (
     <div className="h-full overflow-y-auto fade-enter px-6 py-12 text-center">
@@ -7882,12 +8244,22 @@ function Scene_TrialComplete({ status, error, onPurchase, onFinish }) {
           語った声は文章になり、写真とともに一冊へ育っていきます。
         </p>
 
-        <div className="my-8 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-6 py-5">
-          <p className="text-xs tracking-[0.16em] text-white/34">縦糸横糸ブック　一冊</p>
-          <p className="mt-2 text-[1.4rem] tracking-[0.06em] text-white/86">
-            49,800円 <span className="text-xs text-white/34">税込</span>
-          </p>
-        </div>
+        {waitsForGiftSender ? (
+          <div className="my-8 rounded-[1.7rem] border border-amber-100/12 bg-amber-100/[0.035] px-6 py-5">
+            <p className="text-[0.95rem] leading-[2] text-amber-50/66">三つの問いを終えたことを、贈り主へお知らせしました。</p>
+            <p className="mt-3 text-xs leading-loose text-white/34">語りの中身は共有していません。続きを贈るか決まるまで、このままお待ちください。</p>
+          </div>
+        ) : (
+          <div className="my-8 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-6 py-5">
+            <p className="text-xs tracking-[0.16em] text-white/34">縦糸横糸ブック　一冊</p>
+            {hasFamilyPrice ? (
+              <p className="mt-3 text-[1rem] tracking-[0.06em] text-amber-50/72">家族招待 特別価格</p>
+            ) : (
+              <p className="mt-2 text-[1.4rem] tracking-[0.06em] text-white/86">49,800円 <span className="text-xs text-white/34">税込</span></p>
+            )}
+            {hasFamilyPrice && <p className="mt-2 text-xs text-white/32">金額は購入画面の前に表示します</p>}
+          </div>
+        )}
 
         {error && (
           <p className="mb-5 rounded-2xl border border-red-200/15 bg-red-200/[0.05] px-5 py-4 text-sm leading-relaxed text-red-100/75">
@@ -7895,14 +8267,11 @@ function Scene_TrialComplete({ status, error, onPurchase, onFinish }) {
           </p>
         )}
 
-        <button
-          type="button"
-          onClick={onPurchase}
-          disabled={isWorking}
-          className="btn-quiet w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-45"
-        >
-          {isWorking ? "購入画面を準備しています…" : "この物語を続ける"}
-        </button>
+        {!waitsForGiftSender && (
+          <button type="button" onClick={onPurchase} disabled={isWorking} className="btn-quiet w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-45">
+            {isWorking ? "購入画面を準備しています…" : "この物語を続ける"}
+          </button>
+        )}
 
         <button
           type="button"
@@ -8017,6 +8386,20 @@ function Scene_GiftPurchaseSuccess({ order, gift, onFinish }) {
   );
 }
 
+function Scene_FamilyInvitePurchaseSuccess({ onFinish }) {
+  return (
+    <div className="h-full flex items-center justify-center fade-enter px-6 text-center">
+      <div className="w-full max-w-[420px]">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-emerald-100/20 bg-emerald-100/[0.07]"><Check size={25} className="text-emerald-100/76" /></div>
+        <p className="mt-7 text-[0.72rem] tracking-[0.28em] text-amber-100/42">お手続きが完了しました</p>
+        <h1 className="text-narrative mt-6 text-[1.5rem] leading-[1.9] text-white/92">家族の物語を、<br />お届けする準備ができました</h1>
+        <p className="mt-7 text-sm leading-[2] text-white/48">メールの場合は招待を送りました。<br />ギフトパッケージは発送の準備を進めます。</p>
+        <button type="button" onClick={onFinish} className="btn-quiet mt-10 w-full rounded-full bg-white py-4 text-slate-900">ホームへ戻る</button>
+      </div>
+    </div>
+  );
+}
+
 function Scene_GiftReceived({ preview, onContinue }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -8077,6 +8460,83 @@ function Scene_GiftReceived({ preview, onContinue }) {
           className="btn-quiet mt-11 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-45"
         >
           {busy ? "贈りものを開いています…" : "贈りものを開く"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Scene_FamilyInvitationReceived({ preview, onContinue }) {
+  const [acceptSupport, setAcceptSupport] = useState(preview?.assistance_mode === "support_requested");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const canChooseSupport = ["support_requested", "recipient_chooses"].includes(preview?.assistance_mode);
+  const offerCopy = preview?.offer_type === "full_gift"
+    ? "スタンダードプランが用意されています"
+    : preview?.offer_type === "trial_gift"
+      ? "まず、贈られた三つの問いを試せます"
+      : "まず三つの問いを無料で試せます";
+
+  const receive = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await onContinue?.({ acceptSupport });
+    } catch (receiveError) {
+      console.error("family invitation claim error", receiveError);
+      setError(receiveError?.message || "招待を受け取れませんでした。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!preview?.valid && !preview?.claimed) {
+    return (
+      <div className="h-full flex items-center justify-center px-6 text-center">
+        <div><p className="text-white/84">この家族招待は利用できません。</p><p className="mt-4 text-sm text-white/38">招待した方へご確認ください。</p></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-y-auto fade-enter px-6 py-12 text-center">
+      <div className="mx-auto flex min-h-full w-full max-w-[430px] flex-col justify-center">
+        <p className="text-[0.72rem] tracking-[0.26em] text-amber-100/42">家族の物語への招待</p>
+        <h1 className="text-narrative mt-7 text-[1.55rem] leading-[1.9] text-white/92">
+          {preview?.recipient_name || "あなた"}へ、<br />
+          {preview?.inviter_name || "ご家族"}さんから届きました
+        </h1>
+
+        {preview?.personal_message && (
+          <div className="mt-8 rounded-[1.7rem] border border-amber-100/12 bg-amber-100/[0.035] px-6 py-6">
+            <p className="text-narrative whitespace-pre-wrap text-[0.98rem] leading-[2] text-amber-50/66">{preview.personal_message}</p>
+          </div>
+        )}
+
+        <p className="mt-8 text-[0.95rem] leading-[2] text-white/55">{offerCopy}。</p>
+        {preview?.offer_type === "referral" && (
+          <p className="mt-3 text-xs leading-loose text-amber-100/46">その先は、家族招待の特別価格で続けられます。</p>
+        )}
+
+        {canChooseSupport && (
+          <button type="button" onClick={() => setAcceptSupport(value => !value)} className={`mt-8 w-full rounded-2xl border px-5 py-5 text-left ${acceptSupport ? "border-white/24 bg-white/[0.08]" : "border-white/[0.08] bg-white/[0.025]"}`}>
+            <div className="flex items-start gap-4">
+              <span className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${acceptSupport ? "border-emerald-100/30 bg-emerald-100/10" : "border-white/15"}`}>
+                {acceptSupport && <Check size={14} className="text-emerald-100/78" />}
+              </span>
+              <span><span className="block text-white/84">{preview?.inviter_name || "ご家族"}さんにお手伝いを頼む</span><span className="mt-2 block text-xs leading-loose text-white/38">録音や写真、本の準備を手伝えます。あとから変更できます。</span></span>
+            </div>
+          </button>
+        )}
+
+        <div className="mt-7 rounded-2xl border border-white/[0.07] bg-white/[0.02] px-5 py-4">
+          <p className="text-xs leading-loose text-white/38">語りの中身は、お手伝いを許可しない限り招待した方へ共有されません。</p>
+        </div>
+
+        {error && <p className="mt-6 rounded-2xl border border-red-200/15 bg-red-200/[0.05] px-5 py-4 text-sm leading-relaxed text-red-100/75">{error}</p>}
+
+        <button type="button" onClick={receive} disabled={busy} className="btn-quiet mt-10 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-45">
+          {busy ? "招待を開いています…" : preview?.offer_type === "full_gift" ? "物語を始める" : "まず3問を試す"}
         </button>
       </div>
     </div>
@@ -10757,7 +11217,7 @@ function Scene_FamilyStoryMode({ onChooseFacilitator, onBack }) {
         >
           <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
         </button>
-        <p className="text-white/88 text-[1.02rem] text-narrative">家族の物語を追加する</p>
+        <p className="text-white/88 text-[1.02rem] text-narrative">家族の物語を追加</p>
       </div>
 
       <div className="flex-1 flex flex-col justify-center space-y-5">
@@ -10874,7 +11334,7 @@ function Scene_ChildLedFamilyStorySetup({ onCreate, onBack }) {
             <select
               value={relationshipLabel}
               onChange={event => setRelationshipLabel(event.target.value)}
-              className="quiet-input"
+              className="quiet-select"
             >
               {relationOptions.map(([value, label]) => (
                 <option key={value} value={value} className="bg-slate-900">{label}</option>
@@ -11000,6 +11460,7 @@ function Scene_Home({
   currentIndex = 0,
   supportedProjects = [],
   receivedProjects = [],
+  sentFamilyInvitations = [],
   onStartTalking,
   onOpenStoryPages,
   onStartPhotoStory,
@@ -11009,6 +11470,8 @@ function Scene_Home({
   onOpenSupportedProject,
   onOpenReceivedProject,
   onAddFamilyStory,
+  onContinueFamilyTrial,
+  onDeclineFamilyTrial,
   onShareWithFriend,
   onDevLogout
 }) {
@@ -11163,6 +11626,20 @@ function Scene_Home({
             </div>
           )}
 
+          {sentFamilyInvitations.length > 0 && (
+            <div className="pt-7 border-t border-white/10 space-y-4">
+              <p className="text-white/45 text-xs tracking-[0.18em] px-1">招待した家族の物語</p>
+              {sentFamilyInvitations.map(invitation => (
+                <FamilyInvitationHomeCard
+                  key={invitation.invitation_id}
+                  invitation={invitation}
+                  onContinue={() => onContinueFamilyTrial?.(invitation)}
+                  onDecline={() => onDeclineFamilyTrial?.(invitation)}
+                />
+              ))}
+            </div>
+          )}
+
           <section className="pt-7 border-t border-white/10 space-y-3">
             <p className="text-white/45 text-xs tracking-[0.18em] px-1 mb-4">
               物語を追加する
@@ -11170,8 +11647,8 @@ function Scene_Home({
 
             <HomeMenuButton
               icon={Users}
-              label="家族の物語を追加する"
-              detail="親御さんと一緒に進めることもできます"
+              label="家族の物語を追加"
+              detail="招待したり、あなたのスマホでお手伝いできます"
               onClick={onAddFamilyStory}
             />
 
@@ -11209,6 +11686,51 @@ function Scene_Home({
 
         </div>
       </div>
+    </div>
+  );
+}
+
+function FamilyInvitationHomeCard({ invitation, onContinue, onDecline }) {
+  const statusCopy = {
+    awaiting_payment: "お支払いの途中です",
+    ready: "お届けの準備中です",
+    sent: "招待を送りました",
+    opened: "招待が開かれました",
+    accepted: "招待を受け取りました",
+    trial_started: "3問のお試し中です",
+    trial_completed: "3問を終えました",
+    continuation_awaiting_payment: "続きを贈る準備中です",
+    continuation_declined: "今回は3問まで",
+    started: "物語づくりを始めました",
+    book_preparation: "本の準備に進みました",
+    completed: "物語が完成しました"
+  };
+  const canChooseContinuation = invitation.status === "trial_completed" && !invitation.continuation_decision;
+  const canResumePayment = ["awaiting_payment", "continuation_awaiting_payment"].includes(invitation.status);
+
+  return (
+    <div className="glass-card w-full px-5 py-5">
+      <div className="flex items-start gap-4">
+        <div className="w-11 h-11 rounded-full bg-white/[0.08] flex items-center justify-center shrink-0">
+          <Users size={20} className="text-white/70" strokeWidth={1.7} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-white/86 text-[1rem] text-narrative">{invitation.recipient_name}さんの物語</p>
+          <p className="mt-1 text-white/38 text-xs">{statusCopy[invitation.status] || "準備中です"}</p>
+          {invitation.trial_completed_at && (
+            <p className="mt-2 text-white/28 text-xs leading-relaxed">語りの中身は共有されていません。</p>
+          )}
+        </div>
+      </div>
+      {canChooseContinuation && (
+        <div className="mt-5 grid grid-cols-[1fr_auto] gap-3 border-t border-white/[0.07] pt-4">
+          <button type="button" onClick={onContinue} className="rounded-full bg-white px-4 py-3 text-sm text-slate-900">続きを贈る</button>
+          <button type="button" onClick={onDecline} className="px-3 py-3 text-xs text-white/38 underline underline-offset-4">今回はここまで</button>
+        </div>
+      )}
+      {canResumePayment && (
+        <button type="button" onClick={onContinue} className="mt-5 w-full rounded-full border border-white/12 py-3 text-sm text-white/68">お支払いを再開</button>
+      )}
     </div>
   );
 }

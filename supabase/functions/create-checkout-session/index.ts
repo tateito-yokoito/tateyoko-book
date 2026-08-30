@@ -125,7 +125,12 @@ serve(async request => {
 
     const body = await request.json().catch(() => ({}));
     const projectId = String(body.projectId || "").trim();
-    const orderType = body.orderType === "gift" ? "gift" : "self";
+    const orderType = body.orderType === "gift"
+      ? "gift"
+      : body.orderType === "family_trial_package"
+        ? "family_trial_package"
+        : "self";
+    const familyInvitationId = String(body.familyInvitationId || "").trim();
     const discountCode = String(body.discountCode || "").trim();
     const standardExtraCopyCount = orderType === "self"
       ? Number.parseInt(String(body.standardExtraCopyCount ?? "0"), 10)
@@ -133,7 +138,7 @@ serve(async request => {
     const premiumCopyCount = orderType === "self"
       ? Number.parseInt(String(body.premiumCopyCount ?? (body.includePremiumHardcover === true ? "1" : "0")), 10)
       : 0;
-    const includeGiftPackage = orderType === "gift"
+    const includeGiftPackage = orderType === "gift" || orderType === "family_trial_package"
       ? body.includeGiftPackage !== false
       : body.includeGiftPackage === true;
     const returnContext = body.returnContext === "book_builder" ? "book_builder" : "purchase";
@@ -143,6 +148,23 @@ serve(async request => {
       : {};
 
     let project: any = null;
+    let familyInvitation: any = null;
+    if (familyInvitationId) {
+      const invitationResult = await admin.from("family_story_invitations")
+        .select("*").eq("id", familyInvitationId).maybeSingle();
+      familyInvitation = invitationResult.data;
+      const canUseFamilyInvitation = familyInvitation
+        && (
+          familyInvitation.inviter_user_id === authData.user.id
+          || (orderType === "self" && familyInvitation.recipient_user_id === authData.user.id)
+        );
+      if (invitationResult.error || !canUseFamilyInvitation) {
+        return json({ success: false, error: "この家族招待の手続きを開始できません" }, 403);
+      }
+      if (orderType !== "self" && familyInvitation.status !== "awaiting_payment" && familyInvitation.status !== "continuation_awaiting_payment") {
+        return json({ success: false, error: "この家族招待はお支払い待ちではありません" }, 409);
+      }
+    }
     if (orderType === "self") {
       if (!projectId) return json({ success: false, error: "物語が見つかりません" }, 400);
       const result = await admin.from("book_projects")
@@ -167,13 +189,19 @@ serve(async request => {
         .every(value => String(value || "").trim())) {
         return json({ success: false, error: "お届け先を入力してください" }, 400);
       }
-    } else {
+    } else if (orderType === "gift") {
       if (!String(gift.recipient_name || "").trim()) {
         return json({ success: false, error: "贈る相手のお名前を入力してください" }, 400);
       }
       const address = gift.shipping_address || {};
       if (includeGiftPackage && ![address.postal_code, address.prefecture, address.city, address.line1].every(Boolean)) {
         return json({ success: false, error: "ギフトパッケージの配送先を入力してください" }, 400);
+      }
+    }
+
+    if (orderType === "family_trial_package") {
+      if (!familyInvitation || familyInvitation.offer_type !== "trial_gift" || familyInvitation.delivery_method !== "package") {
+        return json({ success: false, error: "ギフトパッケージの内容を確認できません" }, 400);
       }
     }
 
@@ -187,7 +215,8 @@ serve(async request => {
           input_include_gift_package: includeGiftPackage,
           input_shipping_address: shippingAddress
         })
-      : admin.rpc("create_commerce_order", {
+      : orderType === "gift"
+        ? admin.rpc("create_commerce_order", {
           input_purchaser_user_id: authData.user.id,
           input_book_project_id: null,
           input_order_type: orderType,
@@ -195,13 +224,58 @@ serve(async request => {
           input_discount_code: discountCode || null,
           input_include_gift_package: includeGiftPackage,
           input_gift: gift
-        });
+        })
+        : (async () => {
+          const { data: packageProduct, error: packageProductError } = await admin.from("commerce_products")
+            .select("*").eq("product_code", "gift_package_v1").eq("is_active", true).maybeSingle();
+          if (packageProductError || !packageProduct) throw new Error("ギフトパッケージが見つかりませんでした");
+          const amount = Number(packageProduct.amount_jpy || 0);
+          const { data: packageOrder, error: packageOrderError } = await admin.from("commerce_orders").insert({
+            purchaser_user_id: authData.user.id,
+            order_type: "family_trial_package",
+            product_code: "gift_package_v1",
+            amount_subtotal: 0,
+            gift_package_amount: amount,
+            discount_amount: 0,
+            amount_total: amount,
+            currency: "jpy",
+            status: "checkout_pending",
+            includes_base_book: false,
+            gift_package_selected: true,
+            shipping_address: familyInvitation.shipping_address || {},
+            metadata: { family_invitation_id: familyInvitation.id }
+          }).select().single();
+          if (packageOrderError) throw packageOrderError;
+          return {
+            data: {
+              order: packageOrder,
+              quote: {
+                amount_subtotal: 0,
+                base_book_amount: 0,
+                gift_package_amount: amount,
+                discount_amount: 0,
+                amount_total: amount,
+                currency: "jpy"
+              }
+            },
+            error: null
+          };
+        })();
     const { data: created, error: createError } = await createRequest;
     if (createError) throw createError;
     const order = created?.order;
     const quote = created?.quote;
     orderId = String(order?.id || "");
     if (!orderId || !quote) throw new Error("注文を作成できませんでした");
+
+    if (familyInvitation) {
+      const linkedGiftId = created?.gift?.id || null;
+      const { error: invitationLinkError } = await admin.from("family_story_invitations").update({
+        commerce_order_id: order.id,
+        gift_order_id: linkedGiftId
+      }).eq("id", familyInvitation.id);
+      if (invitationLinkError) throw invitationLinkError;
+    }
 
     // A fully discounted order does not need Stripe products, coupons, or a
     // Checkout Session. Finalize it directly as a zero-yen purchase.
@@ -229,7 +303,9 @@ serve(async request => {
           { code: "premium_hardcover_v1", quantity: Number(quote.premium_copy_count_due || 0) },
           { code: "gift_package_v1", quantity: Number(quote.gift_package_amount || 0) > 0 ? 1 : 0 }
         ]
-      : [
+      : orderType === "family_trial_package"
+        ? [{ code: "gift_package_v1", quantity: 1 }]
+        : [
           { code: "self_book_v1", quantity: Number(order.base_book_amount ?? quote.base_book_amount ?? 0) > 0 ? 1 : 0 },
           { code: "gift_package_v1", quantity: Number(quote.gift_package_amount || 0) > 0 ? 1 : 0 }
         ];
@@ -281,9 +357,16 @@ serve(async request => {
     form.set("metadata[standard_extra_copy_count]", String(order.standard_extra_copy_count || 0));
     form.set("metadata[premium_copy_count]", String(order.premium_copy_count || 0));
     form.set("metadata[gift_package_selected]", String(Boolean(order.gift_package_selected)));
+    if (familyInvitationId) form.set("metadata[family_invitation_id]", familyInvitationId);
     form.set("expires_at", String(Math.floor(Date.now() / 1000) + 60 * 60));
-    form.set("success_url", appReturnUrl({ app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout: "success", session_id: "{CHECKOUT_SESSION_ID}" }));
-    form.set("cancel_url", appReturnUrl({ app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout: "cancelled" }));
+    const returnParams: Record<string, string> = { app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout: "success", session_id: "{CHECKOUT_SESSION_ID}" };
+    const cancelParams: Record<string, string> = { app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout: "cancelled" };
+    if (familyInvitationId) {
+      returnParams.family_invite_checkout = familyInvitationId;
+      cancelParams.family_invite_checkout = familyInvitationId;
+    }
+    form.set("success_url", appReturnUrl(returnParams));
+    form.set("cancel_url", appReturnUrl(cancelParams));
 
     const checkout = await stripeRequest(stripeSecretKey, "checkout/sessions", form);
     if (!checkout?.id || !checkout?.url) throw new Error("購入画面を開けませんでした");

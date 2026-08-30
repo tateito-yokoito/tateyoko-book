@@ -17,6 +17,8 @@ function shouldOpenApplication() {
     "token",
     "supporter_invite",
     "sharing_invite",
+    "family_invite",
+    "family_invite_checkout",
     "sequence"
   ];
 

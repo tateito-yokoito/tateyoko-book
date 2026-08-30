@@ -65,6 +65,22 @@ serve(async request => {
           input_purchased_at: checkout.created ? new Date(checkout.created * 1000).toISOString() : new Date().toISOString()
         });
         if (error) throw error;
+
+        const familyInvitationId = String(checkout?.metadata?.family_invitation_id || "");
+        if (familyInvitationId) {
+          const deliveryResponse = await fetch(`${supabaseUrl}/functions/v1/send-family-story-invite`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${serviceRoleKey}`,
+              apikey: serviceRoleKey,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ invitationId: familyInvitationId })
+          });
+          if (!deliveryResponse.ok) {
+            console.error("family invitation delivery failed", familyInvitationId, deliveryResponse.status);
+          }
+        }
       } else {
         // Compatibility for sessions created before commerce_orders existed.
         const projectId = String(checkout?.metadata?.project_id || checkout?.client_reference_id || "");
