@@ -576,6 +576,49 @@ function withHonorific(name) {
   return text.endsWith("さん") ? text : `${text}さん`;
 }
 
+function formatTranscriptParagraphs(input) {
+  const source = String(input || "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n+ */g, "\n")
+    .trim();
+
+  if (!source) return "";
+
+  return source
+    .split(/\n+/)
+    .flatMap(paragraph => {
+      const sentences = paragraph.match(/[^。！？]+[。！？]+[」』）】"]*|[^。！？]+$/g) || [paragraph];
+      const groups = [];
+      let current = "";
+      let sentenceCount = 0;
+
+      for (const sentence of sentences) {
+        const nextSentence = sentence.trim();
+        if (!nextSentence) continue;
+
+        if (current && current.length + nextSentence.length > 90) {
+          groups.push(current);
+          current = "";
+          sentenceCount = 0;
+        }
+
+        current += nextSentence;
+        sentenceCount += 1;
+
+        if (current.length >= 56 || sentenceCount >= 3) {
+          groups.push(current);
+          current = "";
+          sentenceCount = 0;
+        }
+      }
+
+      if (current) groups.push(current);
+      return groups;
+    })
+    .join("\n\n");
+}
+
 
 function formatTranscriptForReading(input) {
   let text = String(input || "").replace(/\s+/g, " ").trim();
@@ -598,7 +641,7 @@ commaWords.forEach(word => {
     .trim();
 
   if (!/[。！？]$/.test(text)) text += "。";
-  return text;
+  return formatTranscriptParagraphs(text);
 }
 
 const DEV_LOGIN_EMAIL = import.meta.env.VITE_DEV_LOGIN_EMAIL || "";
@@ -3726,15 +3769,14 @@ const newTranscriptRaw =
   sourceVoiceData.transcript ||
   "";
 
-const transcriptRaw =
+const transcriptRaw = formatTranscriptForReading(
   editMode === "append"
-    ? formatTranscriptForReading(
-        [
-          sourceVoiceData.editBaseText,
-          newTranscriptRaw
-        ].filter(Boolean).join("\n\n")
-      )
-    : newTranscriptRaw;
+    ? [
+        sourceVoiceData.editBaseText,
+        newTranscriptRaw
+      ].filter(Boolean).join("\n\n")
+    : newTranscriptRaw
+);
 
 const firstData = {
   ...sourceVoiceData,
@@ -3782,20 +3824,26 @@ try {
       const next = {
       ...prev,
       transcriptClean:
-        polishResult.transcript_clean ||
-        prev.transcriptClean ||
-        transcriptRaw,
+        formatTranscriptParagraphs(
+          polishResult.transcript_clean ||
+          prev.transcriptClean ||
+          transcriptRaw
+        ),
 
       transcriptReadable:
-        polishResult.transcript_readable ||
-        polishResult.transcript_clean ||
-        prev.transcriptReadable ||
-        transcriptRaw,
+        formatTranscriptParagraphs(
+          polishResult.transcript_readable ||
+          polishResult.transcript_clean ||
+          prev.transcriptReadable ||
+          transcriptRaw
+        ),
 
       transcriptEssay:
-        polishResult.transcript_essay ||
-        prev.transcriptEssay ||
-        "",
+        formatTranscriptParagraphs(
+          polishResult.transcript_essay ||
+          prev.transcriptEssay ||
+          ""
+        ),
 
       extractedSnippet:
         polishResult.extracted_snippet ||
@@ -15478,12 +15526,14 @@ return (
         </div>
         )}
 
-         {isProcessing ? (
-           <div className="flex items-center gap-3 text-white/45 text-sm leading-loose">
-             <div className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/70 animate-spin shrink-0"></div>
-             <p>文字起こし中です</p>
-           </div>
-         ) : displayText ? (
+        {(isProcessing || isPolishing) && (
+          <div className={`${displayText ? "mb-4" : ""} flex items-center gap-3 text-white/45 text-sm leading-loose`}>
+            <div className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/70 animate-spin shrink-0"></div>
+            <p>{isProcessing ? "文字起こし中です" : "文章を整えています"}</p>
+          </div>
+        )}
+
+         {!isProcessing && displayText ? (
           <>
             {!isEditingTranscript && (
 <div>
@@ -15561,18 +15611,11 @@ return (
               </div>
             )}
           </>
-        ) : (
+        ) : !isProcessing ? (
           <p className="text-white/45 text-sm leading-loose">
             文字起こしを取得できませんでした。
           </p>
-        )}
-
-        {isPolishing && !isProcessing && (
-          <div className="mt-4 flex items-center gap-3 text-white/35 text-xs leading-loose">
-            <div className="w-3 h-3 rounded-full border-2 border-white/15 border-t-white/50 animate-spin shrink-0"></div>
-            <p>文章を整えています</p>
-          </div>
-        )}
+        ) : null}
 
         </div>
 
