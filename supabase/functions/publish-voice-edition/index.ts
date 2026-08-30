@@ -47,7 +47,7 @@ serve(async (req) => {
 
       const { data: publications, error: statusError } = await serviceClient
         .from("voice_publications")
-        .select("id, public_id, status, access_mode, book_title, book_subtitle, subject_name, published_at, disabled_at, created_at")
+        .select("id, public_id, status, access_mode, book_title, book_subtitle, subject_name, published_at, disabled_at, disabled_reason, created_at")
         .eq("book_project_id", bookProjectId)
         .order("created_at", { ascending: false })
         .limit(20);
@@ -65,7 +65,7 @@ serve(async (req) => {
       });
     }
 
-    if (action === "disable" || action === "set_access") {
+    if (action === "disable" || action === "resume" || action === "set_access") {
       const publicationId = String(body.publicationId || "").trim();
       if (!isUuid(publicationId)) throw new HttpError("publicationId is required", 400);
 
@@ -78,6 +78,27 @@ serve(async (req) => {
       if (!publication) throw new HttpError("Publication not found", 404);
 
       await requireProjectAccess(serviceClient, publication.book_project_id, user.id);
+      if (action === "resume") {
+        const { error: resumeError } = await serviceClient
+          .from("voice_publications")
+          .update({
+            status: "published",
+            disabled_at: null,
+            disabled_reason: null
+          })
+          .eq("id", publicationId)
+          .eq("status", "disabled");
+        if (resumeError) throw resumeError;
+
+        const { error: counterError } = await serviceClient
+          .from("voice_publication_request_windows")
+          .delete()
+          .eq("publication_id", publicationId);
+        if (counterError) throw counterError;
+
+        return jsonResponse({ success: true, publicationId, status: "published" });
+      }
+
       if (action === "set_access") {
         const accessCode = String(body.accessCode || "").trim();
         if (accessCode && !/^[0-9]{4,8}$/.test(accessCode)) {

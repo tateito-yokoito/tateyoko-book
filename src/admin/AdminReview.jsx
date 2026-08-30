@@ -1394,6 +1394,7 @@ function DetailPanel({
   voicePublicationBusy,
   onPublishVoiceEdition,
   onDisableVoiceEdition,
+  onResumeVoiceEdition,
   attentionBusy,
   onRetryAttention,
   onResolveAttention
@@ -1482,7 +1483,7 @@ function DetailPanel({
                 {detail.voice_publication?.status === "published" ? (
                   <StatusPill tone="success">限定公開中</StatusPill>
                 ) : detail.voice_publication?.status === "disabled" ? (
-                  <StatusPill tone="warning">公開停止</StatusPill>
+                  <StatusPill tone="warning">{String(detail.voice_publication?.disabled_reason || "").startsWith("automatic_playback_limit:") ? "アクセス急増で自動停止" : "公開停止"}</StatusPill>
                 ) : (
                   <StatusPill tone="neutral">未公開</StatusPill>
                 )}
@@ -1506,6 +1507,19 @@ function DetailPanel({
                   >
                     {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <EyeOff size={15} />}
                     公開を停止
+                  </button>
+                </div>
+              ) : detail.voice_publication?.status === "disabled" ? (
+                <div className="mt-4">
+                  <p className="mb-3 text-xs leading-5 text-amber-700">同じQR・URLのまま公開を再開できます。アクセス状況を確認してから再開してください。</p>
+                  <button
+                    type="button"
+                    disabled={voicePublicationBusy}
+                    onClick={onResumeVoiceEdition}
+                    className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm text-amber-800 transition hover:bg-amber-50 disabled:opacity-40"
+                  >
+                    {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <BookOpen size={15} />}
+                    公開を再開
                   </button>
                 </div>
               ) : (
@@ -2379,6 +2393,40 @@ export default function AdminReview({ supabaseClient }) {
     }
   }
 
+  async function resumeVoiceEdition() {
+    const publication = detail?.voice_publication;
+    if (!publication?.id || voicePublicationBusy) return;
+    if (!window.confirm("このWeb冊子・音声プレイヤーを、同じQR・URLで再開しますか？")) return;
+
+    setVoicePublicationBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const { data, error: resumeError } = await supabaseClient.functions.invoke("publish-voice-edition", {
+        body: { action: "resume", publicationId: publication.id }
+      });
+      if (resumeError || data?.success === false) {
+        const details = await functionErrorDetails(resumeError, data);
+        throw new Error(details?.error || "公開を再開できませんでした。");
+      }
+      setDetail(current => current ? {
+        ...current,
+        voice_publication: {
+          ...current.voice_publication,
+          status: "published",
+          disabled_at: null,
+          disabled_reason: null
+        }
+      } : current);
+      setNotice("同じQR・URLで公開を再開しました。");
+    } catch (resumeError) {
+      console.error("voice publication resume error", resumeError);
+      setError(resumeError?.message || "公開を再開できませんでした。");
+    } finally {
+      setVoicePublicationBusy(false);
+    }
+  }
+
   async function retryAttentionDelivery(item) {
     if (!item?.source_id || !detailId) return;
     setAttentionActionId(item.id);
@@ -2725,6 +2773,7 @@ export default function AdminReview({ supabaseClient }) {
           voicePublicationBusy={voicePublicationBusy}
           onPublishVoiceEdition={publishVoiceEdition}
           onDisableVoiceEdition={disableVoiceEdition}
+          onResumeVoiceEdition={resumeVoiceEdition}
           attentionBusy={attentionActionId}
           onRetryAttention={retryAttentionDelivery}
           onResolveAttention={resolveAttention}

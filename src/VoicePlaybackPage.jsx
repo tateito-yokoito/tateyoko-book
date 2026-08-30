@@ -23,6 +23,7 @@ function formatTime(seconds) {
 export default function VoicePlaybackPage({ supabaseClient, publicId }) {
   const audioRef = useRef(null);
   const autoplayRef = useRef(false);
+  const assetUrlCacheRef = useRef(new Map());
   const [publication, setPublication] = useState(null);
   const [status, setStatus] = useState("loading");
   const [screen, setScreen] = useState("home");
@@ -35,6 +36,10 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playedItems, setPlayedItems] = useState(() => new Set());
   const [savedProgress, setSavedProgress] = useState(null);
+  const [currentAudioUrl, setCurrentAudioUrl] = useState("");
+  const [currentPhotoUrls, setCurrentPhotoUrls] = useState([]);
+  const [assetStatus, setAssetStatus] = useState("idle");
+  const [assetRetry, setAssetRetry] = useState(0);
 
   const progressKey = storageKey(publicId, "progress");
   const accessKey = storageKey(publicId, "access");
@@ -90,6 +95,70 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
   const currentItem = items[currentItemIndex] || null;
   const currentAsset = currentItem?.audio?.[currentPartIndex] || null;
 
+  const resolveAssetUrl = useCallback(async ({ itemOrder, assetIndex, kind }) => {
+    const cacheKey = `${kind}:${itemOrder}:${assetIndex}`;
+    const cached = assetUrlCacheRef.current.get(cacheKey);
+    if (cached?.url && cached.expiresAt > Date.now()) return cached.url;
+
+    const storedAccess = readStored(accessKey, {});
+    const { data, error } = await supabaseClient.functions.invoke("public-voice", {
+      body: {
+        action: "asset",
+        publicId,
+        itemOrder,
+        assetIndex,
+        kind,
+        accessToken: storedAccess?.token || ""
+      }
+    });
+    if (error || !data?.success || !data?.asset?.url) throw new Error("asset unavailable");
+
+    const lifetimeSeconds = Math.max(60, Number(data.asset.expiresInSeconds || 0));
+    assetUrlCacheRef.current.set(cacheKey, {
+      url: data.asset.url,
+      expiresAt: Date.now() + Math.max(30, lifetimeSeconds - 60) * 1000
+    });
+    return data.asset.url;
+  }, [accessKey, publicId, supabaseClient]);
+
+  useEffect(() => {
+    if (screen !== "player" || !currentItem || !currentAsset) return undefined;
+    let cancelled = false;
+    setAssetStatus("loading");
+    setCurrentAudioUrl("");
+    setCurrentPhotoUrls([]);
+
+    const audioRequest = resolveAssetUrl({
+      itemOrder: currentItem.order,
+      assetIndex: currentAsset.assetIndex,
+      kind: "audio"
+    });
+    const photoRequest = Promise.all((currentItem.photos || []).map(async (photo) => ({
+      ...photo,
+      url: await resolveAssetUrl({
+        itemOrder: currentItem.order,
+        assetIndex: photo.assetIndex,
+        kind: "photo"
+      })
+    }))).catch(() => []);
+
+    Promise.all([audioRequest, photoRequest])
+      .then(([audioUrl, photos]) => {
+        if (cancelled) return;
+        setCurrentAudioUrl(audioUrl);
+        setCurrentPhotoUrls(photos);
+        setAssetStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        autoplayRef.current = false;
+        setIsPlaying(false);
+        setAssetStatus("error");
+      });
+
+    return () => { cancelled = true; };
+  }, [assetRetry, currentAsset, currentItem, resolveAssetUrl, screen]);
+
   const saveProgress = useCallback((overrides = {}) => {
     if (!publication || !currentItem) return;
     const payload = {
@@ -112,7 +181,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !currentAsset?.url || screen !== "player") return;
+    if (!audio || !currentAudioUrl || screen !== "player") return;
     audio.load();
     const seekTo = clamp(currentTime, 0, Number.MAX_SAFE_INTEGER);
     const onLoaded = () => {
@@ -125,7 +194,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
     return () => audio.removeEventListener("loadedmetadata", onLoaded);
     // Time is applied only when changing audio; regular progress updates must not reload it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentAsset?.url, currentItemIndex, currentPartIndex, screen]);
+  }, [currentAudioUrl, currentItemIndex, currentPartIndex, screen]);
 
   const groupedItems = useMemo(() => {
     const groups = [];
@@ -268,21 +337,28 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
           <p className="voice-kicker">{voiceNumber(currentItemIndex)}</p>
           {currentItem.chapterTitle && <p className="voice-player-theme">{currentItem.chapterTitle}</p>}
           <h1>{currentItem.question || "残された声"}</h1>
-          {currentItem.photos?.length > 0 && (
+          {currentPhotoUrls.length > 0 && (
             <div className="voice-photo-strip">
-              {currentItem.photos.map((photo, index) => <figure key={`${photo.url}-${index}`}><img src={photo.url} alt={photo.caption || "この語りに添えられた写真"} />{photo.caption && <figcaption>{photo.caption}</figcaption>}</figure>)}
+              {currentPhotoUrls.map((photo, index) => <figure key={`${photo.url}-${index}`}><img src={photo.url} alt={photo.caption || "この語りに添えられた写真"} />{photo.caption && <figcaption>{photo.caption}</figcaption>}</figure>)}
             </div>
           )}
           <div className="voice-audio-console">
-            <audio ref={audioRef} src={currentAsset.url} preload="metadata" onPlay={() => setIsPlaying(true)} onPause={() => { setIsPlaying(false); saveProgress(); }} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} onDurationChange={(event) => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)} onEnded={handleEnded} />
-            <div className="voice-timeline"><input type="range" min="0" max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} onChange={(event) => seekTo(Number(event.target.value))} aria-label="再生位置" /><div><span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span></div></div>
-            <div className="voice-transport">
-              <button type="button" onClick={() => moveStory(-1)} disabled={currentItemIndex === 0 && currentPartIndex === 0} aria-label="前の声">‹</button>
-              <button type="button" onClick={() => seekTo(currentTime - 15)} aria-label="15秒戻る">−15</button>
-              <button type="button" className="voice-play-button" onClick={togglePlayback} aria-label={isPlaying ? "一時停止" : "再生"}>{isPlaying ? "Ⅱ" : "▶"}</button>
-              <button type="button" onClick={() => seekTo(currentTime + 15)} aria-label="15秒進む">+15</button>
-              <button type="button" onClick={() => moveStory(1)} disabled={currentItemIndex === items.length - 1 && currentPartIndex === currentItem.audio.length - 1} aria-label="次の声">›</button>
-            </div>
+            <audio ref={audioRef} src={currentAudioUrl || undefined} preload="metadata" onPlay={() => setIsPlaying(true)} onPause={() => { setIsPlaying(false); saveProgress(); }} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} onDurationChange={(event) => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)} onEnded={handleEnded} />
+            {assetStatus === "error" ? (
+              <div className="voice-asset-error"><p>音声をひらけませんでした。</p><button type="button" onClick={() => setAssetRetry((value) => value + 1)}>もう一度試す</button></div>
+            ) : (
+              <>
+                {assetStatus === "loading" && <p className="voice-asset-loading" aria-live="polite">声を準備しています。</p>}
+                <div className="voice-timeline"><input type="range" min="0" max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} onChange={(event) => seekTo(Number(event.target.value))} aria-label="再生位置" disabled={!currentAudioUrl} /><div><span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span></div></div>
+                <div className="voice-transport">
+                  <button type="button" onClick={() => moveStory(-1)} disabled={currentItemIndex === 0 && currentPartIndex === 0} aria-label="前の声">‹</button>
+                  <button type="button" onClick={() => seekTo(currentTime - 15)} disabled={!currentAudioUrl} aria-label="15秒戻る">−15</button>
+                  <button type="button" className="voice-play-button" onClick={togglePlayback} disabled={!currentAudioUrl} aria-label={isPlaying ? "一時停止" : "再生"}>{isPlaying ? "Ⅱ" : "▶"}</button>
+                  <button type="button" onClick={() => seekTo(currentTime + 15)} disabled={!currentAudioUrl} aria-label="15秒進む">+15</button>
+                  <button type="button" onClick={() => moveStory(1)} disabled={currentItemIndex === items.length - 1 && currentPartIndex === currentItem.audio.length - 1} aria-label="次の声">›</button>
+                </div>
+              </>
+            )}
           </div>
           {currentItem.transcript && <article className="voice-transcript"><p className="voice-kicker">WORDS</p><p>{currentItem.transcript}</p></article>}
           <div className="voice-player-nav"><button type="button" onClick={() => setScreen("contents")}>声の一覧へ</button>{currentItemIndex < items.length - 1 && <button type="button" onClick={() => openStory(currentItemIndex + 1)}>次の声へ</button>}</div>

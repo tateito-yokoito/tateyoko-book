@@ -9,8 +9,9 @@ const corsHeaders = {
 
 const AUDIO_BUCKET = "audio";
 const PHOTO_BUCKET = "photos";
-const SIGNED_URL_LIFETIME_SECONDS = 60 * 60;
+const SIGNED_URL_LIFETIME_SECONDS = 15 * 60;
 const ACCESS_SESSION_DAYS = 30;
+const PUBLIC_ACTIONS = new Set(["metadata", "asset"]);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -27,6 +28,8 @@ serve(async (req) => {
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const publicId = String(body.publicId || requestUrl.searchParams.get("voice") || "").trim().toLowerCase();
     if (!/^[a-f0-9]{48}$/.test(publicId)) throw new HttpError("Not found", 404);
+    const action = String(body.action || "metadata").trim().toLowerCase();
+    if (!PUBLIC_ACTIONS.has(action)) throw new HttpError("Unsupported action", 400);
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false }
@@ -40,6 +43,24 @@ serve(async (req) => {
       .maybeSingle();
     if (publicationError) throw publicationError;
     if (!publication) throw new HttpError("Not found", 404);
+
+    const clientHash = await requestClientHash(req, serviceRoleKey);
+    const { data: rateRows, error: rateError } = await admin.rpc("register_voice_publication_request", {
+      input_publication_id: publication.id,
+      input_client_hash: clientHash,
+      input_request_kind: action
+    });
+    if (rateError) throw rateError;
+    const rate = Array.isArray(rateRows) ? rateRows[0] : rateRows;
+    if (!rate?.allowed) {
+      const retryAfter = Math.max(1, finiteInteger(rate?.retry_after_seconds) || 60);
+      return jsonResponse({
+        success: false,
+        rateLimited: true,
+        temporarilyUnavailable: Boolean(rate?.circuit_open),
+        retryAfterSeconds: retryAfter
+      }, 429, { "Retry-After": String(retryAfter) });
+    }
 
     const accessResult = await authorizePublication({
       req,
@@ -55,6 +76,10 @@ serve(async (req) => {
       });
     }
 
+    if (action === "asset") {
+      return createAssetResponse({ admin, body, publication });
+    }
+
     const { data: itemRows, error: itemsError } = await admin
       .from("voice_publication_items")
       .select("item_order, chapter_title, question_text, transcript_text, audio_assets, photo_assets")
@@ -67,40 +92,24 @@ serve(async (req) => {
       const audio = [];
       const photos = [];
       const assets = Array.isArray(item.audio_assets) ? item.audio_assets : [];
-      for (const asset of assets) {
+      for (let assetIndex = 0; assetIndex < assets.length; assetIndex += 1) {
+        const asset = assets[assetIndex];
         const storagePath = String(asset?.storagePath || "").trim();
         if (!storagePath.startsWith(`published/${publication.id}/`)) continue;
-
-        const { data: signed, error: signedError } = await admin.storage
-          .from(AUDIO_BUCKET)
-          .createSignedUrl(storagePath, SIGNED_URL_LIFETIME_SECONDS);
-        if (signedError || !signed?.signedUrl) {
-          console.error("public-voice signed URL", { storagePath, signedError });
-          continue;
-        }
-
         audio.push({
-          url: signed.signedUrl,
+          assetIndex,
           part: finiteNumber(asset?.part),
           durationSeconds: finiteNumber(asset?.durationSeconds)
         });
       }
 
       const photoAssets = Array.isArray(item.photo_assets) ? item.photo_assets : [];
-      for (const asset of photoAssets) {
+      for (let assetIndex = 0; assetIndex < photoAssets.length; assetIndex += 1) {
+        const asset = photoAssets[assetIndex];
         const storagePath = String(asset?.storagePath || "").trim();
         if (!storagePath.startsWith(`published/${publication.id}/`)) continue;
-
-        const { data: signed, error: signedError } = await admin.storage
-          .from(PHOTO_BUCKET)
-          .createSignedUrl(storagePath, SIGNED_URL_LIFETIME_SECONDS);
-        if (signedError || !signed?.signedUrl) {
-          console.error("public-voice photo signed URL", { storagePath, signedError });
-          continue;
-        }
-
         photos.push({
-          url: signed.signedUrl,
+          assetIndex,
           width: finiteNumber(asset?.width),
           height: finiteNumber(asset?.height),
           caption: String(asset?.caption || "").trim()
@@ -139,6 +148,51 @@ serve(async (req) => {
     return jsonResponse({ success: false, error: status === 404 ? "Not found" : "Playback unavailable" }, status);
   }
 });
+
+async function createAssetResponse({ admin, body, publication }: any) {
+  const kind = String(body.kind || "").trim().toLowerCase();
+  if (kind !== "audio" && kind !== "photo") throw new HttpError("Invalid asset", 400);
+
+  const itemOrder = finiteInteger(body.itemOrder);
+  const assetIndex = finiteInteger(body.assetIndex);
+  if (!itemOrder || itemOrder < 1 || assetIndex === null || assetIndex < 0) {
+    throw new HttpError("Invalid asset", 400);
+  }
+
+  const column = kind === "audio" ? "audio_assets" : "photo_assets";
+  const { data: item, error: itemError } = await admin
+    .from("voice_publication_items")
+    .select(column)
+    .eq("publication_id", publication.id)
+    .eq("item_order", itemOrder)
+    .maybeSingle();
+  if (itemError) throw itemError;
+
+  const assets = Array.isArray(item?.[column]) ? item[column] : [];
+  const asset = assets[assetIndex];
+  const storagePath = String(asset?.storagePath || "").trim();
+  if (!storagePath.startsWith(`published/${publication.id}/`)) throw new HttpError("Not found", 404);
+
+  const bucket = kind === "audio" ? AUDIO_BUCKET : PHOTO_BUCKET;
+  const { data: signed, error: signedError } = await admin.storage
+    .from(bucket)
+    .createSignedUrl(storagePath, SIGNED_URL_LIFETIME_SECONDS);
+  if (signedError || !signed?.signedUrl) {
+    console.error("public-voice asset signed URL", { kind, itemOrder, assetIndex, signedError });
+    throw new HttpError("Playback unavailable", 503);
+  }
+
+  return jsonResponse({
+    success: true,
+    asset: {
+      kind,
+      itemOrder,
+      assetIndex,
+      url: signed.signedUrl,
+      expiresInSeconds: SIGNED_URL_LIFETIME_SECONDS
+    }
+  });
+}
 
 async function authorizePublication({ req, body, admin, publication }: any) {
   if (publication.access_mode !== "code") return { authorized: true };
@@ -222,6 +276,22 @@ function finiteNumber(value: unknown) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function finiteInteger(value: unknown) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+async function requestClientHash(req: Request, secret: string) {
+  const forwarded = String(req.headers.get("x-forwarded-for") || "")
+    .split(",")[0]
+    .trim();
+  const address = forwarded
+    || String(req.headers.get("cf-connecting-ip") || "").trim()
+    || String(req.headers.get("x-real-ip") || "").trim()
+    || "unknown";
+  return sha256Hex(`public-voice:${address}:${secret}`);
+}
+
 function randomHex(byteLength: number) {
   const bytes = new Uint8Array(byteLength);
   crypto.getRandomValues(bytes);
@@ -234,11 +304,12 @@ async function sha256Hex(value: string) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function jsonResponse(payload: unknown, status = 200) {
+function jsonResponse(payload: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: {
       ...corsHeaders,
+      ...extraHeaders,
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store, max-age=0"
     }
