@@ -45,6 +45,7 @@ body.voice-page-active {
 .voice-home,
 .voice-contents,
 .voice-player,
+.voice-video-player,
 .voice-finished,
 .voice-page-footer {
   width: min(880px, calc(100% - 40px));
@@ -105,6 +106,19 @@ body.voice-page-active {
 .voice-player-nav { display: flex; gap: 12px; justify-content: space-between; margin-top: 42px; }
 .voice-player-nav button { min-width: 150px; min-height: 54px; }
 
+.voice-video-index { margin-top: 66px; }
+.voice-video-player { padding: clamp(56px, 9vw, 88px) 0; }
+.voice-video-player > h1 { margin: 0; font-size: clamp(1.7rem, 5vw, 2.7rem); font-weight: 400; line-height: 1.55; }
+.voice-video-prompt { max-width: 38em; margin: 16px 0 34px; color: var(--muted); line-height: 1.8; }
+.voice-video-frame { display: flex; min-height: 260px; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--line); border-radius: 22px; background: #07111f; }
+.voice-video-frame video { display: block; width: 100%; max-height: min(72vh, 760px); background: #07111f; object-fit: contain; }
+.voice-video-frame .voice-asset-loading { margin: 0; color: rgba(255,255,255,.58); }
+.voice-video-frame .voice-asset-error { color: rgba(255,255,255,.68); }
+.voice-video-frame .voice-asset-error button { border-color: rgba(255,255,255,.28); color: white; }
+.voice-audio-only-button { display: block; min-height: 52px; margin: 22px auto 0; padding: 10px 24px; border: 1px solid var(--line); border-radius: 999px; background: transparent; cursor: pointer; }
+.voice-video-audio { display: block; width: min(520px, 100%); margin: 24px auto 0; }
+.voice-video-audio-error { color: #9a4653; font-size: .82rem; text-align: center; }
+
 .voice-finished { min-height: calc(100vh - 78px); padding: clamp(80px, 15vw, 150px) 0; text-align: center; }
 .voice-finished > img { width: 58px; margin-bottom: 32px; }
 .voice-finished h1 { margin: 0 0 48px; font-size: clamp(1.75rem, 5vw, 3rem); font-weight: 400; line-height: 1.7; }
@@ -130,7 +144,7 @@ body.voice-page-active {
   .voice-page { font-size: 16px; }
   .voice-page-header { min-height: 68px; padding-inline: 18px; }
   .voice-wordmark img { width: 164px; height: 40px; }
-  .voice-home, .voice-contents, .voice-player, .voice-finished, .voice-page-footer { width: calc(100% - 32px); }
+  .voice-home, .voice-contents, .voice-player, .voice-video-player, .voice-finished, .voice-page-footer { width: calc(100% - 32px); }
   .voice-home { display: flex; min-height: 0; flex-direction: column; gap: 48px; padding-block: 42px 64px; }
   .voice-cover { width: min(78vw, 360px); }
   .voice-home-actions { width: 100%; }

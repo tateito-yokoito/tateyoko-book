@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bell, BookOpen, Check, ChevronLeft, ChevronRight, Files, Home, Image as ImageIcon, Lock, Mail, Mic, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings, Smartphone, Square, UserCircle, UserCog, Users } from "lucide-react";
+import { Bell, BookOpen, Check, ChevronLeft, ChevronRight, Files, Home, Image as ImageIcon, Lock, Mail, Mic, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings, Smartphone, Square, UserCircle, UserCog, Users, Video } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import { logActivity } from "./lib/activityLog.js";
+import VideoStoryFlow from "./VideoStoryFlow.jsx";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumossjxehdop.supabase.co";
 
@@ -16973,6 +16974,8 @@ function Scene_StoryPages({
   const [editingPhoto, setEditingPhoto] = useState(null);
   const [preparingPhotoPath, setPreparingPhotoPath] = useState(null);
   const [replacingPhotoPath, setReplacingPhotoPath] = useState(null);
+  const [videoStories, setVideoStories] = useState([]);
+  const [videoFlowOpen, setVideoFlowOpen] = useState(false);
 
   const [editSelectedStyle, setEditSelectedStyle] = useState("readable");
   const [editDraftText, setEditDraftText] = useState("");
@@ -16998,6 +17001,7 @@ const loadAnswers = async (options = {}) => {
     if (!user?.id) {
       setAnswers([]);
       setMediaByAnswerId({});
+      setVideoStories([]);
       setLoading(false);
       return;
     }
@@ -17028,6 +17032,19 @@ const loadAnswers = async (options = {}) => {
 
       const answerRows = data || [];
       setAnswers(answerRows);
+
+      if (foundation?.project?.id) {
+        const { data: videoRows, error: videoError } = await supabaseClient
+          .from("video_stories")
+          .select("id, book_project_id, slot_order, prompt_kind, prompt_text, title, source_answer_id, video_storage_path, audio_storage_path, poster_storage_path, duration_seconds, mime_type, file_size_bytes, status, transcript_text, metadata, created_at")
+          .eq("book_project_id", foundation.project.id)
+          .order("slot_order", { ascending: true });
+
+        if (videoError) throw videoError;
+        setVideoStories(videoRows || []);
+      } else {
+        setVideoStories([]);
+      }
 
       if (foundation?.project?.id) {
         const { data: introductionRow, error: introductionError } =
@@ -17421,6 +17438,17 @@ useEffect(() => {
 
 return (
   <div className="h-full flex flex-col fade-enter px-4 pt-0 pb-4 -mt-8 overflow-hidden">
+    <VideoStoryFlow
+      open={videoFlowOpen}
+      user={user}
+      foundation={foundation}
+      answers={answers}
+      questionSet={questionSet}
+      stories={videoStories}
+      supabaseClient={supabaseClient}
+      onReload={() => loadAnswers({ showLoading: false })}
+      onClose={() => setVideoFlowOpen(false)}
+    />
     <PhotoCorrectionFlow
       open={!!photoActionAnswerId}
       onClose={() => setPhotoActionAnswerId(null)}
@@ -17563,6 +17591,24 @@ return (
     これまでの語り
   </p>
 </div>
+
+<button
+  type="button"
+  onClick={() => setVideoFlowOpen(true)}
+  className="glass-card mb-3 flex min-h-[64px] items-center justify-between px-5 text-left"
+>
+  <div className="flex items-center gap-3">
+    <Video size={20} className="text-white/52" strokeWidth={1.7} />
+    <div>
+      <p className="text-white/80 text-[0.95rem] text-narrative">ビデオで残す</p>
+      <p className="mt-1 text-white/30 text-[0.68rem]">任意</p>
+    </div>
+  </div>
+  <div className="flex items-center gap-3">
+    <span className="text-white/34 text-sm">{videoStories.length}/2</span>
+    <ChevronRight size={18} className="text-white/28" strokeWidth={1.7} />
+  </div>
+</button>
 
 {hasLifeOutline && onOpenLifeOutline && (
   <button

@@ -22,6 +22,7 @@ function formatTime(seconds) {
 
 export default function VoicePlaybackPage({ supabaseClient, publicId }) {
   const audioRef = useRef(null);
+  const videoRef = useRef(null);
   const autoplayRef = useRef(false);
   const assetUrlCacheRef = useRef(new Map());
   const [publication, setPublication] = useState(null);
@@ -40,6 +41,11 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
   const [currentPhotoUrls, setCurrentPhotoUrls] = useState([]);
   const [assetStatus, setAssetStatus] = useState("idle");
   const [assetRetry, setAssetRetry] = useState(0);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [currentVideoUrl, setCurrentVideoUrl] = useState("");
+  const [currentVideoPosterUrl, setCurrentVideoPosterUrl] = useState("");
+  const [currentVideoAudioUrl, setCurrentVideoAudioUrl] = useState("");
+  const [videoAssetStatus, setVideoAssetStatus] = useState("idle");
 
   const progressKey = storageKey(publicId, "progress");
   const accessKey = storageKey(publicId, "access");
@@ -92,11 +98,15 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
   }, []);
 
   const items = publication?.items || [];
+  const videos = publication?.videos || [];
   const currentItem = items[currentItemIndex] || null;
   const currentAsset = currentItem?.audio?.[currentPartIndex] || null;
+  const currentVideo = videos[currentVideoIndex] || null;
 
-  const resolveAssetUrl = useCallback(async ({ itemOrder, assetIndex, kind }) => {
-    const cacheKey = `${kind}:${itemOrder}:${assetIndex}`;
+  const resolveAssetUrl = useCallback(async ({ itemOrder, assetIndex, videoIndex, kind }) => {
+    const cacheKey = kind.startsWith("video")
+      ? `${kind}:video:${videoIndex}`
+      : `${kind}:${itemOrder}:${assetIndex}`;
     const cached = assetUrlCacheRef.current.get(cacheKey);
     if (cached?.url && cached.expiresAt > Date.now()) return cached.url;
 
@@ -107,6 +117,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
         publicId,
         itemOrder,
         assetIndex,
+        videoIndex,
         kind,
         accessToken: storedAccess?.token || ""
       }
@@ -120,6 +131,40 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
     });
     return data.asset.url;
   }, [accessKey, publicId, supabaseClient]);
+
+  useEffect(() => {
+    if (screen !== "video" || !currentVideo) return undefined;
+    let cancelled = false;
+    setVideoAssetStatus("loading");
+    setCurrentVideoUrl("");
+    setCurrentVideoPosterUrl("");
+    setCurrentVideoAudioUrl("");
+
+    const videoRequest = resolveAssetUrl({
+      videoIndex: currentVideo.videoIndex,
+      kind: "video"
+    });
+    const posterRequest = currentVideo.hasPoster
+      ? resolveAssetUrl({ videoIndex: currentVideo.videoIndex, kind: "video_poster" }).catch(() => "")
+      : Promise.resolve("");
+
+    Promise.all([videoRequest, posterRequest])
+      .then(([videoUrl, posterUrl]) => {
+        if (cancelled) return;
+        setCurrentVideoUrl(videoUrl);
+        setCurrentVideoPosterUrl(posterUrl);
+        setVideoAssetStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setVideoAssetStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+      videoRef.current?.pause?.();
+    };
+  }, [assetRetry, currentVideo, resolveAssetUrl, screen]);
 
   useEffect(() => {
     if (screen !== "player" || !currentItem || !currentAsset) return undefined;
@@ -219,6 +264,26 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
     setScreen("player");
   }
 
+  function openVideo(videoIndex) {
+    setCurrentVideoIndex(clamp(videoIndex, 0, Math.max(videos.length - 1, 0)));
+    setScreen("video");
+  }
+
+  async function openVideoAudio() {
+    if (!currentVideo?.hasAudioFallback) return;
+    try {
+      setVideoAssetStatus("loading-audio");
+      const url = await resolveAssetUrl({
+        videoIndex: currentVideo.videoIndex,
+        kind: "video_audio"
+      });
+      setCurrentVideoAudioUrl(url);
+      setVideoAssetStatus("ready");
+    } catch {
+      setVideoAssetStatus("error-audio");
+    }
+  }
+
   function resumeStory() {
     if (!savedProgress || !items[savedProgress.itemIndex]) return;
     openStory(savedProgress.itemIndex, savedProgress.partIndex || 0, savedProgress.time || 0);
@@ -292,7 +357,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
         <button type="button" className="voice-wordmark" onClick={() => setScreen("home")} aria-label="この作品の表紙へ">
           <img src="/brand-logo-lockup-kyokasho.svg" alt="縦糸横糸" />
         </button>
-        {screen !== "home" && <button type="button" className="voice-header-action" onClick={() => setScreen("contents")}>声を選ぶ</button>}
+        {screen !== "home" && <button type="button" className="voice-header-action" onClick={() => setScreen("contents")}>一覧を見る</button>}
       </header>
 
       {screen === "home" && (
@@ -308,7 +373,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
           <div className="voice-home-actions">
             <button type="button" className="voice-primary-button" onClick={() => openStory(0)}>最初から聴く</button>
             {savedProgress && <button type="button" onClick={resumeStory}>前回の続きから <small>{voiceNumber(savedProgress.itemIndex)}</small></button>}
-            <button type="button" onClick={() => setScreen("contents")}>声を選ぶ</button>
+            <button type="button" onClick={() => setScreen("contents")}>{videos.length > 0 ? "声・ビデオを選ぶ" : "声を選ぶ"}</button>
           </div>
         </section>
       )}
@@ -316,7 +381,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
       {screen === "contents" && (
         <section className="voice-contents">
           <p className="voice-kicker">VOICE INDEX</p>
-          <h1>声を選ぶ</h1>
+          <h1>{videos.length > 0 ? "声・ビデオを選ぶ" : "声を選ぶ"}</h1>
           {groupedItems.map((group) => (
             <div className="voice-theme" key={group.title}>
               <h2>{group.title}</h2>
@@ -329,6 +394,47 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
               ))}
             </div>
           ))}
+          {videos.length > 0 && (
+            <div className="voice-theme voice-video-index">
+              <h2>ビデオ</h2>
+              {videos.map((video, index) => (
+                <button type="button" className="voice-index-item" key={`${video.videoIndex}-${index}`} onClick={() => openVideo(index)}>
+                  <span className="voice-number">VIDEO {String(index + 1).padStart(2, "0")}</span>
+                  <span><strong>{video.title || "残したビデオ"}</strong>{video.prompt && <small>{video.prompt}</small>}</span>
+                  <b aria-hidden="true">›</b>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {screen === "video" && currentVideo && (
+        <section className="voice-video-player">
+          <p className="voice-kicker">VIDEO {String(currentVideoIndex + 1).padStart(2, "0")}</p>
+          <h1>{currentVideo.title || "残したビデオ"}</h1>
+          {currentVideo.prompt && <p className="voice-video-prompt">{currentVideo.prompt}</p>}
+          <div className="voice-video-frame">
+            {videoAssetStatus === "error" ? (
+              <div className="voice-asset-error"><p>ビデオをひらけませんでした。</p><button type="button" onClick={() => setAssetRetry((value) => value + 1)}>もう一度試す</button></div>
+            ) : currentVideoUrl ? (
+              <video ref={videoRef} src={currentVideoUrl} poster={currentVideoPosterUrl || undefined} controls playsInline preload="metadata" />
+            ) : (
+              <p className="voice-asset-loading" aria-live="polite">ビデオを準備しています。</p>
+            )}
+          </div>
+          {currentVideo.hasAudioFallback && !currentVideoAudioUrl && (
+            <button type="button" className="voice-audio-only-button" onClick={openVideoAudio} disabled={videoAssetStatus === "loading-audio"}>
+              {videoAssetStatus === "loading-audio" ? "音声を準備しています。" : "音声だけで聴く"}
+            </button>
+          )}
+          {currentVideoAudioUrl && <audio className="voice-video-audio" src={currentVideoAudioUrl} controls preload="metadata" />}
+          {videoAssetStatus === "error-audio" && <p className="voice-video-audio-error">音声だけの再生をひらけませんでした。</p>}
+          {currentVideo.transcript && <article className="voice-transcript"><p className="voice-kicker">WORDS</p><p>{currentVideo.transcript}</p></article>}
+          <div className="voice-player-nav">
+            <button type="button" onClick={() => setScreen("contents")}>声とビデオの一覧へ</button>
+            {currentVideoIndex < videos.length - 1 && <button type="button" onClick={() => openVideo(currentVideoIndex + 1)}>次のビデオへ</button>}
+          </div>
         </section>
       )}
 

@@ -9,6 +9,7 @@ const corsHeaders = {
 
 const AUDIO_BUCKET = "audio";
 const PHOTO_BUCKET = "photos";
+const VIDEO_BUCKET = "videos";
 const SIGNED_URL_LIFETIME_SECONDS = 15 * 60;
 const ACCESS_SESSION_DAYS = 30;
 const PUBLIC_ACTIONS = new Set(["metadata", "asset"]);
@@ -37,7 +38,7 @@ serve(async (req) => {
 
     const { data: publication, error: publicationError } = await admin
       .from("voice_publications")
-      .select("id, book_project_id, book_title, book_subtitle, subject_name, snapshot_metadata, published_at, access_mode")
+      .select("id, book_project_id, book_title, book_subtitle, subject_name, snapshot_metadata, video_assets, published_at, access_mode")
       .eq("public_id", publicId)
       .eq("status", "published")
       .maybeSingle();
@@ -45,10 +46,13 @@ serve(async (req) => {
     if (!publication) throw new HttpError("Not found", 404);
 
     const clientHash = await requestClientHash(req, serviceRoleKey);
+    const requestKind = action === "asset" && String(body.kind || "").toLowerCase().startsWith("video")
+      ? "video_asset"
+      : action;
     const { data: rateRows, error: rateError } = await admin.rpc("register_voice_publication_request", {
       input_publication_id: publication.id,
       input_client_hash: clientHash,
-      input_request_kind: action
+      input_request_kind: requestKind
     });
     if (rateError) throw rateError;
     const rate = Array.isArray(rateRows) ? rateRows[0] : rateRows;
@@ -129,6 +133,24 @@ serve(async (req) => {
 
     if (items.length === 0) throw new HttpError("Not found", 404);
 
+    const videos = [];
+    const videoAssets = Array.isArray(publication.video_assets) ? publication.video_assets : [];
+    for (let videoIndex = 0; videoIndex < videoAssets.length; videoIndex += 1) {
+      const video = videoAssets[videoIndex];
+      const videoPath = String(video?.videoStoragePath || "").trim();
+      if (!videoPath.startsWith(`published/${publication.id}/videos/`)) continue;
+      videos.push({
+        videoIndex,
+        slotOrder: finiteInteger(video?.slotOrder) || videoIndex + 1,
+        title: String(video?.title || "残したビデオ").trim(),
+        prompt: String(video?.promptText || "").trim(),
+        transcript: String(video?.transcriptText || "").trim(),
+        durationSeconds: finiteNumber(video?.durationSeconds),
+        hasAudioFallback: String(video?.audioStoragePath || "").startsWith(`published/${publication.id}/videos/`),
+        hasPoster: String(video?.posterStoragePath || "").startsWith(`published/${publication.id}/videos/`)
+      });
+    }
+
     return jsonResponse({
       success: true,
       publication: {
@@ -138,7 +160,8 @@ serve(async (req) => {
         footerText: String(publication.snapshot_metadata?.footerText || "").trim(),
         publishedAt: publication.published_at,
         accessProtected: publication.access_mode === "code",
-        items
+        items,
+        videos
       },
       accessToken: accessResult.accessToken || null
     });
@@ -151,7 +174,45 @@ serve(async (req) => {
 
 async function createAssetResponse({ admin, body, publication }: any) {
   const kind = String(body.kind || "").trim().toLowerCase();
-  if (kind !== "audio" && kind !== "photo") throw new HttpError("Invalid asset", 400);
+  const videoKinds = new Set(["video", "video_audio", "video_poster"]);
+  if (kind !== "audio" && kind !== "photo" && !videoKinds.has(kind)) {
+    throw new HttpError("Invalid asset", 400);
+  }
+
+  if (videoKinds.has(kind)) {
+    const videoIndex = finiteInteger(body.videoIndex);
+    if (videoIndex === null || videoIndex < 0) throw new HttpError("Invalid asset", 400);
+    const videos = Array.isArray(publication.video_assets) ? publication.video_assets : [];
+    const video = videos[videoIndex];
+    const property = kind === "video"
+      ? "videoStoragePath"
+      : kind === "video_audio"
+        ? "audioStoragePath"
+        : "posterStoragePath";
+    const storagePath = String(video?.[property] || "").trim();
+    if (!storagePath.startsWith(`published/${publication.id}/videos/`)) {
+      throw new HttpError("Not found", 404);
+    }
+
+    const lifetimeSeconds = kind === "video" ? 10 * 60 : SIGNED_URL_LIFETIME_SECONDS;
+    const { data: signed, error: signedError } = await admin.storage
+      .from(VIDEO_BUCKET)
+      .createSignedUrl(storagePath, lifetimeSeconds);
+    if (signedError || !signed?.signedUrl) {
+      console.error("public-voice video signed URL", { kind, videoIndex, signedError });
+      throw new HttpError("Playback unavailable", 503);
+    }
+
+    return jsonResponse({
+      success: true,
+      asset: {
+        kind,
+        videoIndex,
+        url: signed.signedUrl,
+        expiresInSeconds: lifetimeSeconds
+      }
+    });
+  }
 
   const itemOrder = finiteInteger(body.itemOrder);
   const assetIndex = finiteInteger(body.assetIndex);

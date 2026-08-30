@@ -9,6 +9,7 @@ const corsHeaders = {
 
 const AUDIO_BUCKET = "audio";
 const PHOTO_BUCKET = "photos";
+const VIDEO_BUCKET = "videos";
 const APP_URL = (Deno.env.get("APP_URL") || "https://www.tateito-yokoito.jp").replace(/\/$/, "");
 
 class HttpError extends Error {
@@ -223,6 +224,14 @@ serve(async (req) => {
     const publishableAnswers = answers.filter((answer) => (audioByAnswerId.get(answer.id) || []).length > 0);
     if (publishableAnswers.length === 0) throw new HttpError("公開できる音声がありません", 409);
 
+    const { data: videoRows, error: videosError } = await serviceClient
+      .from("video_stories")
+      .select("id, slot_order, prompt_kind, prompt_text, title, transcript_text, video_storage_path, audio_storage_path, poster_storage_path, duration_seconds, mime_type, status")
+      .eq("book_project_id", bookProjectId)
+      .in("status", ["ready", "failed"])
+      .order("slot_order", { ascending: true });
+    if (videosError) throw videosError;
+
     const publicId = randomHex(24);
     const { data: publication, error: publicationError } = await serviceClient
       .from("voice_publications")
@@ -233,10 +242,11 @@ serve(async (req) => {
         book_title: String(cover?.title || project.title || "").trim(),
         book_subtitle: String(cover?.subtitle || "").trim(),
         subject_name: String(subject?.display_name || subject?.preferred_name || "").trim(),
-        snapshot_schema_version: 2,
+        snapshot_schema_version: 3,
         snapshot_metadata: {
           footerText: String(cover?.footer_text || "").trim(),
           sourceAnswerCount: publishableAnswers.length,
+          sourceVideoCount: (videoRows || []).length,
           sourceProjectTitle: String(project.title || "").trim()
         },
         created_by: user.id
@@ -314,10 +324,51 @@ serve(async (req) => {
       .insert(itemRows);
     if (itemsError) throw itemsError;
 
+    const copiedVideos = [];
+    for (const videoStory of videoRows || []) {
+      const destinationRoot = `published/${publication.id}/videos/${String(videoStory.slot_order).padStart(2, "0")}`;
+      const videoDestination = `${destinationRoot}/video${safeExtension(videoStory.video_storage_path)}`;
+      const { error: videoCopyError } = await serviceClient.storage
+        .from(VIDEO_BUCKET)
+        .copy(videoStory.video_storage_path, videoDestination);
+      if (videoCopyError) throw new Error(`ビデオの固定コピーに失敗しました: ${videoCopyError.message}`);
+
+      let audioDestination = null;
+      if (videoStory.audio_storage_path) {
+        audioDestination = `${destinationRoot}/audio${safeExtension(videoStory.audio_storage_path)}`;
+        const { error: audioCopyError } = await serviceClient.storage
+          .from(VIDEO_BUCKET)
+          .copy(videoStory.audio_storage_path, audioDestination);
+        if (audioCopyError) throw new Error(`ビデオ音声の固定コピーに失敗しました: ${audioCopyError.message}`);
+      }
+
+      let posterDestination = null;
+      if (videoStory.poster_storage_path) {
+        posterDestination = `${destinationRoot}/poster${safeExtension(videoStory.poster_storage_path, ".jpg")}`;
+        const { error: posterCopyError } = await serviceClient.storage
+          .from(VIDEO_BUCKET)
+          .copy(videoStory.poster_storage_path, posterDestination);
+        if (posterCopyError) throw new Error(`ビデオ表紙の固定コピーに失敗しました: ${posterCopyError.message}`);
+      }
+
+      copiedVideos.push({
+        slotOrder: videoStory.slot_order,
+        title: String(videoStory.title || "").trim(),
+        promptKind: String(videoStory.prompt_kind || "free"),
+        promptText: String(videoStory.prompt_text || "").trim(),
+        transcriptText: String(videoStory.transcript_text || "").trim(),
+        durationSeconds: finiteNumber(videoStory.duration_seconds),
+        videoStoragePath: videoDestination,
+        audioStoragePath: audioDestination,
+        posterStoragePath: posterDestination,
+        mimeType: String(videoStory.mime_type || "").trim()
+      });
+    }
+
     const publishedAt = new Date().toISOString();
     const { error: publishError } = await serviceClient
       .from("voice_publications")
-      .update({ status: "published", published_at: publishedAt })
+      .update({ status: "published", published_at: publishedAt, video_assets: copiedVideos })
       .eq("id", publication.id)
       .eq("status", "draft");
     if (publishError) throw publishError;
@@ -329,7 +380,8 @@ serve(async (req) => {
       publicUrl: `${APP_URL}/?voice=${encodeURIComponent(publicId)}`,
       accessMode: "link",
       publishedAt,
-      itemCount: itemRows.length
+      itemCount: itemRows.length,
+      videoCount: copiedVideos.length
     });
   } catch (error) {
     console.error("publish-voice-edition", error);
