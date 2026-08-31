@@ -528,7 +528,7 @@ function CommercePanel({
   const campaigns = data?.campaigns || [];
   const codes = data?.codes || [];
   const orders = data?.orders || [];
-  const gifts = data?.gifts || [];
+  const gifts = (data?.gifts || []).filter(item => ["paid", "zero_paid"].includes(item.order_status));
   const selectedCodeCampaign = campaigns.find(item => item.id === codeCampaignId) || null;
   const selectedCodeCampaignCoversEntireOrder = selectedCodeCampaign?.discount_scope === "entire_order";
   const paidOrders = orders.filter(item => ["paid", "zero_paid"].includes(item.status));
@@ -771,7 +771,7 @@ function CommercePanel({
                 <select value={item.package_status} onChange={event => onUpdateGift(item, event.target.value)} disabled={busy || !item.package_selected} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 disabled:opacity-50"><option value="not_requested">梱包なし</option><option value="pending">準備待ち</option><option value="preparing">準備中</option><option value="shipped">発送済み</option><option value="delivered">配達完了</option></select>
               </div>
             </div>
-          )) : <p className="py-8 text-center text-sm text-slate-400">ギフト注文はまだありません。</p>}
+          )) : <p className="py-8 text-center text-sm text-slate-400">決済完了したギフトはまだありません。</p>}
         </div>
       </section>
     </div>
