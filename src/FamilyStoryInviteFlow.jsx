@@ -196,7 +196,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
           <button type="button" onClick={goBack} disabled={busy} className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] disabled:opacity-35" aria-label="前へ戻る">
             <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
           </button>
-          <p className="text-narrative text-[1.02rem] text-white/88">家族に贈る・紹介する</p>
+          <p className="text-narrative text-[1.02rem] text-white/88">家族に贈る</p>
         </div>
 
         {step !== "complete" && (
