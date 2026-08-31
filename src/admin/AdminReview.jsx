@@ -737,8 +737,17 @@ function CommercePanel({
         <div className="mt-4 max-h-80 overflow-y-auto divide-y divide-slate-100 border-t border-slate-100">
           {codes.length ? codes.slice(0, 200).map(item => (
             <div key={item.id} className="flex items-center justify-between gap-3 py-3">
-              <div className="min-w-0"><p className="truncate font-mono text-sm">{item.code}</p><p className="mt-1 text-xs text-slate-400">利用 {item.redemption_count || 0} / {item.max_redemptions ?? "無制限"}</p></div>
-              {salesModeActive && <button type="button" disabled={busy} onClick={() => onSetCodeActive(item.id, !item.is_active)} className={`rounded-lg border px-3 py-1.5 text-xs ${item.is_active ? "border-rose-200 text-rose-700" : "border-emerald-200 text-emerald-700"}`}>{item.is_active ? "停止" : "再開"}</button>}
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2"><p className="truncate font-mono text-sm">{item.code}</p><StatusPill tone={item.is_active ? "success" : "neutral"}>{item.is_active ? "有効" : "停止中"}</StatusPill></div>
+                <p className="mt-1 text-xs text-slate-400">利用 {item.redemption_count || 0} / {item.max_redemptions ?? "無制限"}</p>
+              </div>
+              {salesModeActive && <button type="button" disabled={busy} onClick={() => {
+                const nextActive = !item.is_active;
+                const message = nextActive
+                  ? `割引コード「${item.code}」を再開します。利用期限・利用上限内で再び使えるようになります。続けますか？`
+                  : `割引コード「${item.code}」を停止します。入力しても割引が適用されなくなります。続けますか？`;
+                if (window.confirm(message)) onSetCodeActive(item.id, nextActive);
+              }} className={`rounded-lg border px-3 py-1.5 text-xs ${item.is_active ? "border-rose-200 text-rose-700" : "border-emerald-200 text-emerald-700"}`}>{item.is_active ? "停止する" : "再開する"}</button>}
             </div>
           )) : <p className="py-8 text-center text-sm text-slate-400">コードはまだありません。</p>}
         </div>
