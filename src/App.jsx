@@ -2756,6 +2756,7 @@ function App() {
   const [giftClaimPreview, setGiftClaimPreview] = useState(null);
   const [familyInvitePreview, setFamilyInvitePreview] = useState(null);
   const [sentFamilyInvitations, setSentFamilyInvitations] = useState([]);
+  const [familyPaymentInvitation, setFamilyPaymentInvitation] = useState(null);
   const [receivedFamilyInvitation, setReceivedFamilyInvitation] = useState(null);
   const checkoutSyncAttemptedRef = useRef(false);
   const checkoutUrlRef = useRef("");
@@ -6453,7 +6454,6 @@ let sceneAfterInvite = nextScene;
          onAddFamilyStory={() => setScene("family_story_invite_flow")}
          onContinueFamilyTrial={async invitation => {
            if (!invitation?.invitation_id) return;
-           const checkoutWindow = openCheckoutWindow();
            try {
              if (invitation.status === "trial_completed") {
                const { error: decisionError } = await supabaseClient.rpc("decide_family_invitation_continuation", {
@@ -6465,27 +6465,11 @@ let sceneAfterInvite = nextScene;
              const { data: decision, error: invitationError } = await supabaseClient.from("family_story_invitations")
                .select("*").eq("id", invitation.invitation_id).maybeSingle();
              if (invitationError || !decision) throw new Error("家族招待を確認できませんでした");
-             const isTrialPackage = decision.offer_type === "trial_gift" && decision.delivery_method === "package" && !decision.recipient_project_id;
-             const isContinuationGift = Boolean(decision.recipient_project_id);
-             const started = await startPurchase({
-               orderType: isTrialPackage ? "family_trial_package" : "gift",
-               includeGiftPackage: !isContinuationGift && decision.delivery_method === "package",
-               familyInvitationId: invitation.invitation_id,
-               gift: {
-                 recipient_name: decision.recipient_name,
-                 recipient_email: decision.recipient_email,
-                 gift_message: decision.personal_message || null,
-                 shipping_address: !isContinuationGift && decision.delivery_method === "package"
-                   ? decision.shipping_address || {}
-                   : {}
-               },
-               checkoutWindow
-             });
-             if (!started) throw new Error("購入画面を開けませんでした");
+             setFamilyPaymentInvitation(decision);
+             setScene("family_story_payment_review");
            } catch (error) {
-             closeCheckoutWindow(checkoutWindow);
-             console.error("family continuation gift error", error);
-             alert(error?.message || "続きを贈る手続きを開始できませんでした。");
+             console.error("family payment review error", error);
+             alert(error?.message || "お支払い内容を確認できませんでした。");
            }
          }}
          onDeclineFamilyTrial={async invitation => {
@@ -6526,6 +6510,32 @@ let sceneAfterInvite = nextScene;
           onComplete={async () => {
             setSentFamilyInvitations(await loadSentFamilyInvitations());
             setScene("home");
+          }}
+        />
+      )}
+
+      {scene === "family_story_payment_review" && familyPaymentInvitation && (
+        <FamilyStoryInviteFlow
+          key={`payment-${familyPaymentInvitation.id}`}
+          supabaseClient={supabaseClient}
+          inviterName={user?.display_name || user?.name || user?.preferred_name || "ご家族"}
+          existingInvitation={familyPaymentInvitation}
+          onBack={() => {
+            setFamilyPaymentInvitation(null);
+            setScene("home");
+          }}
+          onStartCheckout={async ({ invitation, orderType, discountCode, includeGiftPackage, gift }) => {
+            const checkoutWindow = openCheckoutWindow();
+            const started = await startPurchase({
+              orderType,
+              discountCode,
+              includeGiftPackage,
+              gift,
+              familyInvitationId: invitation.id,
+              checkoutWindow
+            });
+            if (!started) closeCheckoutWindow(checkoutWindow);
+            return started;
           }}
         />
       )}

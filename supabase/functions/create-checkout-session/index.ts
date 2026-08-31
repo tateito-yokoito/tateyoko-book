@@ -229,6 +229,65 @@ serve(async request => {
       // Family invitations always receive their special price. A supplied
       // discount code is applied to the remaining book price; the optional
       // gift package is never discounted.
+
+      if (familyInvitation.commerce_order_id) {
+        const { data: previousOrder, error: previousOrderError } = await admin.from("commerce_orders")
+          .select("id, order_type, status, stripe_checkout_session_id")
+          .eq("id", familyInvitation.commerce_order_id)
+          .maybeSingle();
+        if (previousOrderError) throw previousOrderError;
+        const replacingCompletedTrialPackage = Boolean(
+          familyInvitation.status === "continuation_awaiting_payment"
+          && previousOrder?.order_type === "family_trial_package"
+          && ["paid", "zero_paid"].includes(previousOrder?.status)
+        );
+        if (["paid", "zero_paid"].includes(previousOrder?.status) && !replacingCompletedTrialPackage) {
+          return json({ success: false, error: "お支払いは完了しています。画面を再読み込みしてください" }, 409);
+        }
+
+        if (previousOrder?.status === "checkout_pending" && previousOrder.stripe_checkout_session_id) {
+          const previousCheckout = await stripeRequest(
+            stripeSecretKey,
+            `checkout/sessions/${encodeURIComponent(previousOrder.stripe_checkout_session_id)}`
+          );
+          if (previousCheckout.status === "complete") {
+            return json({ success: false, error: "お支払いを確認しています。少し待ってから画面を再読み込みしてください" }, 409);
+          }
+          if (previousCheckout.status === "open") {
+            await stripeRequest(
+              stripeSecretKey,
+              `checkout/sessions/${encodeURIComponent(previousOrder.stripe_checkout_session_id)}/expire`,
+              new URLSearchParams()
+            );
+          }
+        }
+
+        if (previousOrder?.id) {
+          const { error: cancelOrderError } = await admin.from("commerce_orders")
+            .update({ status: "cancelled" })
+            .eq("id", previousOrder.id)
+            .in("status", ["checkout_pending", "expired"]);
+          if (cancelOrderError) throw cancelOrderError;
+          const { error: releaseDiscountError } = await admin.from("discount_redemptions")
+            .update({ status: "released" })
+            .eq("commerce_order_id", previousOrder.id)
+            .eq("status", "pending");
+          if (releaseDiscountError) throw releaseDiscountError;
+        }
+        if (familyInvitation.gift_order_id && !replacingCompletedTrialPackage) {
+          const { error: cancelGiftError } = await admin.from("gift_orders")
+            .update({ package_status: "cancelled" })
+            .eq("id", familyInvitation.gift_order_id)
+            .eq("package_status", "pending");
+          if (cancelGiftError) throw cancelGiftError;
+        }
+        const { error: unlinkPreviousOrderError } = await admin.from("family_story_invitations")
+          .update({ commerce_order_id: null, gift_order_id: null })
+          .eq("id", familyInvitation.id);
+        if (unlinkPreviousOrderError) throw unlinkPreviousOrderError;
+        familyInvitation.commerce_order_id = null;
+        familyInvitation.gift_order_id = null;
+      }
     }
     if (orderType === "self") {
       if (!projectId) return json({ success: false, error: "物語が見つかりません" }, 400);
