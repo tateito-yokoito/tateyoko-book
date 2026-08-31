@@ -97,16 +97,16 @@ serve(async request => {
 
     const offerCopy = invitation.offer_type === "full_gift"
       ? {
-          subject: `【縦糸横糸】${inviterName}さんから、物語づくりの贈りものです`,
-          lead: "物語を一冊にするスタンダードプランが用意されています。"
+          subject: `【縦糸横糸】${inviterName}さんから、贈りものが届きました`,
+          lead: "物語を一冊にするスタンダードプランが贈られています。"
         }
       : invitation.offer_type === "trial_gift"
         ? {
-            subject: `【縦糸横糸】${inviterName}さんから、三つの問いが届きました`,
+            subject: `【縦糸横糸】${inviterName}さんから、贈りものが届きました`,
             lead: "まずは三つの問いを、無料でお試しいただけます。"
           }
         : {
-            subject: `【縦糸横糸】${inviterName}さんから、家族の物語づくりのご案内`,
+            subject: `【縦糸横糸】${inviterName}さんから、招待が届きました`,
             lead: "まずは三つの問いを無料で試し、その先は家族招待の特別価格34,860円（30%割引）で続けられます。"
           };
     const templateMessage = messageLabels[invitation.message_template] || "";
@@ -128,12 +128,14 @@ serve(async request => {
         to: invitation.recipient_email,
         subject: offerCopy.subject,
         html: `<div style="font-family:serif;line-height:1.95;color:#172033;max-width:620px;margin:auto;padding:36px 24px">
-          <p style="font-size:13px;color:#718096">家族の物語への招待</p>
+          <p style="font-size:13px;color:#718096">縦糸横糸への招待</p>
           <h1 style="font-size:24px;font-weight:500">${escapeHtml(invitation.recipient_name)}さんへ</h1>
+          <p>${escapeHtml(inviterName)}さんから、あなたへ。縦糸横糸の贈りものが届きました。</p>
           ${message ? `<div style="margin:24px 0;padding:20px 22px;background:#f7f5ef;border-left:3px solid #b97849;white-space:pre-wrap">${escapeHtml(message)}</div>` : ""}
+          <p>縦糸横糸（たていと よこいと）は、スマートフォンに届く問いに声で答えながら人生を振り返り、思い出や考えをWebと冊子にまとめられるサービスです。</p>
+          <p>人生を「再発見」し、「家族が還れる」場所をつくることを目指しています。</p>
           <p>${escapeHtml(offerCopy.lead)}</p>
-          <p>語りの中身が、招待した方へ自動で共有されることはありません。お手伝いを頼むかどうかも、ご本人が選べます。</p>
-          <p style="margin:32px 0"><a href="${safeActionLink}" style="background:#101827;color:white;text-decoration:none;padding:14px 26px;border-radius:999px">招待を開く</a></p>
+          <p style="margin:32px 0"><a href="${safeActionLink}" style="background:#101827;color:white;text-decoration:none;padding:14px 26px;border-radius:999px">招待を見る</a></p>
           <p style="font-size:12px;color:#8a94a6">心当たりがない場合は、このメールを破棄してください。</p>
         </div>`
       })

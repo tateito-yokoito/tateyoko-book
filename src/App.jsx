@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { logActivity } from "./lib/activityLog.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
+import "./family-invitation.css";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumossjxehdop.supabase.co";
 
@@ -174,7 +175,12 @@ function hasFullProjectAccess(project) {
   return ["paid", "gifted", "legacy"].includes(project?.access_status);
 }
 
+function isFamilyGiftTrialMode(project) {
+  return project?.onboarding_preferences?.family_start_mode === "trial";
+}
+
 function hasRestrictedProjectAccess(project) {
+  if (isFamilyGiftTrialMode(project)) return true;
   if (hasFullProjectAccess(project)) return false;
 
   if (["trial", "checkout_pending", "refunded"].includes(project?.access_status)) {
@@ -251,7 +257,8 @@ function getCommercialEntryScene({ project, questionSet, defaultScene }) {
 
   if (
     getEntryModeFromUrl() === "trial" &&
-    hasFullProjectAccess(project)
+    hasFullProjectAccess(project) &&
+    !isFamilyGiftTrialMode(project)
   ) {
     return "home";
   }
@@ -5751,7 +5758,7 @@ setScene(6);
   };
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${scene === "family_invite_received" ? "app-container--family-invitation" : ""}`}>
       {showGlobalHome && (
         <button
           type="button"
@@ -5953,7 +5960,33 @@ let sceneAfterInvite = nextScene;
           status={purchaseStatus}
           error={purchaseError}
           familyInvitation={receivedFamilyInvitation}
-          onPurchase={() => {
+          onPurchase={async () => {
+            if (receivedFamilyInvitation?.offer_type === "full_gift") {
+              try {
+                const nextPreferences = {
+                  ...(foundation?.project?.onboarding_preferences || {}),
+                  family_start_mode: "full",
+                  family_trial_preview_completed_at: new Date().toISOString()
+                };
+                const { data: updatedProject, error: updateError } = await supabaseClient
+                  .from("book_projects")
+                  .update({ onboarding_preferences: nextPreferences })
+                  .eq("id", foundation.project.id)
+                  .select("*")
+                  .single();
+                if (updateError) throw updateError;
+                setFoundation(previous => ({ ...previous, project: updatedProject }));
+                const url = new URL(window.location.href);
+                url.searchParams.delete("entry");
+                url.searchParams.set("app", "1");
+                window.history.replaceState({}, "", url.toString());
+                setScene("home");
+              } catch (continueError) {
+                console.error("family gift trial continue error", continueError);
+                setPurchaseError("続きを開けませんでした。少し時間をおいて、もう一度お試しください。");
+              }
+              return;
+            }
             setPurchaseFor("self");
             setPurchaseStatus("idle");
             setPurchaseError("");
@@ -6030,7 +6063,7 @@ let sceneAfterInvite = nextScene;
       {scene === "family_invite_received" && (
         <Scene_FamilyInvitationReceived
           preview={familyInvitePreview}
-          onContinue={async ({ acceptSupport }) => {
+          onContinue={async ({ acceptSupport, startMode = "trial" }) => {
             const claimToken = getFamilyInviteTokenFromUrl();
             if (!claimToken || !foundation?.project?.id || !user?.id) {
               throw new Error("家族招待を確認できませんでした。");
@@ -6041,6 +6074,23 @@ let sceneAfterInvite = nextScene;
               input_accept_support: Boolean(acceptSupport)
             });
             if (claimError || !claim?.success) throw new Error(claimError?.message || "招待を受け取れませんでした");
+
+            const { data: claimedProject, error: claimedProjectError } = await supabaseClient
+              .from("book_projects")
+              .select("onboarding_preferences")
+              .eq("id", foundation.project.id)
+              .single();
+            if (claimedProjectError) throw claimedProjectError;
+            const { error: startModeError } = await supabaseClient
+              .from("book_projects")
+              .update({
+                onboarding_preferences: {
+                  ...(claimedProject?.onboarding_preferences || {}),
+                  family_start_mode: startMode
+                }
+              })
+              .eq("id", foundation.project.id);
+            if (startModeError) throw startModeError;
 
             if (familyInvitePreview?.offer_type === "full_gift" && familyInvitePreview?.gift_claim_token) {
               await claimGiftForProject(familyInvitePreview.gift_claim_token, foundation.project.id);
@@ -6053,7 +6103,11 @@ let sceneAfterInvite = nextScene;
             url.searchParams.delete("family_invite");
             url.searchParams.delete("gift");
             url.searchParams.set("app", "1");
-            if (familyInvitePreview?.offer_type !== "full_gift") url.searchParams.set("entry", "trial");
+            if (familyInvitePreview?.offer_type !== "full_gift" || startMode === "trial") {
+              url.searchParams.set("entry", "trial");
+            } else {
+              url.searchParams.delete("entry");
+            }
             window.history.replaceState({}, "", url.toString());
             setScene(0);
           }}
@@ -7621,7 +7675,7 @@ if (isNewMode) {
             {isFamilyInviteEntry ? (
               <>
                 <p className="text-amber-100/42 text-xs tracking-[0.18em]">
-                  家族の物語への招待
+                  縦糸横糸への招待
                 </p>
                 <p className="text-[1.15rem] text-white/90 leading-loose">
                   {familyInvitePreview?.recipient_name || "あなた"}へ、<br />
@@ -7633,8 +7687,8 @@ if (isNewMode) {
                   </p>
                 )}
                 <p className="text-white/55 text-[0.95rem] leading-loose">
-                  まず三つの問いから始められます。<br />
-                  語りの中身は、ご本人の許可なく共有されません。
+                  招待を受け取ると、サービスの紹介を見てから<br />
+                  始め方を選べます。
                 </p>
               </>
             ) : isGiftEntry ? (
@@ -8277,6 +8331,7 @@ function Scene_PurchaseStart({
 
 function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFinish }) {
   const isWorking = status === "starting" || status === "checking";
+  const isPaidFamilyGift = familyInvitation?.offer_type === "full_gift";
   const waitsForGiftSender = familyInvitation?.offer_type === "trial_gift"
     && ["trial_completed", "continuation_awaiting_payment"].includes(familyInvitation?.status);
   const hasFamilyPrice = Boolean(familyInvitation);
@@ -8299,7 +8354,13 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
           語った声は文章になり、写真とともに一冊へ育っていきます。
         </p>
 
-        {waitsForGiftSender ? (
+        {isPaidFamilyGift ? (
+          <div className="my-8 rounded-[1.7rem] border border-amber-100/12 bg-amber-100/[0.035] px-6 py-5">
+            <p className="text-xs tracking-[0.16em] text-amber-50/42">贈られている内容</p>
+            <p className="mt-3 text-[0.95rem] leading-[2] text-amber-50/72">縦糸横糸ブック・スタンダードプラン</p>
+            <p className="mt-3 text-xs leading-loose text-white/34">追加のお支払いなく、そのまま続きを始められます。</p>
+          </div>
+        ) : waitsForGiftSender ? (
           <div className="my-8 rounded-[1.7rem] border border-amber-100/12 bg-amber-100/[0.035] px-6 py-5">
             <p className="text-[0.95rem] leading-[2] text-amber-50/66">三つの問いを終えたことを、贈り主へお知らせしました。</p>
             <p className="mt-3 text-xs leading-loose text-white/34">語りの中身は共有していません。続きを贈るか決まるまで、このままお待ちください。</p>
@@ -8327,7 +8388,7 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
 
         {!waitsForGiftSender && (
           <button type="button" onClick={onPurchase} disabled={isWorking} className="btn-quiet w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-45">
-            {isWorking ? "購入画面を準備しています…" : "この物語を続ける"}
+            {isWorking ? "準備しています…" : isPaidFamilyGift ? "このまま物語を続ける" : "この物語を続ける"}
           </button>
         )}
 
@@ -8529,17 +8590,15 @@ function Scene_FamilyInvitationReceived({ preview, onContinue }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const canChooseSupport = ["support_requested", "recipient_chooses"].includes(preview?.assistance_mode);
-  const offerCopy = preview?.offer_type === "full_gift"
-    ? "スタンダードプランが用意されています"
-    : preview?.offer_type === "trial_gift"
-      ? "まず、贈られた三つの問いを試せます"
-      : "まず三つの問いを無料で試せます";
+  const isFullGift = preview?.offer_type === "full_gift";
+  const inviterName = preview?.inviter_name || "ご家族";
+  const recipientName = preview?.recipient_name || "あなた";
 
-  const receive = async () => {
+  const receive = async (startMode = "trial") => {
     setBusy(true);
     setError("");
     try {
-      await onContinue?.({ acceptSupport });
+      await onContinue?.({ acceptSupport, startMode });
     } catch (receiveError) {
       console.error("family invitation claim error", receiveError);
       setError(receiveError?.message || "招待を受け取れませんでした。");
@@ -8550,53 +8609,142 @@ function Scene_FamilyInvitationReceived({ preview, onContinue }) {
 
   if (!preview?.valid && !preview?.claimed) {
     return (
-      <div className="h-full flex items-center justify-center px-6 text-center">
-        <div><p className="text-white/84">この家族招待は利用できません。</p><p className="mt-4 text-sm text-white/38">招待した方へご確認ください。</p></div>
+      <div className="family-invite-invalid">
+        <div><p>この招待は利用できません。</p><p>招待した方へご確認ください。</p></div>
       </div>
     );
   }
 
   return (
-    <div className="h-full overflow-y-auto fade-enter px-6 py-12 text-center">
-      <div className="mx-auto flex min-h-full w-full max-w-[430px] flex-col justify-center">
-        <p className="text-[0.72rem] tracking-[0.26em] text-amber-100/42">家族の物語への招待</p>
-        <h1 className="text-narrative mt-7 text-[1.55rem] leading-[1.9] text-white/92">
-          {preview?.recipient_name || "あなた"}へ、<br />
-          {preview?.inviter_name || "ご家族"}さんから届きました
-        </h1>
+    <div className="family-invite-page fade-enter">
+      <header className="family-invite-header">
+        <img src="/brand-logo-lockup-kyokasho.svg" alt="縦糸横糸" />
+      </header>
 
-        {preview?.personal_message && (
-          <div className="mt-8 rounded-[1.7rem] border border-amber-100/12 bg-amber-100/[0.035] px-6 py-6">
-            <p className="text-narrative whitespace-pre-wrap text-[0.98rem] leading-[2] text-amber-50/66">{preview.personal_message}</p>
+      <main>
+        <section className="family-invite-hero">
+          <div className="family-invite-hero-copy">
+            <p className="family-invite-kicker">縦糸横糸への招待</p>
+            <p className="family-invite-recipient">{inviterName}さんから、{recipientName}へ。</p>
+            <h1>声で残す、<br />あなたの物語。</h1>
+            <p className="family-invite-hero-lead">
+              {isFullGift
+                ? "縦糸横糸の物語づくりが贈られました。"
+                : "縦糸横糸を体験できる、三つの問いが届きました。"}
+            </p>
+            {preview?.personal_message && (
+              <blockquote>
+                <p>{preview.personal_message}</p>
+                <cite>{inviterName}さんより</cite>
+              </blockquote>
+            )}
           </div>
-        )}
+          <figure className="family-invite-hero-visual">
+            <img src="/site/hero-book.jpg" alt="深緑の布張りで仕上げた縦糸横糸ブック" />
+            <figcaption>声と写真が、一冊の物語になります。</figcaption>
+          </figure>
+        </section>
 
-        <p className="mt-8 text-[0.95rem] leading-[2] text-white/55">{offerCopy}。</p>
-        {preview?.offer_type === "referral" && (
-          <p className="mt-3 text-xs leading-loose text-amber-100/46">その先は、家族招待の特別価格 34,860円（30% OFF）で続けられます。</p>
-        )}
-
-        {canChooseSupport && (
-          <button type="button" onClick={() => setAcceptSupport(value => !value)} className={`mt-8 w-full rounded-2xl border px-5 py-5 text-left ${acceptSupport ? "border-white/24 bg-white/[0.08]" : "border-white/[0.08] bg-white/[0.025]"}`}>
-            <div className="flex items-start gap-4">
-              <span className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${acceptSupport ? "border-emerald-100/30 bg-emerald-100/10" : "border-white/15"}`}>
-                {acceptSupport && <Check size={14} className="text-emerald-100/78" />}
-              </span>
-              <span><span className="block text-white/84">{preview?.inviter_name || "ご家族"}さんにお手伝いを頼む</span><span className="mt-2 block text-xs leading-loose text-white/38">録音や写真、本の準備を手伝えます。あとから変更できます。</span></span>
+        <section className="family-invite-need">
+          <div className="family-invite-section-copy">
+            <p className="family-invite-section-number">01　WHY</p>
+            <h2>大切な話ほど、<br />日々の会話では残しにくい。</h2>
+            <p>家族がいつか聞いてみたいこと。自分でも忘れていた出来事。</p>
+            <p>きっかけがないまま、言葉にならずに過ぎていく思い出があります。</p>
+            <p>写真には残らない声や話し方も、その人らしさの一部です。</p>
+          </div>
+          <figure className="family-invite-life-figure">
+            <img src="/site/lifestyle.jpg" alt="家族で物語を開き、思い出を語り合う時間" />
+            <div className="family-invite-recording-card" aria-hidden="true">
+              <span>声で語る</span>
+              <div className="family-invite-wave"><i /><i /><i /><i /><i /><i /><i /></div>
+              <Mic size={24} strokeWidth={1.4} />
             </div>
-          </button>
-        )}
+            <figcaption>話すことから、物語づくりは始まります。</figcaption>
+          </figure>
+        </section>
 
-        <div className="mt-7 rounded-2xl border border-white/[0.07] bg-white/[0.02] px-5 py-4">
-          <p className="text-xs leading-loose text-white/38">語りの中身は、お手伝いを許可しない限り招待した方へ共有されません。</p>
-        </div>
+        <section className="family-invite-experience">
+          <div className="family-invite-section-heading">
+            <p className="family-invite-section-number">02　EXPERIENCE</p>
+            <p className="family-invite-kicker">このために、縦糸横糸は生まれました</p>
+            <h2>問いが届く。<br />声で語る。<br />物語になる。</h2>
+          </div>
+          <ol className="family-invite-steps">
+            <li><span>01</span><Mic size={27} strokeWidth={1.25} /><strong>声で語る</strong><p>スマートフォンに届く問いに、自分の言葉で答えます。</p></li>
+            <li><span>02</span><Pencil size={27} strokeWidth={1.25} /><strong>文章になる</strong><p>語った声を文字にして、読みやすく整えられます。</p></li>
+            <li><span>03</span><BookOpen size={27} strokeWidth={1.25} /><strong>本とWebに残る</strong><p>写真と共にまとめ、声も聴ける形で残します。</p></li>
+          </ol>
+          <p className="family-invite-voice-copy">うまく話さなくて、大丈夫です。<br />言い直しも、沈黙も、笑い声も。<br />その人らしい時間として残ります。</p>
+        </section>
 
-        {error && <p className="mt-6 rounded-2xl border border-red-200/15 bg-red-200/[0.05] px-5 py-4 text-sm leading-relaxed text-red-100/75">{error}</p>}
+        <section className="family-invite-finish">
+          <figure>
+            <img src="/site/book-spread.jpg" alt="写真と文章、音声QRが入った縦糸横糸ブックの見開き" />
+          </figure>
+          <div className="family-invite-finish-copy">
+            <p className="family-invite-section-number">03　MEMORY</p>
+            <h2>開けば読めて、<br />かざせば声に会える。</h2>
+            <p>語りはWebでいつでも読み返せます。完成した物語は、写真と文章を収めた冊子に。</p>
+            <div className="family-invite-viewer" aria-label="Webで語りを見られる画面のイメージ">
+              <div className="family-invite-viewer-head"><span>語りを見る</span><span>03 / 24</span></div>
+              <p>家族と過ごした時間のこと</p>
+              <div className="family-invite-audio"><Play size={14} fill="currentColor" /><i /><span>01:24</span></div>
+            </div>
+          </div>
+        </section>
 
-        <button type="button" onClick={receive} disabled={busy} className="btn-quiet mt-10 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-45">
-          {busy ? "招待を開いています…" : preview?.offer_type === "full_gift" ? "物語を始める" : "まず3問を試す"}
-        </button>
-      </div>
+        <section className="family-invite-assurance">
+          <div className="family-invite-assurance-inner">
+            <p className="family-invite-section-number">04　YOUR STORY</p>
+            <h2>あなたの物語は、<br />あなたのものです。</h2>
+            <div className="family-invite-assurance-grid">
+              <article><Lock size={23} strokeWidth={1.35} /><h3>勝手に共有されません</h3><p>語った内容が、贈り主へ自動で共有されることはありません。</p></article>
+              <article><Users size={23} strokeWidth={1.35} /><h3>必要なときだけ頼めます</h3><p>録音や写真追加など、操作のお手伝いを頼むかはご本人が選べます。</p></article>
+              <article><RotateCw size={23} strokeWidth={1.35} /><h3>自分のペースで</h3><p>一度に話さなくても大丈夫。いつでも休み、続きから再開できます。</p></article>
+            </div>
+
+            {canChooseSupport && (
+              <button
+                type="button"
+                onClick={() => setAcceptSupport(value => !value)}
+                className={`family-invite-support-choice ${acceptSupport ? "is-selected" : ""}`}
+                aria-pressed={acceptSupport}
+              >
+                <span className="family-invite-choice-check">{acceptSupport && <Check size={16} />}</span>
+                <span><strong>{inviterName}さんにお手伝いを頼む</strong><small>録音や写真追加などを、相手のスマートフォンからも手伝えるようにします。あとから変更できます。</small></span>
+              </button>
+            )}
+          </div>
+        </section>
+
+        <section className="family-invite-cta">
+          <p className="family-invite-kicker">THE FIRST STEP</p>
+          <h2>まずは、声にしてみる。</h2>
+          <p>{isFullGift ? "物語づくりは、すでに贈られています。" : "最初の三つの問いは、無料で試せます。"}</p>
+          {isFullGift && <p className="family-invite-paid-note">追加のお支払いはありません。</p>}
+          {preview?.offer_type === "referral" && <p className="family-invite-paid-note">三つの問いの先は、家族招待の特別価格 34,860円（30% OFF）で続けられます。</p>}
+
+          {error && <p className="family-invite-error">{error}</p>}
+
+          <div className="family-invite-cta-actions">
+            {isFullGift && (
+              <button type="button" onClick={() => receive("full")} disabled={busy} className="family-invite-primary-button">
+                {busy ? "準備しています…" : "このまま始める"}<span aria-hidden="true">→</span>
+              </button>
+            )}
+            <button type="button" onClick={() => receive("trial")} disabled={busy} className={isFullGift ? "family-invite-secondary-button" : "family-invite-primary-button"}>
+              {busy ? "準備しています…" : isFullGift ? "まずは3問を試してみる" : "3問を試してみる"}<span aria-hidden="true">→</span>
+            </button>
+          </div>
+          <p className="family-invite-cta-note">スマートフォンだけで始められます。</p>
+        </section>
+      </main>
+
+      <footer className="family-invite-footer">
+        <img src="/brand-logo-lockup-kyokasho.svg" alt="縦糸横糸" />
+        <p>人生を再発見し、家族が還れる場所をつくる。</p>
+      </footer>
     </div>
   );
 }

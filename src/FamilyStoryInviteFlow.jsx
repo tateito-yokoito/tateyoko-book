@@ -85,20 +85,20 @@ function Field({ label, children }) {
 function getOfferPreviewCopy(offerType, inviterName) {
   if (offerType === "full_gift") {
     return {
-      subject: `【縦糸横糸】${inviterName}さんから、物語づくりの贈りものです`,
-      lead: "物語を一冊にするスタンダードプランが用意されています。"
+      subject: `【縦糸横糸】${inviterName}さんから、贈りものが届きました`,
+      lead: "物語を一冊にするスタンダードプランが贈られています。"
     };
   }
 
   if (offerType === "trial_gift") {
     return {
-      subject: `【縦糸横糸】${inviterName}さんから、三つの問いが届きました`,
+      subject: `【縦糸横糸】${inviterName}さんから、贈りものが届きました`,
       lead: "まずは三つの問いを、無料でお試しいただけます。"
     };
   }
 
   return {
-    subject: `【縦糸横糸】${inviterName}さんから、家族の物語づくりのご案内`,
+    subject: `【縦糸横糸】${inviterName}さんから、招待が届きました`,
     lead: "まずは三つの問いを無料で試し、その先は家族招待の特別価格34,860円（30%割引）で続けられます。"
   };
 }
@@ -171,16 +171,18 @@ function InvitationPreview({ deliveryMethod, recipientName, recipientEmail, invi
         </div>
 
         <div className="rounded-[1.4rem] bg-[#fbfaf7] px-6 py-9 text-[#172033] shadow-2xl sm:px-10">
-          <p className="text-xs text-slate-500">家族の物語への招待</p>
+          <p className="text-xs text-slate-500">縦糸横糸への招待</p>
           <h1 className="mt-5 font-serif text-2xl font-normal">{recipientName || "お相手"}さんへ</h1>
+          <p className="mt-6 font-serif text-[0.98rem] leading-[1.95]">{inviterName}さんから、あなたへ。縦糸横糸の贈りものが届きました。</p>
           {message && (
             <div className="mt-7 border-l-[3px] border-[#b97849] bg-[#f7f5ef] px-5 py-5">
               <p className="whitespace-pre-wrap font-serif text-[1rem] leading-[1.95]">{message}</p>
             </div>
           )}
+          <p className="mt-7 font-serif text-[0.98rem] leading-[1.95]">縦糸横糸（たていと よこいと）は、スマートフォンに届く問いに声で答えながら人生を振り返り、思い出や考えをWebと冊子にまとめられるサービスです。</p>
+          <p className="mt-5 font-serif text-[0.98rem] leading-[1.95]">人生を「再発見」し、「家族が還れる」場所をつくることを目指しています。</p>
           <p className="mt-7 font-serif text-[0.98rem] leading-[1.95]">{offerCopy.lead}</p>
-          <p className="mt-5 font-serif text-[0.98rem] leading-[1.95]">語りの中身が、招待した方へ自動で共有されることはありません。お手伝いを頼むかどうかも、ご本人が選べます。</p>
-          <div className="mt-8 inline-flex rounded-full bg-[#101827] px-7 py-4 font-serif text-white">招待を開く</div>
+          <div className="mt-8 inline-flex rounded-full bg-[#101827] px-7 py-4 font-serif text-white">招待を見る</div>
           <p className="mt-8 text-xs leading-loose text-slate-400">心当たりがない場合は、このメールを破棄してください。</p>
         </div>
 
