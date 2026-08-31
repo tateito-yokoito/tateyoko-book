@@ -651,8 +651,14 @@ function CommercePanel({
               <option value="entire_order">すべての有料項目を無料（内部テスト）</option>
             </select>
             <input required={campaign.discount_type !== "full"} disabled={campaign.discount_scope === "entire_order"} type="number" min="0" value={campaign.discount_value} onChange={event => setCampaign(current => ({ ...current, discount_value: event.target.value }))} placeholder={campaign.discount_type === "percent" ? "割引率" : "割引額"} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400" />
-            <input type="datetime-local" value={campaign.starts_at} onChange={event => setCampaign(current => ({ ...current, starts_at: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
-            <input type="datetime-local" value={campaign.ends_at} onChange={event => setCampaign(current => ({ ...current, ends_at: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
+            <label className="grid gap-1.5 text-xs text-slate-500">
+              <span>利用開始日時（任意）</span>
+              <input type="datetime-local" aria-label="利用開始日時" value={campaign.starts_at} onChange={event => setCampaign(current => ({ ...current, starts_at: event.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm text-slate-900 outline-none" />
+            </label>
+            <label className="grid gap-1.5 text-xs text-slate-500">
+              <span>{campaign.discount_scope === "entire_order" ? "利用終了日時（必須）" : "利用終了日時（任意）"}</span>
+              <input required={campaign.discount_scope === "entire_order"} type="datetime-local" aria-label="利用終了日時" value={campaign.ends_at} onChange={event => setCampaign(current => ({ ...current, ends_at: event.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm text-slate-900 outline-none" />
+            </label>
             <input type="number" min="1" value={campaign.max_redemptions} onChange={event => setCampaign(current => ({ ...current, max_redemptions: event.target.value }))} placeholder="キャンペーン全体の上限（任意）" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
             <input value={campaign.partner_name} onChange={event => setCampaign(current => ({ ...current, partner_name: event.target.value }))} placeholder="代理店名・媒体名（任意）" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
             <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" disabled={campaign.discount_scope === "entire_order"} checked={campaign.one_per_account} onChange={event => setCampaign(current => ({ ...current, one_per_account: event.target.checked }))} />1アカウント1回</label>
