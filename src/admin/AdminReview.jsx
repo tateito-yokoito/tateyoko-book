@@ -507,6 +507,7 @@ function CommercePanel({
     name: "",
     campaign_type: "crowdfunding",
     discount_type: "amount",
+    discount_scope: "base_product",
     discount_value: "",
     starts_at: "",
     ends_at: "",
@@ -528,6 +529,8 @@ function CommercePanel({
   const codes = data?.codes || [];
   const orders = data?.orders || [];
   const gifts = data?.gifts || [];
+  const selectedCodeCampaign = campaigns.find(item => item.id === codeCampaignId) || null;
+  const selectedCodeCampaignCoversEntireOrder = selectedCodeCampaign?.discount_scope === "entire_order";
   const paidOrders = orders.filter(item => ["paid", "zero_paid"].includes(item.status));
   const revenue = paidOrders.reduce((sum, item) => sum + Number(item.amount_total || 0) - Number(item.refund_amount || 0), 0);
 
@@ -542,7 +545,18 @@ function CommercePanel({
       ends_at: campaign.ends_at ? new Date(campaign.ends_at).toISOString() : null
     });
     setCampaignOpen(false);
-    setCampaign(current => ({ ...current, name: "", discount_value: "", max_redemptions: "", partner_name: "" }));
+    setCampaign(current => ({
+      ...current,
+      name: "",
+      campaign_type: "crowdfunding",
+      discount_type: "amount",
+      discount_scope: "base_product",
+      discount_value: "",
+      ends_at: "",
+      max_redemptions: "",
+      one_per_account: false,
+      partner_name: ""
+    }));
   };
 
   const submitCodes = async (event) => {
@@ -621,19 +635,29 @@ function CommercePanel({
         {campaignOpen && salesModeActive && (
           <form onSubmit={submitCampaign} className="mt-5 grid gap-3 border-t border-slate-100 pt-5 md:grid-cols-2">
             <input required value={campaign.name} onChange={event => setCampaign(current => ({ ...current, name: event.target.value }))} placeholder="キャンペーン名" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
-            <select value={campaign.campaign_type} onChange={event => setCampaign(current => ({ ...current, campaign_type: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">
-              <option value="crowdfunding">クラウドファンディング</option><option value="advertising">広告</option><option value="agency">代理店</option>
+            <select value={campaign.campaign_type} disabled={campaign.discount_scope === "entire_order"} onChange={event => setCampaign(current => ({ ...current, campaign_type: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400">
+              <option value="crowdfunding">クラウドファンディング</option><option value="advertising">広告</option><option value="agency">代理店</option><option value="internal_test">内部テスト</option>
             </select>
-            <select value={campaign.discount_type} onChange={event => setCampaign(current => ({ ...current, discount_type: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">
+            <select value={campaign.discount_type} disabled={campaign.discount_scope === "entire_order"} onChange={event => setCampaign(current => ({ ...current, discount_type: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400">
               <option value="amount">定額（円）</option><option value="percent">率（%）</option><option value="full">全額</option>
             </select>
-            <input required={campaign.discount_type !== "full"} type="number" min="0" value={campaign.discount_value} onChange={event => setCampaign(current => ({ ...current, discount_value: event.target.value }))} placeholder={campaign.discount_type === "percent" ? "割引率" : "割引額"} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
+            <select value={campaign.discount_scope} onChange={event => {
+              const discountScope = event.target.value;
+              setCampaign(current => discountScope === "entire_order"
+                ? { ...current, discount_scope: discountScope, campaign_type: "internal_test", discount_type: "full", discount_value: 100, one_per_account: true }
+                : { ...current, discount_scope: discountScope });
+            }} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">
+              <option value="base_product">基本プランのみ割引</option>
+              <option value="entire_order">すべての有料項目を無料（内部テスト）</option>
+            </select>
+            <input required={campaign.discount_type !== "full"} disabled={campaign.discount_scope === "entire_order"} type="number" min="0" value={campaign.discount_value} onChange={event => setCampaign(current => ({ ...current, discount_value: event.target.value }))} placeholder={campaign.discount_type === "percent" ? "割引率" : "割引額"} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400" />
             <input type="datetime-local" value={campaign.starts_at} onChange={event => setCampaign(current => ({ ...current, starts_at: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
             <input type="datetime-local" value={campaign.ends_at} onChange={event => setCampaign(current => ({ ...current, ends_at: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
             <input type="number" min="1" value={campaign.max_redemptions} onChange={event => setCampaign(current => ({ ...current, max_redemptions: event.target.value }))} placeholder="キャンペーン全体の上限（任意）" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
             <input value={campaign.partner_name} onChange={event => setCampaign(current => ({ ...current, partner_name: event.target.value }))} placeholder="代理店名・媒体名（任意）" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
-            <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={campaign.one_per_account} onChange={event => setCampaign(current => ({ ...current, one_per_account: event.target.checked }))} />1アカウント1回</label>
-            <button type="submit" disabled={busy || !campaign.name} className="rounded-xl bg-[#10203a] px-4 py-3 text-sm text-white disabled:opacity-40">キャンペーンを作成</button>
+            <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" disabled={campaign.discount_scope === "entire_order"} checked={campaign.one_per_account} onChange={event => setCampaign(current => ({ ...current, one_per_account: event.target.checked }))} />1アカウント1回</label>
+            {campaign.discount_scope === "entire_order" && <p className="rounded-xl bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800 md:col-span-2">内部テスト専用です。基本プラン、増刷、プレミアム冊子、ギフトパッケージなど、注文内のすべての有料項目を0円にします。有効期限が必須で、各コードは1回だけ利用できます。</p>}
+            <button type="submit" disabled={busy || !campaign.name || (campaign.discount_scope === "entire_order" && !campaign.ends_at)} className="rounded-xl bg-[#10203a] px-4 py-3 text-sm text-white disabled:opacity-40">キャンペーンを作成</button>
           </form>
         )}
 
@@ -651,7 +675,7 @@ function CommercePanel({
                     <p className="text-sm font-medium">{item.name}</p>
                     <StatusPill tone={campaignStatusTone(displayStatus)}>{campaignStatusLabel(displayStatus)}</StatusPill>
                   </div>
-                  <p className="mt-1 text-xs text-slate-400">{item.campaign_type} · {item.discount_type === "amount" ? formatAdminYen(item.discount_value) : item.discount_type === "full" ? "全額" : `${item.discount_value}%`}</p>
+                  <p className="mt-1 text-xs text-slate-400">{item.campaign_type} · {item.discount_scope === "entire_order" ? "全額（すべての有料項目）" : item.discount_type === "amount" ? formatAdminYen(item.discount_value) : item.discount_type === "full" ? "全額（基本プラン）" : `${item.discount_value}%`}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <p className="text-xs text-slate-400">{codes.filter(code => code.campaign_id === item.id).length}コード</p>
@@ -683,16 +707,22 @@ function CommercePanel({
         <form onSubmit={submitCodes} className="rounded-2xl border border-slate-200 bg-white p-5">
           <h3 className="font-medium">割引コードを発行</h3>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <select required value={codeCampaignId} onChange={event => setCodeCampaignId(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none"><option value="">キャンペーンを選択</option>{campaigns.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+            <select required value={codeCampaignId} onChange={event => {
+              const campaignId = event.target.value;
+              setCodeCampaignId(campaignId);
+              const selectedCampaign = campaigns.find(item => item.id === campaignId);
+              if (selectedCampaign?.discount_scope === "entire_order") setCodeMaxUses("1");
+            }} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none"><option value="">キャンペーンを選択</option>{campaigns.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
             <select value={codeMode} onChange={event => setCodeMode(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none"><option value="unique">個別コードを一括発行</option><option value="shared">共通コードを発行</option></select>
             {codeMode === "unique" ? <><input type="number" min="1" max="1000" value={codeQuantity} onChange={event => setCodeQuantity(event.target.value)} placeholder="発行数" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" /><input value={codePrefix} onChange={event => setCodePrefix(event.target.value.toUpperCase())} placeholder="接頭辞（例 CF26-）" className="rounded-xl border border-slate-200 px-3 py-3 text-sm uppercase outline-none" /></> : <input required value={commonCode} onChange={event => setCommonCode(event.target.value.toUpperCase())} placeholder="共通コード" className="rounded-xl border border-slate-200 px-3 py-3 text-sm uppercase outline-none md:col-span-2" />}
-            <input type="number" min="1" value={codeMaxUses} onChange={event => setCodeMaxUses(event.target.value)} placeholder="コードごとの利用上限" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none" />
+            <input type="number" min="1" disabled={selectedCodeCampaignCoversEntireOrder} value={codeMaxUses} onChange={event => setCodeMaxUses(event.target.value)} placeholder="コードごとの利用上限" className="rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400" />
             <label className="grid gap-1.5 text-xs text-slate-500">
               <span>コードの有効期限（任意）</span>
               <input type="datetime-local" value={codeExpiresAt} onChange={event => setCodeExpiresAt(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm text-slate-900 outline-none" />
             </label>
           </div>
-          <button type="submit" disabled={busy || !codeCampaignId || (codeMode === "shared" && !commonCode)} className="mt-4 rounded-xl bg-[#10203a] px-4 py-3 text-sm text-white disabled:opacity-40">コードを発行</button>
+          {selectedCodeCampaignCoversEntireOrder && <p className="mt-3 text-xs leading-5 text-amber-700">全項目無料の内部テストコードには、有効期限を設定してください。発行した各コードは1回だけ利用できます。</p>}
+          <button type="submit" disabled={busy || !codeCampaignId || (codeMode === "shared" && !commonCode) || (selectedCodeCampaignCoversEntireOrder && !codeExpiresAt)} className="mt-4 rounded-xl bg-[#10203a] px-4 py-3 text-sm text-white disabled:opacity-40">コードを発行</button>
         </form>
       )}
 

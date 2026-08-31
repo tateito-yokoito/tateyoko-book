@@ -392,6 +392,45 @@ serve(async request => {
     orderId = String(order?.id || "");
     if (!orderId || !quote) throw new Error("注文を作成できませんでした");
 
+    let discountScope = "base_product";
+    if (quote.campaign_id) {
+      const { data: campaignPolicy, error: campaignPolicyError } = await admin.from("discount_campaigns")
+        .select("discount_scope")
+        .eq("id", quote.campaign_id)
+        .single();
+      if (campaignPolicyError) throw campaignPolicyError;
+      discountScope = campaignPolicy?.discount_scope || "base_product";
+    }
+
+    if (discountScope === "entire_order") {
+      const entireOrderDiscount = Number(order.amount_subtotal || 0) + Number(order.gift_package_amount || 0);
+      const existingMetadata = order.metadata && typeof order.metadata === "object" ? order.metadata : {};
+      const nextMetadata = {
+        ...existingMetadata,
+        discount_scope: "entire_order",
+        internal_test_waiver: true
+      };
+      const { error: entireOrderDiscountError } = await admin.from("commerce_orders").update({
+        discount_amount: entireOrderDiscount,
+        amount_total: 0,
+        metadata: nextMetadata
+      }).eq("id", order.id);
+      if (entireOrderDiscountError) throw entireOrderDiscountError;
+      const { error: redemptionAmountError } = await admin.from("discount_redemptions").update({
+        amount_discounted: entireOrderDiscount
+      }).eq("commerce_order_id", order.id).eq("status", "pending");
+      if (redemptionAmountError) throw redemptionAmountError;
+
+      order.discount_amount = entireOrderDiscount;
+      order.amount_total = 0;
+      order.metadata = nextMetadata;
+      quote.discount_amount = entireOrderDiscount;
+      quote.amount_total = 0;
+      quote.discount_scope = "entire_order";
+    } else {
+      quote.discount_scope = "base_product";
+    }
+
     let familyInviteDiscountPercent = 0;
     let familyInviteDiscountAmount = 0;
     if (familyInvitation && orderType !== "family_trial_package") {

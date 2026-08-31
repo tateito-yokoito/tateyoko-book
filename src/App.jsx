@@ -400,7 +400,26 @@ async function loadCommerceQuote({ discountCode = "", includeGiftPackage = false
     input_include_gift_package: Boolean(includeGiftPackage)
   });
   if (error) throw error;
-  return data;
+  return resolveEntireOrderDiscountQuote(data);
+}
+
+async function resolveEntireOrderDiscountQuote(quote) {
+  if (!quote?.campaign_id) return quote;
+  const { data: discountScope, error } = await supabaseClient.rpc("get_discount_scope_for_quote", {
+    input_campaign_id: quote.campaign_id
+  });
+  if (error) throw error;
+  if (discountScope !== "entire_order") {
+    return { ...quote, discount_scope: "base_product" };
+  }
+
+  const entireOrderDiscount = Number(quote.amount_subtotal || 0) + Number(quote.gift_package_amount || 0);
+  return {
+    ...quote,
+    discount_scope: "entire_order",
+    discount_amount: entireOrderDiscount,
+    amount_total: 0
+  };
 }
 
 async function loadBookOrderQuote({
@@ -419,7 +438,7 @@ async function loadBookOrderQuote({
     input_include_gift_package: Boolean(includeGiftPackage)
   });
   if (error) throw error;
-  return data;
+  return resolveEntireOrderDiscountQuote(data);
 }
 
 async function loadGiftClaimPreview(token) {

@@ -284,11 +284,26 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
       const { data, error: quoteError } = await supabaseClient.rpc("get_commerce_quote", {
         input_product_code: "self_book_v1",
         input_discount_code: code,
-        input_include_gift_package: false
+        input_include_gift_package: includesGiftPackagePayment
       });
       if (quoteError || !data) throw new Error(quoteError?.message || "割引コードを確認できませんでした");
+      let resolvedQuote = { ...data, discount_scope: "base_product" };
+      if (data.campaign_id) {
+        const { data: discountScope, error: scopeError } = await supabaseClient.rpc("get_discount_scope_for_quote", {
+          input_campaign_id: data.campaign_id
+        });
+        if (scopeError) throw scopeError;
+        if (discountScope === "entire_order") {
+          resolvedQuote = {
+            ...data,
+            discount_scope: "entire_order",
+            discount_amount: Number(data.amount_subtotal || 0) + Number(data.gift_package_amount || 0),
+            amount_total: 0
+          };
+        }
+      }
       setAppliedDiscountCode(code);
-      setDiscountQuote(data);
+      setDiscountQuote(resolvedQuote);
       setDiscountStatus("ready");
     } catch (quoteError) {
       console.error("family gift discount quote error", quoteError);
@@ -357,11 +372,14 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
   const offerLabel = includesBasePlanPayment ? "基本プランを贈る" : "無料体験を贈る";
   const continuationLabel = offerType === "referral" ? "本人に案内" : "私に案内";
   const deliveryLabel = deliveryMethod === "package" ? "ギフトパッケージ" : "メール";
-  const codeDiscountAmount = includesBasePlanPayment
-    ? Math.min(FAMILY_PLAN_PRICE, Number(discountQuote?.discount_amount || 0))
-    : 0;
-  const paymentTotal = (includesBasePlanPayment ? Math.max(0, FAMILY_PLAN_PRICE - codeDiscountAmount) : 0)
+  const paymentBeforeCode = (includesBasePlanPayment ? FAMILY_PLAN_PRICE : 0)
     + (includesGiftPackagePayment ? GIFT_PACKAGE_PRICE : 0);
+  const codeDiscountAmount = discountQuote?.discount_scope === "entire_order"
+    ? paymentBeforeCode
+    : includesBasePlanPayment
+      ? Math.min(FAMILY_PLAN_PRICE, Number(discountQuote?.discount_amount || 0))
+      : 0;
+  const paymentTotal = Math.max(0, paymentBeforeCode - codeDiscountAmount);
   const resolvedMessage = personalMessage.trim() || MESSAGE_DRAFTS[messageTemplate] || "";
   const offerPreviewCopy = getOfferPreviewCopy(offerType, inviterName);
 
@@ -611,7 +629,11 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
                     </div>
                   )}
                   {discountError && <p className="mt-3 text-xs leading-relaxed text-red-100/72">{discountError}</p>}
-                  <p className="mt-3 text-[0.68rem] leading-relaxed text-white/28">割引コードは基本プランに適用されます。ギフトパッケージ代は対象外です。</p>
+                  <p className="mt-3 text-[0.68rem] leading-relaxed text-white/28">
+                    {discountQuote?.discount_scope === "entire_order"
+                      ? "内部テスト用コードを、選択したすべての有料項目に適用しています。"
+                      : "割引コードは基本プランに適用されます。ギフトパッケージ代は対象外です。"}
+                  </p>
                 </div>
               )}
               <div className="rounded-2xl border border-emerald-100/10 bg-emerald-100/[0.035] px-5 py-4">
