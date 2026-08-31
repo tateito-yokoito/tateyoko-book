@@ -69,7 +69,8 @@ function Field({ label, children }) {
 
 export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartCheckout, onComplete }) {
   const [step, setStep] = useState("person");
-  const [recipientName, setRecipientName] = useState("");
+  const [recipientFamilyName, setRecipientFamilyName] = useState("");
+  const [recipientGivenName, setRecipientGivenName] = useState("");
   const [relationship, setRelationship] = useState("parent");
   const [assistanceMode, setAssistanceMode] = useState("recipient_chooses");
   const [offerType, setOfferType] = useState("referral");
@@ -84,6 +85,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
 
   const steps = useMemo(() => ["person", "assistance", "offer", "delivery", "details", "review"], []);
   const currentStepIndex = steps.indexOf(step);
+  const recipientName = `${recipientFamilyName.trim()} ${recipientGivenName.trim()}`.trim();
 
   const goBack = () => {
     setError("");
@@ -100,8 +102,8 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
 
   const goNext = () => {
     setError("");
-    if (step === "person" && !recipientName.trim()) {
-      setError("お名前を入力してください。");
+    if (step === "person" && (!recipientFamilyName.trim() || !recipientGivenName.trim())) {
+      setError("姓と名を入力してください。");
       return;
     }
     if (step === "offer" && offerType === "referral") setDeliveryMethod("email");
@@ -198,14 +200,19 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
           {step === "person" && (
             <>
               <p className="mb-6 text-center text-sm leading-loose text-white/42">ご本人が主役となる、新しい物語を用意します。</p>
-              <Field label="お名前">
-                <input className="quiet-input" value={recipientName} onChange={event => setRecipientName(event.target.value)} placeholder="例：菅原 花子" maxLength={80} />
-              </Field>
               <Field label="あなたとの関係">
                 <select className="quiet-select" value={relationship} onChange={event => setRelationship(event.target.value)}>
                   {RELATIONSHIPS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </Field>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="姓">
+                  <input className="quiet-input" value={recipientFamilyName} onChange={event => setRecipientFamilyName(event.target.value)} autoComplete="family-name" maxLength={40} />
+                </Field>
+                <Field label="名">
+                  <input className="quiet-input" value={recipientGivenName} onChange={event => setRecipientGivenName(event.target.value)} autoComplete="given-name" maxLength={40} />
+                </Field>
+              </div>
             </>
           )}
 
