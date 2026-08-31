@@ -11675,7 +11675,7 @@ function Scene_Home({
             <HomeMenuButton
               icon={Users}
               label="家族に贈る"
-              detail="無料体験の紹介や、基本プランを贈れます"
+              detail="無料体験への招待や、ギフトの形で贈れます。"
               onClick={onAddFamilyStory}
             />
 
