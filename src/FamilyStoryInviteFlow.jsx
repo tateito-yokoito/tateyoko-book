@@ -184,7 +184,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
 
   const relationLabel = RELATIONSHIPS.find(([value]) => value === relationship)?.[1] || "家族";
   const offerLabel = offerType === "full_gift" ? "基本プランを贈る" : "3問の無料体験を贈る";
-  const continuationLabel = offerType === "referral" ? "本人に案内する" : "私に案内する";
+  const continuationLabel = offerType === "referral" ? "本人に案内" : "私に案内";
   const deliveryLabel = deliveryMethod === "package" ? "ギフトパッケージ" : "メール";
   const paymentTotal = FAMILY_PLAN_PRICE + (deliveryMethod === "package" ? GIFT_PACKAGE_PRICE : 0);
 
@@ -230,8 +230,8 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
           {step === "assistance" && (
             <>
               <p className="mb-5 text-center text-sm leading-loose text-white/42">内容は、ご本人の許可なく共有されません。</p>
-              <OptionCard icon={Smartphone} title="本人だけで進められる" detail="招待された方のスマートフォンで進めます。" selected={assistanceMode === "recipient_led"} onClick={() => setAssistanceMode("recipient_led")} />
-              <OptionCard icon={Users} title="私もお手伝いする" detail="ご本人が承認すると、あなたのスマートフォンから録音や写真、本の準備を手伝えます。" selected={assistanceMode === "support_requested"} onClick={() => setAssistanceMode("support_requested")} />
+              <OptionCard icon={Smartphone} title="本人だけで進められる" detail="招待された方のスマートフォンだけで進めます。" selected={assistanceMode === "recipient_led"} onClick={() => setAssistanceMode("recipient_led")} />
+              <OptionCard icon={Users} title="私もお手伝いする" detail="ご本人が承認すると、あなたのスマートフォンからも録音や写真追加などを手伝えます。" selected={assistanceMode === "support_requested"} onClick={() => setAssistanceMode("support_requested")} />
               <OptionCard icon={Smartphone} title="本人に選んでもらう" detail="招待を開いた時に、お手伝いを頼むか選んでもらいます。" selected={assistanceMode === "recipient_chooses"} onClick={() => setAssistanceMode("recipient_chooses")} />
             </>
           )}
@@ -251,7 +251,8 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
 
               {offerType !== "full_gift" && (
                 <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-xs text-white/44">3問のあと、特別価格でご案内できます。</p>
+                  <div className="mt-4 flex flex-wrap items-baseline justify-between gap-2">
                     <p className="text-xs tracking-[0.1em] text-amber-100/52">家族招待 特別価格</p>
                     <p className="text-sm text-white/72">
                       <span className="mr-2 text-xs text-white/28 line-through">{formatPrice(FAMILY_PLAN_LIST_PRICE)}</span>
@@ -260,14 +261,13 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
                   </div>
                   <p className="mt-1 text-right text-[0.68rem] text-amber-100/40">30% OFF</p>
 
-                  <p className="mt-5 text-xs text-white/44">3問のあと、どちらに案内しますか？</p>
-                  <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div className="mt-5 grid grid-cols-2 gap-3">
                     <button
                       type="button"
                       onClick={() => setOfferType("referral")}
                       className={`min-h-[108px] rounded-2xl border px-3 py-4 text-left transition ${offerType === "referral" ? "border-white/28 bg-white/[0.09]" : "border-white/[0.08] bg-white/[0.02]"}`}
                     >
-                      <span className="flex items-center justify-between gap-2 text-sm text-white/82">本人に案内する{offerType === "referral" && <Check size={15} className="text-emerald-100/72" />}</span>
+                      <span className="flex items-center justify-between gap-2 text-sm text-white/82">本人に案内{offerType === "referral" && <Check size={15} className="text-emerald-100/72" />}</span>
                       <span className="mt-2 block text-xs leading-relaxed text-white/38">本人が続けるか決めて購入</span>
                     </button>
                     <button
@@ -275,7 +275,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
                       onClick={() => setOfferType("trial_gift")}
                       className={`min-h-[108px] rounded-2xl border px-3 py-4 text-left transition ${offerType === "trial_gift" ? "border-white/28 bg-white/[0.09]" : "border-white/[0.08] bg-white/[0.02]"}`}
                     >
-                      <span className="flex items-center justify-between gap-2 text-sm text-white/82">私に案内する{offerType === "trial_gift" && <Check size={15} className="text-emerald-100/72" />}</span>
+                      <span className="flex items-center justify-between gap-2 text-sm text-white/82">私に案内{offerType === "trial_gift" && <Check size={15} className="text-emerald-100/72" />}</span>
                       <span className="mt-2 block text-xs leading-relaxed text-white/38">利用意向を確認して私が購入</span>
                     </button>
                   </div>
