@@ -14,6 +14,14 @@ function json(body: Record<string, unknown>, status = 200) {
   });
 }
 
+function errorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === "object" && "message" in error) {
+    const message = String((error as { message?: unknown }).message || "").trim();
+    if (message) return message;
+  }
+  return fallback;
+}
+
 function appReturnUrl(params: Record<string, string>) {
   const configured = Deno.env.get("APP_URL") || "https://www.tateito-yokoito.jp/";
   const url = new URL(configured);
@@ -640,6 +648,6 @@ serve(async request => {
       await admin.from("commerce_orders").update({ status: "cancelled" }).eq("id", orderId);
       await admin.from("discount_redemptions").update({ status: "released" }).eq("commerce_order_id", orderId).eq("status", "pending");
     }
-    return json({ success: false, error: error instanceof Error ? error.message : "購入手続きを開始できませんでした" }, 500);
+    return json({ success: false, error: errorMessage(error, "購入手続きを開始できませんでした") }, 500);
   }
 });
