@@ -204,6 +204,11 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
   const [personalMessage, setPersonalMessage] = useState(MESSAGE_DRAFTS.hear_your_story);
   const [shipping, setShipping] = useState({ postal_code: "", prefecture: "", city: "", line1: "", line2: "" });
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [discountCode, setDiscountCode] = useState("");
+  const [appliedDiscountCode, setAppliedDiscountCode] = useState("");
+  const [discountQuote, setDiscountQuote] = useState(null);
+  const [discountStatus, setDiscountStatus] = useState("idle");
+  const [discountError, setDiscountError] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const createdRef = useRef(null);
@@ -248,6 +253,36 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
     setStep(steps[Math.min(steps.length - 1, currentStepIndex + 1)]);
   };
 
+  const applyDiscountCode = async () => {
+    const code = discountCode.trim().toUpperCase();
+    setDiscountError("");
+    if (!code) {
+      setAppliedDiscountCode("");
+      setDiscountQuote(null);
+      setDiscountStatus("idle");
+      return;
+    }
+
+    setDiscountStatus("loading");
+    try {
+      const { data, error: quoteError } = await supabaseClient.rpc("get_commerce_quote", {
+        input_product_code: "self_book_v1",
+        input_discount_code: code,
+        input_include_gift_package: false
+      });
+      if (quoteError || !data) throw new Error(quoteError?.message || "割引コードを確認できませんでした");
+      setAppliedDiscountCode(code);
+      setDiscountQuote(data);
+      setDiscountStatus("ready");
+    } catch (quoteError) {
+      console.error("family gift discount quote error", quoteError);
+      setAppliedDiscountCode("");
+      setDiscountQuote(null);
+      setDiscountStatus("error");
+      setDiscountError(quoteError?.message || "割引コードを確認できませんでした。");
+    }
+  };
+
   const createInvitation = async () => {
     if (busy) return;
     setBusy(true);
@@ -276,6 +311,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
         const started = await onStartCheckout?.({
           invitation,
           orderType: offerType === "full_gift" ? "gift" : "family_trial_package",
+          discountCode: offerType === "full_gift" ? appliedDiscountCode : "",
           includeGiftPackage: deliveryMethod === "package",
           gift: {
             recipient_name: recipientName.trim(),
@@ -305,7 +341,9 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
   const offerLabel = offerType === "full_gift" ? "基本プランを贈る" : "無料体験を贈る";
   const continuationLabel = offerType === "referral" ? "本人に案内" : "私に案内";
   const deliveryLabel = deliveryMethod === "package" ? "ギフトパッケージ" : "メール";
-  const paymentTotal = FAMILY_PLAN_PRICE + (deliveryMethod === "package" ? GIFT_PACKAGE_PRICE : 0);
+  const codeDiscountAmount = Math.min(FAMILY_PLAN_PRICE, Number(discountQuote?.discount_amount || 0));
+  const paymentTotal = Math.max(0, FAMILY_PLAN_PRICE - codeDiscountAmount)
+    + (deliveryMethod === "package" ? GIFT_PACKAGE_PRICE : 0);
   const resolvedMessage = personalMessage.trim() || MESSAGE_DRAFTS[messageTemplate] || "";
   const offerPreviewCopy = getOfferPreviewCopy(offerType, inviterName);
 
@@ -486,12 +524,72 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
                 <p>届け方：{deliveryLabel}</p>
                 <p>お手伝い：{assistanceMode === "recipient_led" ? "本人だけで進める" : assistanceMode === "support_requested" ? "私もお手伝いする" : "本人に選んでもらう"}</p>
                 {offerType === "full_gift" && (
-                  <div className="mt-4 flex items-center justify-between border-t border-white/[0.07] pt-4">
-                    <span>お支払い合計</span>
-                    <span className="text-white/88">{formatPrice(paymentTotal)}</span>
+                  <div className="mt-4 space-y-2 border-t border-white/[0.07] pt-4">
+                    <div className="flex items-center justify-between gap-3 text-white/46">
+                      <span>基本プラン</span>
+                      <span>{formatPrice(FAMILY_PLAN_LIST_PRICE)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 text-amber-100/58">
+                      <span>家族招待 30%割引</span>
+                      <span>−{formatPrice(FAMILY_PLAN_LIST_PRICE - FAMILY_PLAN_PRICE)}</span>
+                    </div>
+                    {codeDiscountAmount > 0 && (
+                      <div className="flex items-center justify-between gap-3 text-emerald-100/64">
+                        <span>割引コード</span>
+                        <span>−{formatPrice(codeDiscountAmount)}</span>
+                      </div>
+                    )}
+                    {deliveryMethod === "package" && (
+                      <div className="flex items-center justify-between gap-3 text-white/46">
+                        <span>ギフトパッケージ</span>
+                        <span>{formatPrice(GIFT_PACKAGE_PRICE)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-3 border-t border-white/[0.07] pt-3 text-white/82">
+                      <span>お支払い合計</span>
+                      <span className="text-white/92">{formatPrice(paymentTotal)}</span>
+                    </div>
                   </div>
                 )}
               </div>
+              {offerType === "full_gift" && (
+                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-5 py-5">
+                  <label className="text-xs tracking-[0.08em] text-white/42">割引コードをお持ちの方</label>
+                  <div className="mt-3 flex gap-2">
+                    <input
+                      value={discountCode}
+                      onChange={event => {
+                        setDiscountCode(event.target.value.toUpperCase());
+                        setDiscountError("");
+                      }}
+                      placeholder="コードを入力"
+                      className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm uppercase tracking-[0.08em] text-white/84 outline-none placeholder:text-white/24"
+                    />
+                    <button
+                      type="button"
+                      onClick={applyDiscountCode}
+                      disabled={busy || discountStatus === "loading"}
+                      className="shrink-0 rounded-2xl border border-white/12 px-4 text-sm text-white/66 disabled:opacity-40"
+                    >
+                      {discountStatus === "loading" ? "確認中" : "適用"}
+                    </button>
+                  </div>
+                  {discountQuote?.campaign_name && appliedDiscountCode && (
+                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-emerald-100/64">
+                      <span>{discountQuote.campaign_name}を適用しました。</span>
+                      <button type="button" onClick={() => {
+                        setDiscountCode("");
+                        setAppliedDiscountCode("");
+                        setDiscountQuote(null);
+                        setDiscountStatus("idle");
+                        setDiscountError("");
+                      }} className="shrink-0 underline underline-offset-4 text-white/38">外す</button>
+                    </div>
+                  )}
+                  {discountError && <p className="mt-3 text-xs leading-relaxed text-red-100/72">{discountError}</p>}
+                  <p className="mt-3 text-[0.68rem] leading-relaxed text-white/28">割引コードは基本プランに適用されます。ギフトパッケージ代は対象外です。</p>
+                </div>
+              )}
               <div className="rounded-2xl border border-emerald-100/10 bg-emerald-100/[0.035] px-5 py-4">
                 <p className="text-sm leading-loose text-emerald-50/62">語りの中身は、ご本人の許可なくあなたへ共有されません。</p>
               </div>
@@ -517,8 +615,8 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
         {error && <p className="mt-5 rounded-2xl border border-red-200/15 bg-red-200/[0.05] px-5 py-4 text-sm leading-relaxed text-red-100/75">{error}</p>}
 
         {step !== "complete" && (
-          <button type="button" onClick={step === "review" ? createInvitation : goNext} disabled={busy} className="btn-quiet mt-8 flex w-full items-center justify-center gap-2 rounded-full bg-white py-4 text-slate-900 disabled:opacity-40">
-            {busy ? "準備しています…" : step === "review" ? (offerType === "full_gift" ? "お支払いへ進む" : "この内容でメールを送る") : "次へ"}
+          <button type="button" onClick={step === "review" ? createInvitation : goNext} disabled={busy || discountStatus === "loading"} className="btn-quiet mt-8 flex w-full items-center justify-center gap-2 rounded-full bg-white py-4 text-slate-900 disabled:opacity-40">
+            {busy ? "準備しています…" : discountStatus === "loading" ? "割引コードを確認しています…" : step === "review" ? (offerType === "full_gift" ? "お支払いへ進む" : "この内容でメールを送る") : "次へ"}
             {!busy && step !== "review" && <ChevronRight size={17} />}
           </button>
         )}

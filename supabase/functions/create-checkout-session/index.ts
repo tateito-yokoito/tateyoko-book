@@ -145,6 +145,25 @@ async function ensureFamilyInviteStripeCoupon(
   return coupon.id;
 }
 
+async function createCombinedFamilyInviteStripeCoupon(
+  secret: string,
+  discountAmount: number,
+  stripeProductId: string,
+  orderId: string
+) {
+  const form = new URLSearchParams();
+  form.set("duration", "once");
+  form.set("name", "家族招待・割引コード併用");
+  form.set("amount_off", String(Math.round(discountAmount)));
+  form.set("currency", "jpy");
+  form.set("max_redemptions", "1");
+  form.set("applies_to[products][0]", stripeProductId);
+  form.set("metadata[discount_type]", "family_invite_with_code");
+  form.set("metadata[order_id]", orderId);
+  const coupon = await stripeRequest(secret, "coupons", form);
+  return coupon.id;
+}
+
 serve(async request => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") return json({ success: false, error: "Method not allowed" }, 405);
@@ -207,8 +226,9 @@ serve(async request => {
       if (orderType !== "self" && familyInvitation.status !== "awaiting_payment" && familyInvitation.status !== "continuation_awaiting_payment") {
         return json({ success: false, error: "この家族招待はお支払い待ちではありません" }, 409);
       }
-      // The family invitation price is automatic and cannot be stacked with a coupon code.
-      discountCode = "";
+      // Family invitations always receive their special price. A supplied
+      // discount code is applied to the remaining book price; the optional
+      // gift package is never discounted.
     }
     if (orderType === "self") {
       if (!projectId) return json({ success: false, error: "物語が見つかりません" }, 400);
@@ -324,10 +344,14 @@ serve(async request => {
         || quote.amount_subtotal
         || 0
       );
-      familyInviteDiscountAmount = Math.round(baseBookAmount * familyInviteDiscountPercent / 100);
+      const requestedFamilyInviteDiscount = Math.round(baseBookAmount * familyInviteDiscountPercent / 100);
+      const currentDiscount = Number(order.discount_amount || quote.discount_amount || 0);
+      familyInviteDiscountAmount = Math.min(
+        requestedFamilyInviteDiscount,
+        Math.max(0, baseBookAmount - currentDiscount)
+      );
 
       if (familyInviteDiscountAmount > 0) {
-        const currentDiscount = Number(order.discount_amount || quote.discount_amount || 0);
         const nextDiscount = currentDiscount + familyInviteDiscountAmount;
         const nextTotal = Math.max(0, Number(order.amount_total ?? quote.amount_total ?? 0) - familyInviteDiscountAmount);
         const existingMetadata = order.metadata && typeof order.metadata === "object" ? order.metadata : {};
@@ -422,7 +446,17 @@ serve(async request => {
     }
 
     let couponId = "";
-    if (familyInviteDiscountAmount > 0) {
+    const campaignDiscountAmount = Number(quote.discount_amount || 0) - familyInviteDiscountAmount;
+    if (familyInviteDiscountAmount > 0 && campaignDiscountAmount > 0) {
+      const bookStripe = stripeLines.find(item => item.code === "self_book_v1");
+      if (!bookStripe) throw new Error("割引対象の商品が見つかりませんでした");
+      couponId = await createCombinedFamilyInviteStripeCoupon(
+        stripeSecretKey,
+        Number(quote.discount_amount || 0),
+        bookStripe.productId,
+        order.id
+      );
+    } else if (familyInviteDiscountAmount > 0) {
       const bookStripe = stripeLines.find(item => item.code === "self_book_v1");
       if (!bookStripe) throw new Error("家族招待の割引対象が見つかりませんでした");
       couponId = await ensureFamilyInviteStripeCoupon(

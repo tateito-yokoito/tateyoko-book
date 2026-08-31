@@ -6510,10 +6510,11 @@ let sceneAfterInvite = nextScene;
           supabaseClient={supabaseClient}
           inviterName={user?.display_name || user?.name || user?.preferred_name || "ご家族"}
           onBack={() => setScene("home")}
-          onStartCheckout={async ({ invitation, orderType, includeGiftPackage, gift }) => {
+          onStartCheckout={async ({ invitation, orderType, discountCode, includeGiftPackage, gift }) => {
             const checkoutWindow = openCheckoutWindow();
             const started = await startPurchase({
               orderType,
+              discountCode,
               includeGiftPackage,
               gift,
               familyInvitationId: invitation.id,
