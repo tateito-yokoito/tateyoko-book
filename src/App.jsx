@@ -6508,6 +6508,7 @@ let sceneAfterInvite = nextScene;
       {scene === "family_story_invite_flow" && (
         <FamilyStoryInviteFlow
           supabaseClient={supabaseClient}
+          inviterName={user?.display_name || user?.name || user?.preferred_name || "ご家族"}
           onBack={() => setScene("home")}
           onStartCheckout={async ({ invitation, orderType, includeGiftPackage, gift }) => {
             const checkoutWindow = openCheckoutWindow();

@@ -19,6 +19,14 @@ const MESSAGE_TEMPLATES = [
   ["custom", "自分の言葉で書く"]
 ];
 
+const MESSAGE_DRAFTS = {
+  gratitude: "ありがとうを伝えたくて、贈ります。",
+  hear_your_story: "あなたの話を、もっと聞いてみたいと思いました。",
+  keep_in_family: "家族に残しておきたい物語があると思い、贈ります。",
+  celebration: "お祝いの気持ちを込めて、贈ります。",
+  custom: ""
+};
+
 const FAMILY_PLAN_LIST_PRICE = 49800;
 const FAMILY_PLAN_PRICE = 34860;
 const GIFT_PACKAGE_PRICE = 3000;
@@ -74,7 +82,116 @@ function Field({ label, children }) {
   );
 }
 
-export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartCheckout, onComplete }) {
+function getOfferPreviewCopy(offerType, inviterName) {
+  if (offerType === "full_gift") {
+    return {
+      subject: `【縦糸横糸】${inviterName}さんから、物語づくりの贈りものです`,
+      lead: "物語を一冊にするスタンダードプランが用意されています。"
+    };
+  }
+
+  if (offerType === "trial_gift") {
+    return {
+      subject: `【縦糸横糸】${inviterName}さんから、三つの問いが届きました`,
+      lead: "まずは三つの問いを、無料でお試しいただけます。"
+    };
+  }
+
+  return {
+    subject: `【縦糸横糸】${inviterName}さんから、家族の物語づくりのご案内`,
+    lead: "まずは三つの問いを無料で試し、その先は家族招待の特別価格34,860円（30%割引）で続けられます。"
+  };
+}
+
+function InvitationPreview({ deliveryMethod, recipientName, recipientEmail, inviterName, offerType, message, shipping, onClose }) {
+  const offerCopy = getOfferPreviewCopy(offerType, inviterName);
+  const address = [
+    shipping.postal_code ? `〒${shipping.postal_code}` : "",
+    shipping.prefecture,
+    shipping.city,
+    shipping.line1,
+    shipping.line2
+  ].filter(Boolean).join(" ");
+
+  if (deliveryMethod === "package") {
+    return (
+      <div className="h-full overflow-y-auto bg-[#0f172a] px-4 py-8 fade-enter">
+        <div className="mx-auto w-full max-w-[440px]">
+          <div className="relative mb-9 flex h-10 items-center justify-center">
+            <button type="button" onClick={onClose} className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]" aria-label="元の画面へ戻る">
+              <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+            </button>
+            <p className="text-narrative text-[1.02rem] text-white/88">ギフトの内容</p>
+          </div>
+
+          <div className="rounded-[1.8rem] border border-amber-100/12 bg-amber-100/[0.035] p-6">
+            <p className="text-xs tracking-[0.18em] text-amber-100/48">ギフトとしてお届け</p>
+            <h1 className="text-narrative mt-5 text-[1.3rem] text-white/90">{recipientName || "お相手"}さんへ</h1>
+            {message && (
+              <div className="mt-6 border-l-2 border-amber-200/45 bg-white/[0.035] px-5 py-4">
+                <p className="whitespace-pre-wrap text-sm leading-[2] text-white/68">{message}</p>
+              </div>
+            )}
+
+            <div className="mt-7 border-t border-white/[0.08] pt-6">
+              <p className="text-xs text-white/38">お届けするもの</p>
+              <ul className="mt-4 space-y-3 text-sm leading-loose text-white/62">
+                <li>・詳しいはじめ方を載せたブランドブック</li>
+                <li>・物語づくりを始めるためのご案内</li>
+                <li>・あなたからのメッセージ</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-white/[0.07] bg-white/[0.02] px-5 py-4">
+            <p className="text-xs text-white/38">お届け先</p>
+            <p className="mt-2 text-sm leading-loose text-white/64">{address || "住所を入力すると表示されます"}</p>
+          </div>
+
+          <button type="button" onClick={onClose} className="btn-quiet mt-8 w-full rounded-full bg-white py-4 text-slate-900">元の画面へ戻る</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-y-auto bg-[#0f172a] px-4 py-8 fade-enter">
+      <div className="mx-auto w-full max-w-[620px]">
+        <div className="relative mb-7 flex h-10 items-center justify-center">
+          <button type="button" onClick={onClose} className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]" aria-label="元の画面へ戻る">
+            <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+          </button>
+          <p className="text-narrative text-[1.02rem] text-white/88">送られるメール</p>
+        </div>
+
+        <div className="mb-5 rounded-2xl border border-white/[0.08] bg-white/[0.025] px-5 py-4 text-xs leading-[1.9] text-white/48">
+          <p className="flex items-start gap-2"><span className="w-14 shrink-0 text-white/28">差出人</span><span className="min-w-0 flex-1 break-all">縦糸横糸 &lt;hello@tateito-yokoito.jp&gt;</span></p>
+          <p className="mt-1 flex items-start gap-2"><span className="w-14 shrink-0 text-white/28">宛先</span><span className="min-w-0 flex-1 break-all">{recipientEmail || "メールアドレスを入力すると表示されます"}</span></p>
+          <p className="mt-2 flex items-start gap-2"><span className="w-14 shrink-0 text-white/28">件名</span><span className="min-w-0 flex-1">{offerCopy.subject}</span></p>
+        </div>
+
+        <div className="rounded-[1.4rem] bg-[#fbfaf7] px-6 py-9 text-[#172033] shadow-2xl sm:px-10">
+          <p className="text-xs text-slate-500">家族の物語への招待</p>
+          <h1 className="mt-5 font-serif text-2xl font-normal">{recipientName || "お相手"}さんへ</h1>
+          {message && (
+            <div className="mt-7 border-l-[3px] border-[#b97849] bg-[#f7f5ef] px-5 py-5">
+              <p className="whitespace-pre-wrap font-serif text-[1rem] leading-[1.95]">{message}</p>
+            </div>
+          )}
+          <p className="mt-7 font-serif text-[0.98rem] leading-[1.95]">{offerCopy.lead}</p>
+          <p className="mt-5 font-serif text-[0.98rem] leading-[1.95]">語りの中身が、招待した方へ自動で共有されることはありません。お手伝いを頼むかどうかも、ご本人が選べます。</p>
+          <div className="mt-8 inline-flex rounded-full bg-[#101827] px-7 py-4 font-serif text-white">招待を開く</div>
+          <p className="mt-8 text-xs leading-loose text-slate-400">心当たりがない場合は、このメールを破棄してください。</p>
+        </div>
+
+        <p className="mt-5 text-center text-xs leading-loose text-white/34">このメールは「縦糸横糸」から送信されます。<br />招待した方のお名前は、件名に表示されます。</p>
+        <button type="button" onClick={onClose} className="btn-quiet mt-7 w-full rounded-full bg-white py-4 text-slate-900">元の画面へ戻る</button>
+      </div>
+    </div>
+  );
+}
+
+export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "ご家族", onBack, onStartCheckout, onComplete }) {
   const [step, setStep] = useState("person");
   const [recipientFamilyName, setRecipientFamilyName] = useState("");
   const [recipientGivenName, setRecipientGivenName] = useState("");
@@ -84,8 +201,9 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
   const [deliveryMethod, setDeliveryMethod] = useState("email");
   const [recipientEmail, setRecipientEmail] = useState("");
   const [messageTemplate, setMessageTemplate] = useState("hear_your_story");
-  const [personalMessage, setPersonalMessage] = useState("");
+  const [personalMessage, setPersonalMessage] = useState(MESSAGE_DRAFTS.hear_your_story);
   const [shipping, setShipping] = useState({ postal_code: "", prefecture: "", city: "", line1: "", line2: "" });
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const createdRef = useRef(null);
@@ -188,6 +306,23 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
   const continuationLabel = offerType === "referral" ? "本人に案内" : "私に案内";
   const deliveryLabel = deliveryMethod === "package" ? "ギフトパッケージ" : "メール";
   const paymentTotal = FAMILY_PLAN_PRICE + (deliveryMethod === "package" ? GIFT_PACKAGE_PRICE : 0);
+  const resolvedMessage = personalMessage.trim() || MESSAGE_DRAFTS[messageTemplate] || "";
+  const offerPreviewCopy = getOfferPreviewCopy(offerType, inviterName);
+
+  if (previewOpen) {
+    return (
+      <InvitationPreview
+        deliveryMethod={deliveryMethod}
+        recipientName={recipientName.trim()}
+        recipientEmail={recipientEmail.trim()}
+        inviterName={inviterName}
+        offerType={offerType}
+        message={resolvedMessage}
+        shipping={shipping}
+        onClose={() => setPreviewOpen(false)}
+      />
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto px-4 py-8 fade-enter">
@@ -318,14 +453,26 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
                   <Field label="建物名・部屋番号（任意）"><input className="quiet-input" value={shipping.line2} onChange={event => setShipping(previous => ({ ...previous, line2: event.target.value }))} /></Field>
                 </div>
               )}
-              <Field label="気持ちを選ぶ">
-                <select className="quiet-select" value={messageTemplate} onChange={event => setMessageTemplate(event.target.value)}>
+              <Field label="伝えたい気持ち">
+                <select className="quiet-select" value={messageTemplate} onChange={event => {
+                  const nextTemplate = event.target.value;
+                  setMessageTemplate(nextTemplate);
+                  setPersonalMessage(MESSAGE_DRAFTS[nextTemplate] || "");
+                }}>
                   {MESSAGE_TEMPLATES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </Field>
-              <Field label="ひとこと（任意）">
-                <textarea className="min-h-[112px] w-full rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm leading-loose text-white/84 outline-none placeholder:text-white/24" value={personalMessage} onChange={event => setPersonalMessage(event.target.value)} maxLength={300} placeholder="短い言葉を添えられます" />
+              <p className="-mt-2 px-1 text-xs leading-loose text-white/32">選ぶと文章が入ります。自由に直せます。</p>
+              <Field label={deliveryMethod === "email" ? "メールに載せるメッセージ（任意）" : "ギフトに添えるメッセージ（任意）"}>
+                <textarea className="min-h-[132px] w-full rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm leading-loose text-white/84 outline-none placeholder:text-white/24" value={personalMessage} onChange={event => {
+                  const nextMessage = event.target.value;
+                  setPersonalMessage(nextMessage);
+                  if (!nextMessage.trim()) setMessageTemplate("custom");
+                }} maxLength={300} placeholder="相手に届けたい言葉を入力できます" />
               </Field>
+              <button type="button" onClick={() => setPreviewOpen(true)} className="btn-quiet w-full rounded-full border border-white/14 bg-white/[0.04] py-4 text-sm text-white/76">
+                {deliveryMethod === "email" ? "送られるメールを確認" : "ギフトに添える内容を確認"}
+              </button>
             </>
           )}
 
@@ -348,6 +495,12 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
               <div className="rounded-2xl border border-emerald-100/10 bg-emerald-100/[0.035] px-5 py-4">
                 <p className="text-sm leading-loose text-emerald-50/62">語りの中身は、ご本人の許可なくあなたへ共有されません。</p>
               </div>
+              <button type="button" onClick={() => setPreviewOpen(true)} className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.025] px-5 py-4 text-left">
+                <span className="block text-xs text-white/38">{deliveryMethod === "email" ? "送られるメール" : "ギフトに添える内容"}</span>
+                {deliveryMethod === "email" && <span className="mt-2 block text-sm leading-relaxed text-white/68">{offerPreviewCopy.subject}</span>}
+                {resolvedMessage && <span className="mt-2 line-clamp-2 block text-xs leading-loose text-white/38">{resolvedMessage}</span>}
+                <span className="mt-3 flex items-center justify-end gap-1 text-xs text-white/48">全文を確認 <ChevronRight size={14} /></span>
+              </button>
             </div>
           )}
 
@@ -365,7 +518,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
 
         {step !== "complete" && (
           <button type="button" onClick={step === "review" ? createInvitation : goNext} disabled={busy} className="btn-quiet mt-8 flex w-full items-center justify-center gap-2 rounded-full bg-white py-4 text-slate-900 disabled:opacity-40">
-            {busy ? "準備しています…" : step === "review" ? (offerType === "full_gift" ? "お支払いへ進む" : "この内容で送る") : "次へ"}
+            {busy ? "準備しています…" : step === "review" ? (offerType === "full_gift" ? "お支払いへ進む" : "この内容でメールを送る") : "次へ"}
             {!busy && step !== "review" && <ChevronRight size={17} />}
           </button>
         )}
