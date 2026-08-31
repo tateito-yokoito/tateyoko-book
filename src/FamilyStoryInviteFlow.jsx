@@ -28,7 +28,8 @@ const formatPrice = value => `${Number(value || 0).toLocaleString("ja-JP")}円`;
 const STEP_TITLES = {
   person: "どなたへ届けますか？",
   assistance: "操作のお手伝いは必要ですか？",
-  offer: "何を贈りますか？",
+  offer: "何を届けますか？",
+  trial_offer: "3問のあとについて",
   delivery: "届け方を選ぶ",
   details: "送り先とメッセージ",
   review: "内容を確認",
@@ -90,7 +91,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
   const createdRef = useRef(null);
 
   const steps = useMemo(
-    () => ["person", "assistance", "offer", ...(offerType === "full_gift" ? ["delivery"] : []), "details", "review"],
+    () => ["person", "assistance", "offer", offerType === "full_gift" ? "delivery" : "trial_offer", "details", "review"],
     [offerType]
   );
   const currentStepIndex = steps.indexOf(step);
@@ -183,7 +184,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
   };
 
   const relationLabel = RELATIONSHIPS.find(([value]) => value === relationship)?.[1] || "家族";
-  const offerLabel = offerType === "full_gift" ? "基本プランを贈る" : "3問の無料体験を贈る";
+  const offerLabel = offerType === "full_gift" ? "基本プランを贈る" : "無料体験を贈る";
   const continuationLabel = offerType === "referral" ? "本人に案内" : "私に案内";
   const deliveryLabel = deliveryMethod === "package" ? "ギフトパッケージ" : "メール";
   const paymentTotal = FAMILY_PLAN_PRICE + (deliveryMethod === "package" ? GIFT_PACKAGE_PRICE : 0);
@@ -195,7 +196,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
           <button type="button" onClick={goBack} disabled={busy} className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] disabled:opacity-35" aria-label="前へ戻る">
             <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
           </button>
-          <p className="text-narrative text-[1.02rem] text-white/88">家族の物語を追加</p>
+          <p className="text-narrative text-[1.02rem] text-white/88">家族に贈る・紹介する</p>
         </div>
 
         {step !== "complete" && (
@@ -240,8 +241,8 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
             <>
               <OptionCard
                 icon={Gift}
-                title="3問の無料体験を贈る"
-                detail="まずは無料で体験。続けるかは、3問のあとに決められます。"
+                title="無料体験を贈る"
+                detail="まずは3問を無料で試せます。続けるかはご本人が決められます。続ける場合は、家族招待だけの特別価格でご案内します。"
                 selected={offerType !== "full_gift"}
                 onClick={() => {
                   setOfferType(current => current === "trial_gift" ? "trial_gift" : "referral");
@@ -249,57 +250,49 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
                 }}
               />
 
-              {offerType !== "full_gift" && (
-                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5">
-                  <p className="text-xs text-white/44">3問のあと、特別価格でご案内できます。</p>
-                  <div className="mt-4 flex flex-wrap items-baseline justify-between gap-2">
-                    <p className="text-xs tracking-[0.1em] text-amber-100/52">家族招待 特別価格</p>
-                    <p className="text-sm text-white/72">
-                      <span className="mr-2 text-xs text-white/28 line-through">{formatPrice(FAMILY_PLAN_LIST_PRICE)}</span>
-                      {formatPrice(FAMILY_PLAN_PRICE)}
-                    </p>
-                  </div>
-                  <p className="mt-1 text-right text-[0.68rem] text-amber-100/40">30% OFF</p>
-
-                  <div className="mt-5 grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setOfferType("referral")}
-                      className={`min-h-[108px] rounded-2xl border px-3 py-4 text-left transition ${offerType === "referral" ? "border-white/28 bg-white/[0.09]" : "border-white/[0.08] bg-white/[0.02]"}`}
-                    >
-                      <span className="flex items-center justify-between gap-2 text-sm text-white/82">本人に案内{offerType === "referral" && <Check size={15} className="text-emerald-100/72" />}</span>
-                      <span className="mt-2 block text-xs leading-relaxed text-white/38">本人が続けるか決めて購入</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOfferType("trial_gift")}
-                      className={`min-h-[108px] rounded-2xl border px-3 py-4 text-left transition ${offerType === "trial_gift" ? "border-white/28 bg-white/[0.09]" : "border-white/[0.08] bg-white/[0.02]"}`}
-                    >
-                      <span className="flex items-center justify-between gap-2 text-sm text-white/82">私に案内{offerType === "trial_gift" && <Check size={15} className="text-emerald-100/72" />}</span>
-                      <span className="mt-2 block text-xs leading-relaxed text-white/38">利用意向を確認して私が購入</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
               <OptionCard
                 icon={Gift}
                 title="基本プランを贈る"
-                detail="家族招待の特別価格で購入し、物語づくりをプレゼント。"
-                note="メールとギフトパッケージから選べます。"
+                detail="家族招待だけの特別価格34,860円（30%OFF）で購入して贈ります。メールかギフトパッケージを選べます。"
                 selected={offerType === "full_gift"}
                 onClick={() => setOfferType("full_gift")}
               />
+            </>
+          )}
 
-              {offerType === "full_gift" && (
-                <div className="rounded-2xl border border-amber-100/10 bg-amber-100/[0.035] px-5 py-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs tracking-[0.1em] text-amber-50/55">家族招待 特別価格</p>
-                    <p className="text-sm text-amber-50/76"><span className="mr-2 text-xs text-white/28 line-through">{formatPrice(FAMILY_PLAN_LIST_PRICE)}</span>{formatPrice(FAMILY_PLAN_PRICE)}</p>
-                  </div>
-                  <p className="mt-2 text-right text-[0.68rem] text-amber-100/40">30% OFF</p>
+          {step === "trial_offer" && (
+            <>
+              <p className="mb-1 text-center text-sm leading-loose text-white/46">3問のあと、特別価格でご案内できます。</p>
+              <div className="rounded-2xl border border-amber-100/10 bg-amber-100/[0.035] px-5 py-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-xs tracking-[0.1em] text-amber-50/55">家族招待 特別価格</p>
+                  <p className="text-sm text-amber-50/76">
+                    <span className="mr-2 text-xs text-white/28 line-through">{formatPrice(FAMILY_PLAN_LIST_PRICE)}</span>
+                    {formatPrice(FAMILY_PLAN_PRICE)}
+                  </p>
                 </div>
-              )}
+                <p className="mt-2 text-right text-[0.68rem] text-amber-100/40">30% OFF</p>
+              </div>
+
+              <p className="px-1 pt-3 text-xs text-white/44">ご案内先を選んでください</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setOfferType("referral")}
+                  className={`min-h-[116px] rounded-2xl border px-4 py-4 text-left transition ${offerType === "referral" ? "border-white/28 bg-white/[0.09]" : "border-white/[0.08] bg-white/[0.02]"}`}
+                >
+                  <span className="flex items-center justify-between gap-2 text-sm text-white/82">本人に案内{offerType === "referral" && <Check size={15} className="text-emerald-100/72" />}</span>
+                  <span className="mt-3 block text-xs leading-relaxed text-white/38">本人が続けるか決めて購入</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOfferType("trial_gift")}
+                  className={`min-h-[116px] rounded-2xl border px-4 py-4 text-left transition ${offerType === "trial_gift" ? "border-white/28 bg-white/[0.09]" : "border-white/[0.08] bg-white/[0.02]"}`}
+                >
+                  <span className="flex items-center justify-between gap-2 text-sm text-white/82">私に案内{offerType === "trial_gift" && <Check size={15} className="text-emerald-100/72" />}</span>
+                  <span className="mt-3 block text-xs leading-relaxed text-white/38">利用意向を確認して私が購入</span>
+                </button>
+              </div>
             </>
           )}
 
