@@ -390,6 +390,29 @@ function closeCheckoutWindow(checkoutWindow) {
   } catch (_error) {}
 }
 
+async function getFunctionInvokeErrorMessage(error, fallbackMessage) {
+  if (!error) return fallbackMessage;
+
+  try {
+    const response = error.context;
+    if (response && typeof response.clone === "function") {
+      const payload = await response.clone().json();
+      const serverMessage = String(payload?.error || payload?.message || "").trim();
+      if (serverMessage) {
+        if (/invalid jwt|jwt expired|unauthorized/i.test(serverMessage)) {
+          return "ログイン情報を更新できませんでした。画面を再読み込みして、もう一度お試しください。";
+        }
+        return serverMessage;
+      }
+    }
+  } catch (_parseError) {}
+
+  const message = String(error?.message || "").trim();
+  return message && !/edge function returned a non-2xx/i.test(message)
+    ? message
+    : fallbackMessage;
+}
+
 function openCheckoutWindow() {
   try {
     const checkoutWindow = window.open("", "_blank");
@@ -5170,7 +5193,13 @@ const startPurchase = async ({
     );
 
     if (error || !data?.success) {
-      throw new Error(data?.error || "購入画面を開けませんでした");
+      throw new Error(
+        data?.error ||
+          await getFunctionInvokeErrorMessage(
+            error,
+            "購入手続きを完了できませんでした。画面を再読み込みして、もう一度お試しください。"
+          )
+      );
     }
 
     if (data.completed || data.alreadyPurchased) {
@@ -7999,6 +8028,7 @@ function Scene_PurchaseStart({
     }
   });
   const hasFamilyInvitePrice = Boolean(familyInvitation && orderType === "self");
+  const noPaymentRequired = quoteStatus === "ready" && Number(quote?.amount_total || 0) === 0;
 
   useEffect(() => {
     setOrderType(initialOrderType === "gift" ? "gift" : "self");
@@ -8299,10 +8329,14 @@ function Scene_PurchaseStart({
           {checkoutOpened
             ? "決済画面を開き直す"
             : isPreparingCheckout
-            ? "購入画面を準備しています…"
+            ? noPaymentRequired
+              ? "お申し込みを確定しています…"
+              : "購入画面を準備しています…"
             : orderType === "gift"
               ? "この内容で贈る"
-              : "この内容で購入する"}
+              : noPaymentRequired
+                ? "この内容で申し込む"
+                : "この内容で購入する"}
         </button>
 
         {orderType === "self" && (
@@ -8322,7 +8356,9 @@ function Scene_PurchaseStart({
         )}
 
         <p className="mt-5 text-center text-xs leading-relaxed text-white/24">
-          カード情報はStripeの安全な決済画面で入力します。
+          {noPaymentRequired
+            ? "お支払いは0円です。カード情報の入力は必要ありません。"
+            : "カード情報はStripeの安全な決済画面で入力します。"}
         </p>
       </div>
     </div>

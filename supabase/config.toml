@@ -30,3 +30,12 @@ verify_jwt = false
 
 [functions.public-voice]
 verify_jwt = false
+
+# Both payment functions validate the bearer token again with auth.getUser.
+# Let that validation be the single source of truth so valid sessions are not
+# rejected by the Edge gateway before the function can return a useful error.
+[functions.create-checkout-session]
+verify_jwt = false
+
+[functions.sync-checkout-session]
+verify_jwt = false
