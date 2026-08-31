@@ -107,7 +107,7 @@ serve(async request => {
           }
         : {
             subject: `【縦糸横糸】${inviterName}さんから、家族の物語づくりのご案内`,
-            lead: "まずは三つの問いを無料で試し、その先は家族招待の特別価格で続けられます。"
+            lead: "まずは三つの問いを無料で試し、その先は家族招待の特別価格34,860円（30%割引）で続けられます。"
           };
     const templateMessage = messageLabels[invitation.message_template] || "";
     const personalMessage = String(invitation.personal_message || "").trim();

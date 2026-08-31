@@ -13,6 +13,8 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const FREE_TRIAL_QUESTION_COUNT = 3;
+const FAMILY_INVITE_DISCOUNT_PERCENT = 30;
+const FAMILY_INVITE_PLAN_PRICE = 34860;
 
 const STORY_RELATIONSHIP_LABELS = {
   child: "子",
@@ -5906,6 +5908,7 @@ let sceneAfterInvite = nextScene;
       {scene === "purchase_start" && (
         <Scene_PurchaseStart
           initialOrderType={purchaseFor}
+          familyInvitation={receivedFamilyInvitation}
           checkoutWasCancelled={getCheckoutReturnFromUrl().status === "cancelled"}
           status={purchaseStatus}
           error={purchaseError}
@@ -7880,6 +7883,7 @@ if (isNewMode) {
 
 function Scene_PurchaseStart({
   initialOrderType = "self",
+  familyInvitation = null,
   checkoutWasCancelled,
   status,
   error,
@@ -7909,6 +7913,7 @@ function Scene_PurchaseStart({
       line2: ""
     }
   });
+  const hasFamilyInvitePrice = Boolean(familyInvitation && orderType === "self");
 
   useEffect(() => {
     setOrderType(initialOrderType === "gift" ? "gift" : "self");
@@ -7918,12 +7923,24 @@ function Scene_PurchaseStart({
     setQuoteStatus("loading");
     setQuoteError("");
     try {
-      const nextQuote = await loadCommerceQuote({
-        discountCode: code,
+      const loadedQuote = await loadCommerceQuote({
+        discountCode: hasFamilyInvitePrice ? "" : code,
         includeGiftPackage: orderType === "gift" && includeGiftPackage
       });
+      const nextQuote = hasFamilyInvitePrice
+        ? (() => {
+            const baseBookAmount = Number(loadedQuote.amount_subtotal || 0);
+            const familyDiscountAmount = Math.round(baseBookAmount * FAMILY_INVITE_DISCOUNT_PERCENT / 100);
+            return {
+              ...loadedQuote,
+              discount_amount: familyDiscountAmount,
+              amount_total: Math.max(0, Number(loadedQuote.amount_total || 0) - familyDiscountAmount),
+              campaign_name: "家族招待 特別価格"
+            };
+          })()
+        : loadedQuote;
       setQuote(nextQuote);
-      setAppliedCode(code);
+      setAppliedCode(hasFamilyInvitePrice ? "" : code);
       setQuoteStatus("ready");
       return nextQuote;
     } catch (quoteLoadError) {
@@ -7938,7 +7955,7 @@ function Scene_PurchaseStart({
 
   useEffect(() => {
     refreshQuote(appliedCode);
-  }, [orderType, includeGiftPackage]);
+  }, [orderType, includeGiftPackage, hasFamilyInvitePrice]);
 
   const updateGiftAddress = (key, value) => {
     setGift(current => ({
@@ -8022,6 +8039,13 @@ function Scene_PurchaseStart({
               {quote ? formatYen(quote.amount_subtotal) : "—"}
             </p>
           </div>
+
+          {hasFamilyInvitePrice && (
+            <div className="mt-5 flex items-center justify-between gap-3 border-t border-amber-100/10 pt-4">
+              <p className="text-xs tracking-[0.1em] text-amber-100/52">家族招待 特別価格</p>
+              <p className="text-xs text-amber-50/60">30% OFF</p>
+            </div>
+          )}
 
           {orderType === "gift" && (
             <label className="mt-5 flex cursor-pointer items-start gap-3 border-t border-white/8 pt-5">
@@ -8112,7 +8136,7 @@ function Scene_PurchaseStart({
           </div>
         )}
 
-        <div className="mt-6 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-5 py-5">
+        {!hasFamilyInvitePrice && <div className="mt-6 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-5 py-5">
           <label className="text-xs tracking-[0.08em] text-white/38">割引コード</label>
           <div className="mt-3 flex gap-2">
             <input
@@ -8135,7 +8159,7 @@ function Scene_PurchaseStart({
               {quote.campaign_name}を適用しました。
             </p>
           )}
-        </div>
+        </div>}
 
         <div className="mt-6 space-y-3 border-y border-white/10 py-6 text-sm">
           <div className="flex justify-between text-white/42">
@@ -8253,11 +8277,14 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
           <div className="my-8 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-6 py-5">
             <p className="text-xs tracking-[0.16em] text-white/34">縦糸横糸ブック　一冊</p>
             {hasFamilyPrice ? (
-              <p className="mt-3 text-[1rem] tracking-[0.06em] text-amber-50/72">家族招待 特別価格</p>
+              <>
+                <p className="mt-3 text-[0.9rem] tracking-[0.06em] text-amber-50/72">家族招待 特別価格</p>
+                <p className="mt-2 text-[1.4rem] tracking-[0.06em] text-white/86"><span className="mr-2 text-xs text-white/28 line-through">49,800円</span>{formatYen(FAMILY_INVITE_PLAN_PRICE)} <span className="text-xs text-white/34">税込</span></p>
+                <p className="mt-1 text-xs text-amber-100/42">30% OFF</p>
+              </>
             ) : (
               <p className="mt-2 text-[1.4rem] tracking-[0.06em] text-white/86">49,800円 <span className="text-xs text-white/34">税込</span></p>
             )}
-            {hasFamilyPrice && <p className="mt-2 text-xs text-white/32">金額は購入画面の前に表示します</p>}
           </div>
         )}
 
@@ -8515,7 +8542,7 @@ function Scene_FamilyInvitationReceived({ preview, onContinue }) {
 
         <p className="mt-8 text-[0.95rem] leading-[2] text-white/55">{offerCopy}。</p>
         {preview?.offer_type === "referral" && (
-          <p className="mt-3 text-xs leading-loose text-amber-100/46">その先は、家族招待の特別価格で続けられます。</p>
+          <p className="mt-3 text-xs leading-loose text-amber-100/46">その先は、家族招待の特別価格 34,860円（30% OFF）で続けられます。</p>
         )}
 
         {canChooseSupport && (
@@ -11724,7 +11751,7 @@ function FamilyInvitationHomeCard({ invitation, onContinue, onDecline }) {
       </div>
       {canChooseContinuation && (
         <div className="mt-5 grid grid-cols-[1fr_auto] gap-3 border-t border-white/[0.07] pt-4">
-          <button type="button" onClick={onContinue} className="rounded-full bg-white px-4 py-3 text-sm text-slate-900">続きを贈る</button>
+          <button type="button" onClick={onContinue} className="rounded-full bg-white px-4 py-3 text-sm text-slate-900">続きを贈る（34,860円）</button>
           <button type="button" onClick={onDecline} className="px-3 py-3 text-xs text-white/38 underline underline-offset-4">今回はここまで</button>
         </div>
       )}

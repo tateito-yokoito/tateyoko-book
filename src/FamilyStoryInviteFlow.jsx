@@ -19,10 +19,16 @@ const MESSAGE_TEMPLATES = [
   ["custom", "自分の言葉で書く"]
 ];
 
+const FAMILY_PLAN_LIST_PRICE = 49800;
+const FAMILY_PLAN_PRICE = 34860;
+const GIFT_PACKAGE_PRICE = 3000;
+
+const formatPrice = value => `${Number(value || 0).toLocaleString("ja-JP")}円`;
+
 const STEP_TITLES = {
   person: "どなたへ届けますか？",
   assistance: "操作のお手伝いは必要ですか？",
-  offer: "何を届けますか？",
+  offer: "何を贈りますか？",
   delivery: "届け方を選ぶ",
   details: "送り先とメッセージ",
   review: "内容を確認",
@@ -83,7 +89,10 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
   const [error, setError] = useState("");
   const createdRef = useRef(null);
 
-  const steps = useMemo(() => ["person", "assistance", "offer", "delivery", "details", "review"], []);
+  const steps = useMemo(
+    () => ["person", "assistance", "offer", ...(offerType === "full_gift" ? ["delivery"] : []), "details", "review"],
+    [offerType]
+  );
   const currentStepIndex = steps.indexOf(step);
   const recipientName = `${recipientFamilyName.trim()} ${recipientGivenName.trim()}`.trim();
 
@@ -106,7 +115,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
       setError("姓と名を入力してください。");
       return;
     }
-    if (step === "offer" && offerType === "referral") setDeliveryMethod("email");
+    if (step === "offer" && offerType !== "full_gift") setDeliveryMethod("email");
     if (step === "details") {
       if (deliveryMethod === "email" && !recipientEmail.trim()) {
         setError("メールアドレスを入力してください。");
@@ -174,8 +183,10 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
   };
 
   const relationLabel = RELATIONSHIPS.find(([value]) => value === relationship)?.[1] || "家族";
-  const offerLabel = offerType === "referral" ? "家族として招待" : offerType === "trial_gift" ? "まず3問を贈る" : "スタンダードプランを贈る";
+  const offerLabel = offerType === "full_gift" ? "基本プランを贈る" : "3問の無料体験を贈る";
+  const continuationLabel = offerType === "referral" ? "本人に案内する" : "私に案内する";
   const deliveryLabel = deliveryMethod === "package" ? "ギフトパッケージ" : "メール";
+  const paymentTotal = FAMILY_PLAN_PRICE + (deliveryMethod === "package" ? GIFT_PACKAGE_PRICE : 0);
 
   return (
     <div className="h-full overflow-y-auto px-4 py-8 fade-enter">
@@ -227,17 +238,75 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
 
           {step === "offer" && (
             <>
-              <OptionCard icon={Mail} title="家族として招待" detail="まず3問を無料で試せます。その先は、家族招待の特別価格で始められます。" selected={offerType === "referral"} onClick={() => { setOfferType("referral"); setDeliveryMethod("email"); }} />
-              <OptionCard icon={Gift} title="まず3問を贈る" detail="お試しの完了だけをお知らせします。語りの中身は届きません。" selected={offerType === "trial_gift"} onClick={() => setOfferType("trial_gift")} />
-              <OptionCard icon={Gift} title="スタンダードプランを贈る" detail="基本プランを先に購入して贈ります。追加オプションは、ご本人も後から選べます。" note="家族招待 特別価格は、お支払い前に表示します。" selected={offerType === "full_gift"} onClick={() => setOfferType("full_gift")} />
+              <OptionCard
+                icon={Gift}
+                title="3問の無料体験を贈る"
+                detail="まずは無料で体験。続けるかは、3問のあとに決められます。"
+                selected={offerType !== "full_gift"}
+                onClick={() => {
+                  setOfferType(current => current === "trial_gift" ? "trial_gift" : "referral");
+                  setDeliveryMethod("email");
+                }}
+              />
+
+              {offerType !== "full_gift" && (
+                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <p className="text-xs tracking-[0.1em] text-amber-100/52">家族招待 特別価格</p>
+                    <p className="text-sm text-white/72">
+                      <span className="mr-2 text-xs text-white/28 line-through">{formatPrice(FAMILY_PLAN_LIST_PRICE)}</span>
+                      {formatPrice(FAMILY_PLAN_PRICE)}
+                    </p>
+                  </div>
+                  <p className="mt-1 text-right text-[0.68rem] text-amber-100/40">30% OFF</p>
+
+                  <p className="mt-5 text-xs text-white/44">3問のあと、どちらに案内しますか？</p>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setOfferType("referral")}
+                      className={`min-h-[108px] rounded-2xl border px-3 py-4 text-left transition ${offerType === "referral" ? "border-white/28 bg-white/[0.09]" : "border-white/[0.08] bg-white/[0.02]"}`}
+                    >
+                      <span className="flex items-center justify-between gap-2 text-sm text-white/82">本人に案内する{offerType === "referral" && <Check size={15} className="text-emerald-100/72" />}</span>
+                      <span className="mt-2 block text-xs leading-relaxed text-white/38">本人が続けるか決めて購入</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOfferType("trial_gift")}
+                      className={`min-h-[108px] rounded-2xl border px-3 py-4 text-left transition ${offerType === "trial_gift" ? "border-white/28 bg-white/[0.09]" : "border-white/[0.08] bg-white/[0.02]"}`}
+                    >
+                      <span className="flex items-center justify-between gap-2 text-sm text-white/82">私に案内する{offerType === "trial_gift" && <Check size={15} className="text-emerald-100/72" />}</span>
+                      <span className="mt-2 block text-xs leading-relaxed text-white/38">利用意向を確認して私が購入</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <OptionCard
+                icon={Gift}
+                title="基本プランを贈る"
+                detail="家族招待の特別価格で購入し、物語づくりをプレゼント。"
+                note="メールとギフトパッケージから選べます。"
+                selected={offerType === "full_gift"}
+                onClick={() => setOfferType("full_gift")}
+              />
+
+              {offerType === "full_gift" && (
+                <div className="rounded-2xl border border-amber-100/10 bg-amber-100/[0.035] px-5 py-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs tracking-[0.1em] text-amber-50/55">家族招待 特別価格</p>
+                    <p className="text-sm text-amber-50/76"><span className="mr-2 text-xs text-white/28 line-through">{formatPrice(FAMILY_PLAN_LIST_PRICE)}</span>{formatPrice(FAMILY_PLAN_PRICE)}</p>
+                  </div>
+                  <p className="mt-2 text-right text-[0.68rem] text-amber-100/40">30% OFF</p>
+                </div>
+              )}
             </>
           )}
 
           {step === "delivery" && (
             <>
-              <OptionCard icon={Mail} title="メールで届ける" detail="短いメッセージと一緒に、すぐ招待を送ります。" selected={deliveryMethod === "email"} onClick={() => setDeliveryMethod("email")} />
-              <OptionCard icon={Package} title="ギフトパッケージで届ける" detail="感謝の気持ちを形にして、ご指定の住所へ届けます。" note="パッケージ代と送料は、お支払い前に表示します。" selected={deliveryMethod === "package"} disabled={offerType === "referral"} onClick={() => setDeliveryMethod("package")} />
-              {offerType === "referral" && <p className="px-3 text-xs leading-relaxed text-white/30">家族としての紹介は、メールでお届けします。</p>}
+              <OptionCard icon={Mail} title="メールで贈る" detail="短いメッセージと一緒に、すぐ招待を送ります。" note={`お支払い合計 ${formatPrice(FAMILY_PLAN_PRICE)}`} selected={deliveryMethod === "email"} onClick={() => setDeliveryMethod("email")} />
+              <OptionCard icon={Package} title="ギフトパッケージで贈る" detail="感謝の気持ちを形にして、ご指定の住所へ届けます。" note={`パッケージ 3,000円・お支払い合計 ${formatPrice(FAMILY_PLAN_PRICE + GIFT_PACKAGE_PRICE)}`} selected={deliveryMethod === "package"} onClick={() => setDeliveryMethod("package")} />
             </>
           )}
 
@@ -273,8 +342,15 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
                 <p className="text-[1.05rem] text-white/88">{recipientName.trim()}さん</p>
                 <p className="mt-3">関係：{relationLabel}</p>
                 <p>内容：{offerLabel}</p>
+                {offerType !== "full_gift" && <p>体験後の案内：{continuationLabel}</p>}
                 <p>届け方：{deliveryLabel}</p>
                 <p>お手伝い：{assistanceMode === "recipient_led" ? "本人だけで進める" : assistanceMode === "support_requested" ? "私もお手伝いする" : "本人に選んでもらう"}</p>
+                {offerType === "full_gift" && (
+                  <div className="mt-4 flex items-center justify-between border-t border-white/[0.07] pt-4">
+                    <span>お支払い合計</span>
+                    <span className="text-white/88">{formatPrice(paymentTotal)}</span>
+                  </div>
+                )}
               </div>
               <div className="rounded-2xl border border-emerald-100/10 bg-emerald-100/[0.035] px-5 py-4">
                 <p className="text-sm leading-loose text-emerald-50/62">語りの中身は、ご本人の許可なくあなたへ共有されません。</p>
@@ -286,7 +362,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
             <div className="flex min-h-[55vh] flex-col items-center justify-center text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-full border border-emerald-100/20 bg-emerald-100/[0.07]"><Check size={25} className="text-emerald-100/76" /></div>
               <h1 className="text-narrative mt-7 text-[1.35rem] text-white/90">{recipientName.trim()}さんへ<br />招待を送りました</h1>
-              <p className="mt-6 text-sm leading-loose text-white/44">受け取った方が主役となって進めます。<br />節目だけをお知らせします。</p>
+              <p className="mt-6 text-sm leading-loose text-white/44">受け取った方が主役となって進めます。<br />語りの中身が自動で共有されることはありません。</p>
               <button type="button" onClick={onComplete} className="btn-quiet mt-10 w-full rounded-full bg-white py-4 text-slate-900">ホームへ戻る</button>
             </div>
           )}
@@ -296,7 +372,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
 
         {step !== "complete" && (
           <button type="button" onClick={step === "review" ? createInvitation : goNext} disabled={busy} className="btn-quiet mt-8 flex w-full items-center justify-center gap-2 rounded-full bg-white py-4 text-slate-900 disabled:opacity-40">
-            {busy ? "準備しています…" : step === "review" ? (offerType === "referral" || (offerType === "trial_gift" && deliveryMethod === "email") ? "この内容で送る" : "お支払いへ進む") : "次へ"}
+            {busy ? "準備しています…" : step === "review" ? (offerType === "full_gift" ? "お支払いへ進む" : "この内容で送る") : "次へ"}
             {!busy && step !== "review" && <ChevronRight size={17} />}
           </button>
         )}

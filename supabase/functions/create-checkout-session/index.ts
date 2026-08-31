@@ -102,6 +102,49 @@ async function ensureStripeCoupon(admin: any, secret: string, campaign: any, str
   return coupon.id;
 }
 
+async function getFamilyInviteDiscountPercent(admin: any) {
+  const { data, error } = await admin.from("commerce_settings")
+    .select("integer_value")
+    .eq("setting_key", "family_invite_discount_percent")
+    .maybeSingle();
+  if (error) throw error;
+  return Math.min(100, Math.max(0, Number(data?.integer_value || 0)));
+}
+
+async function ensureFamilyInviteStripeCoupon(
+  admin: any,
+  secret: string,
+  discountPercent: number,
+  stripeProductId: string
+) {
+  const mode = stripeMode(secret);
+  const settingKey = `family_invite_coupon_${mode}_${discountPercent}_${stripeProductId}`;
+  const { data: setting, error: settingError } = await admin.from("commerce_settings")
+    .select("text_value")
+    .eq("setting_key", settingKey)
+    .maybeSingle();
+  if (settingError) throw settingError;
+  if (setting?.text_value) return setting.text_value;
+
+  const form = new URLSearchParams();
+  form.set("duration", "once");
+  form.set("name", `家族招待 ${discountPercent}%割引`);
+  form.set("percent_off", String(discountPercent));
+  form.set("applies_to[products][0]", stripeProductId);
+  form.set("metadata[discount_type]", "family_invite");
+  form.set("metadata[discount_percent]", String(discountPercent));
+  const coupon = await stripeRequest(secret, "coupons", form);
+
+  const { error: saveError } = await admin.from("commerce_settings").upsert({
+    setting_key: settingKey,
+    integer_value: discountPercent,
+    text_value: coupon.id,
+    updated_at: new Date().toISOString()
+  }, { onConflict: "setting_key" });
+  if (saveError) throw saveError;
+  return coupon.id;
+}
+
 serve(async request => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") return json({ success: false, error: "Method not allowed" }, 405);
@@ -131,7 +174,7 @@ serve(async request => {
         ? "family_trial_package"
         : "self";
     const familyInvitationId = String(body.familyInvitationId || "").trim();
-    const discountCode = String(body.discountCode || "").trim();
+    let discountCode = String(body.discountCode || "").trim();
     const standardExtraCopyCount = orderType === "self"
       ? Number.parseInt(String(body.standardExtraCopyCount ?? "0"), 10)
       : 0;
@@ -164,6 +207,8 @@ serve(async request => {
       if (orderType !== "self" && familyInvitation.status !== "awaiting_payment" && familyInvitation.status !== "continuation_awaiting_payment") {
         return json({ success: false, error: "この家族招待はお支払い待ちではありません" }, 409);
       }
+      // The family invitation price is automatic and cannot be stacked with a coupon code.
+      discountCode = "";
     }
     if (orderType === "self") {
       if (!projectId) return json({ success: false, error: "物語が見つかりません" }, 400);
@@ -268,6 +313,47 @@ serve(async request => {
     orderId = String(order?.id || "");
     if (!orderId || !quote) throw new Error("注文を作成できませんでした");
 
+    let familyInviteDiscountPercent = 0;
+    let familyInviteDiscountAmount = 0;
+    if (familyInvitation && orderType !== "family_trial_package") {
+      familyInviteDiscountPercent = await getFamilyInviteDiscountPercent(admin);
+      const baseBookAmount = Number(
+        order.base_book_amount
+        || quote.base_book_amount
+        || order.amount_subtotal
+        || quote.amount_subtotal
+        || 0
+      );
+      familyInviteDiscountAmount = Math.round(baseBookAmount * familyInviteDiscountPercent / 100);
+
+      if (familyInviteDiscountAmount > 0) {
+        const currentDiscount = Number(order.discount_amount || quote.discount_amount || 0);
+        const nextDiscount = currentDiscount + familyInviteDiscountAmount;
+        const nextTotal = Math.max(0, Number(order.amount_total ?? quote.amount_total ?? 0) - familyInviteDiscountAmount);
+        const existingMetadata = order.metadata && typeof order.metadata === "object" ? order.metadata : {};
+        const familyMetadata = {
+          ...existingMetadata,
+          family_invitation_id: familyInvitation.id,
+          family_invite_discount_percent: familyInviteDiscountPercent,
+          family_invite_discount_amount: familyInviteDiscountAmount
+        };
+        const { error: familyDiscountError } = await admin.from("commerce_orders").update({
+          discount_amount: nextDiscount,
+          amount_total: nextTotal,
+          metadata: familyMetadata
+        }).eq("id", order.id);
+        if (familyDiscountError) throw familyDiscountError;
+
+        order.discount_amount = nextDiscount;
+        order.amount_total = nextTotal;
+        order.metadata = familyMetadata;
+        quote.discount_amount = nextDiscount;
+        quote.amount_total = nextTotal;
+        quote.campaign_name = "家族招待 特別価格";
+        quote.family_invite_discount_percent = familyInviteDiscountPercent;
+      }
+    }
+
     if (familyInvitation) {
       const linkedGiftId = created?.gift?.id || null;
       const { error: invitationLinkError } = await admin.from("family_story_invitations").update({
@@ -336,7 +422,16 @@ serve(async request => {
     }
 
     let couponId = "";
-    if (quote.campaign_id && Number(quote.discount_amount) > 0) {
+    if (familyInviteDiscountAmount > 0) {
+      const bookStripe = stripeLines.find(item => item.code === "self_book_v1");
+      if (!bookStripe) throw new Error("家族招待の割引対象が見つかりませんでした");
+      couponId = await ensureFamilyInviteStripeCoupon(
+        admin,
+        stripeSecretKey,
+        familyInviteDiscountPercent,
+        bookStripe.productId
+      );
+    } else if (quote.campaign_id && Number(quote.discount_amount) > 0) {
       const { data: campaign, error: campaignError } = await admin.from("discount_campaigns").select("*").eq("id", quote.campaign_id).single();
       if (campaignError) throw campaignError;
       const bookStripe = stripeLines.find(item => item.code === "self_book_v1");
@@ -380,10 +475,11 @@ serve(async request => {
     const checkout = await stripeRequest(stripeSecretKey, "checkout/sessions", form);
     if (!checkout?.id || !checkout?.url) throw new Error("購入画面を開けませんでした");
 
+    const existingOrderMetadata = order.metadata && typeof order.metadata === "object" ? order.metadata : {};
     const { error: orderUpdateError } = await admin.from("commerce_orders").update({
       stripe_checkout_session_id: checkout.id,
       stripe_mode: stripeMode(stripeSecretKey),
-      metadata: { stripe_amount_total: checkout.amount_total }
+      metadata: { ...existingOrderMetadata, stripe_amount_total: checkout.amount_total }
     }).eq("id", order.id);
     if (orderUpdateError) throw orderUpdateError;
 

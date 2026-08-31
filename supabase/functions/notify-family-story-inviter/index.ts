@@ -66,7 +66,7 @@ serve(async request => {
         html: `<div style="font-family:serif;line-height:1.95;color:#172033;max-width:620px;margin:auto;padding:36px 24px">
           <p style="font-size:13px;color:#718096">家族の物語・節目のお知らせ</p>
           <h1 style="font-size:24px;font-weight:500">${escapeHtml(invitation.recipient_name)}さんが、三つの問いを終えました。</h1>
-          <p>語った内容は共有していません。ホームから、続きを贈るかどうかを選べます。</p>
+          <p>語った内容は共有していません。ホームから、家族招待の特別価格34,860円（30%割引）で続きを贈るかどうかを選べます。</p>
           <p style="margin:32px 0"><a href="${escapeHtml(appUrl.toString())}" style="background:#101827;color:white;text-decoration:none;padding:14px 26px;border-radius:999px">続きを確認する</a></p>
         </div>`
       })
