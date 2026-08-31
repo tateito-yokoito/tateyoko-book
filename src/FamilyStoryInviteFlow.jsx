@@ -298,7 +298,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, onBack, onStartC
 
           {step === "delivery" && (
             <>
-              <OptionCard icon={Mail} title="メールで贈る" detail="短いメッセージと一緒に、すぐ招待を送ります。" note={`お支払い合計 ${formatPrice(FAMILY_PLAN_PRICE)}`} selected={deliveryMethod === "email"} onClick={() => setDeliveryMethod("email")} />
+              <OptionCard icon={Mail} title="メールで贈る" detail="短いメッセージを添えてメールで招待。すぐ始められます。" note={`お支払い合計 ${formatPrice(FAMILY_PLAN_PRICE)}`} selected={deliveryMethod === "email"} onClick={() => setDeliveryMethod("email")} />
               <OptionCard icon={Package} title="ギフトパッケージで贈る" detail="感謝の気持ちを形にして、ご指定の住所へ届けます。" note={`パッケージ 3,000円・お支払い合計 ${formatPrice(FAMILY_PLAN_PRICE + GIFT_PACKAGE_PRICE)}`} selected={deliveryMethod === "package"} onClick={() => setDeliveryMethod("package")} />
             </>
           )}
