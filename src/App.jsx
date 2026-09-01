@@ -28,15 +28,96 @@ const STORY_RELATIONSHIP_LABELS = {
 };
 
 const STORY_THEMES = [
-  { code: "ty_theme_childhood", label: "幼い頃", order: 1 },
-  { code: "ty_theme_youth", label: "学生時代・若い頃", order: 2 },
-  { code: "ty_theme_likes", label: "好きなこと", order: 3 },
-  { code: "ty_theme_living", label: "暮らし", order: 4 },
-  { code: "ty_theme_work", label: "仕事・役割", order: 5 },
-  { code: "ty_theme_connections", label: "人とのつながり", order: 6 },
-  { code: "ty_theme_family", label: "家族の記憶", order: 7 },
-  { code: "ty_theme_turning_points", label: "人生の転機", order: 8 },
-  { code: "ty_theme_now_future", label: "今とこれから", order: 9 }
+  {
+    code: "ty_theme_childhood",
+    label: "幼い頃のこと",
+    order: 1,
+    summary: "幼少期から中学生くらいまでのことを振り返ります。",
+    opening: "遠くにある景色を、少しずつたどってみましょう。",
+    hint: "昔のアルバムを開いたり、住んでいた家や通学路、よく遊んだ場所を思い浮かべたりしてみるのもよいかもしれません。",
+    completion: "幼い頃の景色が、あなたの物語に残りました。",
+    visual: "childhood"
+  },
+  {
+    code: "ty_theme_youth",
+    label: "学生時代・若い頃",
+    order: 2,
+    summary: "学びや出会い、夢中になったことをたどります。",
+    opening: "あの頃にしかなかった時間へ、戻ってみましょう。",
+    hint: "卒業アルバムや当時よく聴いた音楽、通っていた道が、記憶の入口になるかもしれません。",
+    completion: "若い日の時間が、ひとつの章になりました。",
+    visual: "youth"
+  },
+  {
+    code: "ty_theme_likes",
+    label: "好きなこと",
+    order: 3,
+    summary: "心が動いたものや、夢中になった時間を振り返ります。",
+    opening: "好きだったもののそばには、その頃の自分がいます。",
+    hint: "今も手元にあるものや、何度も聴いた曲、好きだった味を一つ思い浮かべてみてください。",
+    completion: "あなたを彩ってきたものが、物語に加わりました。",
+    visual: "likes"
+  },
+  {
+    code: "ty_theme_living",
+    label: "暮らし",
+    order: 4,
+    summary: "住まいや食卓、旅など、日々の風景をたどります。",
+    opening: "何気ない暮らしの中にも、残しておきたい景色があります。",
+    hint: "長く使っている道具や、思い出の料理、窓から見えていた景色を手がかりにしてみましょう。",
+    completion: "日々の風景が、物語の中に灯りました。",
+    visual: "living"
+  },
+  {
+    code: "ty_theme_work",
+    label: "仕事・役割",
+    order: 5,
+    summary: "担ってきた仕事や役割、その中で得たものを振り返ります。",
+    opening: "積み重ねてきた時間に、あらためて目を向けます。",
+    hint: "初めて働いた場所、使っていた道具、忘れられない人の顔から思い出してみるのもよさそうです。",
+    completion: "歩みを支えた仕事と役割が、ひとつの章になりました。",
+    visual: "work"
+  },
+  {
+    code: "ty_theme_connections",
+    label: "人とのつながり",
+    order: 6,
+    summary: "人生で出会い、支え合ってきた人たちをたどります。",
+    opening: "人を思い出すとき、その頃の自分も見えてきます。",
+    hint: "年賀状や古い連絡先、集合写真に写る人を眺めてみると、忘れていた出来事が浮かぶかもしれません。",
+    completion: "大切なつながりが、物語の中に結ばれました。",
+    visual: "connections"
+  },
+  {
+    code: "ty_theme_family",
+    label: "家族の記憶",
+    order: 7,
+    summary: "家族と過ごした時間や、受け取ったものを振り返ります。",
+    opening: "家族の記憶には、言葉になっていない気持ちがあります。",
+    hint: "家族の口癖や食卓の風景、季節ごとの習慣を一つ思い出してみてください。",
+    completion: "家族と過ごした時間が、物語に受け継がれました。",
+    visual: "family"
+  },
+  {
+    code: "ty_theme_turning_points",
+    label: "人生の転機",
+    order: 8,
+    summary: "決断や変化、乗り越えてきた出来事をたどります。",
+    opening: "振り返ると、道が大きく動いた瞬間があります。",
+    hint: "住む場所が変わった日、新しい役割を引き受けた時、誰かの言葉に背中を押された場面を思い返してみましょう。",
+    completion: "人生を動かした出来事が、ひとつの章になりました。",
+    visual: "turning-points"
+  },
+  {
+    code: "ty_theme_now_future",
+    label: "今とこれから",
+    order: 9,
+    summary: "今大切にしていることと、これからへ残したい言葉を見つめます。",
+    opening: "これまでをたどった今だからこそ、見えるものがあります。",
+    hint: "今の一日で心がほどける時間や、これから会いたい人、未来へ手渡したい言葉を考えてみてください。",
+    completion: "これまでとこれからが、あなたの物語として結ばれました。",
+    visual: "now-future"
+  }
 ];
 
 const STORY_QUESTION_CANDIDATES = {
@@ -193,6 +274,15 @@ function hasRestrictedProjectAccess(project) {
 }
 
 function getFreeTrialQuestions(questionSet) {
+  const dedicatedTrialQuestions = (questionSet || [])
+    .filter(question => question?.onboarding_group === "trial_experience")
+    .slice(0, FREE_TRIAL_QUESTION_COUNT);
+
+  // 専用の体験質問を持たない既存プロジェクトだけ、旧3問を引き続き使う。
+  if (dedicatedTrialQuestions.length === FREE_TRIAL_QUESTION_COUNT) {
+    return dedicatedTrialQuestions;
+  }
+
   return (questionSet || [])
     .filter(question => isFormalOnboardingQuestion(question))
     .slice(0, FREE_TRIAL_QUESTION_COUNT);
@@ -976,6 +1066,7 @@ function isFormalOnboardingQuestion(question) {
   return (
     question?.flow_type === "onboarding" ||
     question?.flow_phase === "onboarding" ||
+    question?.onboarding_group === "trial_experience" ||
     question?.onboarding_group === "starting_conversation" ||
     question?.onboarding_group === "starting_motivation" ||
     question?.onboarding_group === "voice_intro" ||
@@ -1016,13 +1107,13 @@ function getStoryThemeProgress(questionSet, currentIndex = 0) {
 
   const currentQuestion = questionSet?.[currentIndex];
   const currentThemeOrder = Number(currentQuestion?.theme_order) ||
-    Number(storyQuestions.find(question => question?.status !== "answered")?.theme_order) ||
+    Number(storyQuestions.find(question => !["answered", "skipped"].includes(question?.status))?.theme_order) ||
     Number(storyQuestions[storyQuestions.length - 1]?.theme_order) || 1;
   const themeQuestions = storyQuestions.filter(
     question => Number(question.theme_order) === currentThemeOrder
   );
   const answeredInTheme = themeQuestions.filter(
-    question => question?.status === "answered"
+    question => ["answered", "skipped"].includes(question?.status)
   ).length;
   const currentTheme = STORY_THEMES.find(theme => theme.order === currentThemeOrder) || {
     label: currentQuestion?.theme_label || currentQuestion?.chapter_label || "物語",
@@ -1660,20 +1751,22 @@ if (!questionSet) {
     projectId &&
     questionSet.code === "tateito_yokoito_standard_v2"
   ) {
-    const { data: firstOnboardingQuestion, error: firstQuestionError } =
+    const { data: onboardingQuestions, error: firstQuestionError } =
       await supabaseClient
         .from("user_questions")
-        .select("id")
+        .select("id, meta_json, sequence_order")
         .eq("book_project_id", projectId)
         .eq("is_active", true)
-        .order("sequence_order", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+        .order("sequence_order", { ascending: true });
 
     if (firstQuestionError) {
       console.warn("first onboarding question load error", firstQuestionError);
       return;
     }
+
+    const firstOnboardingQuestion = (onboardingQuestions || []).find(
+      question => question?.meta_json?.onboarding_group === "starting_conversation"
+    ) || (onboardingQuestions || [])[0] || null;
 
     const { error: onboardingUpdateError } = await supabaseClient
       .from("book_projects")
@@ -1853,25 +1946,77 @@ function getProjectQuestionIndex(questionSet, project, profile) {
 
 function getInitialSceneForProject({
   project,
-  notificationPref
+  notificationPref,
+  sharingPreference
 }) {
+  if (
+    project?.onboarding_status === "completed" &&
+    Number(project?.theme_experience_state?.pending_transition_order) > 0
+  ) {
+    return "theme_transition";
+  }
+
   if (
     project?.onboarding_status === "life_outline_completed" ||
     project?.onboarding_status === "first_story"
   ) {
+    const ritualStep = project?.onboarding_ritual_step || null;
+
+    if (ritualStep === "conversation_complete") {
+      return "starting_conversation_complete";
+    }
+
+    if (ritualStep === "theme_guide") {
+      return "theme_guide";
+    }
+
+    if (ritualStep === "preferences") {
+      return "onboarding_preferences";
+    }
+
+    if (ritualStep === "notification") {
+      return "notification_setup";
+    }
+
+    if (ritualStep === "sharing") {
+      return "sharing_setup";
+    }
+
+    if (ritualStep === "support") {
+      return "supporter_invite_initial";
+    }
+
+    if (ritualStep === "motivation") {
+      return "starting_motivation_prompt";
+    }
+
+    if (ritualStep === "chapter_complete") {
+      return "hajimari_complete";
+    }
+
+    if (!project?.theme_guide_completed_at) {
+      return ritualStep === "preferences"
+        ? "onboarding_preferences"
+        : "starting_conversation_complete";
+    }
+
     if (!project?.onboarding_preferences_completed_at) {
       return "onboarding_preferences";
+    }
+
+    if (!notificationPref) {
+      return "notification_setup";
+    }
+
+    if (!sharingPreference?.initial_setup_completed_at) {
+      return "sharing_setup";
     }
 
     if (!project?.starting_motivation_completed_at) {
       return "starting_motivation_prompt";
     }
 
-    if (!project?.theme_guide_completed_at) {
-      return "theme_guide";
-    }
-
-    return "life_outline_complete";
+    return "hajimari_complete";
   }
 
   if (project?.onboarding_status === "introduction_review") {
@@ -2793,6 +2938,8 @@ function App() {
   const [lifeOutlineError, setLifeOutlineError] = useState("");
   const [lifeOutlineReturnScene, setLifeOutlineReturnScene] = useState(null);
   const [notificationSetupReturnScene, setNotificationSetupReturnScene] = useState(null);
+  const [completedThemeOrder, setCompletedThemeOrder] = useState(null);
+  const [savedNotice, setSavedNotice] = useState("");
   const [pendingBetaSurvey, setPendingBetaSurvey] = useState(null);
   const [accessMode, setAccessMode] = useState("session");
   const [deliveryToken, setDeliveryToken] = useState(null);
@@ -2809,6 +2956,12 @@ function App() {
   const [receivedFamilyInvitation, setReceivedFamilyInvitation] = useState(null);
   const checkoutSyncAttemptedRef = useRef(false);
   const checkoutUrlRef = useRef("");
+
+  useEffect(() => {
+    if (!savedNotice) return undefined;
+    const timer = window.setTimeout(() => setSavedNotice(""), 1800);
+    return () => window.clearTimeout(timer);
+  }, [savedNotice]);
 
   const [voiceData, setVoiceData] = useState({
     duration: 0,
@@ -2978,6 +3131,9 @@ let activeFoundationData = await ensureLifeOutlineReviewPhase({
 });
 
 setFoundation(activeFoundationData);
+setCompletedThemeOrder(
+  Number(activeFoundationData?.project?.theme_experience_state?.pending_transition_order) || null
+);
 
 notificationData = await loadNotificationPreference(
   session.user.id,
@@ -2993,7 +3149,8 @@ setSharingPreference(sharingPreferenceData);
 
 let nextScene = getInitialSceneForProject({
   project: activeFoundationData?.project,
-  notificationPref: notificationData || null
+  notificationPref: notificationData || null,
+  sharingPreference: sharingPreferenceData
 });
 
 nextScene = getCommercialEntryScene({
@@ -3225,7 +3382,10 @@ const goToNextQuestion = async () => {
   const currentSeq = currentQ?.sequence_order || 1;
 
   const nextIndex = progress.currentIndex + 1;
-  const nextSeq = questionsDB[nextIndex]?.sequence_order || (currentSeq + 1);
+  const nextQuestion = questionsDB[nextIndex] || null;
+  const nextSeq = nextQuestion?.sequence_order || (currentSeq + 1);
+  const completedTheme = Number(currentQ?.theme_order) > 0 &&
+    Number(nextQuestion?.theme_order) !== Number(currentQ?.theme_order);
 
   if (user?.id) {
     await supabaseClient
@@ -3241,7 +3401,12 @@ const goToNextQuestion = async () => {
       ...p,
       currentIndex: Math.max(questionsDB.length - 1, 0)
     }));
-    setScene(6);
+    if (Number(currentQ?.theme_order) > 0) {
+      await savePendingThemeTransition(Number(currentQ.theme_order));
+      setScene("theme_transition");
+    } else {
+      setScene(6);
+    }
     return;
   }
 
@@ -3250,7 +3415,12 @@ const goToNextQuestion = async () => {
     currentIndex: nextIndex
   }));
 
-  setScene(1);
+  if (completedTheme) {
+    await savePendingThemeTransition(Number(currentQ.theme_order));
+    setScene("theme_transition");
+  } else {
+    setScene(1);
+  }
 };
 
 const handleSkipQuestion = async () => {
@@ -3259,6 +3429,11 @@ const handleSkipQuestion = async () => {
   try {
     const currentQ = questionsDB[progress.currentIndex];
     await markUserQuestionSkipped(currentQ?.user_question_id);
+    setQuestionsDB(current => current.map(question =>
+      question.user_question_id === currentQ?.user_question_id
+        ? { ...question, status: "skipped" }
+        : question
+    ));
     await goToNextQuestion();
   } catch (e) {
     console.error("skip question error", e);
@@ -4737,6 +4912,94 @@ const startLifeOutlineAnswerRetake = async (answer) => {
   }
 };
 
+const updateOnboardingRitualStep = async (step, patch = {}) => {
+  if (!foundation?.project?.id) return foundation?.project || null;
+
+  const { data: updatedProject, error } = await supabaseClient
+    .from("book_projects")
+    .update({
+      ...patch,
+      onboarding_ritual_step: step
+    })
+    .eq("id", foundation.project.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  setFoundation(previous => ({
+    ...previous,
+    project: updatedProject
+  }));
+
+  return updatedProject;
+};
+
+const savePendingThemeTransition = async themeOrder => {
+  const normalizedOrder = Number(themeOrder) || null;
+  setCompletedThemeOrder(normalizedOrder);
+
+  if (!foundation?.project?.id) return;
+
+  const nextState = {
+    ...(foundation.project.theme_experience_state || {}),
+    pending_transition_order: normalizedOrder
+  };
+
+  const { data: updatedProject, error } = await supabaseClient
+    .from("book_projects")
+    .update({ theme_experience_state: nextState })
+    .eq("id", foundation.project.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  setFoundation(previous => ({ ...previous, project: updatedProject }));
+};
+
+const leaveThemeTransition = async nextScene => {
+  try {
+    setIsInitializing(true);
+    await savePendingThemeTransition(null);
+    resetVoiceData();
+    setScene(nextScene);
+  } catch (error) {
+    console.error("theme transition completion error", error);
+    alert("次の画面へ進めませんでした。");
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
+const openThemeGuideAfterConversation = async () => {
+  try {
+    setIsInitializing(true);
+    await updateOnboardingRitualStep("theme_guide");
+    setScene("theme_guide");
+  } catch (error) {
+    console.error("starting conversation transition error", error);
+    alert("次の案内を開けませんでした。");
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
+const completeThemeGuide = async () => {
+  try {
+    setIsInitializing(true);
+    await updateOnboardingRitualStep("preferences", {
+      theme_guide_completed_at:
+        foundation?.project?.theme_guide_completed_at || new Date().toISOString()
+    });
+    setScene("onboarding_preferences");
+  } catch (error) {
+    console.error("theme guide completion error", error);
+    alert("次の準備へ進めませんでした。");
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
 const completeLifeOutlineReview = async () => {
   if (!foundation?.project?.id) return;
 
@@ -4798,7 +5061,8 @@ const saveOnboardingPreferences = async preferences => {
           people: preferences?.people || [],
           version: 1
         },
-        onboarding_preferences_completed_at: new Date().toISOString()
+        onboarding_preferences_completed_at: new Date().toISOString(),
+        onboarding_ritual_step: "notification"
       })
       .eq("id", foundation.project.id)
       .select()
@@ -4810,7 +5074,7 @@ const saveOnboardingPreferences = async preferences => {
       ...prev,
       project: updatedProject
     }));
-    setScene("starting_motivation_prompt");
+    setScene("notification_setup");
   } catch (error) {
     console.error("onboarding preferences save error", error);
     alert("選んだ内容を保存できませんでした。");
@@ -4825,7 +5089,7 @@ const startOnboardingMotivation = async () => {
   );
 
   if (motivationIndex < 0) {
-    setScene("theme_guide");
+    setScene("hajimari_complete");
     return;
   }
 
@@ -4838,7 +5102,8 @@ const startOnboardingMotivation = async () => {
         .update({
           onboarding_status: "life_outline_completed",
           current_onboarding_user_question_id:
-            motivationQuestion?.user_question_id || null
+            motivationQuestion?.user_question_id || null,
+          onboarding_ritual_step: "motivation"
         })
         .eq("id", foundation.project.id)
         .select()
@@ -4866,7 +5131,7 @@ const startOnboardingMotivation = async () => {
 
 const skipOnboardingMotivation = async () => {
   if (!foundation?.project?.id) {
-    setScene("theme_guide");
+    setScene("hajimari_complete");
     return;
   }
 
@@ -4882,7 +5147,8 @@ const skipOnboardingMotivation = async () => {
         onboarding_status: "life_outline_completed",
         current_onboarding_user_question_id:
           firstStoryQuestion?.user_question_id || null,
-        starting_motivation_completed_at: completedAt
+        starting_motivation_completed_at: completedAt,
+        onboarding_ritual_step: "chapter_complete"
       })
       .eq("id", foundation.project.id)
       .select()
@@ -4894,7 +5160,7 @@ const skipOnboardingMotivation = async () => {
       ...prev,
       project: updatedProject
     }));
-    setScene("theme_guide");
+    setScene("hajimari_complete");
   } catch (error) {
     console.error("starting motivation skip error", error);
     alert("次の案内へ進めませんでした。");
@@ -4903,7 +5169,7 @@ const skipOnboardingMotivation = async () => {
   }
 };
 
-const leaveLifeOutlineMilestone = async ({ continueNow, completeThemeGuide = false }) => {
+const leaveLifeOutlineMilestone = async ({ continueNow }) => {
   if (!foundation?.project?.id) return;
 
   setIsInitializing(true);
@@ -4924,9 +5190,9 @@ const leaveLifeOutlineMilestone = async ({ continueNow, completeThemeGuide = fal
         life_outline_completed_at:
           foundation.project.life_outline_completed_at ||
           new Date().toISOString(),
-        theme_guide_completed_at: completeThemeGuide
-          ? new Date().toISOString()
-          : foundation.project.theme_guide_completed_at || null
+        theme_guide_completed_at:
+          foundation.project.theme_guide_completed_at || new Date().toISOString(),
+        onboarding_ritual_step: "completed"
       })
       .eq("id", foundation.project.id)
       .select()
@@ -4961,16 +5227,6 @@ const leaveLifeOutlineMilestone = async ({ continueNow, completeThemeGuide = fal
     if (continueNow && firstStoryQuestion) {
 
       resetVoiceData();
-
-      if (!notificationPref) {
-        setScene("notification_setup");
-        return;
-      }
-
-      if (!sharingPreference?.initial_setup_completed_at) {
-        setScene("sharing_setup");
-        return;
-      }
 
       setScene(1);
       return;
@@ -5527,14 +5783,16 @@ if (mediaStoragePaths.length > 0) {
         onboarding_status: "life_outline_completed",
         current_onboarding_user_question_id:
           nextQuestion?.user_question_id || null,
-        starting_motivation_completed_at: new Date().toISOString()
+        starting_motivation_completed_at: new Date().toISOString(),
+        onboarding_ritual_step: "chapter_complete"
       }
     : isCompletingStartingConversation
     ? {
         onboarding_status: "life_outline_completed",
         current_onboarding_user_question_id:
           nextQuestion?.user_question_id || null,
-        life_outline_completed_at: new Date().toISOString()
+        life_outline_completed_at: new Date().toISOString(),
+        onboarding_ritual_step: "conversation_complete"
       }
     : isCompletingLifeOutline
       ? {
@@ -5642,13 +5900,13 @@ const completedStartingMotivation =
 
 if (completedStartingConversation) {
   resetVoiceData();
-  setScene("onboarding_preferences");
+  setScene("starting_conversation_complete");
   return;
 }
 
 if (completedStartingMotivation) {
   resetVoiceData();
-  setScene("theme_guide");
+  setScene("hajimari_complete");
   return;
 }
 
@@ -5725,7 +5983,20 @@ if (isContinuingFormalOnboarding) {
   return;
 }
 
-setScene(6);
+const nextQuestion = questionsDB[nextIndex] || null;
+const completedTheme = Number(currentQ?.theme_order) > 0 &&
+  Number(nextQuestion?.theme_order) !== Number(currentQ?.theme_order);
+
+resetVoiceData();
+
+if (completedTheme) {
+  await savePendingThemeTransition(Number(currentQ.theme_order));
+  setScene("theme_transition");
+  return;
+}
+
+setSavedNotice("この語りを残しました");
+setScene(1);
 
 
     } catch (error) {
@@ -5757,6 +6028,7 @@ setScene(6);
     Boolean(user?.id) &&
     foundation?.project?.onboarding_status === "completed" &&
     scene !== "home" &&
+    scene !== "theme_transition" &&
     scene !== -1 &&
     scene !== "supporter_invite_received" &&
     scene !== "family_invite_received" &&
@@ -5798,6 +6070,13 @@ setScene(6);
           <Home size={18} className="text-white/62" strokeWidth={1.7} />
         </button>
       )}
+      {savedNotice && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] z-[90] flex justify-center px-6">
+          <p className="rounded-full border border-white/10 bg-slate-950/90 px-5 py-3 text-sm text-white/62 shadow-2xl backdrop-blur-md">
+            ✓ {savedNotice}
+          </p>
+        </div>
+      )}
       {scene === -1 && (
         <Scene_Login
           giftPreview={giftClaimPreview}
@@ -5838,7 +6117,12 @@ const notificationData = await loadNotificationPreference(
   refreshedFoundationData?.project?.id || null
 );
 
+const sharingPreferenceData = await loadStorySharingPreference(
+  refreshedFoundationData?.project?.id
+);
+
 setNotificationPref(notificationData || null);
+setSharingPreference(sharingPreferenceData);
 
 setQuestionsDB(questionSet);
 
@@ -5855,6 +6139,9 @@ const activeFoundationData = await ensureLifeOutlineReviewPhase({
 });
 
 setFoundation(activeFoundationData);
+setCompletedThemeOrder(
+  Number(activeFoundationData?.project?.theme_experience_state?.pending_transition_order) || null
+);
 
 setProgress({
   currentIndex,
@@ -5863,7 +6150,8 @@ setProgress({
 
 let nextScene = getInitialSceneForProject({
   project: activeFoundationData?.project,
-  notificationPref: notificationData || null
+  notificationPref: notificationData || null,
+  sharingPreference: sharingPreferenceData
 });
 
 nextScene = getCommercialEntryScene({
@@ -6033,7 +6321,8 @@ let sceneAfterInvite = nextScene;
             if (hasCompletedFreeTrial(questionsDB)) {
               setScene(getInitialSceneForProject({
                 project: foundation?.project,
-                notificationPref
+                notificationPref,
+                sharingPreference
               }));
               return;
             }
@@ -6174,7 +6463,8 @@ let sceneAfterInvite = nextScene;
 
             setScene(getInitialSceneForProject({
               project: foundation?.project,
-              notificationPref
+              notificationPref,
+              sharingPreference
             }));
           }}
         />
@@ -6191,11 +6481,18 @@ let sceneAfterInvite = nextScene;
           onNext={async () => {
             try {
               setIsInitializing(true);
+              const firstConversationIndex = questionsDB.findIndex(
+                question => question?.onboarding_group === "starting_conversation"
+              );
+              const firstConversationQuestion = questionsDB[firstConversationIndex] || null;
 
               const { data: updatedProject, error } = await supabaseClient
                 .from("book_projects")
                 .update({
-                  onboarding_overview_completed_at: new Date().toISOString()
+                  onboarding_overview_completed_at: new Date().toISOString(),
+                  onboarding_ritual_step: "starting_conversation",
+                  current_onboarding_user_question_id:
+                    firstConversationQuestion?.user_question_id || null
                 })
                 .eq("id", foundation?.project?.id)
                 .select()
@@ -6207,6 +6504,17 @@ let sceneAfterInvite = nextScene;
                 ...prev,
                 project: updatedProject
               }));
+
+              if (firstConversationQuestion) {
+                await supabaseClient
+                  .from("profiles")
+                  .update({ current_sequence: firstConversationQuestion.sequence_order })
+                  .eq("id", user.id);
+                setProgress(previous => ({
+                  ...previous,
+                  currentIndex: firstConversationIndex
+                }));
+              }
               setScene(0);
             } catch (error) {
               console.error("onboarding overview completion error", error);
@@ -6225,6 +6533,12 @@ let sceneAfterInvite = nextScene;
         />
       )}
 
+      {scene === "starting_conversation_complete" && (
+        <Scene_StartingConversationComplete
+          onContinue={openThemeGuideAfterConversation}
+        />
+      )}
+
       {scene === "starting_motivation_prompt" && (
         <Scene_StartingMotivationPrompt
           onRecord={startOnboardingMotivation}
@@ -6234,14 +6548,19 @@ let sceneAfterInvite = nextScene;
 
       {scene === "theme_guide" && (
         <Scene_ThemeGuide
-          onContinue={() => leaveLifeOutlineMilestone({
-            continueNow: true,
-            completeThemeGuide: true
-          })}
-          onEndToday={() => leaveLifeOutlineMilestone({
-            continueNow: false,
-            completeThemeGuide: true
-          })}
+          onContinue={completeThemeGuide}
+        />
+      )}
+
+      {scene === "hajimari_complete" && (
+        <Scene_HajimariComplete
+          notificationLabel={formatNextNotificationLabel(notificationPref)}
+          onChangeDelivery={() => {
+            setNotificationSetupReturnScene("hajimari_complete");
+            setScene("notification_setup");
+          }}
+          onWait={() => leaveLifeOutlineMilestone({ continueNow: false })}
+          onContinue={() => leaveLifeOutlineMilestone({ continueNow: true })}
         />
       )}
 
@@ -6293,6 +6612,9 @@ let sceneAfterInvite = nextScene;
               });
 
               setSharingPreference(savedPreference);
+              if (foundation?.project?.onboarding_status !== "completed") {
+                await updateOnboardingRitualStep("support");
+              }
               setScene("supporter_invite_initial");
             } catch (error) {
               console.error("initial sharing setup error", error);
@@ -6325,7 +6647,12 @@ let sceneAfterInvite = nextScene;
               });
 
               setSharingPreference(completedPreference);
-              setScene(1);
+              if (foundation?.project?.onboarding_status !== "completed") {
+                await updateOnboardingRitualStep("motivation");
+                setScene("starting_motivation_prompt");
+              } else {
+                setScene(1);
+              }
             } catch (error) {
               console.error("initial supporter setup completion error", error);
               alert("設定を完了できませんでした。");
@@ -6421,7 +6748,20 @@ let sceneAfterInvite = nextScene;
         if (
           refreshedFoundationData?.project?.onboarding_status !== "completed"
         ) {
-          setScene(0);
+          const { data: ritualProject, error: ritualError } = await supabaseClient
+            .from("book_projects")
+            .update({ onboarding_ritual_step: "sharing" })
+            .eq("id", refreshedFoundationData?.project?.id)
+            .select()
+            .single();
+
+          if (ritualError) throw ritualError;
+
+          setFoundation(previous => ({
+            ...(previous || refreshedFoundationData),
+            project: ritualProject
+          }));
+          setScene("sharing_setup");
         } else if (!sharingPreference?.initial_setup_completed_at) {
           setScene("sharing_setup");
         } else {
@@ -7117,6 +7457,20 @@ onRetry={() => {
     }}
   />
 )}
+      {scene === "theme_transition" && (
+        <Scene_ThemeTransition
+          completedTheme={STORY_THEMES.find(theme => theme.order === completedThemeOrder) || null}
+          nextTheme={STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1) || null}
+          notificationLabel={formatNextNotificationLabel(notificationPref)}
+          onChangeDelivery={() => {
+            setNotificationSetupReturnScene("theme_transition");
+            setScene("notification_setup");
+          }}
+          onWait={() => leaveThemeTransition("home")}
+          onContinue={() => leaveThemeTransition(1)}
+          onFinish={() => leaveThemeTransition("story_pages")}
+        />
+      )}
       {scene === "token_completion" && (
         <Scene_TokenCompletion
           onLogin={() => setScene(-1)}
@@ -8824,91 +9178,40 @@ function Scene_BetaIntro({ onNext }) {
 
 function Scene_OnboardingOverview({ onNext }) {
   return (
-    <div className="h-full flex flex-col fade-enter px-4 py-8">
-      <div className="flex-1 flex flex-col justify-center">
-        <div className="text-center mb-9">
-          <p className="text-white/38 text-xs tracking-[0.22em] mb-4">
-            縦糸横糸の進め方
-          </p>
+    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+      <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center">
+        <div className="text-center">
+          <p className="text-[0.7rem] tracking-[0.28em] text-amber-100/42">はじまりの章</p>
+          <h1 className="mt-6 text-[1.35rem] leading-[1.9] text-white/92 text-narrative">
+            物語の扉を、<br />ひらくところから
+          </h1>
+        </div>
 
-          <p className="text-white/90 text-[1.12rem] leading-loose text-narrative">
-            今のことから、<br />
-            ゆっくりお話を始めます
+        <ThemeMemoryVisual theme={STORY_THEMES[0]} />
+
+        <div className="space-y-5 text-center">
+          <p className="text-[0.98rem] leading-[2] text-white/64 text-narrative">
+            聞いておきたかったこと。<br />
+            いつか話そうと思っていたこと。
+          </p>
+          <p className="text-sm leading-[2.05] text-white/46">
+            大切な記憶ほど、日々の会話だけでは残しきれません。縦糸横糸は、スマートフォンに届く問いに声で語りながら、思い出や考えを言葉にし、Webと一冊の本へまとめていくために生まれました。
           </p>
         </div>
 
-        <div className="space-y-3">
-          <div className="glass-card p-5 flex items-center gap-5">
-            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white/70 text-lg shrink-0">
-              1
+        <div className="mt-8 grid grid-cols-3 gap-2 text-center">
+          {["声で語る", "言葉に整う", "物語になる"].map((label, index) => (
+            <div key={label} className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-2 py-4">
+              <p className="text-[0.65rem] text-white/28">0{index + 1}</p>
+              <p className="mt-2 text-xs text-white/62">{label}</p>
             </div>
-
-            <div className="text-left">
-              <p className="text-white/82 text-[1rem] text-narrative mb-1">
-                はじめの会話
-              </p>
-
-              <p className="text-white/48 text-sm leading-loose">
-                お名前や最近の過ごし方など、<br />
-                答えやすい3つの問いから始めます
-              </p>
-            </div>
-          </div>
-
-          <div className="flex justify-center text-white/20 text-xl">
-            ↓
-          </div>
-
-          <div className="glass-card p-5 flex items-center gap-5">
-            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white/70 text-lg shrink-0">
-              2
-            </div>
-
-            <div className="text-left">
-              <p className="text-white/82 text-[1rem] text-narrative mb-1">
-                テーマを一つずつ
-              </p>
-
-              <p className="text-white/48 text-sm leading-loose">
-                幼い頃から今まで、9つのテーマをたどります
-              </p>
-            </div>
-          </div>
-
-          <div className="flex justify-center text-white/20 text-xl">
-            ↓
-          </div>
-
-          <div className="glass-card p-5 flex items-center gap-5">
-            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white/70 text-lg shrink-0">
-              3
-            </div>
-
-            <div className="text-left">
-              <p className="text-white/82 text-[1rem] text-narrative mb-1">
-                一冊の物語へ
-              </p>
-
-              <p className="text-white/48 text-sm leading-loose">
-                声と文章で、家族に残る物語になります
-              </p>
-            </div>
-          </div>
+          ))}
         </div>
 
-        <p className="mt-8 text-center text-white/42 text-sm leading-loose">
-          録音画面は、その後の問いでも同じです。<br />
-          まずは声に出す感覚を試してみてください。
-        </p>
+        <button type="button" onClick={onNext} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">
+          サービスの進め方を見る
+        </button>
       </div>
-
-      <button
-        type="button"
-        onClick={onNext}
-        className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
-      >
-        もう少し見る
-      </button>
     </div>
   );
 }
@@ -9008,7 +9311,7 @@ function Scene_OnboardingPreferences({ initialValue, onComplete }) {
     <div className="h-full overflow-y-auto fade-enter px-4 py-8">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
         <div className="flex-1 py-6">
-          {step === 1 ? (
+          {step === 1 && (
             <>
               <div className="mb-8 text-center">
                 <p className="text-white/90 text-[1.16rem] text-narrative">
@@ -9033,8 +9336,12 @@ function Scene_OnboardingPreferences({ initialValue, onComplete }) {
                   ))}
                 </div>
               </div>
+            </>
+          )}
 
-              <div className="mt-8 mb-5 text-center">
+          {step === 2 && (
+            <>
+              <div className="mb-8 text-center">
                 <p className="text-white/82 text-[1rem] text-narrative">
                   特に話してみたいテーマ
                 </p>
@@ -9056,7 +9363,9 @@ function Scene_OnboardingPreferences({ initialValue, onComplete }) {
                 ))}
               </div>
             </>
-          ) : (
+          )}
+
+          {step === 3 && (
             <>
               <div className="mb-8 text-center">
                 <p className="text-white/90 text-[1.16rem] text-narrative">
@@ -9091,10 +9400,10 @@ function Scene_OnboardingPreferences({ initialValue, onComplete }) {
         </div>
 
         <div className="flex gap-3 pt-5">
-          {step === 2 && (
+          {step > 1 && (
             <button
               type="button"
-              onClick={() => setStep(1)}
+              onClick={() => setStep(current => Math.max(1, current - 1))}
               className="btn-quiet w-1/3 rounded-full border border-white/10 py-4 text-white/55"
             >
               戻る
@@ -9103,15 +9412,15 @@ function Scene_OnboardingPreferences({ initialValue, onComplete }) {
           <button
             type="button"
             onClick={() => {
-              if (step === 1) {
-                setStep(2);
+              if (step < 3) {
+                setStep(current => current + 1);
                 return;
               }
               onComplete?.({ expectations, preferredThemes, people });
             }}
             className="btn-quiet flex-1 rounded-full bg-white/10 py-4 text-white"
           >
-            {step === 1 ? "次へ" : "この内容で進む"}
+            {step < 3 ? "次へ" : "この内容で進む"}
           </button>
         </div>
       </div>
@@ -9126,13 +9435,13 @@ function Scene_StartingMotivationPrompt({ onRecord, onSkip }) {
         <div className="flex flex-1 items-center py-8">
           <div className="w-full text-center">
             <p className="text-white/90 text-[1.16rem] text-narrative">
-              今のお気持ちも、声で残しておきますか
+              門出の声を、残しておきますか
             </p>
 
             <div className="glass-card mt-8 px-6 py-8">
               <p className="text-[1.05rem] leading-[2.15] text-white/78 text-narrative">
-                今回、声でお話を残すことになったきっかけや、<br className="hidden sm:block" />
-                始める今のお気持ちを、よければ聞かせてください。
+                物語を始めようと思ったきっかけや、<br className="hidden sm:block" />
+                この扉をひらく今のお気持ちを、聞かせてください。
               </p>
             </div>
 
@@ -9163,20 +9472,241 @@ function Scene_StartingMotivationPrompt({ onRecord, onSkip }) {
   );
 }
 
-function Scene_ThemeGuide({ onContinue, onEndToday }) {
+function Scene_StartingConversationComplete({ onContinue }) {
+  return (
+    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+      <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
+        <p className="text-[0.7rem] tracking-[0.28em] text-amber-100/42">
+          はじまりの章
+        </p>
+        <h1 className="mt-7 text-[1.35rem] leading-[1.9] text-white/92 text-narrative">
+          最初の三つの声を、<br />残しました
+        </h1>
+
+        <div className="mx-auto my-10 flex items-center gap-3" aria-hidden="true">
+          {[0, 1, 2].map(index => (
+            <span key={index} className="h-2.5 w-2.5 rounded-full bg-amber-100/45 shadow-[0_0_18px_rgba(254,243,199,0.2)]" />
+          ))}
+        </div>
+
+        <div className="glass-card px-6 py-7 text-left">
+          <p className="text-center text-[1rem] text-white/78 text-narrative">ここで、ひと呼吸</p>
+          <p className="mt-5 text-sm leading-[2.05] text-white/48">
+            これからは、一週に一つのテーマを目安に、問いを届けます。急いで答えを重ねるのではなく、写真を眺めたり、誰かと話したりする時間も、物語づくりの一部です。
+          </p>
+        </div>
+
+        <button type="button" onClick={onContinue} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">
+          これからの歩き方を見る
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ThemeMemoryVisual({ theme }) {
+  const paletteByVisual = {
+    childhood: ["#9a7252", "#23334b"],
+    youth: ["#6c7894", "#202a43"],
+    likes: ["#8c655f", "#31334f"],
+    living: ["#8b765a", "#243441"],
+    work: ["#746b61", "#25303e"],
+    connections: ["#7a6576", "#26354a"],
+    family: ["#8b6b58", "#2b3443"],
+    "turning-points": ["#736b79", "#223341"],
+    "now-future": ["#a27b5d", "#26384a"]
+  };
+  const [glow, base] = paletteByVisual[theme?.visual] || paletteByVisual.childhood;
+  const visual = theme?.visual || "childhood";
+
+  return (
+    <figure
+      className="relative my-7 h-44 overflow-hidden rounded-[1.75rem] border border-white/[0.08]"
+      style={{ background: `radial-gradient(circle at 68% 28%, ${glow}aa 0%, ${base} 42%, #111a2d 100%)` }}
+      aria-label={`${theme?.label || "次のテーマ"}を思い浮かべる情景`}
+    >
+      <svg viewBox="0 0 520 220" className="absolute inset-0 h-full w-full" role="img" aria-hidden="true">
+        <defs>
+          <linearGradient id={`fade-${visual}`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="white" stopOpacity="0.42" />
+            <stop offset="1" stopColor="white" stopOpacity="0.04" />
+          </linearGradient>
+        </defs>
+        <circle cx="365" cy="58" r="30" fill="white" opacity="0.15" />
+        {visual === "childhood" && <>
+          <path d="M0 168 C110 142 162 156 245 145 C335 133 410 145 520 118 L520 220 L0 220Z" fill="white" opacity="0.07" />
+          <path d="M245 220 C252 190 270 162 318 129" fill="none" stroke="url(#fade-childhood)" strokeWidth="10" strokeLinecap="round" />
+          <path d="M86 165 L86 108 M65 134 L86 108 L108 134" fill="none" stroke="white" strokeOpacity="0.22" strokeWidth="4" />
+        </>}
+        {visual === "youth" && <>
+          <rect x="65" y="42" width="150" height="108" rx="4" fill="none" stroke="white" strokeOpacity="0.2" strokeWidth="4" />
+          <path d="M140 42 V150 M65 96 H215 M276 164 Q344 114 426 151" fill="none" stroke="white" strokeOpacity="0.16" strokeWidth="4" />
+          <path d="M270 177 H438" stroke="white" strokeOpacity="0.12" strokeWidth="6" strokeLinecap="round" />
+        </>}
+        {visual === "likes" && <>
+          <circle cx="158" cy="120" r="52" fill="none" stroke="white" strokeOpacity="0.2" strokeWidth="5" />
+          <circle cx="158" cy="120" r="15" fill="white" opacity="0.14" />
+          <path d="M230 86 C287 47 339 157 397 91" fill="none" stroke="white" strokeOpacity="0.2" strokeWidth="5" strokeLinecap="round" />
+          <circle cx="411" cy="84" r="9" fill="white" opacity="0.22" />
+        </>}
+        {visual === "living" && <>
+          <path d="M70 151 L150 77 L230 151 V194 H70Z" fill="white" opacity="0.07" stroke="white" strokeOpacity="0.16" strokeWidth="4" />
+          <rect x="126" y="134" width="48" height="60" fill="white" opacity="0.09" />
+          <path d="M285 163 C330 139 391 139 452 163" fill="none" stroke="white" strokeOpacity="0.18" strokeWidth="4" />
+          <path d="M286 176 H452" stroke="white" strokeOpacity="0.1" strokeWidth="4" />
+        </>}
+        {visual === "work" && <>
+          <path d="M62 169 H458 M112 169 V91 H210 V169 M249 169 V61 H350 V169" fill="none" stroke="white" strokeOpacity="0.16" strokeWidth="4" />
+          <path d="M268 91 H330 M268 113 H330 M268 135 H315" stroke="white" strokeOpacity="0.15" strokeWidth="5" strokeLinecap="round" />
+        </>}
+        {visual === "connections" && <>
+          <path d="M112 150 L214 81 L306 147 L408 75" fill="none" stroke="white" strokeOpacity="0.17" strokeWidth="4" />
+          {[[112,150],[214,81],[306,147],[408,75]].map(([x,y]) => <circle key={`${x}-${y}`} cx={x} cy={y} r="17" fill="white" opacity="0.16" />)}
+        </>}
+        {visual === "family" && <>
+          <ellipse cx="260" cy="164" rx="150" ry="30" fill="white" opacity="0.08" />
+          <path d="M180 151 Q190 94 220 90 Q250 96 250 151 M270 151 Q280 79 318 75 Q355 85 356 151" fill="none" stroke="white" strokeOpacity="0.18" strokeWidth="5" />
+          <circle cx="220" cy="72" r="20" fill="white" opacity="0.15" /><circle cx="318" cy="53" r="22" fill="white" opacity="0.15" />
+        </>}
+        {visual === "turning-points" && <>
+          <path d="M252 220 C253 175 252 133 222 96 C196 63 158 48 122 38 M252 146 C286 118 320 87 399 65" fill="none" stroke="white" strokeOpacity="0.2" strokeWidth="8" strokeLinecap="round" />
+          <circle cx="252" cy="148" r="11" fill="white" opacity="0.18" />
+        </>}
+        {visual === "now-future" && <>
+          <path d="M0 170 Q260 112 520 170" fill="none" stroke="white" strokeOpacity="0.14" strokeWidth="4" />
+          <path d="M160 177 Q260 74 360 177" fill="white" opacity="0.08" />
+          <path d="M260 127 V54 M212 75 L231 94 M308 75 L289 94" stroke="white" strokeOpacity="0.2" strokeWidth="5" strokeLinecap="round" />
+        </>}
+      </svg>
+      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/55 to-transparent" />
+    </figure>
+  );
+}
+
+function ThemeDeliveryChoices({ theme, notificationLabel, onChangeDelivery, onWait, onContinue }) {
+  return (
+    <div className="mt-7 border-t border-white/[0.08] pt-6">
+      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-5 py-5 text-center">
+        <p className="text-[0.68rem] tracking-[0.2em] text-white/32">次の配信予定</p>
+        <p className="mt-3 text-sm leading-loose text-white/68">
+          {notificationLabel || "配信日時を確認しています"}
+        </p>
+        <button type="button" onClick={onChangeDelivery} className="mt-3 text-xs text-white/42 underline underline-offset-4">
+          配信日時を変更
+        </button>
+      </div>
+
+      <div className="mt-5 space-y-3">
+        <button type="button" onClick={onWait} className="btn-quiet w-full rounded-full bg-white py-4 text-slate-900">
+          <span className="block text-[0.65rem] tracking-[0.18em] text-slate-500">おすすめ</span>
+          <span className="mt-1 block">次の問いを待つ</span>
+        </button>
+        <button type="button" onClick={onContinue} className="btn-quiet w-full rounded-full border border-white/12 py-4 text-white/64">
+          このまま「{theme?.label || "次のテーマ"}」へ進む
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ThemePreview({ theme, eyebrow, notificationLabel, onChangeDelivery, onWait, onContinue }) {
+  if (!theme) return null;
+  return (
+    <>
+      <div className="text-center">
+        <p className="text-[0.7rem] tracking-[0.24em] text-amber-100/42">{eyebrow}</p>
+        <h2 className="mt-5 text-[1.42rem] leading-relaxed text-white/92 text-narrative">「{theme.label}」</h2>
+        <p className="mt-4 text-sm leading-[2] text-white/48">{theme.summary}</p>
+      </div>
+      <ThemeMemoryVisual theme={theme} />
+      <p className="text-center text-[0.98rem] leading-[2] text-white/64 text-narrative">{theme.opening}</p>
+      <aside className="mt-6 rounded-2xl border-l-2 border-amber-200/35 bg-white/[0.025] px-5 py-5 text-left">
+        <p className="text-[0.68rem] tracking-[0.16em] text-amber-100/48">💡「{theme.label}」のヒント</p>
+        <p className="mt-3 text-sm leading-[2] text-white/52">{theme.hint}</p>
+      </aside>
+      <ThemeDeliveryChoices
+        theme={theme}
+        notificationLabel={notificationLabel}
+        onChangeDelivery={onChangeDelivery}
+        onWait={onWait}
+        onContinue={onContinue}
+      />
+    </>
+  );
+}
+
+function Scene_HajimariComplete({ notificationLabel, onChangeDelivery, onWait, onContinue }) {
+  const firstTheme = STORY_THEMES[0];
+  return (
+    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+      <div className="mx-auto w-full max-w-[520px]">
+        <div className="mb-10 text-center">
+          <p className="text-[0.7rem] tracking-[0.28em] text-amber-100/42">はじまりの章</p>
+          <h1 className="mt-6 text-[1.35rem] leading-[1.9] text-white/92 text-narrative">はじまりの章を終えました</h1>
+          <p className="mt-4 text-sm leading-[2] text-white/48">あなたの物語の扉が、ひらきました。</p>
+        </div>
+        <ThemePreview
+          theme={firstTheme}
+          eyebrow={`最初のテーマ　${firstTheme.order} / ${STORY_THEMES.length}`}
+          notificationLabel={notificationLabel}
+          onChangeDelivery={onChangeDelivery}
+          onWait={onWait}
+          onContinue={onContinue}
+        />
+      </div>
+    </div>
+  );
+}
+
+function Scene_ThemeTransition({ completedTheme, nextTheme, notificationLabel, onChangeDelivery, onWait, onContinue, onFinish }) {
+  if (!completedTheme) return null;
+  return (
+    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+      <div className="mx-auto w-full max-w-[520px]">
+        <div className="rounded-[1.75rem] border border-amber-100/10 bg-amber-100/[0.035] px-6 py-8 text-center">
+          <p className="text-[0.68rem] tracking-[0.22em] text-amber-100/40">テーマ {completedTheme.order} / {STORY_THEMES.length}</p>
+          <h1 className="mt-5 text-[1.25rem] leading-[1.9] text-white/90 text-narrative">「{completedTheme.label}」を<br />終えました</h1>
+          <p className="mt-5 text-sm leading-[2] text-white/50">{completedTheme.completion}</p>
+        </div>
+
+        {nextTheme ? (
+          <div className="mt-12">
+            <ThemePreview
+              theme={nextTheme}
+              eyebrow={`次のテーマ　${nextTheme.order} / ${STORY_THEMES.length}`}
+              notificationLabel={notificationLabel}
+              onChangeDelivery={onChangeDelivery}
+              onWait={onWait}
+              onContinue={onContinue}
+            />
+          </div>
+        ) : (
+          <div className="py-12 text-center">
+            <p className="text-[1.35rem] leading-[1.9] text-white/92 text-narrative">九つのテーマを、<br />すべてたどりました</p>
+            <p className="mt-6 text-sm leading-[2] text-white/48">重ねてきた声が、あなたの物語の輪郭になりました。</p>
+            <button type="button" onClick={onFinish} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">物語を見る</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Scene_ThemeGuide({ onContinue }) {
   return (
     <div className="h-full overflow-y-auto fade-enter px-4 py-8">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
         <div className="flex-1 py-6">
           <div className="text-center">
-            <p className="text-white/90 text-[1.18rem] leading-loose text-narrative">
-              これからは、一つずつテーマをたどりながら、<br />
-              お話を残していきます
+            <p className="text-[0.7rem] tracking-[0.26em] text-amber-100/42">はじまりの章</p>
+            <p className="mt-5 text-white/90 text-[1.18rem] leading-loose text-narrative">
+              一週に一つのテーマを、<br />
+              ゆっくりたどります
             </p>
             <p className="mt-5 text-sm leading-[2] text-white/45">
-              各テーマでは答えやすい問いから始まり、<br />
-              お話に合わせて少しずつ深めます。<br />
-              話し足りないときは続けられ、いつでも休めます。
+              問いにすぐ答えるだけでなく、写真を見たり、<br />
+              誰かと話したりする時間も大切にします。<br />
+              九つのテーマが、物語の道しるべになります。
             </p>
           </div>
 
@@ -9195,9 +9725,8 @@ function Scene_ThemeGuide({ onContinue, onEndToday }) {
 
           <div className="mt-7 rounded-2xl border border-white/[0.07] px-5 py-5 text-center">
             <p className="text-sm leading-[2] text-white/42">
-              昔の写真や卒業アルバムなどがあれば、あとで見返しながら<br className="hidden sm:block" />
-              お話しいただくのもおすすめです。<br />
-              お手元になくても、そのまま進められます。
+              次に、話してみたいテーマや人物、<br className="hidden sm:block" />
+              問いを受け取る時間と共有方法を整えます。
             </p>
           </div>
         </div>
@@ -9208,14 +9737,7 @@ function Scene_ThemeGuide({ onContinue, onEndToday }) {
             onClick={onContinue}
             className="btn-quiet w-full rounded-full bg-white/10 py-4 text-white"
           >
-            幼い頃から語る
-          </button>
-          <button
-            type="button"
-            onClick={onEndToday}
-            className="btn-quiet w-full py-3 text-sm text-white/42"
-          >
-            今日はここまで
+            これからの歩き方を整える
           </button>
         </div>
       </div>
@@ -15011,8 +15533,11 @@ function Scene1_MyPage({
   const isOnboardingQuestion = isFormalOnboarding;
 
   const sectionLabel = isFormalOnboarding
-    ? question.onboarding_group === "starting_conversation" ||
-      question.onboarding_group === "starting_motivation"
+    ? question.onboarding_group === "trial_experience"
+      ? "体験の一頁"
+      : question.onboarding_group === "starting_motivation"
+      ? "門出の声"
+      : question.onboarding_group === "starting_conversation"
       ? "はじめの会話"
       : question.onboarding_group === "voice_intro"
         ? "物語の入口"
@@ -17676,8 +18201,10 @@ function Scene_StoryPages({
   };
 
   const isVisibleInStoryPages = (question) => (
-    question?.include_in_story_list !== false ||
-    question?.onboarding_group === "starting_conversation"
+    question?.onboarding_group === "trial_experience"
+      ? question?.status === "answered"
+      : question?.include_in_story_list !== false ||
+        question?.onboarding_group === "starting_conversation"
   );
 
   const buildChapterSections = (answerRows) => {
