@@ -34,7 +34,7 @@ const STORY_THEMES = [
     label: "幼い頃のこと",
     order: 1,
     summary: "幼少期から中学生くらいまでのことを振り返ります。",
-    opening: "遠くにある景色を、少しずつたどってみましょう。",
+    opening: "",
     hint: "昔のアルバムを開いたり、住んでいた家や通学路、よく遊んだ場所を思い浮かべたりしてみるのもよいかもしれません。",
     completion: "幼い頃の景色が、あなたの物語に残りました。",
     visual: "childhood"
@@ -9234,7 +9234,7 @@ function Scene_BetaIntro({ onNext }) {
 
 function Scene_OnboardingOverview({ onNext }) {
   return (
-    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+    <div className="flow-scene-shell fade-enter">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center">
         <div className="text-center">
           <p className="text-[0.7rem] tracking-[0.28em] text-amber-100/42">はじまりの章</p>
@@ -9275,7 +9275,7 @@ function Scene_OnboardingOverview({ onNext }) {
 
 function Scene_OnboardingPace({ onNext }) {
   return (
-    <div className="h-full flex flex-col fade-enter px-4 py-8">
+    <div className="flow-scene-shell flex flex-col fade-enter">
       <div className="flex-1 flex flex-col justify-center">
         <div className="text-center mb-8">
           <p className="text-white/90 text-[1.1rem] text-narrative">
@@ -9532,7 +9532,7 @@ function Scene_StartingMotivationPrompt({ onRecord, onSkip }) {
 
 function Scene_StartingConversationComplete({ onContinue }) {
   return (
-    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+    <div className="flow-scene-shell fade-enter">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
         <p className="text-[0.7rem] tracking-[0.28em] text-amber-100/42">
           はじまりの章
@@ -9579,7 +9579,7 @@ function ThemeMemoryVisual({ theme }) {
 
   return (
     <figure
-      className="relative my-7 h-44 overflow-hidden rounded-[1.75rem] border border-white/[0.08]"
+      className="relative my-6 h-40 overflow-hidden rounded-[1.75rem] border border-white/[0.08]"
       style={{ background: `radial-gradient(circle at 68% 28%, ${glow}aa 0%, ${base} 42%, #111a2d 100%)` }}
       aria-label={`${theme?.label || "次のテーマ"}を思い浮かべる情景`}
     >
@@ -9642,22 +9642,24 @@ function ThemeMemoryVisual({ theme }) {
 }
 
 function ThemeDeliveryChoices({ theme, notificationLabel, onChangeDelivery, onWait, onContinue }) {
+  const scheduleLabel = String(notificationLabel || "配信日時を確認しています")
+    .replace(/^次の問い[　\s]*/, "");
+
   return (
-    <div className="mt-7 border-t border-white/[0.08] pt-6">
-      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-5 py-5 text-center">
+    <div className="mt-6 border-t border-white/[0.08] pt-5">
+      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-5 py-4 text-center">
         <p className="text-[0.68rem] tracking-[0.2em] text-white/32">次の配信予定</p>
-        <p className="mt-3 text-sm leading-loose text-white/68">
-          {notificationLabel || "配信日時を確認しています"}
+        <p className="mt-2 text-sm leading-loose text-white/68">
+          {scheduleLabel}
         </p>
-        <button type="button" onClick={onChangeDelivery} className="mt-3 text-xs text-white/42 underline underline-offset-4">
+        <button type="button" onClick={onChangeDelivery} className="mt-2 text-xs text-white/42 underline underline-offset-4">
           配信日時を変更
         </button>
       </div>
 
-      <div className="mt-5 space-y-3">
+      <div className="mt-4 space-y-3">
         <button type="button" onClick={onWait} className="btn-quiet w-full rounded-full bg-white py-4 text-slate-900">
-          <span className="block text-[0.65rem] tracking-[0.18em] text-slate-500">おすすめ</span>
-          <span className="mt-1 block">次の問いを待つ</span>
+          次の問いを待つ
         </button>
         <button type="button" onClick={onContinue} className="btn-quiet w-full rounded-full border border-white/12 py-4 text-white/64">
           このまま「{theme?.label || "次のテーマ"}」へ進む
@@ -9673,13 +9675,15 @@ function ThemePreview({ theme, eyebrow, notificationLabel, onChangeDelivery, onW
     <>
       <div className="text-center">
         <p className="text-[0.7rem] tracking-[0.24em] text-amber-100/42">{eyebrow}</p>
-        <h2 className="mt-5 text-[1.42rem] leading-relaxed text-white/92 text-narrative">「{theme.label}」</h2>
+        <h2 className="mt-4 text-[1.42rem] leading-relaxed text-white/92 text-narrative">「{theme.label}」</h2>
         <p className="mt-4 text-sm leading-[2] text-white/48">{theme.summary}</p>
       </div>
       <ThemeMemoryVisual theme={theme} />
-      <p className="text-center text-[0.98rem] leading-[2] text-white/64 text-narrative">{theme.opening}</p>
-      <aside className="mt-6 rounded-2xl border-l-2 border-amber-200/35 bg-white/[0.025] px-5 py-5 text-left">
-        <p className="text-[0.68rem] tracking-[0.16em] text-amber-100/48">💡「{theme.label}」のヒント</p>
+      {theme.opening && (
+        <p className="text-center text-[0.98rem] leading-[2] text-white/64 text-narrative">{theme.opening}</p>
+      )}
+      <aside className={`${theme.opening ? "mt-6" : "mt-0"} rounded-2xl border-l-2 border-amber-200/35 bg-white/[0.025] px-5 py-5 text-left`}>
+        <p className="text-[0.68rem] tracking-[0.16em] text-amber-100/48">💡 ヒント</p>
         <p className="mt-3 text-sm leading-[2] text-white/52">{theme.hint}</p>
       </aside>
       <ThemeDeliveryChoices
@@ -9695,7 +9699,7 @@ function ThemePreview({ theme, eyebrow, notificationLabel, onChangeDelivery, onW
 
 function Scene_HajimariComplete({ onContinue }) {
   return (
-    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+    <div className="flow-scene-shell fade-enter">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
         <div>
           <h1 className="text-[1rem] leading-[2.1] text-white/92 text-narrative min-[360px]:text-[1.1rem]">
@@ -9727,7 +9731,7 @@ function Scene_HajimariComplete({ onContinue }) {
 function Scene_ThemeComplete({ completedTheme, hasNextTheme, onContinue, onFinish }) {
   if (!completedTheme) return null;
   return (
-    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+    <div className="flow-scene-shell fade-enter">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
         <div>
           <p className="text-[0.68rem] tracking-[0.22em] text-amber-100/40">テーマ {completedTheme.order} / {STORY_THEMES.length}</p>
@@ -9760,7 +9764,7 @@ function Scene_ThemeComplete({ completedTheme, hasNextTheme, onContinue, onFinis
 function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onChangeDelivery, onWait, onContinue }) {
   if (!theme) return null;
   return (
-    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+    <div className="flow-scene-shell fade-enter">
       <div className="mx-auto w-full max-w-[520px]">
         <ThemePreview
           theme={theme}
@@ -9777,7 +9781,7 @@ function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onCh
 
 function Scene_ThemeGuide({ onContinue }) {
   return (
-    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+    <div className="flow-scene-shell fade-enter">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
         <div className="flex-1 py-6">
           <div className="text-center">
