@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./voice-playback.css";
+import { scheduleScrollReset } from "./lib/scrollReset.js";
 
 const SUPPORT_EMAIL = "sugawara@saltlight.co.jp";
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -49,6 +50,11 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
 
   const progressKey = storageKey(publicId, "progress");
   const accessKey = storageKey(publicId, "access");
+
+  useEffect(
+    () => scheduleScrollReset(),
+    [screen, currentItemIndex, currentVideoIndex]
+  );
 
   const loadPublication = useCallback(async (code = "") => {
     setStatus("loading");

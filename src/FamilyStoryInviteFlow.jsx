@@ -1,5 +1,6 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Gift, Mail, Package, Smartphone, Users } from "lucide-react";
+import { scheduleScrollReset } from "./lib/scrollReset.js";
 
 const RELATIONSHIPS = [
   ["parent", "è¦ª"],
@@ -237,6 +238,8 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "ã
   );
   const currentStepIndex = steps.indexOf(step);
   const recipientName = `${recipientFamilyName.trim()} ${recipientGivenName.trim()}`.trim();
+
+  useEffect(() => scheduleScrollReset(), [step]);
 
   const goBack = () => {
     setError("");

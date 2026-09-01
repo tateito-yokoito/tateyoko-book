@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Bell, BookOpen, Check, ChevronLeft, ChevronRight, Files, Home, Image as ImageIcon, Lock, Mail, Mic, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings, Smartphone, Square, UserCircle, UserCog, Users, Video } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import { logActivity } from "./lib/activityLog.js";
+import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
 import "./family-invitation.css";
@@ -2962,6 +2963,11 @@ function App() {
     const timer = window.setTimeout(() => setSavedNotice(""), 1800);
     return () => window.clearTimeout(timer);
   }, [savedNotice]);
+
+  useEffect(
+    () => scheduleScrollReset(),
+    [scene, progress.currentIndex]
+  );
 
   const [voiceData, setVoiceData] = useState({
     duration: 0,
@@ -9307,6 +9313,8 @@ function Scene_OnboardingPreferences({ initialValue, onComplete }) {
     Array.isArray(initialValue?.people) ? initialValue.people : []
   );
 
+  useEffect(() => scheduleScrollReset(), [step]);
+
   return (
     <div className="h-full overflow-y-auto fade-enter px-4 py-8">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
@@ -14091,6 +14099,8 @@ export function Scene_BookBuilder({
   const [coverSuggestionStatus, setCoverSuggestionStatus] = useState("idle");
   const [coverSuggestionMessage, setCoverSuggestionMessage] = useState("");
   const coverSuggestionRequestedRef = useRef(false);
+
+  useEffect(() => scheduleScrollReset(), [stepIndex]);
 
   const [bookStories, setBookStories] = useState([]);
   const [bookMediaByAnswerId, setBookMediaByAnswerId] = useState({});
