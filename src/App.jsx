@@ -1131,6 +1131,56 @@ function getStoryThemeProgress(questionSet, currentIndex = 0) {
   };
 }
 
+function isCompletedStoryQuestion(question) {
+  return ["answered", "skipped"].includes(question?.status);
+}
+
+function getThemeResumeContext(questionSet, currentIndex = 0) {
+  const storyQuestions = (questionSet || [])
+    .map((question, questionIndex) => ({ question, questionIndex }))
+    .filter(({ question }) =>
+      question?.include_in_story_list !== false &&
+      Number.isFinite(Number(question?.theme_order))
+    );
+
+  if (storyQuestions.length === 0) return null;
+
+  const indexedCurrentQuestion = storyQuestions.find(
+    ({ questionIndex }) => questionIndex === currentIndex
+  );
+  const resumeQuestion = indexedCurrentQuestion &&
+    !isCompletedStoryQuestion(indexedCurrentQuestion.question)
+    ? indexedCurrentQuestion
+    : storyQuestions.find(({ question }) => !isCompletedStoryQuestion(question));
+
+  if (!resumeQuestion) return null;
+
+  const themeOrder = Number(resumeQuestion.question.theme_order);
+  const questionsInTheme = storyQuestions.filter(
+    ({ question }) => Number(question.theme_order) === themeOrder
+  );
+  const questionNumber = questionsInTheme.findIndex(
+    ({ questionIndex }) => questionIndex === resumeQuestion.questionIndex
+  ) + 1;
+  const theme = STORY_THEMES.find(item => item.order === themeOrder) || {
+    label:
+      resumeQuestion.question?.theme_label ||
+      resumeQuestion.question?.chapter_label ||
+      "物語",
+    order: themeOrder,
+    summary: resumeQuestion.question?.chapter_description || "",
+    opening: "",
+    hint: resumeQuestion.question?.prompt_hint || "",
+    visual: "childhood"
+  };
+
+  return {
+    theme,
+    questionIndex: resumeQuestion.questionIndex,
+    questionNumber: Math.max(questionNumber, 1)
+  };
+}
+
 function getNotificationSchedules(preference) {
   if (!preference || preference.is_active === false) return [];
 
@@ -2063,6 +2113,31 @@ function getInitialSceneForProject({
   return "home";
 }
 
+function getThemeResumeEntryScene({
+  defaultScene,
+  project,
+  questionSet,
+  currentIndex
+}) {
+  if (!getThemeResumeContext(questionSet, currentIndex)) {
+    return defaultScene;
+  }
+
+  if (defaultScene === "theme_intro") {
+    return "theme_resume";
+  }
+
+  if (
+    defaultScene === "home" &&
+    isProjectOnboardingComplete(project) &&
+    !getEntryModeFromUrl()
+  ) {
+    return "theme_resume";
+  }
+
+  return defaultScene;
+}
+
 async function ensureLifeOutlineReviewPhase({
   foundationData,
   questionSet,
@@ -2130,7 +2205,7 @@ function getResumeQuestionIndexFromToken(questionSet, tokenData) {
 
   const nextUnansweredIndex = questionSet.findIndex(q =>
     Number(q.sequence_order) >= tokenSeq &&
-    q.status !== "answered"
+    !isCompletedStoryQuestion(q)
   );
 
   if (nextUnansweredIndex >= 0) {
@@ -2138,7 +2213,7 @@ function getResumeQuestionIndexFromToken(questionSet, tokenData) {
   }
 
   const anyUnansweredIndex = questionSet.findIndex(q =>
-    q.status !== "answered"
+    !isCompletedStoryQuestion(q)
   );
 
   if (anyUnansweredIndex >= 0) {
@@ -3171,6 +3246,13 @@ nextScene = getCommercialEntryScene({
   defaultScene: nextScene
 });
 
+nextScene = getThemeResumeEntryScene({
+  defaultScene: nextScene,
+  project: activeFoundationData?.project,
+  questionSet,
+  currentIndex
+});
+
 if (getCheckoutReturnFromUrl().status === "cancelled" && getCheckoutReturnFromUrl().familyInvitationId) {
   nextScene = "home";
 }
@@ -3204,7 +3286,11 @@ if (deliveryToken) {
       setDeliveryTokenData(tokenData);
 
       currentIndex = getResumeQuestionIndexFromToken(questionSet, tokenData);
-      nextScene = hasRecentMicCheck() ? 1 : "daily_mic_check";
+      nextScene = getThemeResumeContext(questionSet, currentIndex)
+        ? "theme_resume"
+        : hasRecentMicCheck()
+          ? 1
+          : "daily_mic_check";
     }
   } catch (tokenError) {
     console.error("delivery token handling error", tokenError);
@@ -3812,7 +3898,13 @@ const continueAfterTokenAuth = async () => {
       return;
     }
 
-    setScene(hasRecentMicCheck() ? 1 : "daily_mic_check");
+    setScene(
+      getThemeResumeContext(questionSet, resumeIndex)
+        ? "theme_resume"
+        : hasRecentMicCheck()
+          ? 1
+          : "daily_mic_check"
+    );
   } catch (e) {
     console.error("continue after token auth error", e);
     alert(e instanceof Error ? e.message : "物語の続きを開けませんでした。");
@@ -5282,6 +5374,40 @@ const leaveLifeOutlineMilestone = async ({ continueNow }) => {
   }
 };
 
+const resumeThemeQuestion = async () => {
+  const resumeContext = getThemeResumeContext(
+    questionsDB,
+    progress.currentIndex
+  );
+
+  if (!resumeContext) {
+    setScene("home");
+    return;
+  }
+
+  if (!isProjectOnboardingComplete(foundation?.project)) {
+    await leaveLifeOutlineMilestone({ continueNow: true });
+    return;
+  }
+
+  setProgress(previous => ({
+    ...previous,
+    currentIndex: resumeContext.questionIndex
+  }));
+
+  const nextScene = hasRecentMicCheck() ? 1 : "daily_mic_check";
+  const hasPendingThemeTransition =
+    Number(foundation?.project?.theme_experience_state?.pending_transition_order) > 0;
+
+  if (hasPendingThemeTransition) {
+    await leaveThemeTransition(nextScene);
+    return;
+  }
+
+  resetVoiceData();
+  setScene(nextScene);
+};
+
 useEffect(() => {
   if (
     scene !== "life_outline_summary" ||
@@ -6065,12 +6191,21 @@ setScene(1);
     chapter_description: "...",
     content: "問いを取得できませんでした"
   };
+  const resolvedThemeResumeContext = getThemeResumeContext(
+    questionsDB,
+    progress.currentIndex
+  );
+  const themeResumeContext =
+    scene === "theme_resume" || isProjectOnboardingComplete(foundation?.project)
+      ? resolvedThemeResumeContext
+      : null;
   const showGlobalHome =
     Boolean(user?.id) &&
     foundation?.project?.onboarding_status === "completed" &&
     scene !== "home" &&
     scene !== "theme_complete" &&
     scene !== "theme_intro" &&
+    scene !== "theme_resume" &&
     scene !== -1 &&
     scene !== "supporter_invite_received" &&
     scene !== "family_invite_received" &&
@@ -6200,6 +6335,13 @@ nextScene = getCommercialEntryScene({
   project: activeFoundationData?.project,
   questionSet,
   defaultScene: nextScene
+});
+
+nextScene = getThemeResumeEntryScene({
+  defaultScene: nextScene,
+  project: activeFoundationData?.project,
+  questionSet,
+  currentIndex
 });
 
 if (getCheckoutReturnFromUrl().status === "cancelled" && getCheckoutReturnFromUrl().familyInvitationId) {
@@ -6614,6 +6756,14 @@ let sceneAfterInvite = nextScene;
         />
       )}
 
+      {scene === "theme_resume" && themeResumeContext && (
+        <Scene_ThemeResume
+          theme={themeResumeContext.theme}
+          questionNumber={themeResumeContext.questionNumber}
+          onResume={resumeThemeQuestion}
+        />
+      )}
+
       {scene === "setup_intro" && (
         <Scene_SetupIntro
           onNext={() => setScene("story_theme_setup")}
@@ -6934,7 +7084,7 @@ let sceneAfterInvite = nextScene;
              return;
            }
 
-           setScene(0);
+           setScene(themeResumeContext ? "theme_resume" : 0);
          }}
          onOpenStoryPages={() => setScene("story_pages")}
          onStartPhotoStory={() => setScene("photo_story_start")}
@@ -7538,7 +7688,7 @@ onRetry={() => {
           notificationPref={notificationPref}
           hasSavedAnswer={endTodayHasSavedAnswer}
           onOpenStoryPages={() => setScene("story_pages")}
-          onResume={() => setScene(1)}
+          onResume={() => setScene(themeResumeContext ? "theme_resume" : 1)}
         />
       )}
 
@@ -7555,7 +7705,7 @@ onRetry={() => {
   }}
   onTalkMore={() => {
     resetVoiceData();
-    setScene(1);
+    setScene(themeResumeContext ? "theme_resume" : 1);
   }}
   onEditRecord={startEditRecording}
   onBack={() => setScene("home")}
@@ -9679,8 +9829,34 @@ function ThemeDeliveryChoices({ theme, notificationLabel, onChangeDelivery, onWa
   );
 }
 
-function ThemePreview({ theme, eyebrow, notificationLabel, onChangeDelivery, onWait, onContinue }) {
+function ThemeResumeAction({ questionNumber, onResume }) {
+  const normalizedQuestionNumber = Math.max(Number(questionNumber) || 1, 1);
+  const label = normalizedQuestionNumber === 1
+    ? "1問目から始める"
+    : `${normalizedQuestionNumber}問目から再開する`;
+
+  return (
+    <div className="mt-5 border-t border-white/[0.08] pt-5">
+      <button type="button" onClick={onResume} className="btn-quiet w-full rounded-full bg-white py-4 text-sm text-slate-900">
+        {label}
+      </button>
+    </div>
+  );
+}
+
+function ThemePreview({
+  theme,
+  eyebrow,
+  notificationLabel,
+  onChangeDelivery,
+  onWait,
+  onContinue,
+  resumeQuestionNumber,
+  onResume
+}) {
   if (!theme) return null;
+  const isResume = typeof onResume === "function";
+
   return (
     <>
       <div className="text-center">
@@ -9698,13 +9874,20 @@ function ThemePreview({ theme, eyebrow, notificationLabel, onChangeDelivery, onW
         <p className="text-[0.68rem] tracking-[0.16em] text-amber-100/48">💡 ヒント</p>
         <p className="mt-3 text-sm leading-[2] text-white/52">{theme.hint}</p>
       </aside>
-      <ThemeDeliveryChoices
-        theme={theme}
-        notificationLabel={notificationLabel}
-        onChangeDelivery={onChangeDelivery}
-        onWait={onWait}
-        onContinue={onContinue}
-      />
+      {isResume ? (
+        <ThemeResumeAction
+          questionNumber={resumeQuestionNumber}
+          onResume={onResume}
+        />
+      ) : (
+        <ThemeDeliveryChoices
+          theme={theme}
+          notificationLabel={notificationLabel}
+          onChangeDelivery={onChangeDelivery}
+          onWait={onWait}
+          onContinue={onContinue}
+        />
+      )}
     </>
   );
 }
@@ -9785,6 +9968,22 @@ function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onCh
           onChangeDelivery={onChangeDelivery}
           onWait={onWait}
           onContinue={onContinue}
+        />
+      </div>
+    </div>
+  );
+}
+
+function Scene_ThemeResume({ theme, questionNumber, onResume }) {
+  if (!theme) return null;
+  return (
+    <div className="flow-scene-shell fade-enter">
+      <div className="mx-auto w-full max-w-[520px]">
+        <ThemePreview
+          theme={theme}
+          eyebrow="テーマ"
+          resumeQuestionNumber={questionNumber}
+          onResume={onResume}
         />
       </div>
     </div>
