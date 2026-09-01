@@ -1954,7 +1954,9 @@ function getInitialSceneForProject({
     project?.onboarding_status === "completed" &&
     Number(project?.theme_experience_state?.pending_transition_order) > 0
   ) {
-    return "theme_transition";
+    return project?.theme_experience_state?.pending_transition_phase === "intro"
+      ? "theme_intro"
+      : "theme_complete";
   }
 
   if (
@@ -1993,6 +1995,10 @@ function getInitialSceneForProject({
 
     if (ritualStep === "chapter_complete") {
       return "hajimari_complete";
+    }
+
+    if (ritualStep === "theme_intro") {
+      return "theme_intro";
     }
 
     if (!project?.theme_guide_completed_at) {
@@ -3409,7 +3415,7 @@ const goToNextQuestion = async () => {
     }));
     if (Number(currentQ?.theme_order) > 0) {
       await savePendingThemeTransition(Number(currentQ.theme_order));
-      setScene("theme_transition");
+      setScene("theme_complete");
     } else {
       setScene(6);
     }
@@ -3423,7 +3429,7 @@ const goToNextQuestion = async () => {
 
   if (completedTheme) {
     await savePendingThemeTransition(Number(currentQ.theme_order));
-    setScene("theme_transition");
+    setScene("theme_complete");
   } else {
     setScene(1);
   }
@@ -4941,7 +4947,7 @@ const updateOnboardingRitualStep = async (step, patch = {}) => {
   return updatedProject;
 };
 
-const savePendingThemeTransition = async themeOrder => {
+const savePendingThemeTransition = async (themeOrder, phase = "complete") => {
   const normalizedOrder = Number(themeOrder) || null;
   setCompletedThemeOrder(normalizedOrder);
 
@@ -4949,7 +4955,8 @@ const savePendingThemeTransition = async themeOrder => {
 
   const nextState = {
     ...(foundation.project.theme_experience_state || {}),
-    pending_transition_order: normalizedOrder
+    pending_transition_order: normalizedOrder,
+    pending_transition_phase: normalizedOrder ? phase : null
   };
 
   const { data: updatedProject, error } = await supabaseClient
@@ -4961,6 +4968,34 @@ const savePendingThemeTransition = async themeOrder => {
 
   if (error) throw error;
   setFoundation(previous => ({ ...previous, project: updatedProject }));
+};
+
+const openFirstThemeIntroduction = async () => {
+  try {
+    setIsInitializing(true);
+    await updateOnboardingRitualStep("theme_intro");
+    setScene("theme_intro");
+  } catch (error) {
+    console.error("first theme introduction error", error);
+    alert("最初のテーマを開けませんでした。");
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
+const openNextThemeIntroduction = async () => {
+  if (!completedThemeOrder) return;
+
+  try {
+    setIsInitializing(true);
+    await savePendingThemeTransition(completedThemeOrder, "intro");
+    setScene("theme_intro");
+  } catch (error) {
+    console.error("next theme introduction error", error);
+    alert("次のテーマを開けませんでした。");
+  } finally {
+    setIsInitializing(false);
+  }
 };
 
 const leaveThemeTransition = async nextScene => {
@@ -5997,7 +6032,7 @@ resetVoiceData();
 
 if (completedTheme) {
   await savePendingThemeTransition(Number(currentQ.theme_order));
-  setScene("theme_transition");
+  setScene("theme_complete");
   return;
 }
 
@@ -6034,7 +6069,8 @@ setScene(1);
     Boolean(user?.id) &&
     foundation?.project?.onboarding_status === "completed" &&
     scene !== "home" &&
-    scene !== "theme_transition" &&
+    scene !== "theme_complete" &&
+    scene !== "theme_intro" &&
     scene !== -1 &&
     scene !== "supporter_invite_received" &&
     scene !== "family_invite_received" &&
@@ -6560,9 +6596,17 @@ let sceneAfterInvite = nextScene;
 
       {scene === "hajimari_complete" && (
         <Scene_HajimariComplete
+          onContinue={openFirstThemeIntroduction}
+        />
+      )}
+
+      {scene === "theme_intro" && foundation?.project?.onboarding_status !== "completed" && (
+        <Scene_ThemeIntro
+          theme={STORY_THEMES[0]}
+          isFirstTheme
           notificationLabel={formatNextNotificationLabel(notificationPref)}
           onChangeDelivery={() => {
-            setNotificationSetupReturnScene("hajimari_complete");
+            setNotificationSetupReturnScene("theme_intro");
             setScene("notification_setup");
           }}
           onWait={() => leaveLifeOutlineMilestone({ continueNow: false })}
@@ -7463,18 +7507,24 @@ onRetry={() => {
     }}
   />
 )}
-      {scene === "theme_transition" && (
-        <Scene_ThemeTransition
+      {scene === "theme_complete" && (
+        <Scene_ThemeComplete
           completedTheme={STORY_THEMES.find(theme => theme.order === completedThemeOrder) || null}
-          nextTheme={STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1) || null}
+          hasNextTheme={Boolean(STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1))}
+          onContinue={openNextThemeIntroduction}
+          onFinish={() => leaveThemeTransition("story_pages")}
+        />
+      )}
+      {scene === "theme_intro" && foundation?.project?.onboarding_status === "completed" && (
+        <Scene_ThemeIntro
+          theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1) || null}
           notificationLabel={formatNextNotificationLabel(notificationPref)}
           onChangeDelivery={() => {
-            setNotificationSetupReturnScene("theme_transition");
+            setNotificationSetupReturnScene("theme_intro");
             setScene("notification_setup");
           }}
           onWait={() => leaveThemeTransition("home")}
           onContinue={() => leaveThemeTransition(1)}
-          onFinish={() => leaveThemeTransition("story_pages")}
         />
       )}
       {scene === "token_completion" && (
@@ -9643,58 +9693,79 @@ function ThemePreview({ theme, eyebrow, notificationLabel, onChangeDelivery, onW
   );
 }
 
-function Scene_HajimariComplete({ notificationLabel, onChangeDelivery, onWait, onContinue }) {
-  const firstTheme = STORY_THEMES[0];
+function Scene_HajimariComplete({ onContinue }) {
   return (
     <div className="h-full overflow-y-auto fade-enter px-4 py-8">
-      <div className="mx-auto w-full max-w-[520px]">
-        <div className="mb-10 text-center">
+      <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
+        <div>
           <p className="text-[0.7rem] tracking-[0.28em] text-amber-100/42">はじまりの章</p>
           <h1 className="mt-6 text-[1.35rem] leading-[1.9] text-white/92 text-narrative">はじまりの章を終えました</h1>
           <p className="mt-4 text-sm leading-[2] text-white/48">あなたの物語の扉が、ひらきました。</p>
         </div>
-        <ThemePreview
-          theme={firstTheme}
-          eyebrow={`最初のテーマ　${firstTheme.order} / ${STORY_THEMES.length}`}
-          notificationLabel={notificationLabel}
-          onChangeDelivery={onChangeDelivery}
-          onWait={onWait}
-          onContinue={onContinue}
-        />
+
+        <div className="mx-auto my-12 flex items-center gap-3" aria-hidden="true">
+          <span className="h-px w-12 bg-gradient-to-r from-transparent to-amber-100/30" />
+          <span className="h-3 w-3 rotate-45 border border-amber-100/30 bg-amber-100/[0.06]" />
+          <span className="h-px w-12 bg-gradient-to-l from-transparent to-amber-100/30" />
+        </div>
+
+        <p className="text-[0.98rem] leading-[2] text-white/58 text-narrative">
+          ここまでに残した声を胸に、<br />次の章へ向かいます。
+        </p>
+        <button type="button" onClick={onContinue} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">
+          最初のテーマを見る
+        </button>
       </div>
     </div>
   );
 }
 
-function Scene_ThemeTransition({ completedTheme, nextTheme, notificationLabel, onChangeDelivery, onWait, onContinue, onFinish }) {
+function Scene_ThemeComplete({ completedTheme, hasNextTheme, onContinue, onFinish }) {
   if (!completedTheme) return null;
   return (
     <div className="h-full overflow-y-auto fade-enter px-4 py-8">
-      <div className="mx-auto w-full max-w-[520px]">
-        <div className="rounded-[1.75rem] border border-amber-100/10 bg-amber-100/[0.035] px-6 py-8 text-center">
+      <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
+        <div>
           <p className="text-[0.68rem] tracking-[0.22em] text-amber-100/40">テーマ {completedTheme.order} / {STORY_THEMES.length}</p>
           <h1 className="mt-5 text-[1.25rem] leading-[1.9] text-white/90 text-narrative">「{completedTheme.label}」を<br />終えました</h1>
           <p className="mt-5 text-sm leading-[2] text-white/50">{completedTheme.completion}</p>
         </div>
 
-        {nextTheme ? (
-          <div className="mt-12">
-            <ThemePreview
-              theme={nextTheme}
-              eyebrow={`次のテーマ　${nextTheme.order} / ${STORY_THEMES.length}`}
-              notificationLabel={notificationLabel}
-              onChangeDelivery={onChangeDelivery}
-              onWait={onWait}
-              onContinue={onContinue}
-            />
-          </div>
+        <div className="mx-auto my-12 flex items-center gap-3" aria-hidden="true">
+          <span className="h-px w-12 bg-gradient-to-r from-transparent to-amber-100/30" />
+          <span className="h-3 w-3 rounded-full bg-amber-100/25 shadow-[0_0_22px_rgba(254,243,199,0.18)]" />
+          <span className="h-px w-12 bg-gradient-to-l from-transparent to-amber-100/30" />
+        </div>
+
+        {hasNextTheme ? (
+          <button type="button" onClick={onContinue} className="btn-quiet w-full rounded-full bg-white/10 py-4 text-white">
+            次のテーマを見る
+          </button>
         ) : (
-          <div className="py-12 text-center">
+          <div>
             <p className="text-[1.35rem] leading-[1.9] text-white/92 text-narrative">九つのテーマを、<br />すべてたどりました</p>
             <p className="mt-6 text-sm leading-[2] text-white/48">重ねてきた声が、あなたの物語の輪郭になりました。</p>
             <button type="button" onClick={onFinish} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">物語を見る</button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onChangeDelivery, onWait, onContinue }) {
+  if (!theme) return null;
+  return (
+    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
+      <div className="mx-auto w-full max-w-[520px]">
+        <ThemePreview
+          theme={theme}
+          eyebrow={`${isFirstTheme ? "最初" : "次"}のテーマ　${theme.order} / ${STORY_THEMES.length}`}
+          notificationLabel={notificationLabel}
+          onChangeDelivery={onChangeDelivery}
+          onWait={onWait}
+          onContinue={onContinue}
+        />
       </div>
     </div>
   );
