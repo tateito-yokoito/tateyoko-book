@@ -9707,8 +9707,8 @@ function Scene_HajimariComplete({ onContinue }) {
 
         <figure className="relative mt-9 aspect-[3/2] w-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-[0_24px_70px_rgba(0,0,0,0.24)]">
           <img
-            src="/site/hajimari-doorway-v1.jpg"
-            alt="朝の光が差し込む家の戸口と、その先へ続く庭の小道"
+            src="/site/hajimari-doorway-v2.jpg"
+            alt="風景写真をあしらった布張りの本を手に、朝の庭へ続く小道を眺める様子"
             className="h-full w-full object-cover"
           />
           <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0d1529]/55 via-transparent to-[#0d1529]/12" aria-hidden="true" />
