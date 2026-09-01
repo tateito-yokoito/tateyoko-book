@@ -33,7 +33,7 @@ const STORY_THEMES = [
     code: "ty_theme_childhood",
     label: "幼い頃のこと",
     order: 1,
-    summary: "幼少期から中学生くらいまでのことを振り返ります。",
+    summary: "幼少期から中学生くらいまでを振り返ります。",
     opening: "",
     hint: "昔のアルバムを開いたり、住んでいた家や通学路、よく遊んだ場所を思い浮かべたりしてみるのもよいかもしれません。",
     completion: "幼い頃の景色が、あなたの物語に残りました。",
@@ -9646,26 +9646,36 @@ function ThemeDeliveryChoices({ theme, notificationLabel, onChangeDelivery, onWa
     .replace(/^次の問い[　\s]*/, "");
 
   return (
-    <div className="mt-6 border-t border-white/[0.08] pt-5">
-      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-5 py-4 text-center">
-        <p className="text-[0.68rem] tracking-[0.2em] text-white/32">次の配信予定</p>
-        <p className="mt-2 text-sm leading-loose text-white/68">
-          {scheduleLabel}
+    <section className="mt-5 border-t border-white/[0.08] pt-5" aria-labelledby="theme-delivery-choice-title">
+      <div className="text-center">
+        <p id="theme-delivery-choice-title" className="text-[0.72rem] tracking-[0.16em] text-white/52">
+          次の進み方を選ぶ
         </p>
-        <button type="button" onClick={onChangeDelivery} className="mt-2 text-xs text-white/42 underline underline-offset-4">
-          配信日時を変更
-        </button>
+        <p className="mt-1 text-[0.66rem] text-white/30">2つから選べます</p>
       </div>
 
-      <div className="mt-4 space-y-3">
-        <button type="button" onClick={onWait} className="btn-quiet w-full rounded-full bg-white py-4 text-slate-900">
-          次の問いを待つ
-        </button>
-        <button type="button" onClick={onContinue} className="btn-quiet w-full rounded-full border border-white/12 py-4 text-white/64">
-          このまま「{theme?.label || "次のテーマ"}」へ進む
+      <div className="mt-3 overflow-hidden rounded-2xl border border-white/12 bg-white/[0.02] divide-y divide-white/[0.08]">
+        <div className="bg-white/[0.035]">
+          <button type="button" onClick={onWait} className="btn-quiet flex w-full items-center gap-3 px-4 pb-2 pt-4 text-left">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/25 text-[0.64rem] text-white/54">1</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm text-white/86">次の問いを待つ</span>
+              <span className="mt-1 block text-[0.68rem] leading-relaxed text-white/42">次の配信予定　{scheduleLabel}</span>
+            </span>
+            <ChevronRight size={15} className="shrink-0 text-white/28" />
+          </button>
+          <button type="button" onClick={onChangeDelivery} className="mb-3 ml-14 text-[0.68rem] text-white/40 underline underline-offset-4">
+            配信日時を変更
+          </button>
+        </div>
+
+        <button type="button" onClick={onContinue} className="btn-quiet flex w-full items-center gap-3 px-4 py-4 text-left">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/20 text-[0.64rem] text-white/42">2</span>
+          <span className="min-w-0 flex-1 text-sm text-white/68">このまま「{theme?.label || "次のテーマ"}」へ進む</span>
+          <ChevronRight size={15} className="shrink-0 text-white/24" />
         </button>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -9674,9 +9684,11 @@ function ThemePreview({ theme, eyebrow, notificationLabel, onChangeDelivery, onW
   return (
     <>
       <div className="text-center">
-        <p className="text-[0.7rem] tracking-[0.24em] text-amber-100/42">{eyebrow}</p>
-        <h2 className="mt-4 text-[1.42rem] leading-relaxed text-white/92 text-narrative">「{theme.label}」</h2>
-        <p className="mt-4 text-sm leading-[2] text-white/48">{theme.summary}</p>
+        <div className="flex items-baseline justify-center gap-2 whitespace-nowrap">
+          <p className="text-[0.58rem] tracking-[0.1em] text-amber-100/42 min-[360px]:text-[0.64rem]">{eyebrow}</p>
+          <h2 className="text-[1rem] leading-relaxed text-white/92 text-narrative min-[360px]:text-[1.12rem]">「{theme.label}」</h2>
+        </div>
+        <p className="mt-3 whitespace-nowrap text-[0.7rem] leading-loose text-white/48 min-[360px]:text-[0.8rem]">{theme.summary}</p>
       </div>
       <ThemeMemoryVisual theme={theme} />
       {theme.opening && (
