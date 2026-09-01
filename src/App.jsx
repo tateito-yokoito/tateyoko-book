@@ -9698,10 +9698,9 @@ function Scene_HajimariComplete({ onContinue }) {
     <div className="h-full overflow-y-auto fade-enter px-4 py-8">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
         <div>
-          <h1 className="text-[1.25rem] leading-[1.9] text-white/92 text-narrative">
-            はじまりの章を終え、<br />
-            あなたの物語の扉が<br />
-            ひらきました。
+          <h1 className="text-[1rem] leading-[2.1] text-white/92 text-narrative min-[360px]:text-[1.1rem]">
+            <span className="block whitespace-nowrap">「はじまりの章」を終え、</span>
+            <span className="block whitespace-nowrap">あなたの物語の扉がひらきました。</span>
           </h1>
         </div>
 
@@ -9715,7 +9714,7 @@ function Scene_HajimariComplete({ onContinue }) {
         </figure>
 
         <p className="mt-9 text-[0.98rem] leading-[2] text-white/58 text-narrative">
-          ここまでに残した声を胸に、<br />次の章へ向かいます。
+          ここからは<br />9つのテーマごとに進めていきます。
         </p>
         <button type="button" onClick={onContinue} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">
           最初のテーマを見る
