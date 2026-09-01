@@ -9780,7 +9780,7 @@ function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onCh
       <div className="mx-auto w-full max-w-[520px]">
         <ThemePreview
           theme={theme}
-          eyebrow={`${isFirstTheme ? "最初" : "次"}のテーマ　${theme.order} / ${STORY_THEMES.length}`}
+          eyebrow="テーマ"
           notificationLabel={notificationLabel}
           onChangeDelivery={onChangeDelivery}
           onWait={onWait}
