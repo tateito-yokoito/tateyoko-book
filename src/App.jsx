@@ -9698,18 +9698,23 @@ function Scene_HajimariComplete({ onContinue }) {
     <div className="h-full overflow-y-auto fade-enter px-4 py-8">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
         <div>
-          <p className="text-[0.7rem] tracking-[0.28em] text-amber-100/42">はじまりの章</p>
-          <h1 className="mt-6 text-[1.35rem] leading-[1.9] text-white/92 text-narrative">はじまりの章を終えました</h1>
-          <p className="mt-4 text-sm leading-[2] text-white/48">あなたの物語の扉が、ひらきました。</p>
+          <h1 className="text-[1.25rem] leading-[1.9] text-white/92 text-narrative">
+            はじまりの章を終え、<br />
+            あなたの物語の扉が<br />
+            ひらきました。
+          </h1>
         </div>
 
-        <div className="mx-auto my-12 flex items-center gap-3" aria-hidden="true">
-          <span className="h-px w-12 bg-gradient-to-r from-transparent to-amber-100/30" />
-          <span className="h-3 w-3 rotate-45 border border-amber-100/30 bg-amber-100/[0.06]" />
-          <span className="h-px w-12 bg-gradient-to-l from-transparent to-amber-100/30" />
-        </div>
+        <figure className="relative mt-9 aspect-[3/2] w-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-[0_24px_70px_rgba(0,0,0,0.24)]">
+          <img
+            src="/site/hajimari-doorway-v1.jpg"
+            alt="朝の光が差し込む家の戸口と、その先へ続く庭の小道"
+            className="h-full w-full object-cover"
+          />
+          <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0d1529]/55 via-transparent to-[#0d1529]/12" aria-hidden="true" />
+        </figure>
 
-        <p className="text-[0.98rem] leading-[2] text-white/58 text-narrative">
+        <p className="mt-9 text-[0.98rem] leading-[2] text-white/58 text-narrative">
           ここまでに残した声を胸に、<br />次の章へ向かいます。
         </p>
         <button type="button" onClick={onContinue} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">
