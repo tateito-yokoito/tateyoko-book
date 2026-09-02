@@ -37,6 +37,8 @@ const STORY_THEMES = [
     opening: "",
     hint: "昔のアルバムを開いたり、住んでいた家や通学路、よく遊んだ場所を思い浮かべたりしてみるのもよいかもしれません。",
     completion: "幼い頃の景色が、あなたの物語に残りました。",
+    image: "/site/theme-childhood-classroom.jpg",
+    imageAlt: "放課後の光が差し込む、静かな教室",
     visual: "childhood"
   },
   {
@@ -9713,6 +9715,19 @@ function Scene_StartingConversationComplete({ onContinue }) {
 }
 
 function ThemeMemoryVisual({ theme }) {
+  if (theme?.image) {
+    return (
+      <figure className="relative my-6 h-40 overflow-hidden rounded-[1.75rem] border border-white/[0.08] bg-slate-900">
+        <img
+          src={theme.image}
+          alt={theme.imageAlt || `${theme.label || "次のテーマ"}を思い浮かべる情景`}
+          className="h-full w-full object-cover object-center"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/30 via-transparent to-slate-950/10" aria-hidden="true" />
+      </figure>
+    );
+  }
+
   const paletteByVisual = {
     childhood: ["#9a7252", "#23334b"],
     youth: ["#6c7894", "#202a43"],
