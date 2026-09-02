@@ -38,8 +38,8 @@ const STORY_THEMES = [
     opening: "",
     hint: "昔のアルバムを開いたり、住んでいた家や通学路、よく遊んだ場所を思い浮かべたりしてみるのもよいかもしれません。",
     completion: "幼い頃の景色が、あなたの物語に残りました。",
-    image: "/site/theme-childhood-classroom.jpg",
-    imageAlt: "放課後の光が差し込む、静かな教室",
+    image: "/site/theme-childhood-triptych.jpg",
+    imageAlt: "誕生、友達との遊び、家族の食卓をつないだ幼い頃の情景",
     visual: "childhood"
   },
   {
@@ -50,6 +50,8 @@ const STORY_THEMES = [
     opening: "あの頃にしかなかった時間へ、戻ってみましょう。",
     hint: "卒業アルバムや当時よく聴いた音楽、通っていた道が、記憶の入口になるかもしれません。",
     completion: "若い日の時間が、ひとつの章になりました。",
+    image: "/site/theme-childhood-classroom.jpg",
+    imageAlt: "放課後の光が差し込む、静かな教室",
     visual: "youth"
   },
   {
