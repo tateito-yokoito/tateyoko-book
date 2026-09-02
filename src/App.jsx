@@ -6,6 +6,7 @@ import { logActivity } from "./lib/activityLog.js";
 import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
+import { ThemeMemoryRequestComposer, ThemeMemoryRequestManager } from "./ThemeMemoryRequestFlow.jsx";
 import "./family-invitation.css";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumossjxehdop.supabase.co";
@@ -1135,6 +1136,14 @@ function getStoryThemeProgress(questionSet, currentIndex = 0) {
 
 function isCompletedStoryQuestion(question) {
   return ["answered", "skipped"].includes(question?.status);
+}
+
+function hasCompletedStoryTheme(questionSet, themeOrder) {
+  const questions = (questionSet || []).filter(question =>
+    question?.include_in_story_list !== false &&
+    Number(question?.theme_order) === Number(themeOrder)
+  );
+  return questions.length > 0 && questions.every(isCompletedStoryQuestion);
 }
 
 function getThemeResumeContext(questionSet, currentIndex = 0) {
@@ -3023,6 +3032,7 @@ function App() {
   const [lifeOutlineReturnScene, setLifeOutlineReturnScene] = useState(null);
   const [notificationSetupReturnScene, setNotificationSetupReturnScene] = useState(null);
   const [completedThemeOrder, setCompletedThemeOrder] = useState(null);
+  const [themeMemoryReturnScene, setThemeMemoryReturnScene] = useState("theme_complete");
   const [savedNotice, setSavedNotice] = useState("");
   const [pendingBetaSurvey, setPendingBetaSurvey] = useState(null);
   const [accessMode, setAccessMode] = useState("session");
@@ -6208,6 +6218,8 @@ setScene(1);
     scene !== "theme_complete" &&
     scene !== "theme_intro" &&
     scene !== "theme_resume" &&
+    scene !== "theme_memory_request" &&
+    scene !== "theme_memory_manager" &&
     scene !== -1 &&
     scene !== "supporter_invite_received" &&
     scene !== "family_invite_received" &&
@@ -7089,6 +7101,11 @@ let sceneAfterInvite = nextScene;
            setScene(themeResumeContext ? "theme_resume" : 0);
          }}
          onOpenStoryPages={() => setScene("story_pages")}
+         canOpenThemeMemories={hasCompletedStoryTheme(questionsDB, 1)}
+         onOpenThemeMemories={() => {
+           setThemeMemoryReturnScene("home");
+           setScene("theme_memory_manager");
+         }}
          onStartPhotoStory={() => setScene("photo_story_start")}
          onOpenBookBuilder={() => setScene("book_builder")}
          onOpenQuestionLibrary={() => setScene("question_library")}
@@ -7663,8 +7680,32 @@ onRetry={() => {
         <Scene_ThemeComplete
           completedTheme={STORY_THEMES.find(theme => theme.order === completedThemeOrder) || null}
           hasNextTheme={Boolean(STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1))}
+          onRequestFamilyMemory={completedThemeOrder === 1 ? () => {
+            setThemeMemoryReturnScene("theme_complete");
+            setScene("theme_memory_request");
+          } : null}
           onContinue={openNextThemeIntroduction}
           onFinish={() => leaveThemeTransition("story_pages")}
+        />
+      )}
+      {scene === "theme_memory_request" && (
+        <ThemeMemoryRequestComposer
+          supabaseClient={supabaseClient}
+          bookProjectId={foundation?.project?.id}
+          subjectName={foundation?.person?.preferred_name || foundation?.person?.display_name || user?.name || "あなた"}
+          onBack={() => setScene(themeMemoryReturnScene || "home")}
+          onSent={() => {}}
+        />
+      )}
+      {scene === "theme_memory_manager" && (
+        <ThemeMemoryRequestManager
+          supabaseClient={supabaseClient}
+          bookProjectId={foundation?.project?.id}
+          onBack={() => setScene("home")}
+          onStartNew={() => {
+            setThemeMemoryReturnScene("theme_memory_manager");
+            setScene("theme_memory_request");
+          }}
         />
       )}
       {scene === "theme_intro" && foundation?.project?.onboarding_status === "completed" && (
@@ -9938,7 +9979,7 @@ function Scene_HajimariComplete({ onContinue }) {
   );
 }
 
-function Scene_ThemeComplete({ completedTheme, hasNextTheme, onContinue, onFinish }) {
+function Scene_ThemeComplete({ completedTheme, hasNextTheme, onRequestFamilyMemory, onContinue, onFinish }) {
   if (!completedTheme) return null;
   return (
     <div className="flow-scene-shell fade-enter">
@@ -9954,6 +9995,19 @@ function Scene_ThemeComplete({ completedTheme, hasNextTheme, onContinue, onFinis
           <span className="h-3 w-3 rounded-full bg-amber-100/25 shadow-[0_0_22px_rgba(254,243,199,0.18)]" />
           <span className="h-px w-12 bg-gradient-to-l from-transparent to-amber-100/30" />
         </div>
+
+        {onRequestFamilyMemory && (
+          <button type="button" onClick={onRequestFamilyMemory} className="mb-4 w-full rounded-[1.5rem] border border-amber-100/15 bg-amber-50/[0.035] px-5 py-5 text-left">
+            <span className="flex items-center gap-4">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-100/[0.08]"><Users size={20} className="text-amber-50/62" strokeWidth={1.6} /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-narrative text-[0.95rem] text-white/82">家族の記憶を添えてみる</span>
+                <span className="mt-1 block text-xs leading-relaxed text-white/34">同じ頃を知る人へ、1〜3問だけ聞けます</span>
+              </span>
+              <ChevronRight size={17} className="text-white/25" />
+            </span>
+          </button>
+        )}
 
         {hasNextTheme ? (
           <button type="button" onClick={onContinue} className="btn-quiet w-full rounded-full bg-white/10 py-4 text-white">
@@ -12540,6 +12594,8 @@ function Scene_Home({
   sentFamilyInvitations = [],
   onStartTalking,
   onOpenStoryPages,
+  canOpenThemeMemories = false,
+  onOpenThemeMemories,
   onStartPhotoStory,
   onOpenBookBuilder,
   onOpenQuestionLibrary,
@@ -12633,11 +12689,21 @@ function Scene_Home({
 
           <section>
             <p className="text-white/34 text-xs tracking-[0.18em] px-1 mb-3">これまで</p>
-            <HomeMenuButton
-              icon={Files}
-              label="語りを見る"
-              onClick={onOpenStoryPages}
-            />
+            <div className="space-y-3">
+              <HomeMenuButton
+                icon={Files}
+                label="語りを見る"
+                onClick={onOpenStoryPages}
+              />
+              {canOpenThemeMemories && (
+                <HomeMenuButton
+                  icon={Users}
+                  label="家族から聞いた記憶"
+                  detail="お願いした思い出と、届いた回答を確認します"
+                  onClick={onOpenThemeMemories}
+                />
+              )}
+            </div>
           </section>
 
           <section className="pt-6 border-t border-white/[0.08]">
@@ -18581,6 +18647,7 @@ function Scene_StoryPages({
   const [preparingPhotoPath, setPreparingPhotoPath] = useState(null);
   const [replacingPhotoPath, setReplacingPhotoPath] = useState(null);
   const [videoStories, setVideoStories] = useState([]);
+  const [approvedThemeMemories, setApprovedThemeMemories] = useState([]);
   const [videoFlowOpen, setVideoFlowOpen] = useState(false);
 
   const [editSelectedStyle, setEditSelectedStyle] = useState("readable");
@@ -18648,8 +18715,30 @@ const loadAnswers = async (options = {}) => {
 
         if (videoError) throw videoError;
         setVideoStories(videoRows || []);
+
+        try {
+          const { data: memoryListData, error: memoryListError } = await supabaseClient.functions.invoke(
+            "theme-memory-request-response",
+            { body: { action: "list_owner", bookProjectId: foundation.project.id } }
+          );
+          if (memoryListError || !memoryListData?.success) throw memoryListError || new Error(memoryListData?.error);
+          const approvedRequests = (memoryListData.requests || []).filter(item => item.status === "approved");
+          const memoryDetails = await Promise.all(approvedRequests.map(async item => {
+            const { data: detailData, error: detailError } = await supabaseClient.functions.invoke(
+              "theme-memory-request-response",
+              { body: { action: "owner_preview", requestId: item.id } }
+            );
+            if (detailError || !detailData?.success) return null;
+            return detailData;
+          }));
+          setApprovedThemeMemories(memoryDetails.filter(Boolean));
+        } catch (memoryError) {
+          console.warn("approved theme memories load error", memoryError);
+          setApprovedThemeMemories([]);
+        }
       } else {
         setVideoStories([]);
+        setApprovedThemeMemories([]);
       }
 
       if (foundation?.project?.id) {
@@ -19041,6 +19130,13 @@ useEffect(() => {
   );
   const selectedChapter = chapterSections[safeChapterIndex] || null;
   const visibleAnswers = selectedChapter?.answers || [];
+  const selectedChapterIsChildhood = Boolean(
+    selectedChapter && (
+      selectedChapter.chapterTitle?.includes("幼") ||
+      visibleAnswers.some(answer => Number(getQuestionForAnswer(answer)?.theme_order) === 1)
+    )
+  );
+  const visibleThemeMemories = selectedChapterIsChildhood ? approvedThemeMemories : [];
 
 return (
   <div className="h-full flex flex-col fade-enter px-4 pt-0 pb-4 -mt-8 overflow-hidden">
@@ -19284,14 +19380,15 @@ return (
           <div className="h-full flex items-center justify-center">
             <p className="text-white/35 text-sm tracking-widest animate-pulse">読み込んでいます...</p>
           </div>
-        ) : visibleAnswers.length === 0 ? (
+        ) : visibleAnswers.length === 0 && visibleThemeMemories.length === 0 ? (
           <div className="h-full flex items-center justify-center text-center">
           <p className="text-white/35 text-sm leading-loose">
             まだ語られていません
           </p>
           </div>
         ) : (
-          visibleAnswers.map((answer) => {
+          <>
+          {visibleAnswers.map((answer) => {
             const body = getStoryBody(answer);
             const questionText = getQuestionTextForAnswer(answer);
 
@@ -19398,7 +19495,48 @@ return (
 
               </article>
             );
-          })
+          })}
+          {visibleThemeMemories.map(memory => {
+            const response = memory.response || {};
+            const mediaUrls = memory.mediaUrls || {};
+            const contributions = [
+              ...(response.answers || []),
+              ...(
+                response.extra_response?.mode !== "none" &&
+                (response.extra_response?.text || response.extra_response?.audioPath)
+                  ? [response.extra_response]
+                  : []
+              )
+            ];
+            return (
+              <article key={memory.request.id} className="glass-card p-5 text-left">
+                <div className="mb-5 flex items-center gap-3 border-b border-white/[0.07] pb-4">
+                  <Users size={18} className="text-amber-100/52" strokeWidth={1.6} />
+                  <div>
+                    <p className="text-[0.68rem] tracking-[0.16em] text-amber-100/42">家族から聞いた記憶</p>
+                    <p className="mt-1 text-sm text-white/58">{withHonorific(memory.request.recipientName)}から</p>
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  {contributions.map((item, index) => (
+                    <div key={`${item.questionId || "extra"}-${index}`}>
+                      {item.prompt && <p className="border-l-2 border-amber-400/45 pl-4 text-[0.85rem] leading-[1.8] text-white/48">{item.prompt}</p>}
+                      {item.text && <p className="mt-3 whitespace-pre-wrap text-narrative text-[0.96rem] leading-[2.1] text-white/74">{item.text}</p>}
+                      {item.audioPath && mediaUrls[item.audioPath] && <audio controls src={mediaUrls[item.audioPath]} className="mt-4 w-full" />}
+                    </div>
+                  ))}
+                </div>
+                {(response.photo_paths || []).length > 0 && (
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    {response.photo_paths.map(path => mediaUrls[path] && (
+                      <img key={path} src={mediaUrls[path]} alt="家族から届いた写真" className="aspect-square w-full rounded-2xl object-cover" />
+                    ))}
+                  </div>
+                )}
+              </article>
+            );
+          })}
+          </>
         )}
       </div>
 

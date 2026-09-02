@@ -5,6 +5,7 @@ import LandingPage from "./LandingPage.jsx";
 import AdminReview from "./admin/AdminReview.jsx";
 import VoiceLibraryPage from "./VoiceLibraryPage.jsx";
 import VoicePlaybackPage from "./VoicePlaybackPage.jsx";
+import { ThemeMemoryRequestRecipient } from "./ThemeMemoryRequestFlow.jsx";
 import "./index.css";
 
 function shouldOpenApplication() {
@@ -27,6 +28,15 @@ function shouldOpenApplication() {
 
 function RootScreen() {
   const params = new URLSearchParams(window.location.search);
+
+  if (params.has("memory_request")) {
+    return (
+      <ThemeMemoryRequestRecipient
+        supabaseClient={adminSupabaseClient}
+        requestId={params.get("memory_request") || ""}
+      />
+    );
+  }
 
   if (params.has("voice")) {
     return (

@@ -39,3 +39,8 @@ verify_jwt = false
 
 [functions.sync-checkout-session]
 verify_jwt = false
+
+# 回答する家族はアカウントを持たないため、十分に長い依頼IDを使い、
+# 関数内で公開範囲を最小限に検証する。
+[functions.theme-memory-request-response]
+verify_jwt = false
