@@ -50,8 +50,8 @@ const STORY_THEMES = [
     opening: "あの頃にしかなかった時間へ、戻ってみましょう。",
     hint: "卒業アルバムや当時よく聴いた音楽、通っていた道が、記憶の入口になるかもしれません。",
     completion: "若い日の時間が、ひとつの章になりました。",
-    image: "/site/theme-childhood-classroom.jpg",
-    imageAlt: "放課後の光が差し込む、静かな教室",
+    image: "/site/theme-student-triptych.jpg",
+    imageAlt: "友人、部活動と淡い恋、卒業と恩師をつないだ学生時代の情景",
     visual: "youth"
   },
   {
