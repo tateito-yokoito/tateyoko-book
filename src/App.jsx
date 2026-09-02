@@ -43,7 +43,7 @@ const STORY_THEMES = [
   },
   {
     code: "ty_theme_youth",
-    label: "学生時代・若い頃",
+    label: "学生時代",
     order: 2,
     summary: "学びや出会い、夢中になったことをたどります。",
     opening: "あの頃にしかなかった時間へ、戻ってみましょう。",
