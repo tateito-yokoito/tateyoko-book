@@ -74,6 +74,8 @@ const STORY_THEMES = [
     opening: "何気ない暮らしの中にも、残しておきたい景色があります。",
     hint: "長く使っている道具や、思い出の料理、窓から見えていた景色を手がかりにしてみましょう。",
     completion: "日々の風景が、物語の中に灯りました。",
+    image: "/site/theme-living-triptych.jpg",
+    imageAlt: "住まいの朝、ペットとの日常、列車の旅をつないだ暮らしの情景",
     visual: "living"
   },
   {
