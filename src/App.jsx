@@ -62,6 +62,8 @@ const STORY_THEMES = [
     opening: "好きだったもののそばには、その頃の自分がいます。",
     hint: "今も手元にあるものや、何度も聴いた曲、好きだった味を一つ思い浮かべてみてください。",
     completion: "あなたを彩ってきたものが、物語に加わりました。",
+    image: "/site/theme-likes-triptych.jpg",
+    imageAlt: "読書と音楽、自然の写真、仲間とのものづくりをつないだ好きなことの情景",
     visual: "likes"
   },
   {
