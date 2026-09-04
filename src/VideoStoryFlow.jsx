@@ -43,6 +43,10 @@ function extensionFor(type, fallback = "webm") {
   return fallback;
 }
 
+function baseMimeType(type, fallback) {
+  return String(type || "").split(";", 1)[0].trim().toLowerCase() || fallback;
+}
+
 function getQuestionText(answer, questionSet) {
   const question = (questionSet || []).find((item) => (
     Number(item.sequence_order) === Number(answer.sequence_order)
@@ -90,7 +94,11 @@ async function resumableUpload({ supabaseClient, file, path, onProgress }) {
       metadata: {
         bucketName: VIDEO_BUCKET,
         objectName: path,
-        contentType: file.type || "video/webm",
+        // Safari includes codec parameters (for example
+        // "video/mp4; codecs=avc1...,mp4a..."). Storage bucket allow-lists
+        // compare the media type itself, so upload the standards-compliant
+        // base MIME type while retaining the same MP4/WebM bytes.
+        contentType: baseMimeType(file.type, "video/webm"),
         cacheControl: "3600"
       },
       uploadSize: file.size,
@@ -452,13 +460,15 @@ export default function VideoStoryFlow({
     const audioPath = audioBlob
       ? `${rootPath}/audio.${extensionFor(audioBlob.type)}`
       : null;
+    const videoContentType = baseMimeType(videoBlob.type, "video/webm");
+    const audioContentType = audioBlob ? baseMimeType(audioBlob.type, "audio/webm") : null;
     let posterPath = null;
     const uploadedPaths = [];
 
     try {
       await resumableUpload({
         supabaseClient,
-        file: new File([videoBlob], `video.${extensionFor(videoBlob.type)}`, { type: videoBlob.type }),
+        file: new File([videoBlob], `video.${extensionFor(videoBlob.type)}`, { type: videoContentType }),
         path: videoPath,
         onProgress: (value) => setUploadProgress(value * 0.82)
       });
@@ -469,7 +479,7 @@ export default function VideoStoryFlow({
       if (audioBlob && audioPath) {
         supportingUploads.push(
           supabaseClient.storage.from(VIDEO_BUCKET).upload(audioPath, audioBlob, {
-            contentType: audioBlob.type || "audio/webm",
+            contentType: audioContentType,
             upsert: false
           }).then(({ error }) => {
             if (error) throw error;
@@ -512,7 +522,7 @@ export default function VideoStoryFlow({
           audio_storage_path: audioPath,
           poster_storage_path: posterPath,
           duration_seconds: Math.min(MAX_VIDEO_SECONDS, elapsed),
-          mime_type: videoBlob.type || "video/webm",
+          mime_type: videoContentType,
           file_size_bytes: videoBlob.size,
           status: "processing",
           metadata: {
@@ -520,7 +530,8 @@ export default function VideoStoryFlow({
             max_duration_seconds: MAX_VIDEO_SECONDS,
             capture_width: captureDimensions?.width || null,
             capture_height: captureDimensions?.height || null,
-            capture_aspect_ratio: captureAspectRatio || null
+            capture_aspect_ratio: captureAspectRatio || null,
+            recorded_mime_type: videoBlob.type || videoContentType
           }
         });
       if (insertError) throw insertError;
