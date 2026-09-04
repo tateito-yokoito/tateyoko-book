@@ -127,6 +127,9 @@ export default function VideoStoryFlow({
   const [customPrompt, setCustomPrompt] = useState("");
   const [cameraFacing, setCameraFacing] = useState("user");
   const [cameraStatus, setCameraStatus] = useState("idle");
+  const [captureDimensions, setCaptureDimensions] = useState(null);
+  const [reviewAspectRatio, setReviewAspectRatio] = useState(null);
+  const [existingAspectRatio, setExistingAspectRatio] = useState(null);
   const [recording, setRecording] = useState(false);
   const [paused, setPaused] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -164,6 +167,15 @@ export default function VideoStoryFlow({
     [answers.length, questionSet.length]
   );
   const remainingSeconds = Math.max(0, MAX_VIDEO_SECONDS - elapsed);
+  const captureAspectRatio = captureDimensions?.width && captureDimensions?.height
+    ? captureDimensions.width / captureDimensions.height
+    : null;
+
+  const readVideoDimensions = (videoElement, setter) => {
+    const width = Number(videoElement?.videoWidth || 0);
+    const height = Number(videoElement?.videoHeight || 0);
+    if (width > 0 && height > 0) setter({ width, height });
+  };
 
   const stopCamera = () => {
     for (const track of streamRef.current?.getTracks?.() || []) track.stop();
@@ -190,6 +202,8 @@ export default function VideoStoryFlow({
     setAudioBlob(null);
     setReviewUrl("");
     setCameraStatus("idle");
+    setCaptureDimensions(null);
+    setReviewAspectRatio(null);
     setErrorMessage("");
     videoChunksRef.current = [];
     audioChunksRef.current = [];
@@ -201,6 +215,7 @@ export default function VideoStoryFlow({
     setSelectedPrompt(null);
     setExistingStory(null);
     setExistingVideoUrl("");
+    setExistingAspectRatio(null);
     setErrorMessage("");
     return () => resetCapture();
     // The capture cleanup is intentionally tied to opening/closing the flow.
@@ -233,9 +248,7 @@ export default function VideoStoryFlow({
 
     navigator.mediaDevices?.getUserMedia({
       video: {
-        facingMode: { ideal: cameraFacing },
-        width: { ideal: 720 },
-        height: { ideal: 1280 }
+        facingMode: { ideal: cameraFacing }
       },
       audio: {
         echoCancellation: true,
@@ -250,7 +263,9 @@ export default function VideoStoryFlow({
       streamRef.current = stream;
       if (cameraVideoRef.current) {
         cameraVideoRef.current.srcObject = stream;
-        cameraVideoRef.current.play().catch(() => {});
+        cameraVideoRef.current.play().then(() => {
+          if (!cancelled) readVideoDimensions(cameraVideoRef.current, setCaptureDimensions);
+        }).catch(() => {});
       }
       setCameraStatus("ready");
     }).catch((error) => {
@@ -413,6 +428,7 @@ export default function VideoStoryFlow({
 
   const switchCamera = () => {
     stopCamera();
+    setCaptureDimensions(null);
     setCameraFacing((value) => value === "user" ? "environment" : "user");
   };
 
@@ -501,7 +517,10 @@ export default function VideoStoryFlow({
           status: "processing",
           metadata: {
             recorded_facing_mode: cameraFacing,
-            max_duration_seconds: MAX_VIDEO_SECONDS
+            max_duration_seconds: MAX_VIDEO_SECONDS,
+            capture_width: captureDimensions?.width || null,
+            capture_height: captureDimensions?.height || null,
+            capture_aspect_ratio: captureAspectRatio || null
           }
         });
       if (insertError) throw insertError;
@@ -530,6 +549,7 @@ export default function VideoStoryFlow({
   const openExisting = async (story) => {
     setExistingStory(story);
     setExistingVideoUrl("");
+    setExistingAspectRatio(null);
     setPhase("existing");
     setErrorMessage("");
     const { data, error } = await supabaseClient.storage
@@ -707,8 +727,18 @@ export default function VideoStoryFlow({
 
           {phase === "camera" && (
             <div className="flex min-h-full flex-col">
-              <div className="relative aspect-[3/4] w-full overflow-hidden rounded-[2rem] border border-white/10 bg-black">
-                <video ref={cameraVideoRef} muted playsInline autoPlay className={`h-full w-full object-cover ${cameraFacing === "user" ? "-scale-x-100" : ""}`} />
+              <div
+                className="relative w-full overflow-hidden rounded-[2rem] border border-white/10 bg-black"
+                style={{ aspectRatio: captureAspectRatio || "3 / 4" }}
+              >
+                <video
+                  ref={cameraVideoRef}
+                  muted
+                  playsInline
+                  autoPlay
+                  onLoadedMetadata={(event) => readVideoDimensions(event.currentTarget, setCaptureDimensions)}
+                  className={`h-full w-full object-contain ${cameraFacing === "user" ? "-scale-x-100" : ""}`}
+                />
                 {cameraStatus === "opening" && <div className="absolute inset-0 flex items-center justify-center text-sm text-white/55">カメラをひらいています…</div>}
                 {countdown > 0 && <div className="absolute inset-0 flex items-center justify-center bg-black/25 text-7xl text-white">{countdown}</div>}
                 {recording && <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/45 px-3 py-2 text-sm"><span className="h-2.5 w-2.5 rounded-full bg-red-400" />{formatTime(elapsed)}</div>}
@@ -734,7 +764,20 @@ export default function VideoStoryFlow({
           {phase === "review" && reviewUrl && (
             <div className="pt-1">
               <h1 className="mb-4 text-center text-[1.08rem] text-white/85 text-narrative">このビデオを残しますか？</h1>
-              <video ref={reviewVideoRef} src={reviewUrl} controls playsInline preload="metadata" className="aspect-[3/4] w-full rounded-[2rem] border border-white/10 bg-black object-contain" />
+              <video
+                ref={reviewVideoRef}
+                src={reviewUrl}
+                controls
+                playsInline
+                preload="metadata"
+                onLoadedMetadata={(event) => {
+                  const width = Number(event.currentTarget.videoWidth || 0);
+                  const height = Number(event.currentTarget.videoHeight || 0);
+                  if (width > 0 && height > 0) setReviewAspectRatio(width / height);
+                }}
+                className="w-full rounded-[2rem] border border-white/10 bg-black object-contain"
+                style={{ aspectRatio: captureAspectRatio || reviewAspectRatio || "3 / 4" }}
+              />
               <p className="mt-3 text-center text-sm text-white/40">{formatTime(elapsed)}</p>
               {errorMessage && <p className="mt-3 rounded-2xl border border-red-200/10 bg-red-200/[0.04] px-4 py-3 text-center text-sm leading-loose text-red-100/75">{errorMessage}</p>}
               <div className="mt-6 grid grid-cols-2 gap-3">
@@ -759,7 +802,20 @@ export default function VideoStoryFlow({
             <div className="pt-1">
               <h1 className="mb-4 text-center text-[1.08rem] text-white/85 text-narrative">{existingStory.title || existingStory.prompt_text || "残したビデオ"}</h1>
               {existingVideoUrl
-                ? <video src={existingVideoUrl} poster={posterUrls[existingStory.id] || undefined} controls playsInline preload="metadata" className="aspect-[3/4] w-full rounded-[2rem] border border-white/10 bg-black object-contain" />
+                ? <video
+                    src={existingVideoUrl}
+                    poster={posterUrls[existingStory.id] || undefined}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    onLoadedMetadata={(event) => {
+                      const width = Number(event.currentTarget.videoWidth || 0);
+                      const height = Number(event.currentTarget.videoHeight || 0);
+                      if (width > 0 && height > 0) setExistingAspectRatio(width / height);
+                    }}
+                    className="w-full rounded-[2rem] border border-white/10 bg-black object-contain"
+                    style={{ aspectRatio: existingAspectRatio || existingStory.metadata?.capture_aspect_ratio || "3 / 4" }}
+                  />
                 : <div className="flex aspect-[3/4] w-full items-center justify-center rounded-[2rem] border border-white/10 bg-black/50 text-sm text-white/40">ビデオをひらいています…</div>}
               {existingStory.prompt_text && <p className="mt-5 text-center text-[0.95rem] leading-loose text-white/58 text-narrative">{existingStory.prompt_text}</p>}
               {existingStory.transcript_text && <div className="glass-card mt-5 p-5"><p className="whitespace-pre-wrap text-sm leading-[2] text-white/55 text-narrative">{existingStory.transcript_text}</p></div>}
