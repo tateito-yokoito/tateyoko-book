@@ -86,6 +86,8 @@ const STORY_THEMES = [
     opening: "積み重ねてきた時間に、あらためて目を向けます。",
     hint: "初めて働いた場所、使っていた道具、忘れられない人の顔から思い出してみるのもよさそうです。",
     completion: "歩みを支えた仕事と役割が、ひとつの章になりました。",
+    image: "/site/theme-work-role-triptych.jpg",
+    imageAlt: "家族のための食事づくり、職場での協働、地域での共同作業をつないだ仕事と役割の情景",
     visual: "work"
   },
   {
