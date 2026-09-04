@@ -98,6 +98,8 @@ const STORY_THEMES = [
     opening: "人を思い出すとき、その頃の自分も見えてきます。",
     hint: "年賀状や古い連絡先、集合写真に写る人を眺めてみると、忘れていた出来事が浮かぶかもしれません。",
     completion: "大切なつながりが、物語の中に結ばれました。",
+    image: "/site/theme-connections-triptych.jpg",
+    imageAlt: "恩師と学生、職場の仲間、旧友との再会をつないだ人とのつながりの情景",
     visual: "connections"
   },
   {
