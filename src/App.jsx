@@ -110,6 +110,8 @@ const STORY_THEMES = [
     opening: "家族の記憶には、言葉になっていない気持ちがあります。",
     hint: "家族の口癖や食卓の風景、季節ごとの習慣を一つ思い出してみてください。",
     completion: "家族と過ごした時間が、物語に受け継がれました。",
+    image: "/site/theme-family-memory-triptych.jpg",
+    imageAlt: "雨の日に世話をする両親、祖父母と楽しむ線香花火、三世代で祝う傘寿をつないだ家族の情景",
     visual: "family"
   },
   {
