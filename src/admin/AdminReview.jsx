@@ -103,6 +103,38 @@ function deliveryEventAt(item) {
   return item?.event_at || item?.answered_at || item?.opened_at || item?.delivered_at || item?.sent_at || item?.attempted_at || item?.scheduled_for || item?.created_at;
 }
 
+function voicePublicationReadiness(detail) {
+  const publishableAnswers = (detail?.answers || []).filter(answer => answer?.access_override !== "private_forever");
+  const audioAnswerCount = publishableAnswers.filter(answer =>
+    (answer?.media || []).some(media => media?.asset_type === "audio")
+  ).length;
+
+  if (publishableAnswers.length === 0) {
+    return {
+      canPublish: false,
+      message: "まだ公開できる語りがありません。公開可能な音声付きの語りを1件以上保存すると生成できます。"
+    };
+  }
+  if (audioAnswerCount === 0) {
+    return {
+      canPublish: false,
+      message: "公開できる音声がまだありません。音声付きの語りを1件以上保存すると生成できます。"
+    };
+  }
+  return { canPublish: true, message: "" };
+}
+
+function voicePublicationErrorMessage(message) {
+  const value = String(message || "").trim();
+  if (value.includes("公開できる語りがありません")) {
+    return "まだ公開できる語りがありません。公開可能な音声付きの語りを1件以上保存すると生成できます。";
+  }
+  if (value.includes("公開できる音声がありません")) {
+    return "公開できる音声がまだありません。音声付きの語りを1件以上保存すると生成できます。";
+  }
+  return value || "限定公開を生成できませんでした。時間をおいて、もう一度お試しください。";
+}
+
 function formatDate(value, withTime = true) {
   if (!value) return "—";
   const date = new Date(value);
@@ -1437,6 +1469,7 @@ function DetailPanel({
   onOpenBookPreview,
   previewLoading,
   voicePublicationBusy,
+  voicePublicationError,
   onPublishVoiceEdition,
   onDisableVoiceEdition,
   onResumeVoiceEdition,
@@ -1452,6 +1485,7 @@ function DetailPanel({
     : preference && Number.isFinite(Number(preference.weekday)) && Number.isFinite(Number(preference.hour))
       ? [preference]
       : [];
+  const publicationReadiness = voicePublicationReadiness(detail);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35 backdrop-blur-[2px]" onMouseDown={onClose}>
@@ -1568,15 +1602,33 @@ function DetailPanel({
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  disabled={voicePublicationBusy}
-                  onClick={onPublishVoiceEdition}
-                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white transition hover:bg-slate-800 disabled:opacity-40"
-                >
-                  {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <BookOpen size={15} />}
-                  限定公開を生成
-                </button>
+                <div className="mt-4">
+                  {!publicationReadiness.canPublish && (
+                    <div role="alert" className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+                      <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                      <span>{publicationReadiness.message}</span>
+                    </div>
+                  )}
+                  {!!voicePublicationError && (
+                    <div role="alert" className="mb-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs leading-5 text-rose-700">
+                      <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                      <span>{voicePublicationError}</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    disabled={voicePublicationBusy || !publicationReadiness.canPublish}
+                    onClick={onPublishVoiceEdition}
+                    aria-describedby={!publicationReadiness.canPublish ? "voice-publication-requirement" : undefined}
+                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <BookOpen size={15} />}
+                    限定公開を生成
+                  </button>
+                  {!publicationReadiness.canPublish && (
+                    <p id="voice-publication-requirement" className="sr-only">{publicationReadiness.message}</p>
+                  )}
+                </div>
               )}
             </section>
 
@@ -1728,6 +1780,7 @@ export default function AdminReview({ supabaseClient }) {
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [voicePublicationBusy, setVoicePublicationBusy] = useState(false);
+  const [voicePublicationError, setVoicePublicationError] = useState("");
   const [attentionActionId, setAttentionActionId] = useState("");
   const [accountDetailId, setAccountDetailId] = useState(null);
   const [accountDetail, setAccountDetail] = useState(null);
@@ -2313,6 +2366,7 @@ export default function AdminReview({ supabaseClient }) {
     setAccountDetail(null);
     setDetailId(projectId);
     setDetail(null);
+    setVoicePublicationError("");
     setDetailLoading(true);
 
     try {
@@ -2369,12 +2423,18 @@ export default function AdminReview({ supabaseClient }) {
 
   async function publishVoiceEdition() {
     if (!detailId || voicePublicationBusy) return;
+    const readiness = voicePublicationReadiness(detail);
+    if (!readiness.canPublish) {
+      setVoicePublicationError(readiness.message);
+      return;
+    }
     const confirmed = window.confirm(
       "この物語の語り・音声・写真・氏名を、URLを知っている方が閲覧できる限定公開として生成します。続けますか？"
     );
     if (!confirmed) return;
 
     setVoicePublicationBusy(true);
+    setVoicePublicationError("");
     setError("");
     setNotice("");
     try {
@@ -2399,7 +2459,7 @@ export default function AdminReview({ supabaseClient }) {
       setNotice(`Web冊子・音声プレイヤーを限定公開しました（語り${Number(data.itemCount || 0)}件）。`);
     } catch (publishError) {
       console.error("voice publication error", publishError);
-      setError(publishError?.message || "限定公開を生成できませんでした。");
+      setVoicePublicationError(voicePublicationErrorMessage(publishError?.message));
     } finally {
       setVoicePublicationBusy(false);
     }
@@ -2816,13 +2876,14 @@ export default function AdminReview({ supabaseClient }) {
           onOpenStoryPreview={() => openPreview("stories")}
           onOpenBookPreview={() => openPreview("book")}
           voicePublicationBusy={voicePublicationBusy}
+          voicePublicationError={voicePublicationError}
           onPublishVoiceEdition={publishVoiceEdition}
           onDisableVoiceEdition={disableVoiceEdition}
           onResumeVoiceEdition={resumeVoiceEdition}
           attentionBusy={attentionActionId}
           onRetryAttention={retryAttentionDelivery}
           onResolveAttention={resolveAttention}
-          onClose={() => { closePreview(); setDetailId(null); setDetail(null); }}
+          onClose={() => { closePreview(); setVoicePublicationError(""); setDetailId(null); setDetail(null); }}
         />
       )}
 
