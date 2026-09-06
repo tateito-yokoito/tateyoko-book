@@ -131,8 +131,6 @@ serve(async (req) => {
       });
     }
 
-    if (items.length === 0) throw new HttpError("Not found", 404);
-
     const videos = [];
     const videoAssets = Array.isArray(publication.video_assets) ? publication.video_assets : [];
     for (let videoIndex = 0; videoIndex < videoAssets.length; videoIndex += 1) {
@@ -150,6 +148,8 @@ serve(async (req) => {
         hasPoster: String(video?.posterStoragePath || "").startsWith(`published/${publication.id}/videos/`)
       });
     }
+
+    if (items.length === 0 && videos.length === 0) throw new HttpError("Not found", 404);
 
     return jsonResponse({
       success: true,

@@ -108,29 +108,23 @@ function voicePublicationReadiness(detail) {
   const audioAnswerCount = publishableAnswers.filter(answer =>
     (answer?.media || []).some(media => media?.asset_type === "audio")
   ).length;
+  const videoCount = (detail?.video_stories || []).filter(video =>
+    ["ready", "failed"].includes(video?.status) && Boolean(video?.video_storage_path)
+  ).length;
 
-  if (publishableAnswers.length === 0) {
+  if (audioAnswerCount === 0 && videoCount === 0) {
     return {
       canPublish: false,
-      message: "まだ公開できる語りがありません。公開可能な音声付きの語りを1件以上保存すると生成できます。"
+      message: "まだ公開できる音声・ビデオがありません。音声付きの語り、または保存済みのビデオを1件以上用意すると生成できます。"
     };
   }
-  if (audioAnswerCount === 0) {
-    return {
-      canPublish: false,
-      message: "公開できる音声がまだありません。音声付きの語りを1件以上保存すると生成できます。"
-    };
-  }
-  return { canPublish: true, message: "" };
+  return { canPublish: true, message: "", audioAnswerCount, videoCount };
 }
 
 function voicePublicationErrorMessage(message) {
   const value = String(message || "").trim();
-  if (value.includes("公開できる語りがありません")) {
-    return "まだ公開できる語りがありません。公開可能な音声付きの語りを1件以上保存すると生成できます。";
-  }
-  if (value.includes("公開できる音声がありません")) {
-    return "公開できる音声がまだありません。音声付きの語りを1件以上保存すると生成できます。";
+  if (value.includes("公開できる語りがありません") || value.includes("公開できる音声がありません") || value.includes("公開できる音声またはビデオがありません")) {
+    return "まだ公開できる音声・ビデオがありません。音声付きの語り、または保存済みのビデオを1件以上用意すると生成できます。";
   }
   return value || "限定公開を生成できませんでした。時間をおいて、もう一度お試しください。";
 }
@@ -1471,6 +1465,7 @@ function DetailPanel({
   voicePublicationBusy,
   voicePublicationError,
   onPublishVoiceEdition,
+  onUpdateVoiceEdition,
   onDisableVoiceEdition,
   onResumeVoiceEdition,
   attentionBusy,
@@ -1557,7 +1552,7 @@ function DetailPanel({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="flex items-center gap-2 text-sm font-medium"><BookOpen size={16} className="text-slate-400" />Web冊子・音声プレイヤー</h3>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">公開すると、URLを知っている方だけが語りと写真を閲覧できます。検索結果には表示されません。</p>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">公開すると、URLを知っている方だけが語り・写真・ビデオを閲覧できます。検索結果には表示されません。</p>
                 </div>
                 {detail.voice_publication?.status === "published" ? (
                   <StatusPill tone="success">限定公開中</StatusPill>
@@ -1567,6 +1562,19 @@ function DetailPanel({
                   <StatusPill tone="neutral">未公開</StatusPill>
                 )}
               </div>
+
+              {!publicationReadiness.canPublish && (
+                <div role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                  <span>{publicationReadiness.message}</span>
+                </div>
+              )}
+              {!!voicePublicationError && (
+                <div role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs leading-5 text-rose-700">
+                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                  <span>{voicePublicationError}</span>
+                </div>
+              )}
 
               {detail.voice_publication?.status === "published" ? (
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -1580,6 +1588,15 @@ function DetailPanel({
                   </a>
                   <button
                     type="button"
+                    disabled={voicePublicationBusy || !publicationReadiness.canPublish}
+                    onClick={onUpdateVoiceEdition}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+                    限定公開を更新
+                  </button>
+                  <button
+                    type="button"
                     disabled={voicePublicationBusy}
                     onClick={onDisableVoiceEdition}
                     className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-4 py-2.5 text-sm text-rose-700 transition hover:bg-rose-50 disabled:opacity-40"
@@ -1591,30 +1608,29 @@ function DetailPanel({
               ) : detail.voice_publication?.status === "disabled" ? (
                 <div className="mt-4">
                   <p className="mb-3 text-xs leading-5 text-amber-700">同じQR・URLのまま公開を再開できます。アクセス状況を確認してから再開してください。</p>
-                  <button
-                    type="button"
-                    disabled={voicePublicationBusy}
-                    onClick={onResumeVoiceEdition}
-                    className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm text-amber-800 transition hover:bg-amber-50 disabled:opacity-40"
-                  >
-                    {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <BookOpen size={15} />}
-                    公開を再開
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={voicePublicationBusy}
+                      onClick={onResumeVoiceEdition}
+                      className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm text-amber-800 transition hover:bg-amber-50 disabled:opacity-40"
+                    >
+                      {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <BookOpen size={15} />}
+                      公開を再開
+                    </button>
+                    <button
+                      type="button"
+                      disabled={voicePublicationBusy || !publicationReadiness.canPublish}
+                      onClick={onUpdateVoiceEdition}
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+                      限定公開を更新
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="mt-4">
-                  {!publicationReadiness.canPublish && (
-                    <div role="alert" className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
-                      <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                      <span>{publicationReadiness.message}</span>
-                    </div>
-                  )}
-                  {!!voicePublicationError && (
-                    <div role="alert" className="mb-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs leading-5 text-rose-700">
-                      <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                      <span>{voicePublicationError}</span>
-                    </div>
-                  )}
                   <button
                     type="button"
                     disabled={voicePublicationBusy || !publicationReadiness.canPublish}
@@ -2370,19 +2386,24 @@ export default function AdminReview({ supabaseClient }) {
     setDetailLoading(true);
 
     try {
-      const [detailResult, purchaseResult, activityResult, deliveryResult, publicationResult] = await Promise.all([
+      const [detailResult, purchaseResult, activityResult, deliveryResult, publicationResult, videoStoriesResult] = await Promise.all([
         supabaseClient.rpc("get_admin_project_detail", { input_project_id: projectId }),
         supabaseClient.rpc("get_admin_project_purchase", { input_project_id: projectId }),
         supabaseClient.rpc("get_admin_usage_history", { input_project_id: projectId, input_limit: 100 }),
         supabaseClient.rpc("get_admin_delivery_history", { input_project_id: projectId, input_limit: 100 }),
         supabaseClient.functions.invoke("publish-voice-edition", {
           body: { action: "status", bookProjectId: projectId }
-        })
+        }),
+        supabaseClient
+          .from("video_stories")
+          .select("id, status, video_storage_path")
+          .eq("book_project_id", projectId)
       ]);
       if (detailResult.error) throw detailResult.error;
       if (purchaseResult.error) throw purchaseResult.error;
       if (activityResult.error) throw activityResult.error;
       if (deliveryResult.error) throw deliveryResult.error;
+      if (videoStoriesResult.error) throw videoStoriesResult.error;
       if (publicationResult.error || publicationResult.data?.success === false) {
         const publicationError = await functionErrorDetails(publicationResult.error, publicationResult.data);
         console.warn("voice publication status could not be loaded", publicationError);
@@ -2396,6 +2417,7 @@ export default function AdminReview({ supabaseClient }) {
       setDetail({
         ...data,
         voice_publication: publicationResult.data?.publication || null,
+        video_stories: videoStoriesResult.data || [],
         purchase: purchaseResult.data || {},
         activities: (activityResult.data || []).map(activity => ({
           ...activity,
@@ -2456,10 +2478,48 @@ export default function AdminReview({ supabaseClient }) {
           published_at: data.publishedAt
         }
       } : current);
-      setNotice(`Web冊子・音声プレイヤーを限定公開しました（語り${Number(data.itemCount || 0)}件）。`);
+      setNotice(`Web冊子・音声プレイヤーを限定公開しました（音声${Number(data.itemCount || 0)}件・ビデオ${Number(data.videoCount || 0)}件）。`);
     } catch (publishError) {
       console.error("voice publication error", publishError);
       setVoicePublicationError(voicePublicationErrorMessage(publishError?.message));
+    } finally {
+      setVoicePublicationBusy(false);
+    }
+  }
+
+  async function updateVoiceEdition() {
+    const publication = detail?.voice_publication;
+    if (!detailId || !publication?.id || voicePublicationBusy) return;
+    const readiness = voicePublicationReadiness(detail);
+    if (!readiness.canPublish) {
+      setVoicePublicationError(readiness.message);
+      return;
+    }
+    if (!window.confirm("現在の語り・音声・写真・ビデオで限定公開を更新します。同じQR・URLのまま内容が入れ替わります。続けますか？")) return;
+
+    setVoicePublicationBusy(true);
+    setVoicePublicationError("");
+    setError("");
+    setNotice("");
+    try {
+      const { data, error: updateError } = await supabaseClient.functions.invoke("publish-voice-edition", {
+        body: { action: "update", publicationId: publication.id }
+      });
+      if (updateError || data?.success === false) {
+        const details = await functionErrorDetails(updateError, data);
+        throw new Error(details?.error || "限定公開を更新できませんでした。");
+      }
+      setDetail(current => current ? {
+        ...current,
+        voice_publication: {
+          ...current.voice_publication,
+          published_at: data.publishedAt
+        }
+      } : current);
+      setNotice(`同じQR・URLのまま限定公開を更新しました（音声${Number(data.itemCount || 0)}件・ビデオ${Number(data.videoCount || 0)}件）。`);
+    } catch (updateError) {
+      console.error("voice publication update error", updateError);
+      setVoicePublicationError(voicePublicationErrorMessage(updateError?.message));
     } finally {
       setVoicePublicationBusy(false);
     }
@@ -2878,6 +2938,7 @@ export default function AdminReview({ supabaseClient }) {
           voicePublicationBusy={voicePublicationBusy}
           voicePublicationError={voicePublicationError}
           onPublishVoiceEdition={publishVoiceEdition}
+          onUpdateVoiceEdition={updateVoiceEdition}
           onDisableVoiceEdition={disableVoiceEdition}
           onResumeVoiceEdition={resumeVoiceEdition}
           attentionBusy={attentionActionId}

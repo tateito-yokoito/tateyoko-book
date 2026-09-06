@@ -133,9 +133,24 @@ serve(async (req) => {
       return jsonResponse({ success: true, publicationId, status: "disabled", disabledAt });
     }
 
-    if (action !== "publish") throw new HttpError("Unsupported action", 400);
+    if (action !== "publish" && action !== "update") throw new HttpError("Unsupported action", 400);
 
-    const bookProjectId = String(body.bookProjectId || "").trim();
+    let existingPublication: any = null;
+    let bookProjectId = String(body.bookProjectId || "").trim();
+    if (action === "update") {
+      const publicationId = String(body.publicationId || "").trim();
+      if (!isUuid(publicationId)) throw new HttpError("publicationId is required", 400);
+      const { data: publication, error: existingPublicationError } = await serviceClient
+        .from("voice_publications")
+        .select("id, public_id, book_project_id, status, access_mode")
+        .eq("id", publicationId)
+        .in("status", ["published", "disabled"])
+        .maybeSingle();
+      if (existingPublicationError) throw existingPublicationError;
+      if (!publication) throw new HttpError("Publication not found", 404);
+      existingPublication = publication;
+      bookProjectId = publication.book_project_id;
+    }
     if (!isUuid(bookProjectId)) throw new HttpError("bookProjectId is required", 400);
     await requireProjectAccess(serviceClient, bookProjectId, user.id);
 
@@ -185,13 +200,13 @@ serve(async (req) => {
 
     const answers = (answerRows || []).filter((answer) => answer.access_override !== "private_forever");
     const answerIds = answers.map((answer) => answer.id);
-    if (answerIds.length === 0) throw new HttpError("公開できる語りがありません", 409);
 
     const questionIds = Array.from(new Set(answers.map((answer) => answer.user_question_id).filter(Boolean)));
     const [
       { data: questionRows, error: questionsError },
       { data: audioRows, error: audioError },
-      { data: photoRows, error: photoError }
+      { data: photoRows, error: photoError },
+      { data: videoRows, error: videosError }
     ] = await Promise.all([
       questionIds.length > 0
         ? serviceClient
@@ -199,61 +214,72 @@ serve(async (req) => {
           .select("id, custom_question_text, question_text_snapshot, chapter_title_snapshot, chapter, sequence_order")
           .in("id", questionIds)
         : Promise.resolve({ data: [], error: null }),
+      answerIds.length > 0
+        ? serviceClient
+          .from("media_assets")
+          .select("id, answer_id, storage_path, meta_json, created_at")
+          .eq("book_project_id", bookProjectId)
+          .eq("asset_type", "audio")
+          .in("answer_id", answerIds)
+          .order("created_at", { ascending: true })
+        : Promise.resolve({ data: [], error: null }),
+      answerIds.length > 0
+        ? serviceClient
+          .from("media_assets")
+          .select("id, answer_id, storage_path, meta_json, created_at")
+          .eq("book_project_id", bookProjectId)
+          .eq("asset_type", "photo")
+          .in("answer_id", answerIds)
+          .order("created_at", { ascending: true })
+        : Promise.resolve({ data: [], error: null }),
       serviceClient
-        .from("media_assets")
-        .select("id, answer_id, storage_path, meta_json, created_at")
+        .from("video_stories")
+        .select("id, slot_order, prompt_kind, prompt_text, title, transcript_text, video_storage_path, audio_storage_path, poster_storage_path, duration_seconds, mime_type, status")
         .eq("book_project_id", bookProjectId)
-        .eq("asset_type", "audio")
-        .in("answer_id", answerIds)
-        .order("created_at", { ascending: true }),
-      serviceClient
-        .from("media_assets")
-        .select("id, answer_id, storage_path, meta_json, created_at")
-        .eq("book_project_id", bookProjectId)
-        .eq("asset_type", "photo")
-        .in("answer_id", answerIds)
-        .order("created_at", { ascending: true })
+        .in("status", ["ready", "failed"])
+        .order("slot_order", { ascending: true })
     ]);
     if (questionsError) throw questionsError;
     if (audioError) throw audioError;
     if (photoError) throw photoError;
+    if (videosError) throw videosError;
 
     const questionsById = new Map((questionRows || []).map((question) => [question.id, question]));
     const audioByAnswerId = groupAndSortMedia(audioRows || []);
     const photosByAnswerId = groupAndSortMedia(photoRows || []);
     const publishableAnswers = answers.filter((answer) => (audioByAnswerId.get(answer.id) || []).length > 0);
-    if (publishableAnswers.length === 0) throw new HttpError("公開できる音声がありません", 409);
+    if (publishableAnswers.length === 0 && (videoRows || []).length === 0) {
+      throw new HttpError("公開できる音声またはビデオがありません", 409);
+    }
 
-    const { data: videoRows, error: videosError } = await serviceClient
-      .from("video_stories")
-      .select("id, slot_order, prompt_kind, prompt_text, title, transcript_text, video_storage_path, audio_storage_path, poster_storage_path, duration_seconds, mime_type, status")
-      .eq("book_project_id", bookProjectId)
-      .in("status", ["ready", "failed"])
-      .order("slot_order", { ascending: true });
-    if (videosError) throw videosError;
+    const publicId = existingPublication?.public_id || randomHex(24);
+    let publication = existingPublication;
+    if (!publication) {
+      const { data: createdPublication, error: publicationError } = await serviceClient
+        .from("voice_publications")
+        .insert({
+          public_id: publicId,
+          book_project_id: bookProjectId,
+          status: "draft",
+          book_title: String(cover?.title || project.title || "").trim(),
+          book_subtitle: String(cover?.subtitle || "").trim(),
+          subject_name: String(subject?.display_name || subject?.preferred_name || "").trim(),
+          snapshot_schema_version: 3,
+          snapshot_metadata: {
+            footerText: String(cover?.footer_text || "").trim(),
+            sourceAnswerCount: publishableAnswers.length,
+            sourceVideoCount: (videoRows || []).length,
+            sourceProjectTitle: String(project.title || "").trim()
+          },
+          created_by: user.id
+        })
+        .select("id, public_id, book_project_id, status, access_mode")
+        .single();
+      if (publicationError) throw publicationError;
+      publication = createdPublication;
+    }
 
-    const publicId = randomHex(24);
-    const { data: publication, error: publicationError } = await serviceClient
-      .from("voice_publications")
-      .insert({
-        public_id: publicId,
-        book_project_id: bookProjectId,
-        status: "draft",
-        book_title: String(cover?.title || project.title || "").trim(),
-        book_subtitle: String(cover?.subtitle || "").trim(),
-        subject_name: String(subject?.display_name || subject?.preferred_name || "").trim(),
-        snapshot_schema_version: 3,
-        snapshot_metadata: {
-          footerText: String(cover?.footer_text || "").trim(),
-          sourceAnswerCount: publishableAnswers.length,
-          sourceVideoCount: (videoRows || []).length,
-          sourceProjectTitle: String(project.title || "").trim()
-        },
-        created_by: user.id
-      })
-      .select("id")
-      .single();
-    if (publicationError) throw publicationError;
+    const revisionId = randomHex(8);
 
     const itemRows = [];
     let itemOrder = 0;
@@ -269,7 +295,7 @@ serve(async (req) => {
         const media = sourceMedia[index];
         const part = numericPart(media.meta_json?.part, index + 1);
         const extension = safeExtension(media.storage_path);
-        const destinationPath = `published/${publication.id}/${String(itemOrder).padStart(3, "0")}/${media.id}${extension}`;
+        const destinationPath = `published/${publication.id}/revisions/${revisionId}/${String(itemOrder).padStart(3, "0")}/${media.id}${extension}`;
         const { error: copyError } = await serviceClient.storage
           .from(AUDIO_BUCKET)
           .copy(media.storage_path, destinationPath);
@@ -286,7 +312,7 @@ serve(async (req) => {
       for (let index = 0; index < sourcePhotos.length; index += 1) {
         const media = sourcePhotos[index];
         const extension = safeExtension(media.storage_path, ".jpg");
-        const destinationPath = `published/${publication.id}/${String(itemOrder).padStart(3, "0")}/${media.id}${extension}`;
+        const destinationPath = `published/${publication.id}/revisions/${revisionId}/${String(itemOrder).padStart(3, "0")}/${media.id}${extension}`;
         const { error: copyError } = await serviceClient.storage
           .from(PHOTO_BUCKET)
           .copy(media.storage_path, destinationPath);
@@ -319,14 +345,9 @@ serve(async (req) => {
       });
     }
 
-    const { error: itemsError } = await serviceClient
-      .from("voice_publication_items")
-      .insert(itemRows);
-    if (itemsError) throw itemsError;
-
     const copiedVideos = [];
     for (const videoStory of videoRows || []) {
-      const destinationRoot = `published/${publication.id}/videos/${String(videoStory.slot_order).padStart(2, "0")}`;
+      const destinationRoot = `published/${publication.id}/videos/${revisionId}/${String(videoStory.slot_order).padStart(2, "0")}`;
       const videoDestination = `${destinationRoot}/video${safeExtension(videoStory.video_storage_path)}`;
       const { error: videoCopyError } = await serviceClient.storage
         .from(VIDEO_BUCKET)
@@ -366,19 +387,34 @@ serve(async (req) => {
     }
 
     const publishedAt = new Date().toISOString();
-    const { error: publishError } = await serviceClient
-      .from("voice_publications")
-      .update({ status: "published", published_at: publishedAt, video_assets: copiedVideos })
-      .eq("id", publication.id)
-      .eq("status", "draft");
-    if (publishError) throw publishError;
+    const { error: replaceError } = await serviceClient.rpc("replace_voice_publication_snapshot", {
+      input_publication_id: publication.id,
+      input_expected_status: publication.status,
+      input_book_title: String(cover?.title || project.title || "").trim(),
+      input_book_subtitle: String(cover?.subtitle || "").trim(),
+      input_subject_name: String(subject?.display_name || subject?.preferred_name || "").trim(),
+      input_snapshot_metadata: {
+        footerText: String(cover?.footer_text || "").trim(),
+        sourceAnswerCount: publishableAnswers.length,
+        sourceVideoCount: copiedVideos.length,
+        sourceProjectTitle: String(project.title || "").trim(),
+        revisionId,
+        updatedAt: publishedAt
+      },
+      input_video_assets: copiedVideos,
+      input_items: itemRows,
+      input_published_at: publishedAt,
+      input_publish: action === "publish"
+    });
+    if (replaceError) throw replaceError;
 
     return jsonResponse({
       success: true,
       publicationId: publication.id,
       publicId,
       publicUrl: `${APP_URL}/?voice=${encodeURIComponent(publicId)}`,
-      accessMode: "link",
+      accessMode: publication.access_mode || "link",
+      updated: action === "update",
       publishedAt,
       itemCount: itemRows.length,
       videoCount: copiedVideos.length

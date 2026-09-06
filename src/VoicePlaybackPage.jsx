@@ -105,6 +105,9 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
 
   const items = publication?.items || [];
   const videos = publication?.videos || [];
+  const hasVoices = items.length > 0;
+  const hasVideos = videos.length > 0;
+  const contentsLabel = hasVoices ? (hasVideos ? "声・ビデオを選ぶ" : "声を選ぶ") : "ビデオを選ぶ";
   const currentItem = items[currentItemIndex] || null;
   const currentAsset = currentItem?.audio?.[currentPartIndex] || null;
   const currentVideo = videos[currentVideoIndex] || null;
@@ -377,9 +380,13 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
             {publication.footerText && <small>{publication.footerText}</small>}
           </div>
           <div className="voice-home-actions">
-            <button type="button" className="voice-primary-button" onClick={() => openStory(0)}>最初から聴く</button>
-            {savedProgress && <button type="button" onClick={resumeStory}>前回の続きから <small>{voiceNumber(savedProgress.itemIndex)}</small></button>}
-            <button type="button" onClick={() => setScreen("contents")}>{videos.length > 0 ? "声・ビデオを選ぶ" : "声を選ぶ"}</button>
+            {hasVoices ? (
+              <button type="button" className="voice-primary-button" onClick={() => openStory(0)}>最初から聴く</button>
+            ) : (
+              <button type="button" className="voice-primary-button" onClick={() => openVideo(0)}>最初のビデオを見る</button>
+            )}
+            {hasVoices && savedProgress && <button type="button" onClick={resumeStory}>前回の続きから <small>{voiceNumber(savedProgress.itemIndex)}</small></button>}
+            <button type="button" onClick={() => setScreen("contents")}>{contentsLabel}</button>
           </div>
         </section>
       )}
@@ -387,7 +394,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
       {screen === "contents" && (
         <section className="voice-contents">
           <p className="voice-kicker">VOICE INDEX</p>
-          <h1>{videos.length > 0 ? "声・ビデオを選ぶ" : "声を選ぶ"}</h1>
+          <h1>{contentsLabel}</h1>
           {groupedItems.map((group) => (
             <div className="voice-theme" key={group.title}>
               <h2>{group.title}</h2>
@@ -438,7 +445,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
           {videoAssetStatus === "error-audio" && <p className="voice-video-audio-error">音声だけの再生をひらけませんでした。</p>}
           {currentVideo.transcript && <article className="voice-transcript"><p className="voice-kicker">WORDS</p><p>{currentVideo.transcript}</p></article>}
           <div className="voice-player-nav">
-            <button type="button" onClick={() => setScreen("contents")}>声とビデオの一覧へ</button>
+            <button type="button" onClick={() => setScreen("contents")}>{hasVoices ? "声とビデオの一覧へ" : "ビデオの一覧へ"}</button>
             {currentVideoIndex < videos.length - 1 && <button type="button" onClick={() => openVideo(currentVideoIndex + 1)}>次のビデオへ</button>}
           </div>
         </section>
