@@ -122,6 +122,8 @@ const STORY_THEMES = [
     opening: "振り返ると、道が大きく動いた瞬間があります。",
     hint: "住む場所が変わった日、新しい役割を引き受けた時、誰かの言葉に背中を押された場面を思い返してみましょう。",
     completion: "人生を動かした出来事が、ひとつの章になりました。",
+    image: "/site/theme-turning-points.jpg",
+    imageAlt: "朝の光が差す町の分岐路を、一人の人物が歩いていく情景",
     visual: "turning-points"
   },
   {
