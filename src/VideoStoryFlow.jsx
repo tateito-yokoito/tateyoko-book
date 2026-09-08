@@ -74,6 +74,69 @@ async function makePoster(videoElement) {
   return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
 }
 
+function waitForMediaEvent(target, eventName, timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error(`${eventName} timed out`));
+    }, timeoutMs);
+    const onEvent = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(target.error || new Error(`video ${eventName} failed`));
+    };
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      target.removeEventListener(eventName, onEvent);
+      target.removeEventListener("error", onError);
+    };
+    target.addEventListener(eventName, onEvent, { once: true });
+    target.addEventListener("error", onError, { once: true });
+  });
+}
+
+async function makePosterFromVideoUrl(url) {
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.crossOrigin = "anonymous";
+  video.src = url;
+
+  try {
+    video.load();
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      await waitForMediaEvent(video, "loadeddata");
+    }
+
+    const duration = Number(video.duration || 0);
+    const targetTime = Number.isFinite(duration) && duration > 0.15
+      ? Math.min(0.6, Math.max(0.1, duration * 0.12))
+      : 0;
+    if (targetTime > 0 && Math.abs(video.currentTime - targetTime) > 0.03) {
+      const seeked = waitForMediaEvent(video, "seeked");
+      video.currentTime = targetTime;
+      await seeked;
+    }
+
+    if (typeof video.requestVideoFrameCallback === "function") {
+      await Promise.race([
+        new Promise((resolve) => video.requestVideoFrameCallback(() => resolve())),
+        new Promise((resolve) => window.setTimeout(resolve, 1000))
+      ]);
+    } else {
+      await new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+    }
+    return await makePoster(video);
+  } finally {
+    video.removeAttribute("src");
+    video.load();
+  }
+}
+
 async function resumableUpload({ supabaseClient, file, path, onProgress }) {
   const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
   if (sessionError || !session?.access_token) throw new Error("ログイン情報を確認できませんでした");
@@ -168,6 +231,10 @@ export default function VideoStoryFlow({
   const pausedAtRef = useRef(0);
   const totalPausedMsRef = useRef(0);
   const stoppedRecordersRef = useRef(0);
+  const posterBlobRef = useRef(null);
+  const posterCaptureTimerRef = useRef(null);
+  const posterBackfillAttemptedRef = useRef(new Set());
+  const onReloadRef = useRef(onReload);
 
   const projectId = foundation?.project?.id || "";
   const recommendedPrompt = useMemo(
@@ -178,6 +245,11 @@ export default function VideoStoryFlow({
   const captureAspectRatio = captureDimensions?.width && captureDimensions?.height
     ? captureDimensions.width / captureDimensions.height
     : null;
+  const storyPosterSignature = useMemo(
+    () => stories.map((story) => `${story.id}:${story.poster_storage_path || ""}`).join("|"),
+    [stories]
+  );
+  onReloadRef.current = onReload;
 
   const readVideoDimensions = (videoElement, setter) => {
     const width = Number(videoElement?.videoWidth || 0);
@@ -200,6 +272,8 @@ export default function VideoStoryFlow({
 
   const resetCapture = () => {
     clearTimer();
+    if (posterCaptureTimerRef.current) window.clearTimeout(posterCaptureTimerRef.current);
+    posterCaptureTimerRef.current = null;
     stopCamera();
     if (reviewUrl) URL.revokeObjectURL(reviewUrl);
     setRecording(false);
@@ -215,6 +289,7 @@ export default function VideoStoryFlow({
     setErrorMessage("");
     videoChunksRef.current = [];
     audioChunksRef.current = [];
+    posterBlobRef.current = null;
   };
 
   useEffect(() => {
@@ -237,16 +312,57 @@ export default function VideoStoryFlow({
     }
     let cancelled = false;
     Promise.all(stories.map(async (story) => {
-      if (!story.poster_storage_path) return [story.id, ""];
-      const { data } = await supabaseClient.storage
-        .from(VIDEO_BUCKET)
-        .createSignedUrl(story.poster_storage_path, 60 * 60);
-      return [story.id, data?.signedUrl || ""];
-    })).then((entries) => {
-      if (!cancelled) setPosterUrls(Object.fromEntries(entries));
+      if (story.poster_storage_path) {
+        const { data } = await supabaseClient.storage
+          .from(VIDEO_BUCKET)
+          .createSignedUrl(story.poster_storage_path, 60 * 60);
+        return [story.id, data?.signedUrl || "", false];
+      }
+
+      if (
+        !story.video_storage_path
+        || !user?.id
+        || posterBackfillAttemptedRef.current.has(story.id)
+      ) return [story.id, "", false];
+
+      posterBackfillAttemptedRef.current.add(story.id);
+      try {
+        const { data: videoData, error: videoError } = await supabaseClient.storage
+          .from(VIDEO_BUCKET)
+          .createSignedUrl(story.video_storage_path, 60 * 60);
+        if (videoError || !videoData?.signedUrl) throw videoError || new Error("video URL unavailable");
+
+        const posterBlob = await makePosterFromVideoUrl(videoData.signedUrl);
+        if (!posterBlob) throw new Error("poster frame unavailable");
+        const posterPath = `${user.id}/${projectId}/${story.id}/poster.jpg`;
+        const { error: uploadError } = await supabaseClient.storage
+          .from(VIDEO_BUCKET)
+          .upload(posterPath, posterBlob, { contentType: "image/jpeg", upsert: true });
+        if (uploadError) throw uploadError;
+
+        const { error: updateError } = await supabaseClient
+          .from("video_stories")
+          .update({ poster_storage_path: posterPath })
+          .eq("id", story.id);
+        if (updateError) throw updateError;
+
+        const { data: posterData } = await supabaseClient.storage
+          .from(VIDEO_BUCKET)
+          .createSignedUrl(posterPath, 60 * 60);
+        return [story.id, posterData?.signedUrl || "", true];
+      } catch (error) {
+        console.warn("video poster backfill error", error);
+        return [story.id, "", false];
+      }
+    })).then(async (entries) => {
+      if (cancelled) return;
+      setPosterUrls(Object.fromEntries(entries.map(([id, url]) => [id, url])));
+      if (entries.some(([, , backfilled]) => backfilled)) await onReloadRef.current?.();
     });
     return () => { cancelled = true; };
-  }, [open, stories, supabaseClient]);
+    // The signature intentionally limits this effect to changes in poster data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, projectId, storyPosterSignature, supabaseClient, user?.id]);
 
   useEffect(() => {
     if (!open || phase !== "camera") return undefined;
@@ -367,6 +483,11 @@ export default function VideoStoryFlow({
 
       videoRecorder.start(1000);
       audioRecorder?.start(1000);
+      posterBlobRef.current = null;
+      posterCaptureTimerRef.current = window.setTimeout(async () => {
+        posterCaptureTimerRef.current = null;
+        posterBlobRef.current = await makePoster(cameraVideoRef.current).catch(() => null);
+      }, 700);
       startedAtRef.current = Date.now();
       setElapsed(0);
       setRecording(true);
@@ -447,6 +568,12 @@ export default function VideoStoryFlow({
 
   const saveVideo = async () => {
     if (!videoBlob || !selectedPrompt || !projectId || !user?.id) return;
+    // Capture while the review element is still mounted. Previously this ran
+    // after the large video upload, by which point the review screen (and ref)
+    // had already been removed, leaving saved videos without a poster image.
+    const preparedPosterBlob = posterBlobRef.current
+      || await makePosterFromVideoUrl(reviewUrl).catch(() => null)
+      || await makePoster(reviewVideoRef.current).catch(() => null);
     setPhase("uploading");
     setUploadProgress(0);
     setUploadMessage("ビデオを保存しています");
@@ -474,7 +601,6 @@ export default function VideoStoryFlow({
       });
       uploadedPaths.push(videoPath);
 
-      const posterBlob = await makePoster(reviewVideoRef.current).catch(() => null);
       const supportingUploads = [];
       if (audioBlob && audioPath) {
         supportingUploads.push(
@@ -487,10 +613,10 @@ export default function VideoStoryFlow({
           })
         );
       }
-      if (posterBlob) {
+      if (preparedPosterBlob) {
         posterPath = `${rootPath}/poster.jpg`;
         supportingUploads.push(
-          supabaseClient.storage.from(VIDEO_BUCKET).upload(posterPath, posterBlob, {
+          supabaseClient.storage.from(VIDEO_BUCKET).upload(posterPath, preparedPosterBlob, {
             contentType: "image/jpeg",
             upsert: false
           }).then(({ error }) => {
