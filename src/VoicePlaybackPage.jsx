@@ -7,6 +7,12 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const voiceNumber = (index) => `声 ${String(index + 1).padStart(2, "0")}`;
 const storageKey = (publicId, kind) => `tateyoko.voice.${publicId}.${kind}.v1`;
 
+function videoBrightnessFilter(value) {
+  const parsed = Number(value);
+  const percent = Number.isFinite(parsed) ? Math.min(30, Math.max(-20, Math.round(parsed))) : 0;
+  return `brightness(${100 + percent}%)`;
+}
+
 function readStored(key, fallback = null) {
   try {
     const value = window.localStorage.getItem(key);
@@ -431,7 +437,15 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
             {videoAssetStatus === "error" ? (
               <div className="voice-asset-error"><p>ビデオをひらけませんでした。</p><button type="button" onClick={() => setAssetRetry((value) => value + 1)}>もう一度試す</button></div>
             ) : currentVideoUrl ? (
-              <video ref={videoRef} src={currentVideoUrl} poster={currentVideoPosterUrl || undefined} controls playsInline preload="metadata" />
+              <video
+                ref={videoRef}
+                src={currentVideoUrl}
+                poster={currentVideoPosterUrl || undefined}
+                controls
+                playsInline
+                preload="metadata"
+                style={{ filter: videoBrightnessFilter(currentVideo.brightnessPercent) }}
+              />
             ) : (
               <p className="voice-asset-loading" aria-live="polite">ビデオを準備しています。</p>
             )}

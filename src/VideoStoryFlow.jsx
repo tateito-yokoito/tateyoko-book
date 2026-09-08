@@ -61,6 +61,16 @@ function makeRecommendedPrompt(answerCount, questionCount) {
   return FIXED_PROMPTS[2];
 }
 
+function normalizeBrightnessPercent(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.min(30, Math.max(-20, Math.round(parsed)));
+}
+
+function brightnessFilter(value) {
+  return `brightness(${100 + normalizeBrightnessPercent(value)}%)`;
+}
+
 async function makePoster(videoElement) {
   if (!videoElement?.videoWidth || !videoElement?.videoHeight) return null;
   const maxWidth = 720;
@@ -210,6 +220,8 @@ export default function VideoStoryFlow({
   const [reviewUrl, setReviewUrl] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadMessage, setUploadMessage] = useState("");
+  const [savingVideo, setSavingVideo] = useState(false);
+  const [brightnessPercent, setBrightnessPercent] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
   const [posterUrls, setPosterUrls] = useState({});
   const [existingStory, setExistingStory] = useState(null);
@@ -286,6 +298,8 @@ export default function VideoStoryFlow({
     setCameraStatus("idle");
     setCaptureDimensions(null);
     setReviewAspectRatio(null);
+    setSavingVideo(false);
+    setBrightnessPercent(0);
     setErrorMessage("");
     videoChunksRef.current = [];
     audioChunksRef.current = [];
@@ -567,7 +581,8 @@ export default function VideoStoryFlow({
   };
 
   const saveVideo = async () => {
-    if (!videoBlob || !selectedPrompt || !projectId || !user?.id) return;
+    if (!videoBlob || !selectedPrompt || !projectId || !user?.id || savingVideo) return;
+    setSavingVideo(true);
     // Capture while the review element is still mounted. Previously this ran
     // after the large video upload, by which point the review screen (and ref)
     // had already been removed, leaving saved videos without a poster image.
@@ -654,6 +669,7 @@ export default function VideoStoryFlow({
           metadata: {
             recorded_facing_mode: cameraFacing,
             max_duration_seconds: MAX_VIDEO_SECONDS,
+            brightness_percent: normalizeBrightnessPercent(brightnessPercent),
             capture_width: captureDimensions?.width || null,
             capture_height: captureDimensions?.height || null,
             capture_aspect_ratio: captureAspectRatio || null,
@@ -679,6 +695,7 @@ export default function VideoStoryFlow({
         await supabaseClient.storage.from(VIDEO_BUCKET).remove(uploadedPaths).catch(() => {});
       }
       setErrorMessage("ビデオを保存できませんでした。通信を確認して、もう一度お試しください。");
+      setSavingVideo(false);
       setPhase("review");
     }
   };
@@ -766,7 +783,12 @@ export default function VideoStoryFlow({
                 >
                   <div className="flex h-[68px] w-[52px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/[0.06]">
                     {posterUrls[story.id]
-                      ? <img src={posterUrls[story.id]} alt="" className="h-full w-full object-cover" />
+                      ? <img
+                          src={posterUrls[story.id]}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          style={{ filter: brightnessFilter(story.metadata?.brightness_percent) }}
+                        />
                       : <Video size={23} className="text-white/35" />}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -913,13 +935,47 @@ export default function VideoStoryFlow({
                   if (width > 0 && height > 0) setReviewAspectRatio(width / height);
                 }}
                 className="w-full rounded-[2rem] border border-white/10 bg-black object-contain"
-                style={{ aspectRatio: captureAspectRatio || reviewAspectRatio || "3 / 4" }}
+                style={{
+                  aspectRatio: captureAspectRatio || reviewAspectRatio || "3 / 4",
+                  filter: brightnessFilter(brightnessPercent)
+                }}
               />
               <p className="mt-3 text-center text-sm text-white/40">{formatTime(elapsed)}</p>
+              <div className="glass-card mt-5 px-5 py-4">
+                <div className="flex items-center justify-between gap-4 text-sm">
+                  <label htmlFor="video-brightness" className="text-white/68">明るさを調整</label>
+                  <span className="tabular-nums text-white/46">
+                    {brightnessPercent === 0 ? "標準" : `${brightnessPercent > 0 ? "+" : ""}${brightnessPercent}%`}
+                  </span>
+                </div>
+                <input
+                  id="video-brightness"
+                  type="range"
+                  min="-20"
+                  max="30"
+                  step="5"
+                  value={brightnessPercent}
+                  onChange={(event) => setBrightnessPercent(normalizeBrightnessPercent(event.target.value))}
+                  className="mt-4 h-2 w-full cursor-pointer accent-amber-200"
+                  aria-label="ビデオの明るさ"
+                />
+                <div className="mt-2 flex items-center justify-between text-[0.68rem] text-white/28">
+                  <span>暗め</span><span>標準</span><span>明るめ</span>
+                </div>
+                {brightnessPercent !== 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setBrightnessPercent(0)}
+                    className="mx-auto mt-3 block min-h-9 px-3 text-xs text-white/50 underline underline-offset-4"
+                  >
+                    元に戻す
+                  </button>
+                )}
+              </div>
               {errorMessage && <p className="mt-3 rounded-2xl border border-red-200/10 bg-red-200/[0.04] px-4 py-3 text-center text-sm leading-loose text-red-100/75">{errorMessage}</p>}
               <div className="mt-6 grid grid-cols-2 gap-3">
                 <button type="button" onClick={retake} className="min-h-[56px] rounded-full border border-white/12 text-white/60">撮り直す</button>
-                <button type="button" onClick={saveVideo} className="btn-quiet min-h-[56px] rounded-full bg-white text-slate-900">このビデオを残す</button>
+                <button type="button" onClick={saveVideo} disabled={savingVideo} className="btn-quiet min-h-[56px] rounded-full bg-white text-slate-900 disabled:opacity-45">{savingVideo ? "準備しています…" : "このビデオを残す"}</button>
               </div>
             </div>
           )}
@@ -951,7 +1007,10 @@ export default function VideoStoryFlow({
                       if (width > 0 && height > 0) setExistingAspectRatio(width / height);
                     }}
                     className="w-full rounded-[2rem] border border-white/10 bg-black object-contain"
-                    style={{ aspectRatio: existingAspectRatio || existingStory.metadata?.capture_aspect_ratio || "3 / 4" }}
+                    style={{
+                      aspectRatio: existingAspectRatio || existingStory.metadata?.capture_aspect_ratio || "3 / 4",
+                      filter: brightnessFilter(existingStory.metadata?.brightness_percent)
+                    }}
                   />
                 : <div className="flex aspect-[3/4] w-full items-center justify-center rounded-[2rem] border border-white/10 bg-black/50 text-sm text-white/40">ビデオをひらいています…</div>}
               {existingStory.prompt_text && <p className="mt-5 text-center text-[0.95rem] leading-loose text-white/58 text-narrative">{existingStory.prompt_text}</p>}

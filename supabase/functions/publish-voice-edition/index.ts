@@ -234,7 +234,7 @@ serve(async (req) => {
         : Promise.resolve({ data: [], error: null }),
       serviceClient
         .from("video_stories")
-        .select("id, slot_order, prompt_kind, prompt_text, title, transcript_text, video_storage_path, audio_storage_path, poster_storage_path, duration_seconds, mime_type, status")
+        .select("id, slot_order, prompt_kind, prompt_text, title, transcript_text, video_storage_path, audio_storage_path, poster_storage_path, duration_seconds, mime_type, status, metadata")
         .eq("book_project_id", bookProjectId)
         .in("status", ["ready", "failed"])
         .order("slot_order", { ascending: true })
@@ -382,7 +382,8 @@ serve(async (req) => {
         videoStoragePath: videoDestination,
         audioStoragePath: audioDestination,
         posterStoragePath: posterDestination,
-        mimeType: String(videoStory.mime_type || "").trim()
+        mimeType: String(videoStory.mime_type || "").trim(),
+        brightnessPercent: normalizeBrightnessPercent(videoStory.metadata?.brightness_percent)
       });
     }
 
@@ -497,6 +498,12 @@ function numericPart(value: unknown, fallback: number) {
 function finiteNumber(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function normalizeBrightnessPercent(value: unknown) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.min(30, Math.max(-20, Math.round(parsed)));
 }
 
 function safeExtension(path: string, fallback = ".webm") {

@@ -144,6 +144,7 @@ serve(async (req) => {
         prompt: String(video?.promptText || "").trim(),
         transcript: String(video?.transcriptText || "").trim(),
         durationSeconds: finiteNumber(video?.durationSeconds),
+        brightnessPercent: normalizeBrightnessPercent(video?.brightnessPercent),
         hasAudioFallback: String(video?.audioStoragePath || "").startsWith(`published/${publication.id}/videos/`),
         hasPoster: String(video?.posterStoragePath || "").startsWith(`published/${publication.id}/videos/`)
       });
@@ -335,6 +336,12 @@ class HttpError extends Error {
 function finiteNumber(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function normalizeBrightnessPercent(value: unknown) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.min(30, Math.max(-20, Math.round(parsed)));
 }
 
 function finiteInteger(value: unknown) {
