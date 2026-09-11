@@ -16,16 +16,6 @@ export function summarizeAccountImpact(impact) {
   };
 }
 
-export function AccountListImpact({ impact }) {
-  if (!impact) return <p className="text-sm text-amber-700">影響情報を取得できませんでした</p>;
-  const summary = summarizeAccountImpact(impact);
-  return <div className="min-w-0 space-y-1.5 text-xs leading-5 text-slate-500">
-    <p className="text-sm text-slate-700">所有 {summary.owned.length}件 · 語り {summary.answers}件 · 語り足し {summary.additions}本 · 動画 {summary.videos}本</p>
-    <p className="truncate">{summary.owned.slice(0, 2).map(project => project.name).join(" ／ ") || "所有する物語なし"}{summary.owned.length > 2 ? ` ／ ほか${summary.owned.length - 2}件` : ""}</p>
-    <p>お手伝い {summary.supporting}件 · 限定公開 {summary.publications}件{summary.hidden > 0 ? ` · 所有のうち非表示 ${summary.hidden}件` : ""}</p>
-  </div>;
-}
-
 export function AccountImpactSummary({ impact }) {
   if (!impact) return <p role="alert">停止の影響情報を取得できませんでした。再読み込みしてください。</p>;
   const summary = summarizeAccountImpact(impact);

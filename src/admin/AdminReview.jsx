@@ -27,7 +27,8 @@ import {
   X
 } from "lucide-react";
 import { Scene_BookBuilder, Scene_SupportedStoryPages } from "../App.jsx";
-import { AccountListImpact, AccountImpactSummary, AccountProjectFacts, AccountRetirementDialog, summarizeAccountImpact } from "./AccountImpact.jsx";
+import { AccountImpactSummary, AccountProjectFacts, AccountRetirementDialog, summarizeAccountImpact } from "./AccountImpact.jsx";
+import "./admin-accounts.css";
 
 const TAB_ITEMS = [
   { id: "attention", label: "要対応", icon: AlertCircle },
@@ -1165,15 +1166,41 @@ function ProjectRow({ project, onOpen }) {
 function AccountTable({ rows, onOpen }) {
   if (!rows?.length) return <EmptyState>該当するアカウントはありません。</EmptyState>;
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-      {rows.map((account) => (
-        <button type="button" onClick={() => onOpen(account.id)} key={account.id} className="grid w-full gap-3 border-b border-slate-100 px-5 py-4 text-left transition last:border-b-0 hover:bg-slate-50 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_auto_24px] xl:items-center">
-          <div className="min-w-0"><p className="truncate text-sm font-medium">{account.display_name || "名称未登録"}</p><p className="mt-1 truncate text-xs text-slate-500">{account.email}</p><p className="mt-2 text-xs text-slate-500">{account.impact?.is_admin ? "管理者・停止不可" : account.impact?.is_suspended ? "ログイン停止中" : "利用中"}</p></div>
-          <AccountListImpact impact={account.impact} />
-          <div><p className="text-xs text-slate-400">最終ログイン {formatDate(account.last_sign_in_at)}</p><p className="mt-1 text-xs text-slate-400">登録 {formatDate(account.created_at)}</p></div>
-          <ChevronRight size={18} className="hidden text-slate-300 md:block" />
-        </button>
-      ))}
+    <div className="admin-account-list">
+      <p id="account-table-help" className="admin-account-list-help">アカウント名から詳細へ · 右側の項目は横スクロールで確認 →</p>
+      <div className="admin-account-scroll" role="region" aria-label="アカウント一覧（横スクロール）" aria-describedby="account-table-help" tabIndex={0}>
+        <table className="admin-account-table">
+          <caption className="sr-only">語り・語り足し・動画・限定公開・非表示の件数は、所有する物語の集計です。非表示済みも含みます。</caption>
+          <colgroup>
+            {[220, 138, 64, 64, 80, 64, 240, 80, 80, 80, 150, 150].map((width, index) => <col key={index} style={{ width }} />)}
+          </colgroup>
+          <thead><tr>{["アカウント", "状態", "所有", "語り", "語り足し", "動画", "所有する物語", "お手伝い", "限定公開", "非表示", "最終ログイン", "登録日"].map((label, index) => <th key={label} scope="col" className={index >= 2 && index !== 6 && index < 10 ? "account-number" : ""}>{label}</th>)}</tr></thead>
+          <tbody>{rows.map(account => {
+            const summary = account.impact ? summarizeAccountImpact(account.impact) : null;
+            const names = summary?.owned.map(project => project.name).join(" ／ ");
+            const briefNames = summary?.owned.slice(0, 2).map(project => project.name).join(" ／ ");
+            return <tr key={account.id} onClick={() => onOpen(account.id)}>
+              <th scope="row">
+                <button type="button" className="account-name-button" title={`${account.display_name || "名称未登録"}\n${account.email || ""}`}>
+                  <span className="account-name">{account.display_name || "名称未登録"}<ChevronRight size={14} /></span>
+                  <span className="account-email">{account.email}</span>
+                </button>
+              </th>
+              <td>{!summary ? "情報取得不可" : account.impact.is_admin ? "管理者・停止不可" : account.impact.is_suspended ? "ログイン停止中" : "利用中"}</td>
+              <td className="account-number">{summary ? `${summary.owned.length}件` : "—"}</td>
+              <td className="account-number">{summary ? `${summary.answers}件` : "—"}</td>
+              <td className="account-number">{summary ? `${summary.additions}本` : "—"}</td>
+              <td className="account-number">{summary ? `${summary.videos}本` : "—"}</td>
+              <td title={names || "所有する物語なし"}><span className="account-story-names">{summary ? briefNames || "—" : "取得できませんでした"}</span>{summary?.owned.length > 2 && <span className="account-more">ほか{summary.owned.length - 2}件</span>}</td>
+              <td className="account-number">{summary ? `${summary.supporting}件` : "—"}</td>
+              <td className="account-number">{summary ? `${summary.publications}件` : "—"}</td>
+              <td className="account-number">{summary ? `${summary.hidden}件` : "—"}</td>
+              <td className="account-date">{formatDate(account.last_sign_in_at)}</td>
+              <td className="account-date">{formatDate(account.created_at)}</td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
     </div>
   );
 }
