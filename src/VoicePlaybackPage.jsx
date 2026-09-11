@@ -27,10 +27,17 @@ function formatTime(seconds) {
   return `${Math.floor(safe / 60)}:${String(Math.floor(safe % 60)).padStart(2, "0")}`;
 }
 
+function partLabel(index, count) {
+  if (index === 0) return "最初に残した声";
+  return count > 2 ? `語り足し ${index}` : "あとから語り足した声";
+}
+
 export default function VoicePlaybackPage({ supabaseClient, publicId }) {
   const audioRef = useRef(null);
   const videoRef = useRef(null);
   const autoplayRef = useRef(false);
+  const transitionTimerRef = useRef(null);
+  const [partTransition, setPartTransition] = useState(null);
   const assetUrlCacheRef = useRef(new Map());
   const [publication, setPublication] = useState(null);
   const [status, setStatus] = useState("loading");
@@ -118,6 +125,16 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
   const currentAsset = currentItem?.audio?.[currentPartIndex] || null;
   const currentVideo = videos[currentVideoIndex] || null;
 
+  useEffect(() => {
+    setPartTransition(null);
+    if (screen !== "player") return undefined;
+    return () => {
+      window.clearTimeout(transitionTimerRef.current);
+      transitionTimerRef.current = null;
+      autoplayRef.current = false;
+    };
+  }, [screen]);
+
   const resolveAssetUrl = useCallback(async ({ itemOrder, assetIndex, videoIndex, kind }) => {
     const cacheKey = kind.startsWith("video")
       ? `${kind}:video:${videoIndex}`
@@ -186,27 +203,16 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
     let cancelled = false;
     setAssetStatus("loading");
     setCurrentAudioUrl("");
-    setCurrentPhotoUrls([]);
+    setIsPlaying(false);
 
-    const audioRequest = resolveAssetUrl({
+    resolveAssetUrl({
       itemOrder: currentItem.order,
       assetIndex: currentAsset.assetIndex,
       kind: "audio"
-    });
-    const photoRequest = Promise.all((currentItem.photos || []).map(async (photo) => ({
-      ...photo,
-      url: await resolveAssetUrl({
-        itemOrder: currentItem.order,
-        assetIndex: photo.assetIndex,
-        kind: "photo"
-      })
-    }))).catch(() => []);
-
-    Promise.all([audioRequest, photoRequest])
-      .then(([audioUrl, photos]) => {
+    })
+      .then((audioUrl) => {
         if (cancelled) return;
         setCurrentAudioUrl(audioUrl);
-        setCurrentPhotoUrls(photos);
         setAssetStatus("ready");
       })
       .catch(() => {
@@ -218,6 +224,21 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
 
     return () => { cancelled = true; };
   }, [assetRetry, currentAsset, currentItem, resolveAssetUrl, screen]);
+
+  // Photos belong to the question, not an individual recording. Keep them
+  // mounted while the next recording loads so the page does not jump.
+  useEffect(() => {
+    if (screen !== "player" || !currentItem) return undefined;
+    let cancelled = false;
+    setCurrentPhotoUrls([]);
+    Promise.all((currentItem.photos || []).map(async (photo) => ({
+      ...photo,
+      url: await resolveAssetUrl({ itemOrder: currentItem.order, assetIndex: photo.assetIndex, kind: "photo" })
+    }))).then((photos) => {
+      if (!cancelled) setCurrentPhotoUrls(photos);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [currentItem, resolveAssetUrl, screen]);
 
   const saveProgress = useCallback((overrides = {}) => {
     if (!publication || !currentItem) return;
@@ -233,16 +254,22 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
     setSavedProgress(payload);
   }, [currentItem, currentItemIndex, currentPartIndex, currentTime, playedItems, progressKey, publication]);
 
+  const saveProgressRef = useRef(saveProgress);
+  saveProgressRef.current = saveProgress;
   useEffect(() => {
     if (screen !== "player") return undefined;
-    const timer = window.setInterval(() => saveProgress(), 5000);
-    return () => window.clearInterval(timer);
-  }, [saveProgress, screen]);
+    const persist = () => saveProgressRef.current();
+    const timer = window.setInterval(persist, 5000);
+    window.addEventListener("pagehide", persist);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("pagehide", persist);
+    };
+  }, [screen]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentAudioUrl || screen !== "player") return;
-    audio.load();
     const seekTo = clamp(currentTime, 0, Number.MAX_SAFE_INTEGER);
     const onLoaded = () => {
       if (seekTo > 0) audio.currentTime = Math.min(seekTo, audio.duration || seekTo);
@@ -251,6 +278,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
       autoplayRef.current = false;
     };
     audio.addEventListener("loadedmetadata", onLoaded, { once: true });
+    audio.load();
     return () => audio.removeEventListener("loadedmetadata", onLoaded);
     // Time is applied only when changing audio; regular progress updates must not reload it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -271,12 +299,27 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
   }, [items]);
 
   function openStory(itemIndex, partIndex = 0, time = 0, autoplay = true) {
+    window.clearTimeout(transitionTimerRef.current);
+    transitionTimerRef.current = null;
+    setPartTransition(null);
+    const nextIndex = clamp(itemIndex, 0, Math.max(items.length - 1, 0));
+    const nextPart = clamp(partIndex, 0, Math.max((items[nextIndex]?.audio?.length || 1) - 1, 0));
+    if (screen === "player" && nextIndex === currentItemIndex && nextPart === currentPartIndex && currentAudioUrl) {
+      seekTo(time);
+      if (autoplay) audioRef.current?.play().catch(() => setIsPlaying(false));
+      saveProgress({ time });
+      return;
+    }
+    audioRef.current?.pause();
     autoplayRef.current = autoplay;
-    setCurrentItemIndex(clamp(itemIndex, 0, Math.max(items.length - 1, 0)));
-    setCurrentPartIndex(partIndex);
+    setIsPlaying(false);
+    setCurrentAudioUrl("");
+    setCurrentItemIndex(nextIndex);
+    setCurrentPartIndex(nextPart);
     setCurrentTime(time);
     setDuration(0);
     setScreen("player");
+    saveProgress({ itemIndex: nextIndex, partIndex: nextPart, time });
   }
 
   function openVideo(videoIndex) {
@@ -305,13 +348,23 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
   }
 
   function togglePlayback() {
+    if (partTransition) {
+      window.clearTimeout(transitionTimerRef.current);
+      transitionTimerRef.current = null;
+      setPartTransition(null);
+      autoplayRef.current = false;
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) audio.play().catch(() => setIsPlaying(false));
-    else audio.pause();
+    else { audio.pause(); saveProgress(); }
   }
 
   function seekTo(value) {
+    window.clearTimeout(transitionTimerRef.current);
+    transitionTimerRef.current = null;
+    setPartTransition(null);
     const audio = audioRef.current;
     if (!audio) return;
     audio.currentTime = clamp(value, 0, duration || 0);
@@ -328,16 +381,26 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
   }
 
   function handleEnded() {
+    setIsPlaying(false);
     if (currentPartIndex < currentItem.audio.length - 1) {
-      openStory(currentItemIndex, currentPartIndex + 1, 0);
+      const nextPart = currentPartIndex + 1;
+      setPartTransition({
+        from: partLabel(currentPartIndex, currentItem.audio.length),
+        to: partLabel(nextPart, currentItem.audio.length)
+      });
+      window.clearTimeout(transitionTimerRef.current);
+      transitionTimerRef.current = window.setTimeout(() => openStory(currentItemIndex, nextPart, 0), 1200);
       return;
     }
     const nextPlayed = new Set(playedItems);
     nextPlayed.add(currentItemIndex);
     setPlayedItems(nextPlayed);
-    saveProgress({ playedItems: Array.from(nextPlayed), time: 0 });
-    if (currentItemIndex < items.length - 1) openStory(currentItemIndex + 1, 0, 0);
+    if (currentItemIndex < items.length - 1) {
+      openStory(currentItemIndex + 1, 0, 0);
+      saveProgress({ itemIndex: currentItemIndex + 1, partIndex: 0, playedItems: Array.from(nextPlayed), time: 0 });
+    }
     else {
+      saveProgress({ playedItems: Array.from(nextPlayed), time: 0 });
       setIsPlaying(false);
       setScreen("finished");
     }
@@ -391,7 +454,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
             ) : (
               <button type="button" className="voice-primary-button" onClick={() => openVideo(0)}>最初のビデオを見る</button>
             )}
-            {hasVoices && savedProgress && <button type="button" onClick={resumeStory}>前回の続きから <small>{voiceNumber(savedProgress.itemIndex)}</small></button>}
+            {hasVoices && savedProgress && <button type="button" onClick={resumeStory}>前回の続きから <small>{voiceNumber(savedProgress.itemIndex)}{savedProgress.partIndex > 0 && ` ・ ${partLabel(savedProgress.partIndex, items[savedProgress.itemIndex]?.audio?.length || 2)}から再開`}</small></button>}
             <button type="button" onClick={() => setScreen("contents")}>{contentsLabel}</button>
           </div>
         </section>
@@ -407,7 +470,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
               {group.entries.map(({ item, index }) => (
                 <button type="button" className="voice-index-item" key={`${item.order}-${index}`} onClick={() => openStory(index)}>
                   <span className="voice-number">{playedItems.has(index) ? "✓" : voiceNumber(index)}</span>
-                  <span><strong>{item.question || "残された声"}</strong>{item.transcript && <small>{item.transcript.slice(0, 70)}{item.transcript.length > 70 ? "…" : ""}</small>}</span>
+                  <span><strong>{item.question || "残された声"}</strong>{item.audio.length > 1 && <span className="voice-parts-badge">語り足しあり・{item.audio.length}つの声</span>}{item.transcript && <small>{item.transcript.slice(0, 70)}{item.transcript.length > 70 ? "…" : ""}</small>}</span>
                   <b aria-hidden="true">›</b>
                 </button>
               ))}
@@ -476,7 +539,29 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
             </div>
           )}
           <div className="voice-audio-console">
-            <audio ref={audioRef} src={currentAudioUrl || undefined} preload="metadata" onPlay={() => setIsPlaying(true)} onPause={() => { setIsPlaying(false); saveProgress(); }} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} onDurationChange={(event) => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)} onEnded={handleEnded} />
+            {currentItem.audio.length > 1 && (
+              <div className="voice-parts" aria-label="この問いに残された声">
+                <p>この問いには、{currentItem.audio.length}つの声が残されています</p>
+                <ol>
+                  {currentItem.audio.map((asset, index) => (
+                    <li key={asset.assetIndex}>
+                      <button type="button" aria-current={index === currentPartIndex ? "true" : undefined} onClick={() => openStory(currentItemIndex, index)}>
+                        <span className="voice-part-marker" aria-hidden="true">{index === currentPartIndex ? "●" : "○"}</span>
+                        <span className="voice-part-number">{index + 1}/{currentItem.audio.length}</span>
+                        <span>{partLabel(index, currentItem.audio.length)}</span>
+                        {index === currentPartIndex && <small>{isPlaying ? "再生中" : partTransition ? "再生完了" : "選択中"}</small>}
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+                <p className="voice-part-status" role="status" aria-live="polite">
+                  {partTransition
+                    ? `${partTransition.from}を聴き終えました。続いて、${partTransition.to}です。`
+                    : `${currentPartIndex + 1}/${currentItem.audio.length}　${partLabel(currentPartIndex, currentItem.audio.length)}`}
+                </p>
+              </div>
+            )}
+            <audio ref={audioRef} src={currentAudioUrl || undefined} preload="metadata" onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} onDurationChange={(event) => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)} onEnded={handleEnded} />
             {assetStatus === "error" ? (
               <div className="voice-asset-error"><p>音声をひらけませんでした。</p><button type="button" onClick={() => setAssetRetry((value) => value + 1)}>もう一度試す</button></div>
             ) : (
@@ -484,11 +569,11 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
                 {assetStatus === "loading" && <p className="voice-asset-loading" aria-live="polite">声を準備しています。</p>}
                 <div className="voice-timeline"><input type="range" min="0" max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} onChange={(event) => seekTo(Number(event.target.value))} aria-label="再生位置" disabled={!currentAudioUrl} /><div><span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span></div></div>
                 <div className="voice-transport">
-                  <button type="button" onClick={() => moveStory(-1)} disabled={currentItemIndex === 0 && currentPartIndex === 0} aria-label="前の声">‹</button>
+                  <button type="button" onClick={() => moveStory(-1)} disabled={currentItemIndex === 0 && currentPartIndex === 0} aria-label={currentPartIndex > 0 ? "この問いの前の音声" : "前の問い"}>‹</button>
                   <button type="button" onClick={() => seekTo(currentTime - 15)} disabled={!currentAudioUrl} aria-label="15秒戻る">−15</button>
-                  <button type="button" className="voice-play-button" onClick={togglePlayback} disabled={!currentAudioUrl} aria-label={isPlaying ? "一時停止" : "再生"}>{isPlaying ? "Ⅱ" : "▶"}</button>
+                  <button type="button" className="voice-play-button" onClick={togglePlayback} disabled={!currentAudioUrl} aria-label={partTransition ? "続きの自動再生を止める" : isPlaying ? "一時停止" : "再生"}>{isPlaying || partTransition ? "Ⅱ" : "▶"}</button>
                   <button type="button" onClick={() => seekTo(currentTime + 15)} disabled={!currentAudioUrl} aria-label="15秒進む">+15</button>
-                  <button type="button" onClick={() => moveStory(1)} disabled={currentItemIndex === items.length - 1 && currentPartIndex === currentItem.audio.length - 1} aria-label="次の声">›</button>
+                  <button type="button" onClick={() => moveStory(1)} disabled={currentItemIndex === items.length - 1 && currentPartIndex === currentItem.audio.length - 1} aria-label={currentPartIndex < currentItem.audio.length - 1 ? "次の語り足し" : "次の問い"}>›</button>
                 </div>
               </>
             )}

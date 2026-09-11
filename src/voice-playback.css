@@ -91,6 +91,16 @@ body.voice-page-active {
 .voice-photo-strip img { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 4px; background: #ddd6c9; object-fit: contain; }
 .voice-photo-strip figcaption { margin-top: 8px; color: var(--muted); font-size: .75rem; }
 .voice-audio-console { padding: clamp(24px, 5vw, 44px); border: 1px solid var(--line); border-radius: 24px; background: rgba(255,255,255,.45); }
+.voice-parts-badge { display: inline-block; margin-top: 8px; padding: 4px 10px; border-radius: 6px; background: rgba(185,94,50,.08); color: var(--accent); font-size: .75rem; }
+.voice-parts > p:first-child { margin: 0 0 14px; color: var(--muted); font-size: .85rem; line-height: 1.7; }
+.voice-parts ol { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.voice-parts li button { display: flex; width: 100%; min-height: 52px; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid transparent; border-radius: 10px; background: transparent; text-align: left; font-size: .88rem; cursor: pointer; }
+.voice-parts li button[aria-current="true"] { border-color: rgba(185,94,50,.32); background: rgba(185,94,50,.08); }
+.voice-parts li button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.voice-part-marker { color: var(--accent); font-family: sans-serif; }
+.voice-part-number { color: var(--muted); font: .8rem Georgia, serif; white-space: nowrap; }
+.voice-parts li small { margin-left: auto; color: var(--accent); font-size: .7rem; white-space: nowrap; }
+.voice-part-status { min-height: 3.5em; margin: 12px 0 18px; color: var(--muted); font-size: .8rem; line-height: 1.75; }
 .voice-asset-loading { margin: 0 0 18px; color: var(--muted); font-size: .82rem; text-align: center; }
 .voice-asset-error { display: grid; gap: 16px; justify-items: center; padding: 12px 0; color: var(--muted); text-align: center; }
 .voice-asset-error p { margin: 0; }
@@ -155,6 +165,7 @@ body.voice-page-active {
   .voice-player > h1 { margin-bottom: 32px; }
   .voice-photo-strip { grid-auto-columns: 91%; }
   .voice-audio-console { margin-inline: -3px; padding: 24px 16px; }
+  .voice-parts li button { flex-wrap: wrap; gap: 7px; padding-inline: 8px; font-size: .8rem; }
   .voice-transport { gap: 3px; }
   .voice-transport button { min-height: 54px; }
   .voice-transport .voice-play-button { width: 68px; height: 68px; }
