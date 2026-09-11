@@ -814,7 +814,10 @@ function HiddenZone({ entries, actionTarget, onOpen, onRestore, onRetire }) {
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-800">
         ここにあるデータは通常の管理画面では表示されません。物語は表示中に戻せます。退役済みアカウントの復旧はメールの重複を確認して行います。
       </div>
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <AdminListTable label="非表示" columns={[
+        { label: "名前", width: 220 }, { label: "種類", width: 100 }, { label: "状態・理由", width: 220 },
+        { label: "メール", width: 290 }, { label: "非表示日時", width: 165 }, { label: "操作", width: 350 }
+      ]}>
         {entries.map((entry) => {
           const snapshot = entry.snapshot || {};
           const isAccount = entry.entity_type === "account";
@@ -823,18 +826,13 @@ function HiddenZone({ entries, actionTarget, onOpen, onRestore, onRetire }) {
           const label = withoutHonorific(snapshot.display_name || snapshot.title) || snapshot.email || "名称未登録";
           const busy = actionTarget.includes(entry.entity_id);
           return (
-            <div key={`${entry.entity_type}:${entry.entity_id}`} className="grid gap-4 border-b border-slate-100 px-5 py-5 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-              <button type="button" onClick={() => onOpen(entry)} className="min-w-0 text-left">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate font-medium text-slate-900">{label}</p>
-                  <StatusPill>{isAccount ? "アカウント" : "物語"}</StatusPill>
-                  {isAccount && <StatusPill tone={isRetired ? "warning" : "neutral"}>{isRetired ? "退役・メール解放済み" : "非表示のみ"}</StatusPill>}
-                  {followsAccountRetirement && <StatusPill tone="warning">アカウント退役に連動</StatusPill>}
-                </div>
-                <p className="mt-1 truncate text-xs text-slate-500">{snapshot.email || snapshot.owner_email || "連絡先未登録"}</p>
-                <p className="mt-2 text-xs text-slate-400">非表示 {formatDate(entry.trashed_at)}</p>
-              </button>
-              <div className="flex flex-wrap items-center gap-2 md:justify-end">
+            <tr key={`${entry.entity_type}:${entry.entity_id}`}>
+              <AdminNameCell name={label} onOpen={() => onOpen(entry)} />
+              <td>{isAccount ? "アカウント" : "物語"}</td>
+              <td><StatusPill tone={isRetired || followsAccountRetirement ? "warning" : "neutral"}>{isRetired ? "退役・メール解放済み" : followsAccountRetirement ? "アカウント退役に連動" : "非表示のみ"}</StatusPill></td>
+              <td><AdminText>{snapshot.email || snapshot.owner_email || "連絡先未登録"}</AdminText></td>
+              <td className="account-date">{formatDate(entry.trashed_at)}</td>
+              <td><div className="flex items-center gap-2">
                 {isAccount && !isRetired && (
                   <button type="button" disabled={busy} onClick={() => onRetire(entry)} className="rounded-xl border border-amber-200 px-3 py-2 text-xs text-amber-700 disabled:opacity-40">
                     退役してメール解放
@@ -848,11 +846,11 @@ function HiddenZone({ entries, actionTarget, onOpen, onRestore, onRetire }) {
                     {isRetired ? "復旧" : "表示中に戻す"}
                   </button>
                 )}
-              </div>
-            </div>
+              </div></td>
+            </tr>
           );
         })}
-      </div>
+      </AdminListTable>
     </div>
   );
 }
@@ -1131,36 +1129,47 @@ function MetricCard({ label, value, hint, alert = false }) {
   );
 }
 
-function ProjectRow({ project, onOpen }) {
-  const tone = project.health_status === "error" ? "error" : project.health_status === "warning" ? "warning" : project.health_status === "info" ? "info" : "neutral";
-  const displayName = projectDisplayName(project);
-  const ownerName = withoutHonorific(project.owner_name);
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(project.id)}
-      className="grid w-full gap-4 border-b border-slate-100 px-5 py-5 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_24px] md:items-center"
-    >
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="truncate font-medium text-slate-900">物語の主体：{displayName}</p>
-          {project.attention_reason && <StatusPill tone={tone}>{project.attention_reason}</StatusPill>}
-        </div>
-        <p className="mt-1 truncate text-xs text-slate-500">
-          利用アカウント：{uniqueIdentityLine(ownerName, project.owner_email) || "連絡先未登録"}
-        </p>
-      </div>
-      <div className="flex flex-wrap gap-2 text-xs">
-        <StatusPill tone={accessTone(project.access_status)}>{accessLabel(project.access_status)}</StatusPill>
-        <StatusPill>{projectTypeLabel(project.project_type)}</StatusPill>
-      </div>
-      <div>
-        <p className="text-sm tabular-nums text-slate-700">回答 {project.answer_count || 0}件</p>
-        <p className="mt-1 text-xs text-slate-400">最終 {formatDate(project.last_activity_at)}</p>
-      </div>
-      <ChevronRight size={18} className="hidden text-slate-300 md:block" />
-    </button>
-  );
+function AdminListTable({ label, columns, children }) {
+  return <div className="admin-account-list">
+    <p className="admin-account-list-help">右側の項目は横スクロールで確認 →</p>
+    <div className="admin-account-scroll" role="region" aria-label={`${label}一覧（横スクロール）`} tabIndex={0}>
+      <table className="admin-account-table admin-data-table" style={{ width: columns.reduce((sum, column) => sum + column.width, 0) }}>
+        <caption className="sr-only">{label}一覧。名前は左側に固定されています。</caption>
+        <colgroup>{columns.map(column => <col key={column.label} style={{ width: column.width }} />)}</colgroup>
+        <thead><tr>{columns.map(column => <th key={column.label} scope="col" className={column.numeric ? "account-number" : ""}>{column.label}</th>)}</tr></thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  </div>;
+}
+
+function AdminNameCell({ name, onOpen }) {
+  return <th scope="row"><button type="button" onClick={onOpen} className="account-name-button" title={name}><span className="account-name">{name}<ChevronRight size={14} /></span></button></th>;
+}
+
+function AdminText({ children }) {
+  return <span className="admin-table-clip" title={typeof children === "string" ? children : undefined}>{children || "—"}</span>;
+}
+
+function ProjectTable({ rows, onOpen, label }) {
+  return <AdminListTable label={label} columns={[
+    { label: "物語の主体", width: 220 }, { label: "要対応の内容", width: 240 },
+    { label: "利用状態", width: 120 }, { label: "利用パターン", width: 155 },
+    { label: "回答", width: 75, numeric: true }, { label: "最終の活動", width: 165 },
+    { label: "利用アカウント", width: 180 }, { label: "メール", width: 290 }
+  ]}>{rows.map(project => {
+    const tone = ["error", "warning", "info"].includes(project.health_status) ? project.health_status : "neutral";
+    return <tr key={project.id}>
+      <AdminNameCell name={projectDisplayName(project)} onOpen={() => onOpen(project.id)} />
+      <td title={project.attention_reason}><span className="admin-table-clip">{project.attention_reason ? <StatusPill tone={tone}><span className="truncate">{project.attention_reason}</span></StatusPill> : "—"}</span></td>
+      <td><StatusPill tone={accessTone(project.access_status)}>{accessLabel(project.access_status)}</StatusPill></td>
+      <td><AdminText>{projectTypeLabel(project.project_type)}</AdminText></td>
+      <td className="account-number">{project.answer_count || 0}件</td>
+      <td className="account-date">{formatDate(project.last_activity_at)}</td>
+      <td><AdminText>{withoutHonorific(project.owner_name)}</AdminText></td>
+      <td><AdminText>{project.owner_email || "連絡先未登録"}</AdminText></td>
+    </tr>;
+  })}</AdminListTable>;
 }
 
 function AccountTable({ rows, onOpen }) {
@@ -1256,33 +1265,30 @@ function DeliveryHistoryList({ rows, emptyText = "配信履歴はまだありま
 
 function DeliveryTable({ rows, onOpenProject }) {
   if (!rows?.length) return <EmptyState>該当する配信履歴はありません。</EmptyState>;
-  return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-      {rows.map((item) => (
-        <button type="button" onClick={() => item.book_project_id && onOpenProject(item.book_project_id)} key={`${item.delivery_kind}-${item.id}`} className="grid w-full gap-3 border-b border-slate-100 px-5 py-4 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_24px] md:items-center">
-          <div className="min-w-0"><p className="truncate text-sm font-medium">{withoutHonorific(item.project_name) || "名称未登録"}</p><p className="mt-1 truncate text-xs text-slate-400">{deliverySummary(item)}</p></div>
-          <p className="truncate text-xs text-slate-500">{item.resolved_recipient_email || item.recipient_email || "送信先未登録"}</p>
-          <div className="flex items-center gap-3"><StatusPill tone={deliveryStatusTone(item.delivery_status)}>{deliveryStatusLabel(item.delivery_status)}</StatusPill><span className="hidden text-xs text-slate-400 lg:block">{formatDate(deliveryEventAt(item))}</span></div>
-          <ChevronRight size={18} className="hidden text-slate-300 md:block" />
-        </button>
-      ))}
-    </div>
-  );
+  return <AdminListTable label="配信" columns={[
+    { label: "物語の主体", width: 220 }, { label: "状態", width: 110 }, { label: "配信日時", width: 165 },
+    { label: "配信内容", width: 310 }, { label: "送信先", width: 290 }, { label: "エラー内容", width: 300 }
+  ]}>{rows.map(item => <tr key={`${item.delivery_kind}-${item.id}`}>
+    {item.book_project_id ? <AdminNameCell name={withoutHonorific(item.project_name) || "名称未登録"} onOpen={() => onOpenProject(item.book_project_id)} /> : <th scope="row"><AdminText>{withoutHonorific(item.project_name) || "物語未登録"}</AdminText></th>}
+    <td><StatusPill tone={deliveryStatusTone(item.delivery_status)}>{deliveryStatusLabel(item.delivery_status)}</StatusPill></td>
+    <td className="account-date">{formatDate(deliveryEventAt(item))}</td>
+    <td><AdminText>{deliverySummary(item)}</AdminText></td>
+    <td><AdminText>{item.resolved_recipient_email || item.recipient_email || "送信先未登録"}</AdminText></td>
+    <td className="text-rose-700"><AdminText>{item.error_message}</AdminText></td>
+  </tr>)}</AdminListTable>;
 }
 
 function PaymentTable({ rows }) {
   if (!rows?.length) return <EmptyState>該当する決済情報はありません。</EmptyState>;
-  return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-      {rows.map((payment) => (
-        <div key={payment.id} className="grid gap-3 border-b border-slate-100 px-5 py-4 last:border-b-0 md:grid-cols-[2fr_1fr_1fr] md:items-center">
-          <div className="min-w-0"><p className="truncate text-sm font-medium">{projectDisplayName(payment)}</p><p className="mt-1 truncate font-mono text-[11px] text-slate-400">{payment.stripe_checkout_session_id || "Stripe ID 未登録"}</p></div>
-          <StatusPill tone={accessTone(payment.access_status)}>{accessLabel(payment.access_status)}</StatusPill>
-          <p className="text-xs text-slate-400">購入 {formatDate(payment.purchased_at)}</p>
-        </div>
-      ))}
-    </div>
-  );
+  return <AdminListTable label="決済" columns={[
+    { label: "物語の主体", width: 220 }, { label: "利用状態", width: 130 },
+    { label: "購入日時", width: 165 }, { label: "Stripe決済ID", width: 420 }
+  ]}>{rows.map(payment => <tr key={payment.id}>
+    <th scope="row"><AdminText>{projectDisplayName(payment)}</AdminText></th>
+    <td><StatusPill tone={accessTone(payment.access_status)}>{accessLabel(payment.access_status)}</StatusPill></td>
+    <td className="account-date">{formatDate(payment.purchased_at)}</td>
+    <td><AdminText>{payment.stripe_checkout_session_id || "Stripe ID 未登録"}</AdminText></td>
+  </tr>)}</AdminListTable>;
 }
 
 function AccountDetailPanel({
@@ -2933,7 +2939,7 @@ export default function AdminReview({ supabaseClient }) {
             {notice && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notice}</div>}
             {error && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
             {loading && !dashboard ? <div className="flex h-64 items-center justify-center"><LoaderCircle className="animate-spin text-slate-400" /></div> : null}
-            {(tab === "attention" || tab === "projects") && (activeRows.length ? <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">{activeRows.map((project) => <ProjectRow key={project.id} project={project} onOpen={openDetail} />)}</div> : <EmptyState>{tab === "attention" ? <span className="inline-flex items-center gap-2"><CheckCircle2 size={17} className="text-emerald-600" />現在、要対応の物語はありません。</span> : "該当する物語はありません。"}</EmptyState>)}
+            {(tab === "attention" || tab === "projects") && (activeRows.length ? <ProjectTable rows={activeRows} onOpen={openDetail} label={tab === "attention" ? "要対応" : "物語"} /> : <EmptyState>{tab === "attention" ? <span className="inline-flex items-center gap-2"><CheckCircle2 size={17} className="text-emerald-600" />現在、要対応の物語はありません。</span> : "該当する物語はありません。"}</EmptyState>)}
             {tab === "accounts" && <AccountTable rows={dashboard?.accounts || []} onOpen={openAccountDetail} />}
             {tab === "deliveries" && <DeliveryTable rows={deliveryHistory} onOpenProject={openDetail} />}
             {tab === "payments" && <PaymentTable rows={dashboard?.payments || []} />}

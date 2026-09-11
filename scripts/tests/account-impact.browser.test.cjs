@@ -21,6 +21,34 @@ const assert = require('node:assert/strict');
   const page=await browser.newPage({viewport:{width:1440,height:1050}}), errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`http://127.0.0.1:${server.address().port}`);
+  for (const [tab,label] of [['要対応','要対応'],['物語','物語'],['配信','配信'],['決済','決済'],['非表示ゾーン','非表示']]) {
+    await page.locator('nav').getByRole('button',{name:new RegExp(`^${tab}`)}).click();
+    const list=page.getByRole('region',{name:`${label}一覧（横スクロール）`});
+    await list.waitFor();
+    for (const width of [1440,1100,768,390]) {
+      await page.setViewportSize({width,height:900});
+      const first=list.locator('tbody tr').first();
+      const sizes=await list.locator('tbody tr').evaluateAll(rows=>rows.map(r=>r.getBoundingClientRect().height));
+      assert.ok(sizes.every(h=>h<=64), `${tab}: compact rows at ${width}`);
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+      const pinned=first.getByRole('rowheader'), before=(await pinned.boundingBox()).x;
+      await list.evaluate(e=>e.scrollLeft=e.scrollWidth);
+      assert.ok(Math.abs((await pinned.boundingBox()).x-before)<2, `${tab}: sticky identity`);
+      assert.ok(await list.evaluate(e=>(e.scrollLeft>0)===(e.scrollWidth>e.clientWidth)), `${tab}: scroll when columns exceed available width`);
+      await list.evaluate(e=>e.scrollLeft=0);
+      if(width===1100 || width===390) await page.screenshot({path:path.join(temp,`${label}-${width}.png`),fullPage:true});
+    }
+  }
+  page.once('dialog', dialog=>dialog.dismiss());
+  await page.getByRole('region',{name:'非表示一覧（横スクロール）'}).getByRole('button',{name:'表示中に戻す'}).click();
+  assert.equal(await page.evaluate(()=>window.calls.some(c=>c.name==='restore_admin_entity_from_trash')),false);
+  await page.setViewportSize({width:1100,height:900});
+  await page.locator('nav').getByRole('button',{name:'物語',exact:true}).click();
+  await page.getByRole('region',{name:'物語一覧（横スクロール）'}).getByRole('button').first().focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('heading',{name:'物語の状況'}).waitFor();
+  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.name==='get_admin_project_detail').length),1);
+  await page.reload();
   await page.getByRole('button',{name:'アカウント',exact:true}).click();
   const row=page.getByRole('row').filter({has:page.getByRole('button',{name:/確認用アカウント/})});
   await row.waitFor();
@@ -78,6 +106,6 @@ const assert = require('node:assert/strict');
   await protectedButton.waitFor(); assert.equal(await protectedButton.isDisabled(),true);
   assert.equal(await page.evaluate(()=>window.retireCalls),0);
   assert.deepEqual(errors,[]);
-  console.log(`PASS browser: compact rows at 1440/1100/768/390px, contained horizontal scrolling, sticky account names, keyboard opening, list totals, detail, refreshed confirmation, fail-closed error, cancellation, admin disabled. Screenshots: ${temp}`);
+  console.log(`PASS browser: attention/projects/deliveries/payments/hidden/accounts compact at 1440/1100/768/390px, horizontal scrolling, sticky names, keyboard detail opening, restore cancellation, totals, refreshed confirmation, fail-closed errors, admin disabled. Screenshots: ${temp}`);
  }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
