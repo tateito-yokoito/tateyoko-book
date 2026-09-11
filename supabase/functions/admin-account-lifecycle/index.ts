@@ -104,15 +104,18 @@ serve(async (req) => {
       return jsonResponse({ error: "Active owner organization mode required" }, 403);
     }
 
-    const { data: protectedAdmin } = await adminClient
+    const { data: protectedAdmin, error: protectedAdminError } = await adminClient
       .from("admin_users")
       .select("user_id")
       .eq("user_id", accountId)
       .eq("is_active", true)
       .maybeSingle();
 
+    if (protectedAdminError) {
+      return jsonResponse({ error: "管理者権限を確認できませんでした。時間をおいて再度お試しください。" }, 500);
+    }
     if (protectedAdmin) {
-      return jsonResponse({ error: "Active admin accounts cannot be retired" }, 409);
+      return jsonResponse({ error: "有効な管理者アカウントは停止できません。" }, 409);
     }
 
     const { data: userData, error: userError } = await adminClient.auth.admin.getUserById(accountId);

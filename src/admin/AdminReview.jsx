@@ -27,6 +27,7 @@ import {
   X
 } from "lucide-react";
 import { Scene_BookBuilder, Scene_SupportedStoryPages } from "../App.jsx";
+import { AccountListImpact, AccountImpactSummary, AccountProjectFacts, AccountRetirementDialog, summarizeAccountImpact } from "./AccountImpact.jsx";
 
 const TAB_ITEMS = [
   { id: "attention", label: "要対応", icon: AlertCircle },
@@ -1166,9 +1167,9 @@ function AccountTable({ rows, onOpen }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       {rows.map((account) => (
-        <button type="button" onClick={() => onOpen(account.id)} key={account.id} className="grid w-full gap-3 border-b border-slate-100 px-5 py-4 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[2fr_1fr_1fr_24px] md:items-center">
-          <div className="min-w-0"><p className="truncate text-sm font-medium">{account.display_name || "名称未登録"}</p><p className="mt-1 truncate text-xs text-slate-500">{account.email}</p></div>
-          <p className="text-sm text-slate-600">所有 {account.owned_project_count || 0}件・お手伝い {account.supporting_project_count || 0}件</p>
+        <button type="button" onClick={() => onOpen(account.id)} key={account.id} className="grid w-full gap-3 border-b border-slate-100 px-5 py-4 text-left transition last:border-b-0 hover:bg-slate-50 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_auto_24px] xl:items-center">
+          <div className="min-w-0"><p className="truncate text-sm font-medium">{account.display_name || "名称未登録"}</p><p className="mt-1 truncate text-xs text-slate-500">{account.email}</p><p className="mt-2 text-xs text-slate-500">{account.impact?.is_admin ? "管理者・停止不可" : account.impact?.is_suspended ? "ログイン停止中" : "利用中"}</p></div>
+          <AccountListImpact impact={account.impact} />
           <div><p className="text-xs text-slate-400">最終ログイン {formatDate(account.last_sign_in_at)}</p><p className="mt-1 text-xs text-slate-400">登録 {formatDate(account.created_at)}</p></div>
           <ChevronRight size={18} className="hidden text-slate-300 md:block" />
         </button>
@@ -1270,10 +1271,7 @@ function AccountDetailPanel({
   actionError
 }) {
   const account = detail?.account || null;
-  const projects = [
-    ...(detail?.owned_projects || []).map(project => ({ ...project, relationship: "所有" })),
-    ...(detail?.supporting_projects || []).map(project => ({ ...project, relationship: "お手伝い" }))
-  ];
+  const projects = detail?.impact?.projects || [];
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35 backdrop-blur-[2px]" onMouseDown={onClose}>
@@ -1297,13 +1295,15 @@ function AccountDetailPanel({
               </dl>
             </section>
 
+            <AccountImpactSummary impact={detail.impact} />
+
             <section>
               <h3 className="mb-3 text-sm font-medium">関係する物語</h3>
               {projects.length ? (
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                   {projects.map((project) => (
-                    <button type="button" key={`${project.relationship}-${project.id}`} onClick={() => onOpenProject(project.id)} className="flex w-full items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 text-left last:border-b-0 hover:bg-slate-50">
-                      <div className="min-w-0"><p className="truncate text-sm">{withoutHonorific(project.name) || "名称未登録"}</p><p className="mt-1 text-xs text-slate-400">{project.relationship}{project.access_status ? ` · ${accessLabel(project.access_status)}` : ""}</p></div>
+                    <button type="button" key={project.id} onClick={() => onOpenProject(project.id)} className="flex w-full items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 text-left last:border-b-0 hover:bg-slate-50">
+                      <div className="min-w-0"><p className="text-sm">{withoutHonorific(project.name) || "名称未登録"} <span className="text-xs text-slate-400">{accessLabel(project.access_status)}</span></p><AccountProjectFacts project={project} /></div>
                       <ChevronRight size={17} className="shrink-0 text-slate-300" />
                     </button>
                   ))}
@@ -1340,14 +1340,14 @@ function AccountDetailPanel({
               <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-5">
                 <button
                   type="button"
-                  disabled={trashLoading}
+                  disabled={trashLoading || !detail.impact || detail.impact.is_admin}
                   onClick={() => onMoveToTrash(account)}
                   className="inline-flex items-center gap-2 text-sm font-medium text-rose-700 disabled:opacity-40"
                 >
-                  <Trash2 size={16} />{trashLoading ? "退役中…" : "退役してメールを解放する"}
+                  <Trash2 size={16} />{detail.impact?.is_admin ? "管理者アカウントは停止できません" : trashLoading ? "影響を確認中…" : "停止前の確認へ"}
                 </button>
                 <p className="mt-2 text-xs leading-5 text-rose-700/65">
-                  管理画面から非表示にし、ログインを停止してメールを新規登録へ解放します。所有する物語{detail?.owned_projects?.length || 0}件も非表示にします。購入者・お手伝いとして関係するだけの物語と元データは変更しません。
+                  最新の件数と影響範囲を再取得し、確認画面を表示します。この時点では停止しません。
                 </p>
               </section>
             )}
@@ -1801,6 +1801,9 @@ export default function AdminReview({ supabaseClient }) {
   const [accountDetailId, setAccountDetailId] = useState(null);
   const [accountDetail, setAccountDetail] = useState(null);
   const [accountDetailLoading, setAccountDetailLoading] = useState(false);
+  const accountDetailRequestRef = useRef(0);
+  const [retirementConfirmation, setRetirementConfirmation] = useState(null);
+  const retirementBusyRef = useRef(false);
   const [previewMode, setPreviewMode] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -2163,17 +2166,8 @@ export default function AdminReview({ supabaseClient }) {
       const visibleProjects = (data?.projects || []).filter(project => !trashedProjectIds.has(project.id));
       const visibleAttention = (data?.attention || []).filter(project => !trashedProjectIds.has(project.id));
       const visiblePayments = (data?.payments || []).filter(project => !trashedProjectIds.has(project.id));
-      const visibleAccounts = (data?.accounts || [])
-        .filter(account => !trashedAccountIds.has(account.id))
-        .map(account => ({
-          ...account,
-          owned_project_count: Math.max(
-            0,
-            Number(account.owned_project_count || 0) - nextTrashEntries.filter(item =>
-              item.entity_type === "book_project" && item.snapshot?.owner_user_id === account.id
-            ).length
-          )
-        }));
+      const visibleAccounts = (data?.accounts || []).filter(account => !trashedAccountIds.has(account.id));
+      const accountImpacts = await loadAccountImpacts(visibleAccounts.map(account => account.id));
       const hiddenPaidCount = nextTrashEntries.filter(item =>
         item.entity_type === "book_project" && ["paid", "gifted", "legacy"].includes(item.snapshot?.access_status)
       ).length;
@@ -2213,7 +2207,7 @@ export default function AdminReview({ supabaseClient }) {
         },
         projects: visibleProjects.map(withDisplayName),
         attention: visibleAttention.map(withDisplayName),
-        accounts: visibleAccounts,
+        accounts: visibleAccounts.map(account => ({ ...account, impact: accountImpacts[account.id] })),
         payments: visiblePayments.map(withDisplayName)
       });
       setTrashEntries(nextTrashEntries);
@@ -2234,24 +2228,32 @@ export default function AdminReview({ supabaseClient }) {
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
-  async function moveToTrash(entityType, entity) {
+  async function loadAccountImpacts(accountIds) {
+    if (!accountIds.length) return {};
+    const { data, error: impactError } = await supabaseClient.rpc("get_admin_account_impacts", { input_account_ids: accountIds });
+    if (impactError || accountIds.some(id => !data?.[id])) {
+      throw new Error("アカウントの影響情報を取得できませんでした。再読み込みしてお試しください。");
+    }
+    return data;
+  }
+
+  async function moveToTrash(entityType, entity, approvedImpact = null) {
     const entityId = entity?.id;
     if (!entityId) return;
     if (!organizationModeActive) {
       setError("この操作には有効な整理モードが必要です。");
+      setTrashActionError("この操作には有効な整理モードが必要です。確認画面を閉じ、整理モードを有効にしてください。");
       return;
     }
 
     const isAccount = entityType === "account";
-    const ownedProjectCount = Math.max(0, Number(entity?.owned_project_count || 0));
+    let ownedProjectCount = Math.max(0, Number(entity?.owned_project_count || 0));
     const label = isAccount
       ? withoutHonorific(entity.display_name) || entity.email || "このアカウント"
       : projectDisplayName(entity);
-    const message = isAccount
-      ? `「${label}」を退役させ、メールアドレスを解放します。\n\n管理画面から非表示になり、ログインが停止されます。所有する物語${ownedProjectCount}件も非表示になります。購入者・お手伝いとして関係するだけの物語と元データは変更しません。続けますか？`
-      : `「${label}」を管理画面で非表示にします。\n\n回答・音声・写真・購入情報は削除されません。続けますか？`;
-
-    if (!window.confirm(message)) return;
+    if (!isAccount && !window.confirm(`「${label}」を管理画面で非表示にします。\n\n回答・音声・写真・購入情報は削除されません。続けますか？`)) return;
+    if (retirementBusyRef.current) return;
+    retirementBusyRef.current = true;
 
     const targetKey = `${entityType}:${entityId}`;
     setTrashTarget(targetKey);
@@ -2260,6 +2262,17 @@ export default function AdminReview({ supabaseClient }) {
     setNotice("");
     try {
       if (isAccount) {
+        // Re-read even after confirmation: if anything changed, require the
+        // operator to review the new snapshot instead of retiring blindly.
+        const impacts = await loadAccountImpacts([entityId]);
+        const impact = impacts[entityId];
+        if (impact.is_admin) throw new Error("有効な管理者アカウントは停止できません。");
+        ownedProjectCount = summarizeAccountImpact(impact).owned.length;
+        if (!approvedImpact || JSON.stringify(approvedImpact) !== JSON.stringify(impact)) {
+          setRetirementConfirmation({ account: entity, impact });
+          if (approvedImpact) setTrashActionError("影響情報が変更されました。最新の内容を確認して、もう一度操作してください。");
+          return;
+        }
         const { data, error: lifecycleError } = await supabaseClient.functions.invoke("admin-account-lifecycle", {
           body: { action: "retire", account_id: entityId }
         });
@@ -2281,8 +2294,9 @@ export default function AdminReview({ supabaseClient }) {
       setDetail(null);
       setAccountDetailId(null);
       setAccountDetail(null);
+      setRetirementConfirmation(null);
       setNotice(isAccount
-        ? `${label}を退役させ、メールアドレスを解放しました。所有する物語${ownedProjectCount}件も非表示にしました。元データは保持されています。`
+        ? `${label}を退役させ、メールアドレスを解放しました。所有する物語${ownedProjectCount}件は非表示です（非表示済みを含みます）。元データは保持されています。`
         : `${label}を非表示にしました。元データは保持されています。`);
       await loadDashboard();
     } catch (trashError) {
@@ -2291,6 +2305,7 @@ export default function AdminReview({ supabaseClient }) {
       setTrashActionError(actionError);
     } finally {
       setTrashTarget("");
+      retirementBusyRef.current = false;
     }
   }
 
@@ -2378,6 +2393,7 @@ export default function AdminReview({ supabaseClient }) {
 
   async function openDetail(projectId, allowHidden = false) {
     if (trashEntries.some(item => item.entity_type === "book_project" && item.entity_id === projectId) && (!allowHidden || !organizationModeActive)) return;
+    accountDetailRequestRef.current += 1;
     setAccountDetailId(null);
     setAccountDetail(null);
     setDetailId(projectId);
@@ -2642,6 +2658,7 @@ export default function AdminReview({ supabaseClient }) {
   async function openAccountDetail(accountId, allowHidden = false) {
     const hiddenAccount = trashEntries.find(item => item.entity_type === "account" && item.entity_id === accountId);
     if (hiddenAccount && (!allowHidden || !organizationModeActive)) return;
+    const requestId = ++accountDetailRequestRef.current;
     setDetailId(null);
     setDetail(null);
     setTrashActionError("");
@@ -2650,10 +2667,11 @@ export default function AdminReview({ supabaseClient }) {
     setAccountDetailLoading(true);
 
     try {
-      const [detailResult, activityResult, deliveryResult] = await Promise.all([
+      const [detailResult, activityResult, deliveryResult, accountImpacts] = await Promise.all([
         supabaseClient.rpc("get_admin_account_detail", { input_account_id: accountId }),
         supabaseClient.rpc("get_admin_usage_history", { input_account_id: accountId, input_limit: 100 }),
-        supabaseClient.rpc("get_admin_delivery_history", { input_account_id: accountId, input_limit: 100 })
+        supabaseClient.rpc("get_admin_delivery_history", { input_account_id: accountId, input_limit: 100 }),
+        loadAccountImpacts([accountId])
       ]);
       if (detailResult.error) throw detailResult.error;
       if (activityResult.error) throw activityResult.error;
@@ -2676,8 +2694,10 @@ export default function AdminReview({ supabaseClient }) {
         if (nameError) throw nameError;
         projectNames = nameData || {};
       }
+      if (requestId !== accountDetailRequestRef.current) return;
       setAccountDetail({
         ...rawDetail,
+        impact: accountImpacts[accountId],
         account: rawDetail.account
           ? {
             ...rawDetail.account,
@@ -2702,10 +2722,11 @@ export default function AdminReview({ supabaseClient }) {
         }))
       });
     } catch (detailError) {
+      if (requestId !== accountDetailRequestRef.current) return;
       setError(detailError?.message || "アカウント詳細を読み込めませんでした。");
       setAccountDetail(null);
     } finally {
-      setAccountDetailLoading(false);
+      if (requestId === accountDetailRequestRef.current) setAccountDetailLoading(false);
     }
   }
 
@@ -2952,7 +2973,13 @@ export default function AdminReview({ supabaseClient }) {
         <AccountDetailPanel
           detail={accountDetail}
           loading={accountDetailLoading}
-          onOpenProject={openDetail}
+          onOpenProject={(projectId) => {
+            if (trashEntries.some(item => item.entity_type === "book_project" && item.entity_id === projectId) && !organizationModeActive) {
+              setTrashActionError("非表示の物語の詳細を見るには、整理モードを有効にしてください。");
+              return;
+            }
+            openDetail(projectId, true);
+          }}
           canTrash={adminRole === "owner" && organizationModeActive}
           hiddenEntry={hiddenAccountEntry}
           trashLoading={trashTarget.includes(`account:${accountDetailId}`)}
@@ -2962,7 +2989,18 @@ export default function AdminReview({ supabaseClient }) {
             owned_project_count: accountDetail?.owned_projects?.length || 0
           })}
           onRestore={restoreFromTrash}
-          onClose={() => { setTrashActionError(""); setAccountDetailId(null); setAccountDetail(null); }}
+          onClose={() => { accountDetailRequestRef.current += 1; setTrashActionError(""); setAccountDetailId(null); setAccountDetail(null); }}
+        />
+      )}
+
+      {retirementConfirmation && (
+        <AccountRetirementDialog
+          account={retirementConfirmation.account}
+          impact={retirementConfirmation.impact}
+          busy={Boolean(trashTarget)}
+          error={trashActionError}
+          onClose={() => { if (!retirementBusyRef.current) { setRetirementConfirmation(null); setTrashActionError(""); } }}
+          onConfirm={() => moveToTrash("account", retirementConfirmation.account, retirementConfirmation.impact)}
         />
       )}
 
