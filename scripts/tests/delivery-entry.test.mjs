@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import { resolveDeliveryEntry, withoutDeliveryToken } from '../../src/lib/deliveryEntry.js';
+
+const data = { user_id: 'recipient', book_project_id: 'story', sequence_order: 5 };
+let calls = 0;
+const resolveToken = async () => { calls++; return data; };
+const entry = session => resolveDeliveryEntry({ token: 'test-only', session, resolveToken });
+assert.equal((await resolveDeliveryEntry({ resolveToken })).kind, 'none');
+assert.equal(calls, 0);
+assert.equal((await entry(null)).kind, 'authenticate');
+assert.equal((await entry({ user: { id: 'recipient' } })).kind, 'resume');
+const mismatch = await entry({ user: { id: 'other-account' } });
+assert.equal(mismatch.kind, 'authenticate');
+assert.equal(mismatch.accountMismatch, true);
+assert.equal(mismatch.tokenData, data);
+assert.equal((await resolveDeliveryEntry({ token: 'expired', resolveToken: async () => null })).kind, 'invalid');
+assert.equal((await resolveDeliveryEntry({ token: 'valid', resolveToken: async () => { throw Error('network'); } })).kind, 'unavailable');
+const fallback = new URL(withoutDeliveryToken('https://example.test/?token=secret&other=keep#section'));
+assert.equal(fallback.searchParams.has('token'), false);
+assert.equal(fallback.searchParams.get('entry'), 'login');
+assert.equal(fallback.searchParams.get('other'), 'keep');
+assert.equal(fallback.hash, '#section');
+console.log('PASS delivery entry: recipient matching, verification, invalid/network separation, safe fallback URL');

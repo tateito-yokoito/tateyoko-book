@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Bell, BookOpen, Check, ChevronLeft, ChevronRight, Files, Home, Image as ImageIcon, Lock, Mail, Mic, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings, Smartphone, Square, UserCircle, UserCog, Users, Video } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import { logActivity } from "./lib/activityLog.js";
+import { resolveDeliveryEntry, withoutDeliveryToken } from "./lib/deliveryEntry.js";
 import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
@@ -3054,6 +3055,8 @@ function App() {
   const [accessMode, setAccessMode] = useState("session");
   const [deliveryToken, setDeliveryToken] = useState(null);
   const [deliveryTokenData, setDeliveryTokenData] = useState(null);
+  const [deliveryAccountMismatch, setDeliveryAccountMismatch] = useState(false);
+  const [deliveryLinkIssue, setDeliveryLinkIssue] = useState("invalid");
   const [purchaseStatus, setPurchaseStatus] = useState("idle");
   const [purchaseError, setPurchaseError] = useState("");
   const [purchaseFor, setPurchaseFor] = useState(() => getPurchaseForFromUrl());
@@ -3139,6 +3142,20 @@ function App() {
         const { data: { session } } = await supabaseClient.auth.getSession();
 
   const initialDeliveryToken = getDeliveryTokenFromUrl();
+  const deliveryEntry = await resolveDeliveryEntry({ token: initialDeliveryToken, session, resolveToken: resolveDeliveryToken });
+  if (deliveryEntry.kind === "invalid" || deliveryEntry.kind === "unavailable") {
+    setDeliveryLinkIssue(deliveryEntry.kind);
+    setScene("token_invalid");
+    return;
+  }
+  if (deliveryEntry.kind === "authenticate") {
+    setAccessMode("session");
+    setDeliveryToken(initialDeliveryToken);
+    setDeliveryTokenData(deliveryEntry.tokenData);
+    setDeliveryAccountMismatch(deliveryEntry.accountMismatch);
+    setScene("token_auth");
+    return;
+  }
 
 if (!session) {
   const initialGiftClaimToken = getGiftClaimTokenFromUrl();
@@ -3156,27 +3173,6 @@ if (!session) {
       setFamilyInvitePreview(await loadFamilyInvitePreview(initialFamilyInviteToken));
     } catch (familyInvitePreviewError) {
       console.error("family invite preview init error", familyInvitePreviewError);
-    }
-  }
-
-  if (initialDeliveryToken) {
-    try {
-      const tokenData = await resolveDeliveryToken(initialDeliveryToken);
-
-      if (tokenData?.user_id) {
-        setAccessMode("session");
-        setDeliveryToken(initialDeliveryToken);
-        setDeliveryTokenData(tokenData);
-        setScene("token_auth");
-        return;
-      }
-
-      setScene("token_invalid");
-      return;
-    } catch (tokenError) {
-      console.error("token init error", tokenError);
-      setScene("token_invalid");
-      return;
     }
   }
 
@@ -3305,7 +3301,7 @@ let resolvedDeliveryTokenData = null;
 
 if (deliveryToken) {
   try {
-    const tokenData = await resolveDeliveryToken(deliveryToken);
+    const tokenData = deliveryEntry.tokenData;
     resolvedDeliveryTokenData = tokenData;
 
     if (tokenData?.sequence_order) {
@@ -3322,6 +3318,7 @@ if (deliveryToken) {
     }
   } catch (tokenError) {
     console.error("delivery token handling error", tokenError);
+    setDeliveryLinkIssue("unavailable");
     nextScene = "token_invalid";
   }
 }
@@ -3375,6 +3372,7 @@ if (
     setSupportNotificationPref(projectNotificationData || null);
     nextScene = "support_recording_assist";
   } else {
+    setDeliveryLinkIssue("project_unavailable");
     nextScene = "token_invalid";
   }
 }
@@ -6650,20 +6648,23 @@ let sceneAfterInvite = nextScene;
         <Scene_TokenAuthRequired
           token={deliveryToken}
           tokenData={deliveryTokenData}
+          accountMismatch={deliveryAccountMismatch}
           onAuthenticated={continueAfterTokenAuth}
           onInvalid={() => {
-            setScene(-1);
+            window.location.assign(withoutDeliveryToken(window.location.href));
           }}
         />
       )}
 
       {scene === "token_invalid" && (
         <Scene_TokenInvalid
+          issue={deliveryLinkIssue}
+          onRetry={() => window.location.reload()}
           onBack={() => {
             setAccessMode("session");
             setDeliveryToken(null);
             setDeliveryTokenData(null);
-            setScene(-1);
+            window.location.assign(withoutDeliveryToken(window.location.href));
           }}
         />
       )}
@@ -7805,7 +7806,7 @@ function StoryThemeToggle({ label, value, onToggle }) {
   );
 }
 
-function Scene_TokenAuthRequired({ token, tokenData, onAuthenticated, onInvalid }) {
+function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, onAuthenticated, onInvalid }) {
   const [step, setStep] = useState("ready");
   const [pin, setPin] = useState("");
   const [maskedEmail, setMaskedEmail] = useState("");
@@ -7858,12 +7859,12 @@ function Scene_TokenAuthRequired({ token, tokenData, onAuthenticated, onInvalid 
 
       const session = result.session;
 
-      await supabaseClient.auth.setSession({
+      const { error: sessionError } = await supabaseClient.auth.setSession({
         access_token: session.access_token,
         refresh_token: session.refresh_token
       });
-
-      onAuthenticated();
+      if (sessionError) throw sessionError;
+      await onAuthenticated();
     } catch (e) {
       console.error("token auth verify error", e);
 
@@ -7892,18 +7893,20 @@ function Scene_TokenAuthRequired({ token, tokenData, onAuthenticated, onInvalid 
         </p>
 
         <p className="text-white/62 text-[0.96rem] leading-loose">
+          {accountMismatch && <>現在ログインしているアカウントとは、<br />この問いの宛先が異なります。<br /><br /></>}
           ご本人確認のため、<br />
           登録済みのメールアドレスに<br />
           認証コードをお送りします。
         </p>
 
-        {maskedEmail && (
+        {(maskedEmail || tokenData.email_masked) && (
           <p className="text-white/42 text-sm leading-loose">
-            送信先：{maskedEmail}
+            送信先：{maskedEmail || tokenData.email_masked}
           </p>
         )}
       </div>
 
+      {accountMismatch && <p className="mb-6 text-sm text-white/55">認証が完了すると、問いの宛先のアカウントに切り替わります。</p>}
       {step === "ready" ? (
         <button
           type="button"
@@ -7947,24 +7950,25 @@ function Scene_TokenAuthRequired({ token, tokenData, onAuthenticated, onInvalid 
           </button>
         </div>
       )}
+      {accountMismatch && <button type="button" onClick={onInvalid} disabled={loading} className="mt-6 py-3 text-white/55 text-sm underline underline-offset-4">切り替えずに戻る</button>}
     </div>
   );
 }
 
-function Scene_TokenInvalid({ onBack }) {
+function Scene_TokenInvalid({ onBack, issue = "invalid", onRetry }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
       <div className="space-y-7 mb-12 text-narrative">
         <p className="text-white/90 text-[1.08rem]">
-          このリンクは開けませんでした
+          {issue === "unavailable" ? "問いのリンクを確認できませんでした" : issue === "project_unavailable" ? "この問いの物語を開けませんでした" : "このリンクは開けませんでした"}
         </p>
 
         <p className="text-white/62 text-[0.96rem] leading-loose">
-          期限切れ、または無効なリンクの可能性があります。<br />
-          ログインして、物語の続きを開いてください。
+          {issue === "unavailable" ? <>通信またはサーバーで一時的な問題が発生しています。<br />少し時間をおいて、もう一度お試しください。</> : issue === "project_unavailable" ? <>このアカウントでは、問いの対象の物語を確認できませんでした。<br />ログインして、利用する物語をご確認ください。</> : <>期限切れ、または無効なリンクの可能性があります。<br />ログインして、物語の続きを開いてください。</>}
         </p>
       </div>
 
+      {issue === "unavailable" && onRetry && <button type="button" onClick={onRetry} className="btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white mb-4">もう一度確認する</button>}
       <button
         type="button"
         onClick={onBack}
