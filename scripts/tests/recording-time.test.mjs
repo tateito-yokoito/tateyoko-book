@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { createRecordingClock, mergeRecordingDuration, RECORDING_LIMIT_SECONDS, RECORDING_WARNING_SECONDS } from '../../src/lib/recordingTime.js';
+let now = 0;
+const clock = createRecordingClock(() => now);
+clock.start();
+now = 539999; assert.equal(clock.seconds(), RECORDING_WARNING_SECONDS - 1);
+now = 540000; assert.equal(clock.seconds(), RECORDING_WARNING_SECONDS);
+clock.pause(); now += 300000; assert.equal(clock.seconds(), 540);
+clock.pause(); assert.equal(clock.seconds(), 540, 'Pause is idempotent');
+clock.resume(); now += 60000; assert.equal(clock.seconds(), RECORDING_LIMIT_SECONDS);
+clock.pause(); assert.equal(clock.seconds(), 600);
+clock.start(); now += 5000; assert.equal(clock.seconds(), 5, 'Every new recording gets its own allowance');
+now += 595000; assert.equal(clock.seconds(), 600, 'Delayed timer does not undercount active time');
+assert.equal(mergeRecordingDuration(600, 600, true), 1200, 'Do not truncate combined duration at ten minutes');
+assert.equal(mergeRecordingDuration(600, 20, false), 20);
+console.log('PASS recording clock: warning/limit, pauses, restart, delayed ticks, cumulative duration');

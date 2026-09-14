@@ -4,6 +4,7 @@ import { Bell, BookOpen, Check, ChevronLeft, ChevronRight, Files, Home, Image as
 import { createClient } from "@supabase/supabase-js";
 import { logActivity } from "./lib/activityLog.js";
 import { resolveDeliveryEntry, withoutDeliveryToken } from "./lib/deliveryEntry.js";
+import { createRecordingClock, mergeRecordingDuration, RECORDING_LIMIT_SECONDS, RECORDING_WARNING_SECONDS, RECORDING_LIMIT_NOTICE } from "./lib/recordingTime.js";
 import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
@@ -2299,7 +2300,6 @@ function getBetaIntroSeenKey(userId) {
 
 
 const MIN_RECORDING_SECONDS = 15;
-const MAX_RECORDING_SECONDS_PER_QUESTION = 10 * 60;
 const MAX_AUDIO_PARTS_PER_QUESTION = 5;
 const MAX_LIFE_OUTLINE_ADDITIONS = 5;
 
@@ -3046,6 +3046,7 @@ function App() {
   const [lifeOutlineIntroduction, setLifeOutlineIntroduction] = useState(null);
   const [lifeOutlineStatus, setLifeOutlineStatus] = useState("idle");
   const [lifeOutlineError, setLifeOutlineError] = useState("");
+  const [lifeOutlineRecordingNotice, setLifeOutlineRecordingNotice] = useState("");
   const [lifeOutlineReturnScene, setLifeOutlineReturnScene] = useState(null);
   const [notificationSetupReturnScene, setNotificationSetupReturnScene] = useState(null);
   const [completedThemeOrder, setCompletedThemeOrder] = useState(null);
@@ -3960,15 +3961,7 @@ const buildRecordedVoiceData = (prev, txt, dur, url, blob) => {
     ? formatTranscriptForReading([previousTranscript, newTranscript].filter(Boolean).join("\n\n"))
     : newTranscript;
 
-  const mergedDuration = prev.appendMode
-    ? Math.min(
-        MAX_RECORDING_SECONDS_PER_QUESTION,
-        (prev.duration || 0) + (dur || 0)
-      )
-    : Math.min(
-        MAX_RECORDING_SECONDS_PER_QUESTION,
-        dur || 0
-      );
+  const mergedDuration = mergeRecordingDuration(prev.duration, dur, prev.appendMode);
 
   const newSegment = blob && blob.size > 0
     ? {
@@ -4003,7 +3996,7 @@ const buildRecordedVoiceData = (prev, txt, dur, url, blob) => {
   };
 };
 
-const handleRecordComplete = (txt, dur, url, blob) => {
+const handleRecordComplete = (txt, dur, url, blob, details = {}) => {
   console.log("recorded blob", {
     type: blob?.type,
     size: blob?.size,
@@ -4022,6 +4015,7 @@ const handleRecordComplete = (txt, dur, url, blob) => {
   }
 
   const nextVoiceData = buildRecordedVoiceData(voiceData, txt, dur, url, blob);
+  nextVoiceData.recordingStopReason = details.stopReason;
 
   setVoiceData({
     ...nextVoiceData,
@@ -4887,7 +4881,8 @@ const persistLifeOutlineText = async ({
   }
 };
 
-const handleLifeOutlineAddRecording = async (txt, dur, _url, blob) => {
+const handleLifeOutlineAddRecording = async (txt, dur, _url, blob, details = {}) => {
+  setLifeOutlineRecordingNotice(details.stopReason === "limit" ? RECORDING_LIMIT_NOTICE : "");
   const introduction = lifeOutlineIntroduction;
   const additions = introduction?.additions || [];
 
@@ -7010,6 +7005,7 @@ let sceneAfterInvite = nextScene;
     data={lifeOutlineIntroduction}
     status={lifeOutlineStatus}
     error={lifeOutlineError}
+    recordingNotice={lifeOutlineRecordingNotice}
     isRevisit={lifeOutlineReturnScene === "story_pages"}
     onRetry={() => {
       generateLifeOutlineIntroduction({
@@ -7549,9 +7545,7 @@ let sceneAfterInvite = nextScene;
   storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
   userName={user?.name || "あなた"}
   autoStart
-onComplete={(t, d, u, b) => {
-  handleRecordComplete(t, d, u, b);
-}}
+onComplete={handleRecordComplete}
 />
       )}
 
@@ -7566,12 +7560,7 @@ onComplete={(t, d, u, b) => {
   }
   onAddMore={() => {
     const audioPartCount = (voiceData.audioSegments || []).length;
-    const totalDuration = Number(voiceData.duration || 0);
-
-    if (
-      audioPartCount >= MAX_AUDIO_PARTS_PER_QUESTION ||
-      totalDuration >= MAX_RECORDING_SECONDS_PER_QUESTION
-    ) {
+    if (audioPartCount >= MAX_AUDIO_PARTS_PER_QUESTION) {
       alert("語り足しの上限に達しました。\nここからは本文の編集で整えられます。");
       return;
     }
@@ -10136,6 +10125,7 @@ function Scene_LifeOutlineSummary({
   data,
   status,
   error,
+  recordingNotice = "",
   isRevisit = false,
   onRetry,
   onUseDraft,
@@ -10290,6 +10280,7 @@ function Scene_LifeOutlineSummary({
             ? "私の歩み"
             : "人生の輪郭がまとまりました"}
         </h1>
+        {recordingNotice && <p role="status" className="mt-4 text-white/70 text-sm leading-loose">{recordingNotice}</p>}
       </div>
 
       <div className="flex-1 overflow-y-auto pb-6">
@@ -14127,7 +14118,7 @@ export function Scene_SupportedStoryPages({
   );
 }
 
-function Scene_SupportRecordingAssist({
+export function Scene_SupportRecordingAssist({
   user,
   project,
   questionSet = [],
@@ -14139,9 +14130,12 @@ function Scene_SupportRecordingAssist({
     question?.flow_type === "story" ||
     question?.onboarding_group === "first_story"
   );
-  const nextQuestion =
+  const suggestedQuestion =
     storyQuestions.find(question => !question.answer_id && question.status !== "answered") ||
     null;
+  // Keep the same question while saving/reloading the question list between parts.
+  const [recordingQuestion, setRecordingQuestion] = useState(null);
+  const nextQuestion = recordingQuestion || suggestedQuestion;
   const questionIndex = Math.max(
     storyQuestions.findIndex(question => question.user_question_id === nextQuestion?.user_question_id),
     0
@@ -14152,22 +14146,25 @@ function Scene_SupportRecordingAssist({
   const [reviewText, setReviewText] = useState("");
   const [essayText, setEssayText] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const savingRef = useRef(false);
 
-  const processRecording = async (transcript, duration, audioUrl, audioBlob) => {
-    const answerId = crypto.randomUUID();
-
-    setRecordingData({
-      answerId,
+  const processRecording = async (transcript, duration, audioUrl, audioBlob, details = {}, retryData = null) => {
+    const draft = retryData || {
+      answerId: crypto.randomUUID(),
       transcript: transcript || "",
       duration,
       audioUrl,
       audioBlob,
-      storagePaths: []
-    });
+      storagePaths: [],
+      stopReason: details.stopReason
+    };
+    const answerId = draft.answerId;
+    setRecordingData(draft);
     setErrorMessage("");
     setPhase("processing");
 
     try {
+      if (!audioBlob?.size) throw new Error("録音データがありません");
       const contentType = audioBlob?.type || "audio/mp4";
       const ext = contentType.includes("mp4")
         ? "mp4"
@@ -14176,7 +14173,8 @@ function Scene_SupportRecordingAssist({
           : "webm";
       const storagePath = `${user.id}/${answerId}/part-01.${ext}`;
 
-      const { error: uploadError } = await supabaseClient.storage
+      if (!draft.storagePaths.length) {
+        const { error: uploadError } = await supabaseClient.storage
         .from("audio")
         .upload(storagePath, audioBlob, {
           contentType,
@@ -14184,8 +14182,12 @@ function Scene_SupportRecordingAssist({
         });
 
       if (uploadError) throw uploadError;
+      }
+      setRecordingData(prev => ({ ...prev, storagePaths: [storagePath] }));
 
-      const transcription = await transcribeAudioOnServer({
+      let transcriptRaw = String(transcript || "").trim();
+      try {
+        const transcription = await transcribeAudioOnServer({
         answerId,
         audioPaths: [storagePath],
         fallbackTranscript: transcript || "",
@@ -14193,14 +14195,19 @@ function Scene_SupportRecordingAssist({
         questionText: nextQuestion?.content || "",
         previousTranscript: ""
       });
-      const transcriptRaw = String(
+        transcriptRaw = String(
         transcription?.transcript_raw || transcription?.transcript || transcript || ""
       ).trim();
+      } catch (transcriptionError) {
+        console.warn("supporter transcription failed; keep uploaded audio", transcriptionError);
+        setErrorMessage("文字起こしを取得できませんでした。音声はアップロード済みです。このまま保存できます。");
+      }
 
       let readable = transcriptRaw;
       let essay = "";
 
       try {
+        if (!transcriptRaw) throw new Error("No transcript to polish");
         const polished = await polishTranscriptOnServer({
           answerId,
           transcriptRaw,
@@ -14231,14 +14238,15 @@ function Scene_SupportRecordingAssist({
     }
   };
 
-  const saveRecording = async () => {
-    if (!nextQuestion?.user_question_id || !recordingData?.answerId) return;
+  const saveRecording = async (continueRecording = false) => {
+    if (savingRef.current || !nextQuestion?.user_question_id || !recordingData?.storagePaths?.length) return;
+    savingRef.current = true;
 
     try {
       setPhase("saving");
       setErrorMessage("");
 
-      const { error } = await supabaseClient.rpc("save_supporter_recording", {
+      const { error } = await supabaseClient.rpc("append_supporter_recording", {
         input_book_project_id: project.book_project_id,
         input_user_question_id: nextQuestion.user_question_id,
         input_answer_id: recordingData.answerId,
@@ -14252,12 +14260,22 @@ function Scene_SupportRecordingAssist({
 
       if (error) throw error;
 
-      await onSaved?.();
-      setPhase("success");
+      // A failed list refresh must not turn a successful save into a failed save.
+      try { await onSaved?.(); } catch (refreshError) { console.warn("supporter list refresh failed", refreshError); }
+      if (continueRecording) {
+        setRecordingData(null);
+        setReviewText("");
+        setEssayText("");
+        setPhase("recording");
+      } else {
+        setPhase("success");
+      }
     } catch (error) {
       console.error("supporter recording save error", error);
       setErrorMessage("語りを保存できませんでした。もう一度お試しください。");
       setPhase("review");
+    } finally {
+      savingRef.current = false;
     }
   };
 
@@ -14286,6 +14304,7 @@ function Scene_SupportRecordingAssist({
       </div>
 
       <div className="flex-1 flex flex-col justify-center py-8">
+        {recordingData?.stopReason === "limit" && phase !== "success" && <p role="status" className="mb-5 text-white/70 text-sm leading-loose text-center">{RECORDING_LIMIT_NOTICE}</p>}
         {phase === "question" && nextQuestion && (
           <div className="space-y-8 text-center">
             <div className="space-y-3">
@@ -14316,7 +14335,7 @@ function Scene_SupportRecordingAssist({
 
             <button
               type="button"
-              onClick={() => setPhase("recording")}
+              onClick={() => { setRecordingQuestion(nextQuestion); setPhase("recording"); }}
               className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
             >
               録音を始める
@@ -14373,11 +14392,14 @@ function Scene_SupportRecordingAssist({
 
             <button
               type="button"
-              onClick={saveRecording}
-              disabled={!reviewText.trim()}
+              onClick={() => saveRecording(false)}
+              disabled={!recordingData?.storagePaths?.length}
               className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white disabled:opacity-40"
             >
               この内容で保存する
+            </button>
+            <button type="button" onClick={() => saveRecording(true)} disabled={!recordingData?.storagePaths?.length} className="w-full py-3 text-white/65 text-sm underline underline-offset-4 disabled:opacity-40">
+              保存して続きを話す
             </button>
           </div>
         )}
@@ -14390,13 +14412,11 @@ function Scene_SupportRecordingAssist({
             <button
               type="button"
               onClick={() => {
-                setRecordingData(null);
-                setErrorMessage("");
-                setPhase("recording");
+                if (recordingData?.audioBlob) processRecording(recordingData.transcript, recordingData.duration, recordingData.audioUrl, recordingData.audioBlob, {}, recordingData);
               }}
               className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
             >
-              もう一度録音する
+              保存をもう一度試す
             </button>
           </div>
         )}
@@ -16236,7 +16256,7 @@ function Scene_DailyMicCheck({ onComplete }) {
   );
 }
 
-function Scene_Recording({
+export function Scene_Recording({
   question,
   progress,
   storyProgress = progress,
@@ -16251,6 +16271,10 @@ function Scene_Recording({
   const hasStartedRecordingRef = useRef(false);
   const autoStartRequestedRef = useRef(false);
   const timeRef = useRef(0);
+  const clockRef = useRef(createRecordingClock());
+  const stopRequestedRef = useRef(false);
+  const stopReasonRef = useRef("manual");
+  const completionSentRef = useRef(false);
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [waveTick, setWaveTick] = useState(0);
 
@@ -16337,13 +16361,14 @@ useEffect(() => {
   }
 
   if (step === 1 && !isPaused) {
-    recordingTimerRef.current = setInterval(() => {
-      setTime(t => {
-        const next = t + 1;
-        timeRef.current = next;
-        return next;
-      });
-    }, 1000);
+    const tick = () => {
+      const seconds = clockRef.current.seconds();
+      timeRef.current = seconds;
+      setTime(seconds);
+      if (seconds >= RECORDING_LIMIT_SECONDS) stop("limit");
+    };
+    recordingTimerRef.current = setInterval(tick, 250);
+    tick();
 
     document.body.classList.add("is-recording");
   } else {
@@ -16559,6 +16584,9 @@ const startActualRecording = async (preparedStream = null) => {
   });
 
   suppressCompleteRef.current = false;
+  stopRequestedRef.current = false;
+  completionSentRef.current = false;
+  stopReasonRef.current = "manual";
 
   setTime(0);
   timeRef.current = 0;
@@ -16624,6 +16652,10 @@ const startActualRecording = async (preparedStream = null) => {
       };
 
 mediaRef.current.onstop = () => {
+  if (completionSentRef.current) return;
+  completionSentRef.current = true;
+  clockRef.current.pause();
+  timeRef.current = clockRef.current.seconds();
   console.log("[recording-debug] MediaRecorder onstop", {
     runId: debugRunIdRef.current,
     suppressComplete: suppressCompleteRef.current,
@@ -16698,7 +16730,8 @@ mediaRef.current.onstop = () => {
           finalTranscript,
           timeRef.current,
           url,
-          blob
+          blob,
+          { stopReason: stopReasonRef.current }
         );
 
         stopWaveMonitor();
@@ -16713,6 +16746,7 @@ mediaRef.current.onstop = () => {
       };
 
 mediaRef.current.start(1000);
+clockRef.current.start();
 
 console.log("[recording-debug] MediaRecorder started with timeslice", {
   runId: debugRunIdRef.current,
@@ -16771,6 +16805,8 @@ console.log("[recording-debug] recorder-only: wave monitor not used while record
   };
 
 const pauseRecording = () => {
+  if (stopRequestedRef.current) return;
+  clockRef.current.pause();
   setIsPaused(true);
 
   if (recordingTimerRef.current) {
@@ -16793,6 +16829,8 @@ const pauseRecording = () => {
   };
 
   const resumeRecording = async () => {
+    if (stopRequestedRef.current) return;
+    clockRef.current.resume();
     setIsPaused(false);
 
     if (mediaRef.current && mediaRef.current.state === "paused") {
@@ -16812,7 +16850,10 @@ const pauseRecording = () => {
     }
   };
 
-const stop = () => {
+const stop = (reason = "manual") => {
+  if (stopRequestedRef.current) return;
+  stopRequestedRef.current = true;
+  stopReasonRef.current = reason === "limit" ? "limit" : "manual";
   logRecordingDebug("stop clicked", {
     speechExists: !!speechRef.current,
     suppressComplete: suppressCompleteRef.current
@@ -16831,7 +16872,7 @@ const stop = () => {
     try { speechRef.current.stop(); } catch (e) {}
   }
 
-  setTimeout(() => {
+  const finishRecording = () => {
     logRecordingDebug("stop timeout fired");
 
     if (mediaRef.current && mediaRef.current.state !== "inactive") {
@@ -16868,9 +16909,13 @@ const stop = () => {
 
       alert("録音をうまく終了できませんでした。もう一度、録音をお試しください。");
       setStep(0);
+      stopRequestedRef.current = false;
 
     }
-  }, 1200);
+  };
+  // Stop immediately at the limit; retain the existing manual-stop settling delay.
+  if (stopReasonRef.current === "limit") finishRecording();
+  else setTimeout(finishRecording, 1200);
 };
 
 const isRecordingActive = step === 1;
@@ -16977,6 +17022,11 @@ return (
 
 {step === 1 && (
   <div className="recording-control-dock mt-4">
+          {time >= RECORDING_WARNING_SECONDS && (
+            <p role="status" className="mb-4 text-amber-100/85 text-sm leading-relaxed">
+              あと1分で、いったん録音を区切ります。続きも残せます。
+            </p>
+          )}
           <div className="recording-status-row" aria-live="polite">
             <span className={`recording-live-dot ${isPaused ? "is-paused" : ""}`} aria-hidden="true" />
             <span className="text-white/50 text-[0.78rem] tracking-[0.18em] tabular-nums">
@@ -17021,7 +17071,7 @@ return (
   );
 }
 
-function Scene3_5_VoiceCheck({
+export function Scene3_5_VoiceCheck({
   data,
   isLifeOutline = false,
   isLastLifeOutline = false,
@@ -17042,21 +17092,15 @@ function Scene3_5_VoiceCheck({
   const shouldSuggestAddMore = isShortAnswer && !hasAlreadyAddedMore;
 
   const audioPartCount = (data.audioSegments || []).length;
-  const totalDuration = Number(data.duration || 0);
 
   const hasReachedAudioPartLimit =
     audioPartCount >= MAX_AUDIO_PARTS_PER_QUESTION;
 
-  const hasReachedDurationLimit =
-    totalDuration >= MAX_RECORDING_SECONDS_PER_QUESTION;
-
   const canAddMore =
     !data.editRecordingMode &&
-    !hasReachedAudioPartLimit &&
-    !hasReachedDurationLimit;
+    !hasReachedAudioPartLimit;
 
-  const hasReachedAddMoreLimit =
-    hasReachedAudioPartLimit || hasReachedDurationLimit;
+  const hasReachedAddMoreLimit = hasReachedAudioPartLimit;
 
   const displayText =
     data.editedText ||
@@ -17142,6 +17186,7 @@ return (
     </div>
 
       <div className="flex-1 overflow-y-auto pb-6">
+        {data.recordingStopReason === "limit" && <p role="status" className="mb-5 text-white/70 text-sm leading-loose text-center">{RECORDING_LIMIT_NOTICE}</p>}
         {hasTranscriptionError && (
           <div className="glass-card p-5 mb-6">
             <p className="text-white/75 text-sm leading-loose mb-3">
