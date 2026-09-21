@@ -1,4 +1,5 @@
 export const FAMILY_TEST_REF = 'zpswxefgfabzvxdbtyvq';
+import {familyRollout} from './familyRollout.js';
 
 // The server capability is independent of payer, family membership and device.
 export const canProduce = workspace => workspace?.role === 'subject' ||
@@ -17,9 +18,11 @@ export function familyInvitationUrl(origin, token) {
   return `${origin}/?app=1&family_connect=1#connect=${token}`;
 }
 
-export function createFamilyApi(client) {
-  if (new URL(client.supabaseUrl).hostname !== `${FAMILY_TEST_REF}.supabase.co`) {
-    throw Error('母娘接続は現在TEST環境のみで利用できます。');
+export function createFamilyApi(client, env = import.meta.env || {}) {
+  const url=new URL(client.supabaseUrl);
+  if (url.origin !== `https://${FAMILY_TEST_REF}.supabase.co` &&
+      !(url.origin==='https://wquxjeqkumossjxehdop.supabase.co' && familyRollout({...env,VITE_SUPABASE_URL:url.origin}).enabled)) {
+    throw Error('この環境では制作サポートをご利用いただけません。');
   }
   const rpc = async (name, parameters = {}) => {
     const {data, error} = await client.rpc(name, parameters);

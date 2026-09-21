@@ -16,6 +16,8 @@ import FamilyPhotoStoryFlow from './FamilyPhotoStoryFlow.jsx';
 import FamilySubjectStories from './FamilySubjectStories.jsx';
 import FamilyThemeFlow from './FamilyThemeFlow.jsx';
 import FamilyDeliverySettings from './FamilyDeliverySettings.jsx';
+import {familyRollout} from './lib/familyRollout.js';
+const familyRelease=familyRollout(import.meta.env);
 
 const AdminReview = import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
   ? null : React.lazy(() => import('./admin/AdminReview.jsx'));
@@ -42,7 +44,8 @@ function RootScreen() {
   const params = new URLSearchParams(window.location.search);
 
 
-  if (import.meta.env.VITE_FAMILY_CONNECTION_TEST === 'true' && shouldOpenApplication()) {
+  if (familyRelease.enabled && shouldOpenApplication()) {
+    if(params.has('family_connect')&&!familyRelease.subjectConnection)return <p>ご本人のスマホ接続は、現在ご案内していません。</p>;
     return <FamilyTestGate params={params} />;
   }
 
@@ -102,7 +105,7 @@ function FamilyTestGate({params}) {
     renderStarting={props=><FamilyStartingFlow key={props.workspace.project_id} {...props}/>}
     renderSubjectPhoto={props=><FamilyPhotoStoryFlow key={props.workspace.project_id} {...props}/>}
     renderTheme={props=><FamilyThemeFlow key={props.workspace.project_id} {...props}/>}
-    renderDelivery={props=><FamilyDeliverySettings key={props.workspace.project_id} {...props}/>}
+    renderDelivery={familyRelease.delivery ? props=><FamilyDeliverySettings key={props.workspace.project_id} {...props}/> : undefined}
   />;
   return <><nav style={{background:'#101c2c',padding:12,color:'#eee',textAlign:'center'}} aria-label="物語を切り替える"><a href="/?app=1&family=1">わたしの物語 ／ 支えている物語　〉</a></nav><App /></>;
 }

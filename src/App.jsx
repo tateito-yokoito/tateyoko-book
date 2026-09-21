@@ -4,6 +4,7 @@ import TrialGiftPurchaseReview from './TrialGiftPurchaseReview.jsx';
 import ChildhoodTrialIntro from './ChildhoodTrialIntro.jsx';
 import {isChildhoodTrial} from './lib/childhoodTrial.js';
 import {experienceRollout} from './lib/experienceRollout.js';
+import {familyRollout} from './lib/familyRollout.js';
 import {loadBookWork} from './lib/bookWork.js';
 import {questionForStory,buildStorySections,isTrialStoryQuestion} from './lib/storyPages.js';
 import {assertPublicTestEnvironment} from './lib/publicTestSafety.js';
@@ -3652,7 +3653,7 @@ const handleDevLogout = async () => {
 
 const openSupportedProject = async (supportedProject) => {
   if (!supportedProject?.book_project_id) return;
-  if(import.meta.env.VITE_FAMILY_CONNECTION_TEST === 'true') {
+  if(familyRollout(import.meta.env).enabled) {
     const {data,error}=await supabaseClient.rpc('family_list_workspaces');
     if(!error && data?.some(p=>p.project_id===supportedProject.book_project_id)) {
       window.location.assign(`/?app=1&family=1&family_project=${encodeURIComponent(supportedProject.book_project_id)}`);return;
@@ -7323,7 +7324,7 @@ let sceneAfterInvite = nextScene;
 
       {scene === "family_story_mode" && (
         <Scene_FamilyStoryMode
-          onChooseFacilitator={() => import.meta.env.VITE_FAMILY_CONNECTION_TEST === 'true' ? window.location.assign('/?app=1&family=1&create=1') : setScene("family_story_facilitator_setup")}
+          onChooseFacilitator={() => familyRollout(import.meta.env).enabled ? window.location.assign('/?app=1&family=1&create=1') : setScene("family_story_facilitator_setup")}
           onBack={() => setScene("home")}
         />
       )}
@@ -10000,9 +10001,9 @@ function ThemeDeliveryChoices({ theme, notificationLabel, onChangeDelivery, onWa
             </span>
             <ChevronRight size={15} className="shrink-0 text-white/28" />
           </button>
-          <button type="button" onClick={onChangeDelivery} className="mb-3 ml-14 text-[0.68rem] text-white/40 underline underline-offset-4">
+          {onChangeDelivery && <button type="button" onClick={onChangeDelivery} className="mb-3 ml-14 text-[0.68rem] text-white/40 underline underline-offset-4">
             配信日時を変更
-          </button>
+          </button>}
         </div>
 
         <button type="button" onClick={onContinue} className="btn-quiet flex w-full items-center gap-3 px-4 py-4 text-left">

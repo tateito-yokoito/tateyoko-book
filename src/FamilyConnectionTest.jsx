@@ -2,14 +2,16 @@ import React, {useEffect, useMemo, useRef, useState} from 'react';
 import FamilyProductionSupporters from './FamilyProductionSupporters.jsx';
 import {createFamilyApi, familyInvitationUrl, japaneseMobile, canProduce} from './lib/familyConnection.js';
 import {familyAuthFeedback} from './lib/familyAuthFeedback.js';
+import {familyRollout} from './lib/familyRollout.js';
 import './family-connection-test.css';
 import HomePage from './home/HomePage.jsx';
 import HomeInstall, {installWasShown} from './home/HomeInstall.jsx';
 import {familyJourney} from './home/familyHomeModel.js';
 import {firstStoryGuideState, finishFirstStoryGuide, firstStoryDestination} from './home/firstStoryGuide.js';
 
-// TEST-only adapter. Do not mount App's legacy Person/Project bootstrap here.
+// Person-bound adapter. Do not mount App's legacy Person bootstrap here.
 export default function FamilyConnectionTest({client, onOwnStory, renderBook, renderRecording, renderSharedStories, renderSubjectStories, renderSupporterPhoto, renderPrivacy, renderStarting, renderSubjectPhoto, renderTheme, renderDelivery, fixtureUpload = false}) {
+  const release=familyRollout(import.meta.env);
   const api = useMemo(() => createFamilyApi(client), [client]);
   const [session, setSession] = useState(undefined);
   const [list, setList] = useState([]), [workspace, setWorkspace] = useState(null);
@@ -34,6 +36,7 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
   const [continuation, setContinuation] = useState(null), [playback, setPlayback] = useState(null);
   const recorder = useRef(null), stream = useRef(null), uploaded = useRef(null), cooldown = useRef(0);
   const [inviteToken, setInviteToken] = useState(() => {
+    if(!release.subjectConnection)return '';
     const token = new URLSearchParams(location.hash.slice(1)).get('connect');
     if (/^[a-f0-9]{64}$/.test(token || '')) {
       sessionStorage.setItem('family-connect-pending', token);
@@ -205,8 +208,8 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
       onSkip:async()=>{await api.skipQuestion(workspace.project_id,question);await advanceRecording();},
     });
   if(session && !inviteToken && !install && producer && ['theme','mainConsent'].includes(scene) && renderTheme) return renderTheme({workspace,api,
-    notificationLabel:'TESTでは通知を送りません',
-    onDeliverySettings:async fresh=>{if(identity.current!==session.user.id)return;setWorkspace(fresh);setDeliveryReturn('theme');setScene(fresh.role==='subject'?'delivery':'settings');},
+    notificationLabel:release.test?'TESTでは通知を送りません':'ご自身のペースで進められます',
+    onDeliverySettings:renderDelivery ? async fresh=>{if(identity.current!==session.user.id)return;setWorkspace(fresh);setDeliveryReturn('theme');setScene(fresh.role==='subject'?'delivery':'settings');} : undefined,
     onNavigate:async(fresh,destination)=>{
       if(identity.current!==session.user.id)return;
       setWorkspace(fresh);setContinuation(null);
@@ -269,7 +272,7 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
       <button className="secondary" onClick={()=>setScene('stories')}>{producer?'語りを確認・編集する':'共有された語り'}　〉</button>
       {producer && <><button className="secondary" onClick={()=>setScene(workspace.access?.paid?'book':'purchase')}>本をつくる・仕上げる　〉</button><button className="secondary" onClick={()=>setScene('privacy')}>家族への共有設定　〉</button></>}
       {!producer && <button className="secondary" onClick={()=>{setIntent(false);setScene('delegation');}}>制作をおまかせしてもらう　〉</button>}
-      <button className="secondary" onClick={()=>setScene('device')}>ご本人のスマホ　{workspace.connected?'接続済み':''}　〉</button>
+      {release.subjectConnection && <button className="secondary" onClick={()=>setScene('device')}>ご本人のスマホ　{workspace.connected?'接続済み':''}　〉</button>}
       {!workspace.access?.paid && <button className="secondary" onClick={()=>setScene('purchase')}>物語の続きを贈る　〉</button>}
     </section>}
     {!session && !entry && (inviteToken ? <section>
@@ -277,7 +280,7 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
       <button onClick={()=>setEntry('subject')}>このスマホで続ける</button>
       <button className="entry-back" onClick={()=>{sessionStorage.removeItem('family-connect-pending');setInviteToken('');setMessage('');}}>別の入口へ</button>
     </section> : <section className="family-entry" aria-label="使い方を選ぶ">
-      <button className="entry-card" onClick={()=>setEntry('subject')}><span>ご自身の物語を語る</span><span aria-hidden="true">〉</span><small>初めての方も、続きからの方も</small></button>
+      {release.subjectConnection && <button className="entry-card" onClick={()=>setEntry('subject')}><span>ご自身の物語を語る</span><span aria-hidden="true">〉</span><small>初めての方も、続きからの方も</small></button>}
       <button className="entry-card" onClick={()=>setEntry('supporter')}><span>ご家族の物語を支える</span><span aria-hidden="true">〉</span><small>進捗を見る・写真を添える</small></button>
     </section>)}
     {!session && entry==='supporter' && <section>
@@ -336,14 +339,14 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
       {workspace && <>
         {scene==='delegation' && <section><h2>サポーターにおまかせする</h2>
           <p>{workspace.name}さんのすべての語り・音声・写真を確認し、文章編集、共有設定、本への収録、仕上げ・注文をお手伝いします。一般の家族への共有とは別の制作アクセスです。</p>
-          <p>ご本人のスマホなしでも進められます。あとから同じ物語にご本人のスマホをつなげられます。</p>
+          <p>ご本人のスマホなしでも進められます。{release.subjectConnection && 'あとから同じ物語にご本人のスマホをつなげられます。'}</p>
           <label className="check"><input type="checkbox" checked={intent} onChange={e=>setIntent(e.target.checked)}/>この範囲の制作をおまかせで進めることを、ご本人に確認しました</label>
           <button disabled={busy || !intent} onClick={()=>run(async()=>{await api.confirmProduction(workspace.project_id,session.user.id,true);await open(workspace.project_id);setScene('home');})}>確認して進める</button>
         </section>}
         {scene==='questions' && <section><h2>問いを選ぶ</h2>{journey.pool.map(q=><button key={q.id} className="secondary" disabled={!q.available} onClick={()=>selectRecording(q.id)}>{q.text}</button>)}</section>}
         {scene==='inactive' && <section><h2>ご利用状況</h2><p>現在、新しい語りの保存は停止しています。設定からご利用状況を確認してください。</p><button onClick={()=>setScene('settings')}>設定へ</button></section>}
         {scene==='purchase' && <section><h2>物語の続きを残す</h2><p>無料で残した語りも、そのまま一冊へ。</p><p>49,800円（税込）</p><p className="family-note">ご家族が贈る場合の返金保証は決済後45日以内・本編開始前です。制作期間は、ご本人の意向を確認して「はじまりの章」を始めてから1年間です。</p>
-          {workspace.role==='supporter' ? <button disabled={busy} onClick={()=>run(async()=>{const {data,error}=await client.functions.invoke('create-checkout-session',{body:{orderType:'self',projectId:workspace.project_id,returnContext:'family',expectedPolicyVersion:'2.0',expectedAmount:49800}});if(error || data?.success===false)throw error||Error('checkout');if(data?.checkoutUrl){const url=new URL(data.checkoutUrl);if(url.protocol!=='https:' || url.hostname!=='checkout.stripe.com')throw Error('checkout');location.assign(url.href);}else{await open(workspace.project_id);setScene('home');}})}>TESTの購入画面へ</button> : <p>ご家族の画面から、この物語の続きを購入できます。</p>}
+          {workspace.role==='supporter' ? <button disabled={busy} onClick={()=>run(async()=>{const {data,error}=await client.functions.invoke('create-checkout-session',{body:{orderType:'self',projectId:workspace.project_id,returnContext:'family',expectedPolicyVersion:'2.0',expectedAmount:49800}});if(error || data?.success===false)throw error||Error('checkout');if(data?.checkoutUrl){const url=new URL(data.checkoutUrl);if(url.protocol!=='https:' || url.hostname!=='checkout.stripe.com')throw Error('checkout');location.assign(url.href);}else{await open(workspace.project_id);setScene('home');}})}>{release.test?'TESTの購入画面へ':'購入画面へ'}</button> : <p>ご家族の画面から、この物語の続きを購入できます。</p>}
         </section>}
         {['startingConsent','mainConsent'].includes(scene) && <section>
           <h2>{scene==='startingConsent'?'はじまりの章':'9つのテーマへ'}</h2>
@@ -386,7 +389,7 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
         </article>)}
         {playback?.kind==='audio' && <audio src={playback.url} controls autoPlay/>}
         </>}
-        {scene==='device' && workspace.role==='supporter' && <section><h2>ご本人のスマホ {workspace.connected?'接続済み':''}</h2>{!workspace.connected && <>
+        {release.subjectConnection && scene==='device' && workspace.role==='supporter' && <section><h2>ご本人のスマホ {workspace.connected?'接続済み':''}</h2>{!workspace.connected && <>
           <label>ご本人の携帯電話番号<input type="tel" value={phone} onChange={e=>setPhone(e.target.value)}/></label>
           <button disabled={busy} onClick={()=>run(async()=>{const invite=await api.issue(workspace.project_id,phone);setInviteUrl(familyInvitationUrl(location.origin,invite.token));})}>接続リンクを用意する</button>
           {inviteUrl && <><a href={`https://line.me/R/share?text=${encodeURIComponent('縦糸横糸の続きを、このスマホで語れます。\n'+inviteUrl)}`} target="_blank" rel="noreferrer">LINEで送る</a><button className="secondary" onClick={()=>run(()=>navigator.clipboard.writeText(inviteUrl))}>リンクをコピー</button></>}

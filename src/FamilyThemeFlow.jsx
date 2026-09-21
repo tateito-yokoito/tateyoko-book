@@ -36,7 +36,7 @@ export default function FamilyThemeFlow({api,workspace,notificationLabel,onDeliv
         ? <Scene_ThemeComplete completedTheme={completed} hasNextTheme={nav.order<9} onContinue={()=>act('next')} onFinish={()=>act('finish','stories')}/>
         : intro && ['intro','first_intro'].includes(nav?.phase)
           ? <Scene_ThemeIntro theme={intro} isFirstTheme={nav.phase==='first_intro'} notificationLabel={notificationLabel}
-              onChangeDelivery={()=>act('delivery')} onWait={()=>act('enter','home')} onContinue={()=>act('enter','question')}/>
+              onChangeDelivery={onDeliverySettings?()=>act('delivery'):undefined} onWait={()=>act('enter','home')} onContinue={()=>act('enter','question')}/>
           : <p role="alert">テーマを開けませんでした。ホームからもう一度お試しください。</p>}
   </div></div>;
 }

@@ -14,7 +14,7 @@ const settings={
  VITE_PUBLIC_TEST_MODE:'true',VITE_SUPABASE_URL:TEST_SUPABASE_URL,VITE_SUPABASE_ANON_KEY:anon,
  VITE_EXPERIENCE_V2_TEST_ONLY:'true',VITE_EXPERIENCE_V2_ENABLED:'true',
  VITE_TRIAL_CONVERSION_ENABLED:'true',VITE_EXPERIENCE_NOTIFICATIONS_ENABLED:'false',
- VITE_FAMILY_CONNECTION_TEST:'true'
+ VITE_FAMILY_CONNECTION_TEST:'true',VITE_FAMILY_SUBJECT_CONNECTION_ENABLED:'false'
 };
 assertPublicTestEnvironment(settings);
 // Do not import a developer's .env.local or leak ambient VITE values.
@@ -47,11 +47,14 @@ fs.copyFileSync('public/pwa-sw.js',path.join(outDir,'pwa-sw.js'));
 const files=filesUnder(outDir);
 assert.ok(files.every(p=>!/(?:private|\.env|sourcemap|AdminReview|\.map$)/i.test(path.relative(outDir,p))));
 const code=files.filter(p=>/\.(js|html|json)$/.test(p)).map(p=>fs.readFileSync(p,'utf8')).join('\n');
-assert.ok(!code.includes('wquxjeqkumossjxehdop'),'Production ref included');
+// The release guard names both permitted environments. That comparison literal
+// is not runtime configuration; credentials and CSP must still be TEST-only.
+assert.equal(settings.VITE_SUPABASE_URL,TEST_SUPABASE_URL);
+assert.ok(!fs.readFileSync(path.join(outDir,'vercel.json'),'utf8').includes('wquxjeqkumossjxehdop'));
 assert.ok(!/(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{10,}|whsec_[A-Za-z0-9]{10,}|sb_secret_[A-Za-z0-9]/.test(code),'Server key included');
 for(const jwt of code.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)||[]){
  const claims=JSON.parse(Buffer.from(jwt.split('.')[1],'base64url').toString());assert.equal(claims.role,'anon');assert.equal(claims.ref,ref);
 }
 assert.ok(fs.readFileSync(path.join(outDir,'index.html'),'utf8').includes('noindex'));
-const report={ref,files:files.length,bytes:files.reduce((n,p)=>n+fs.statSync(p).size,0),adminBundle:false,sourceMaps:false,productionRef:false,noindex:true,deployed:false};
+const report={ref,files:files.length,bytes:files.reduce((n,p)=>n+fs.statSync(p).size,0),adminBundle:false,sourceMaps:false,productionConfiguration:false,productionGuardLiteral:code.includes('wquxjeqkumossjxehdop'),noindex:true,deployed:false};
 fs.writeFileSync('output/family-test-build-report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));

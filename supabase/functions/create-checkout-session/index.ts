@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import {requireFamilyRelease} from '../_shared/family-release.ts';
 import { requireStripeEnvironment, commerceMode, requireCheckoutEnabled, requireEventMode, finalizeExperienceCheckout } from "../_shared/experience-commerce.ts";
 
 const corsHeaders = {
@@ -325,6 +326,7 @@ serve(async request => {
       const {data:managed,error:managedError}=await admin.rpc('family_managed',{p:projectId});
       if(managedError)throw managedError;
       managedFamily=managed===true;
+      if(managedFamily)await requireFamilyRelease(admin,projectId,authData.user.id);
       if (result.error || !project || (!managedFamily && project.owner_user_id !== authData.user.id)) {
         return json({ success: false, error: "この物語の購入手続きを開始できません" }, 403);
       }
@@ -333,7 +335,7 @@ serve(async request => {
         if(producerError || !producer || returnContext!=='book_builder')return json({success:false,error:'制作権限を確認してください'},403);
       }
       if (returnContext === "family") {
-        if (Deno.env.get('SUPABASE_URL') !== 'https://zpswxefgfabzvxdbtyvq.supabase.co') return json({success:false,error:'TEST only'},403);
+        if(!managedFamily)return json({success:false,error:'Family project required'},403);
         const {data:permitted,error:permissionError}=await admin.rpc('family_supporter',{p:projectId,u:authData.user.id});
         if(permissionError || !permitted) return json({success:false,error:'この物語の購入手続きを開始できません'},403);
         if(standardExtraCopyCount!==0 || premiumCopyCount!==0 || includeGiftPackage) return json({success:false,error:'基本プランをご確認ください'},400);

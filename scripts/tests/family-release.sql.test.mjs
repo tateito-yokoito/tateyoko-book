@@ -1,0 +1,36 @@
+import {readFile} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import {db,as,admin,val,id} from './family-connection.sql.test.mjs';
+try{
+ await admin('');
+ for(const name of ['202609210003_production_supporter','202609210004_production_start_audit_key','202609210005_separate_production_mode_and_authority','202609220001_family_pilot_release_gates'])await db.exec(await readFile(`supabase/migrations/${name}.sql`,'utf8'));
+ assert.equal(await val('select subject_connection_enabled value from family_private.rollout'),false);
+ await as(1);
+ await db.query('select family_confirm_production_support($1,$2,true)',[id(20),id(1)]);
+ assert.equal(await val('select family_creator($1) value',[id(20)]),true);
+ assert.equal(await val('select family_creator($1) value',[id(999)]),false,'Other Project never inherits authority');
+ const p=await val("select family_create('Gate QA mother',true,$1) value",[id(901)]);
+ await db.query('select family_confirm_production_support($1,$2,true)',[p,id(1)]);
+ assert.equal(await val('select family_creator($1) value',[p]),true,'Mother Account not required');
+ await assert.rejects(()=>db.query('select family_issue_invite($1,$2)',[p,'+819000000002']),/not released/);
+ await assert.rejects(()=>db.query('select family_claim_invite($1,true)',['a'.repeat(64)]),/not released/);
+ await admin('update family_private.rollout set subject_connection_enabled=true');await as(1);
+ const invitation=await val('select family_issue_invite($1,$2) value',[p,'+819000000003']);assert.ok(invitation.token);
+ await admin('update family_private.rollout set subject_connection_enabled=false');await as(3);
+ await assert.rejects(()=>db.query('select family_claim_invite($1,true)',[invitation.token]),/not released/,'Previously issued link also blocked');
+ await admin('update family_private.rollout set allowed_actor_ids=ARRAY[]::uuid[]');await as(1);
+ assert.equal(await val('select family_creator($1) value',[p]),false,'Existing consent cannot bypass allowlist');
+ assert.equal(await val('select family_supporter($1) value',[p]),false,'No legacy fallback');
+ await assert.rejects(()=>db.query('select family_journey($1)',[p]));
+ await assert.rejects(()=>db.query('select family_create($1,true,$2)',['Outside',id(902)]));
+ await admin(`update family_private.rollout set allowed_actor_ids=ARRAY['${id(1)}'::uuid],enabled=false`);await as(1);
+ assert.equal(await val('select family_creator($1) value',[p]),false,'Closed DB gate wins');
+ await admin('update family_private.rollout set enabled=true');await as(3);
+ assert.equal(await val('select family_creator($1) value',[id(20)]),false,'Viewer cannot produce');
+ assert.equal(await val('select family_creator($1) value',[p]),false,'Other Person cannot produce');
+ await assert.rejects(()=>db.query('select family_confirm_production_support($1,$2,true)',[p,id(3)]));
+ await admin("set test.uid='';set role authenticated");
+ assert.equal(await val('select family_creator($1) value',[p]),false,'Unauthenticated has no capability');
+ await assert.rejects(()=>db.query('select family_journey($1)',[p]));
+ console.log('PASS SQL pilot gate: allowlist / closed gate / Viewer / other Person+Project / unauthenticated / no-subject production / C OFF');
+}finally{await db.close();}

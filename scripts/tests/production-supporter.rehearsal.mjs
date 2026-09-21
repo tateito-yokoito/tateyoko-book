@@ -16,7 +16,8 @@ const migrations=[
  // 170013 is TEST-only delivery preferences; not a production dependency.
  '202609170014_family_legacy_question_index.sql',
  '202609210003_production_supporter.sql','202609210004_production_start_audit_key.sql',
- '202609210005_separate_production_mode_and_authority.sql','202609210006_preserve_supporter_sms_compatibility.sql'];
+ '202609210005_separate_production_mode_and_authority.sql','202609210006_preserve_supporter_sms_compatibility.sql',
+ '202609220001_family_pilot_release_gates.sql'];
 const needles={
  'family_private.theme_navigation(uuid)':['not family_subject(p)'],
  'family_workspace(uuid)':['progress:=own or','(own or (custom_question_text','(own or actor_id=auth.uid())',"'connected',s.claimed_at is not null"],

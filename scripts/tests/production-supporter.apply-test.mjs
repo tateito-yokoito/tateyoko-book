@@ -12,6 +12,7 @@ const migrations={
  '--audit-key':['202609210004','production_start_audit_key'],
  '--separate-authority':['202609210005','separate_production_mode_and_authority'],
  '--preserve-sms':['202609210006','preserve_supporter_sms_compatibility'],
+ '--pilot-gates':['202609220001','family_pilot_release_gates'],
 };
 assert.ok(!process.argv[3]||migrations[process.argv[3]],'Explicit known TEST migration required');
 const [version,name]=migrations[process.argv[3]]||['202609210003','production_supporter'];
@@ -21,7 +22,7 @@ const pre=query(`select to_regprocedure('public.family_revise_voice(uuid,uuid,uu
 assert.ok(pre.prerequisite);
 if(patch){assert.ok(pre.applied);assert.equal(query(`select version from supabase_migrations.schema_migrations where version='${version}'`).length,0);}
 else assert.equal(pre.applied,null,'Already applied: inspect, do not overwrite');
-if(version>='202609210005')assert.equal(query(`select version from supabase_migrations.schema_migrations where version='${version==='202609210005'?'202609210004':'202609210005'}'`).length,1,'Previous reviewed migration required');
+if(version>='202609210005')assert.equal(query(`select version from supabase_migrations.schema_migrations where version='${version==='202609220001'?'202609210006':version==='202609210005'?'202609210004':'202609210005'}'`).length,1,'Previous reviewed migration required');
 const source=fs.readFileSync(`supabase/migrations/${version}_${name}.sql`,'utf8');
 const literal=s=>"'"+s.replaceAll("'","''")+"'";
 query(`begin;set local lock_timeout='3s';set local statement_timeout='60s';
