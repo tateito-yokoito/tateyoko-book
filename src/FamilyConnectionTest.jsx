@@ -1,4 +1,5 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
+import FamilyProductionSupporters from './FamilyProductionSupporters.jsx';
 import {createFamilyApi, familyInvitationUrl, japaneseMobile, canProduce} from './lib/familyConnection.js';
 import {familyAuthFeedback} from './lib/familyAuthFeedback.js';
 import './family-connection-test.css';
@@ -149,7 +150,7 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
   };
   const goQuestion=()=>{
     setIntent(false);
-    if(workspace.role==='supporter' && workspace.access?.paid && (!producer || workspace.production_mode!=='supporter')){setScene('delegation');return;}
+    if(workspace.role==='supporter' && workspace.access?.paid && !producer){setScene('delegation');return;}
     if(['purchase','startingConsent','mainConsent','inactive'].includes(journey.stage)){setScene(journey.stage);return;}
     if(producer && workspace.theme_navigation && renderTheme){setScene('theme');return;}
     if(!question){setScene('questions');return;}
@@ -243,6 +244,7 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
   return <main className={`family-test${home?' family-home':''}`}>
     {!home && <h1>{workspace ? `${workspace.name}さんの物語` : '縦糸横糸'}</h1>}
     <p role="status" aria-live="polite">{message}</p>
+    {session && workspace?.role==='subject' && scene==='settings' && !inviteToken && !install && <FamilyProductionSupporters key={`${session.user.id}:${workspace.project_id}`} api={api} projectId={workspace.project_id}/>}
     {session && workspace && !inviteToken && !home && !install && !guideWelcome && scene!=='firstSaved' && <button className="secondary" disabled={recording || busy || Boolean(blob)} onClick={()=>{setScene('home');setGuideActive(false);setPlayback(null);}}>ホームへ</button>}
     {install && session && workspace && <HomeInstall userId={session.user.id} onDone={()=>{setInstall(false);setScene('home');}}/>}
     {guideWelcome && <section className="first-story-guide" aria-labelledby="first-story-title">

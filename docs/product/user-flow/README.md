@@ -71,3 +71,11 @@
 Codexや実装担当者は、利用動線を変更する前にこのExcelを確認する。既存コードと異なる場合、コードへ自動的に合わせず、仕様差分として確認する。
 
 ただし、Excelに記載がないことを理由に認証・権限・プライバシーの既存ガードを弱めてはならない。
+
+### 制作Supporterの認可・了承境界
+
+- `production_mode` は主な進め方だけを表す。制作アクセスや本編開始の権限は、明示的なSupporter関係と有効な `family_production_consents` を根拠とし、進め方の選択だけでは付与・取消しない。本編開始時の本人意向の確認は別途必要とする。
+- 既存Supporterが本人の意向を確認したと自己申告することを許容する。これは本人認証ではない。確認したactor・日時・対象Person／Project・Supporter関係を監査可能にする。
+- 本人Accountを後付けしても同じPersonへ接続し、本人から制作支援を停止できる。一度本人が停止した後、Supporterの自己申告だけでは再有効化できない。
+
+事前照合の証跡・本番移行条件は [`production-supporter-preflight.md`](./production-supporter-preflight.md) を参照する。

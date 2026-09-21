@@ -31,6 +31,8 @@ export function createFamilyApi(client) {
     create: (subject_name, consent, creation_key) => rpc('family_create', {subject_name,consent,creation_key}),
     workspace: p => rpc('family_journey', {p}),
     confirmProduction: (p, supporter, confirmed, mode = 'supporter') => rpc('family_confirm_production_support', {p, supporter, confirmed, mode}),
+    productionSupporters: p => rpc('family_list_production_supporters', {p}),
+    revokeProduction: (p, supporter) => rpc('family_revoke_production_support', {p, supporter}),
     startChapter: p => rpc('start_paid_starting_chapter', {input_project_id:p,input_subject_intent_confirmed:true}),
     finishChapter: p => rpc('family_finish_starting_chapter', {p}),
     startMain: p => rpc('start_main_experience', {input_project_id:p,input_subject_intent_confirmed:true}),

@@ -7,7 +7,7 @@
 - 本人、了承を記録した制作Supporter、一般Viewerを分離。娘・親子・購入者・Project所有者であることを制作権限の根拠にしない。
 - `family_production_consents` に Person、Project、Supporter関係、Supporter Account、確認したactor、日時、了承、取消を保存。既存Supporterは自動昇格しない。
 - `family_production_events` に了承・取消・進め方変更・はじまりの章開始・本編開始を記録。本人の意思を確認したSupporterによる開始を許可し、本人Account/SMSは必須にしない。
-- 制作権限は `family_creator` / `family_production_supporter` で判定。本人主体でも制作Supporterの素材アクセスは可能。本編の代理開始には「おまかせ」の了承を要求する。
+- 制作権限は `family_creator` / `family_production_supporter` で判定。本人主体でも制作Supporterの素材アクセスは可能。事前照合時の005で、本編開始に残っていた進め方条件も取り除いた。開始の都度の本人意向確認は維持する。
 - 本人による取消後、Supporterの自己申告だけで再付与できない。本人への接続・身元確認、破壊的な所有者操作、本人データエクスポートの権限は拡大しない。
 - 録音・文字起こし・文章化、語り足し／語り直し、一覧、文章編集、写真、共有、収録選択、ブック編集・確定・注文を既存画面へ接続。制作アクセスと家族向け公開範囲は独立し、「自分だけ」と誤認させる箇所を制作コンテキストで区別する。
 - 非公開素材の明示的な冊子収録は可能だが、初期選択で勝手に収録せず、Viewerへの公開にも変更しない。確定したBookの内容はスナップショットとして保持する。
@@ -52,6 +52,8 @@ TEST側で今回実施した変更は003・004の適用と `create-checkout-sess
 実課金、実SMS、実印刷・配送、本番DB・本番Edge・本番公開は実施していない。
 
 ## 未確認事項・本番反映前の条件
+
+追記：本番スキーマの読み取り照合・最小補正・依存migrationの絞り込みは [`production-supporter-preflight.md`](./production-supporter-preflight.md) に記録。以下は初回実装時の検証範囲を残したもの。
 
 - 実機iPhoneでの録音／写真／復帰、母の実SMSによる後付け接続、9テーマ全問の完走。
 - 本人単独の全工程のブラウザー再走行、返金の実Stripe往復、実印刷・配送。返金境界と本人権限はSQL回帰で確認した範囲。

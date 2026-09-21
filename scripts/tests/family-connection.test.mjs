@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createFamilyApi,japaneseMobile,familyInvitationUrl} from '../../src/lib/familyConnection.js';
+import {createFamilyApi,japaneseMobile,familyInvitationUrl,canProduce} from '../../src/lib/familyConnection.js';
+test('progress mode never grants or removes production authority',()=>{
+ for(const production_mode of ['self','supporter',null]){
+  assert.equal(canProduce({role:'supporter',can_produce:true,production_mode}),true);
+  assert.equal(canProduce({role:'supporter',can_produce:false,production_mode}),false);
+  assert.equal(canProduce({role:'viewer',can_produce:true,production_mode}),false);
+ }
+});
 test('phone normalization does not invent an email identity',()=>{
  assert.equal(japaneseMobile('０９０-００００-０００２'),'+819000000002');
  assert.equal(japaneseMobile('+81 90 0000 0002'),'+819000000002');

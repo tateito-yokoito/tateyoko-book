@@ -5,6 +5,7 @@ try {
  await admin('');
  await db.exec(await readFile(new URL('../../supabase/migrations/202609210003_production_supporter.sql',import.meta.url),'utf8'));
  await db.exec(await readFile(new URL('../../supabase/migrations/202609210004_production_start_audit_key.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../../supabase/migrations/202609210005_separate_production_mode_and_authority.sql',import.meta.url),'utf8'));
  await as(1);
  assert.equal(await val('select family_creator($1) value',[id(20)]),false,'No silent upgrade of old supporter');
  await assert.rejects(()=>db.query('select family_confirm_production_support($1,$2,false)',[id(20),id(1)]),/consent/);
@@ -26,17 +27,25 @@ try {
  await admin('');
  const c=await val('select to_jsonb(c) value from family_production_consents c where id=$1',[consent]);
  assert.equal(c.person_id,id(12));assert.equal(c.confirmed_by,id(1));assert.equal(c.supporter_user_id,id(1));assert.ok(c.confirmed_at);
+ assert.equal(c.project_id,id(20));assert.equal(c.subject_intent_confirmed,true);assert.ok(c.supporter_id);
+ const audit=await val("select to_jsonb(e) value from family_production_events e where consent_id=$1 and event='consent'",[consent]);
+ assert.equal(audit.actor_id,id(1));assert.equal(audit.person_id,id(12));assert.equal(audit.project_id,id(20));assert.equal(audit.supporter_id,c.supporter_id);assert.ok(audit.created_at);
  await assert.rejects(()=>db.query("select family_assert_operation($1,$2,'manage',$3)",[id(20),id(1),id(41)]),/Forbidden answer/);
  await as(2);
  await db.query('select family_revoke_production_support($1,$2)',[id(20),id(1)]);
  await as(1);
  assert.equal(await val('select family_creator($1) value',[id(20)]),false);
- await assert.rejects(()=>db.query('select family_confirm_production_support($1,$2,true)',[id(20),id(1)]),/Subject approval/);
+ assert.equal(await val('select family_supporter($1) value',[id(20)]),false,'Subject stop cannot fall back to legacy supporter access');
+ await assert.rejects(()=>db.query('select family_journey($1)',[id(20)]),/Forbidden/);
+ await assert.rejects(()=>db.query("select family_reserve_upload($1,'audio','mp4')",[id(20)]),/Forbidden/);
+ await assert.rejects(()=>db.query('select family_confirm_production_support($1,$2,true)',[id(20),id(1)]),/Subject approval|Forbidden/);
  await as(2);
  await db.query('select family_confirm_production_support($1,$2,true,$3)',[id(20),id(1),'self']);
  await as(1);
  assert.equal(await val('select family_creator($1) value',[id(20)]),true,'Self-led subject can grant full production support');
- assert.equal(await val('select can_confirm_experience_intent($1) value',[id(20)]),false,'Production permission alone does not attest delegation');
+ assert.equal(await val('select can_confirm_experience_intent($1) value',[id(20)]),true,'Self-led mode does not remove consented production authority');
+ await admin('');await db.query("update family_subject_bindings set production_mode='supporter' where person_id=$1",[id(12)]);
+ await as(3);assert.equal(await val('select family_creator($1) value',[id(20)]),false,'Mode alone never grants authority');
  await as(3);
  assert.equal(await val('select family_creator($1) value',[id(20)]),false);
  assert.equal((await db.query('select id from answers where book_project_id=$1',[id(20)])).rows.length,0);
@@ -106,10 +115,21 @@ try {
    await as(3);await db.query('select family_claim_invite($1,true)',[invite.token]);
    const attached=await val('select family_journey($1) value',[p]);assert.equal(attached.person_id,person);assert.equal(attached.role,'subject');
    const sameWork=await val('select get_book_work($1) value',[p]);assert.equal(sameWork.id,confirmed.id);assert.deepEqual(sameWork.answer_ids,[id(220)]);
+   assert.equal(attached.production_mode,'supporter','Subject joins without being forced to change the progress preference');
    await admin('');
    assert.equal(await val('select order_id value from experience_contracts where book_project_id=$1',[p]),id(210));
    assert.equal(await val('select purchaser_user_id value from commerce_orders where id=$1',[id(210)]),id(1));
    await as(1);assert.equal(await val('select family_creator($1) value',[p]),true,'Mother join does not remove the production supporter');
+   await assert.rejects(()=>db.query('select family_list_production_supporters($1)',[p]),/Subject access/);
+   await as(3);const members=await val('select family_list_production_supporters($1) value',[p]);
+   assert.ok(members.some(x=>x.supporter_user_id===id(1)&&x.confirmed_at));
+   await db.query('select family_revoke_production_support($1,$2)',[p,id(1)]);
+   assert.ok(!(await val('select family_list_production_supporters($1) value',[p])).some(x=>x.supporter_user_id===id(1)));
+   await admin('');const revoked=await val("select to_jsonb(e) value from family_production_events e where project_id=$1 and event='revoke'",[p]);
+   assert.equal(revoked.actor_id,id(3));assert.equal(revoked.person_id,person);assert.ok(revoked.created_at);
+   await as(1);assert.equal(await val('select family_creator($1) value',[p]),false);
+   await assert.rejects(()=>db.query('select family_confirm_production_support($1,$2,true)',[p,id(1)]),/Forbidden|Subject approval/);
+   await assert.rejects(()=>db.query('select get_book_work($1)',[p]),/Forbidden|forbidden|authorized|access|owner/i);
   }
  }
  console.log('PASS production supporter consent, no-subject paid/main/book, 45-day guarantee, audits, immutable work, identity separation, private access, revocation and Viewer guards');
