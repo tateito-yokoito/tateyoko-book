@@ -1,0 +1,110 @@
+export const STORY_THEMES = [
+  {
+    code: "ty_theme_childhood",
+    label: "幼い頃のこと",
+    order: 1,
+    summary: "幼少期から中学生くらいまでを振り返ります。",
+    opening: "",
+    hint: "昔のアルバムを開いたり、住んでいた家や通学路、よく遊んだ場所を思い浮かべたりしてみるのもよいかもしれません。",
+    completion: "幼い頃の景色が、あなたの物語に残りました。",
+    image: "/site/theme-childhood-triptych.jpg",
+    imageAlt: "誕生、友達との遊び、家族の食卓をつないだ幼い頃の情景",
+    visual: "childhood"
+  },
+  {
+    code: "ty_theme_youth",
+    label: "学生時代",
+    order: 2,
+    summary: "学びや出会い、夢中になったことをたどります。",
+    opening: "あの頃にしかなかった時間へ、戻ってみましょう。",
+    hint: "卒業アルバムや当時よく聴いた音楽、通っていた道が、記憶の入口になるかもしれません。",
+    completion: "若い日の時間が、ひとつの章になりました。",
+    image: "/site/theme-student-triptych.jpg",
+    imageAlt: "友人、部活動と淡い恋、卒業と恩師をつないだ学生時代の情景",
+    visual: "youth"
+  },
+  {
+    code: "ty_theme_likes",
+    label: "好きなこと",
+    order: 3,
+    summary: "心が動いたものや、夢中になった時間を振り返ります。",
+    opening: "好きだったもののそばには、その頃の自分がいます。",
+    hint: "今も手元にあるものや、何度も聴いた曲、好きだった味を一つ思い浮かべてみてください。",
+    completion: "あなたを彩ってきたものが、物語に加わりました。",
+    image: "/site/theme-likes-triptych.jpg",
+    imageAlt: "読書と音楽、自然の写真、仲間とのものづくりをつないだ好きなことの情景",
+    visual: "likes"
+  },
+  {
+    code: "ty_theme_living",
+    label: "暮らし",
+    order: 4,
+    summary: "住まいや食卓、旅など、日々の風景をたどります。",
+    opening: "何気ない暮らしの中にも、残しておきたい景色があります。",
+    hint: "長く使っている道具や、思い出の料理、窓から見えていた景色を手がかりにしてみましょう。",
+    completion: "日々の風景が、物語の中に灯りました。",
+    image: "/site/theme-living-triptych.jpg",
+    imageAlt: "住まいの朝、ペットとの日常、列車の旅をつないだ暮らしの情景",
+    visual: "living"
+  },
+  {
+    code: "ty_theme_work",
+    label: "仕事・役割",
+    order: 5,
+    summary: "担ってきた仕事や役割、その中で得たものを振り返ります。",
+    opening: "積み重ねてきた時間に、あらためて目を向けます。",
+    hint: "初めて働いた場所、使っていた道具、忘れられない人の顔から思い出してみるのもよさそうです。",
+    completion: "歩みを支えた仕事と役割が、ひとつの章になりました。",
+    image: "/site/theme-work-role-triptych.jpg",
+    imageAlt: "家族のための食事づくり、職場での協働、地域での共同作業をつないだ仕事と役割の情景",
+    visual: "work"
+  },
+  {
+    code: "ty_theme_connections",
+    label: "人とのつながり",
+    order: 6,
+    summary: "人生で出会い、支え合ってきた人たちをたどります。",
+    opening: "人を思い出すとき、その頃の自分も見えてきます。",
+    hint: "年賀状や古い連絡先、集合写真に写る人を眺めてみると、忘れていた出来事が浮かぶかもしれません。",
+    completion: "大切なつながりが、物語の中に結ばれました。",
+    image: "/site/theme-connections-triptych.jpg",
+    imageAlt: "恩師と学生、職場の仲間、旧友との再会をつないだ人とのつながりの情景",
+    visual: "connections"
+  },
+  {
+    code: "ty_theme_family",
+    label: "家族の記憶",
+    order: 7,
+    summary: "家族と過ごした時間や、受け取ったものを振り返ります。",
+    opening: "家族の記憶には、言葉になっていない気持ちがあります。",
+    hint: "家族の口癖や食卓の風景、季節ごとの習慣を一つ思い出してみてください。",
+    completion: "家族と過ごした時間が、物語に受け継がれました。",
+    image: "/site/theme-family-memory-triptych.jpg",
+    imageAlt: "雨の日に世話をする両親、祖父母と楽しむ線香花火、三世代で祝う傘寿をつないだ家族の情景",
+    visual: "family"
+  },
+  {
+    code: "ty_theme_turning_points",
+    label: "人生の転機",
+    order: 8,
+    summary: "決断や変化、乗り越えてきた出来事をたどります。",
+    opening: "振り返ると、道が大きく動いた瞬間があります。",
+    hint: "住む場所が変わった日、新しい役割を引き受けた時、誰かの言葉に背中を押された場面を思い返してみましょう。",
+    completion: "人生を動かした出来事が、ひとつの章になりました。",
+    image: "/site/theme-turning-points.jpg",
+    imageAlt: "朝の光が差す町の分岐路を、一人の人物が歩いていく情景",
+    visual: "turning-points"
+  },
+  {
+    code: "ty_theme_now_future",
+    label: "今とこれから",
+    order: 9,
+    summary: "今大切にしていることと、これからへ残したい言葉を見つめます。",
+    opening: "これまでをたどった今だからこそ、見えるものがあります。",
+    hint: "今の一日で心がほどける時間や、これから会いたい人、未来へ手渡したい言葉を考えてみてください。",
+    completion: "これまでとこれからが、あなたの物語として結ばれました。",
+    image: "/site/theme-now-future.jpg",
+    imageAlt: "大きな木の向こうに、爽やかな青空と町並み、人々の歩く姿が広がる情景",
+    visual: "now-future"
+  }
+];

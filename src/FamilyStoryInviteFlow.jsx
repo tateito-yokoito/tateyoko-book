@@ -194,7 +194,7 @@ function InvitationPreview({ deliveryMethod, recipientName, recipientEmail, invi
   );
 }
 
-export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "ご家族", existingInvitation = null, onBack, onStartCheckout, onComplete }) {
+export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "ご家族", existingInvitation = null, initialOfferType = null, conversionProjectId = null, allowNotifications = true, onBack, onStartCheckout, onComplete }) {
   const isPaymentResume = Boolean(existingInvitation?.id);
   const isContinuationGift = Boolean(isPaymentResume && existingInvitation?.recipient_project_id);
   const isTrialPackagePayment = Boolean(
@@ -208,7 +208,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
   const [recipientGivenName, setRecipientGivenName] = useState("");
   const [relationship, setRelationship] = useState(existingInvitation?.relationship_label || "parent");
   const [assistanceMode, setAssistanceMode] = useState(existingInvitation?.assistance_mode || "recipient_chooses");
-  const [offerType, setOfferType] = useState(existingInvitation?.offer_type || "referral");
+  const [offerType, setOfferType] = useState(existingInvitation?.offer_type || initialOfferType || "referral");
   const [deliveryMethod, setDeliveryMethod] = useState(existingInvitation?.delivery_method || "email");
   const [recipientEmail, setRecipientEmail] = useState(existingInvitation?.recipient_email || "");
   const [messageTemplate, setMessageTemplate] = useState(existingInvitation?.message_template || "hear_your_story");
@@ -233,8 +233,8 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
     : deliveryMethod === "package";
 
   const steps = useMemo(
-    () => ["person", "assistance", "offer", offerType === "full_gift" ? "delivery" : "trial_offer", "details", "review"],
-    [offerType]
+    () => initialOfferType === "trial_gift" ? ["person", "assistance", "details", "review"] : ["person", "assistance", "offer", offerType === "full_gift" ? "delivery" : "trial_offer", "details", "review"],
+    [offerType, initialOfferType]
   );
   const currentStepIndex = steps.indexOf(step);
   const recipientName = `${recipientFamilyName.trim()} ${recipientGivenName.trim()}`.trim();
@@ -326,16 +326,17 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
     try {
       let invitation = createdRef.current;
       if (!invitation) {
-        const { data, error: createError } = await supabaseClient.rpc("create_family_story_invitation", {
+        const { data, error: createError } = await supabaseClient.rpc(conversionProjectId ? "create_conversion_trial_invitation" : "create_family_story_invitation", {
+          ...(conversionProjectId ? {input_project_id:conversionProjectId} : {
+            input_offer_type: offerType, input_delivery_method: deliveryMethod,
+            input_shipping_address: deliveryMethod === "package" ? shipping : {}
+          }),
           input_recipient_name: recipientName.trim(),
           input_recipient_email: deliveryMethod === "email" ? recipientEmail.trim().toLowerCase() : null,
           input_relationship_label: relationship,
           input_assistance_mode: assistanceMode,
-          input_offer_type: offerType,
-          input_delivery_method: deliveryMethod,
           input_message_template: messageTemplate,
-          input_personal_message: personalMessage.trim() || null,
-          input_shipping_address: deliveryMethod === "package" ? shipping : {}
+          input_personal_message: personalMessage.trim() || null
         });
         if (createError || !data?.id) throw new Error(createError?.message || "家族招待を用意できませんでした");
         invitation = data;
@@ -360,10 +361,12 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
         return;
       }
 
+      if (allowNotifications) {
       const { data: sent, error: sendError } = await supabaseClient.functions.invoke("send-family-story-invite", {
         body: { invitationId: invitation.id }
       });
       if (sendError || !sent?.success) throw new Error(sent?.error || "招待メールを送れませんでした");
+      }
       setStep("complete");
     } catch (submitError) {
       console.error("family story invite error", submitError);
@@ -656,7 +659,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
           {step === "complete" && (
             <div className="flex min-h-[55vh] flex-col items-center justify-center text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-full border border-emerald-100/20 bg-emerald-100/[0.07]"><Check size={25} className="text-emerald-100/76" /></div>
-              <h1 className="text-narrative mt-7 text-[1.35rem] text-white/90">{recipientName.trim()}さんへ<br />招待を送りました</h1>
+              <h1 className="text-narrative mt-7 text-[1.35rem] text-white/90">{recipientName.trim()}さんへの<br />{allowNotifications ? '招待を送りました' : '招待を保存しました（通知停止中）'}</h1>
               <p className="mt-6 text-sm leading-loose text-white/44">受け取った方が主役となって進めます。<br />語りの中身が自動で共有されることはありません。</p>
               <button type="button" onClick={onComplete} className="btn-quiet mt-10 w-full rounded-full bg-white py-4 text-slate-900">ホームへ戻る</button>
             </div>

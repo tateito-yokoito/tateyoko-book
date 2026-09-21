@@ -1,3 +1,13 @@
+import ExperienceContractSettings from './ExperienceContractSettings.jsx';
+import TrialCompletionConnected from './TrialCompletionConnected.jsx';
+import TrialGiftPurchaseReview from './TrialGiftPurchaseReview.jsx';
+import ChildhoodTrialIntro from './ChildhoodTrialIntro.jsx';
+import {isChildhoodTrial} from './lib/childhoodTrial.js';
+import {experienceRollout} from './lib/experienceRollout.js';
+import {loadBookWork} from './lib/bookWork.js';
+import {questionForStory,buildStorySections,isTrialStoryQuestion} from './lib/storyPages.js';
+import {assertPublicTestEnvironment} from './lib/publicTestSafety.js';
+assertPublicTestEnvironment(import.meta.env);
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Bell, BookOpen, Check, ChevronLeft, ChevronRight, Files, Home, Image as ImageIcon, Lock, Mail, Mic, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings, Smartphone, Square, UserCircle, UserCog, Users, Video } from "lucide-react";
@@ -18,6 +28,29 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const FREE_TRIAL_QUESTION_COUNT = 3;
+const EXPERIENCE_ROLLOUT = experienceRollout(import.meta.env);
+const EXPERIENCE_V2_ENABLED = EXPERIENCE_ROLLOUT.contracts;
+const TRIAL_CONVERSION_ENABLED = EXPERIENCE_ROLLOUT.conversion;
+const ALLOW_FAMILY_NOTIFICATIONS = !EXPERIENCE_V2_ENABLED || EXPERIENCE_ROLLOUT.notifications;
+const recordingStorageRoot = (userId, projectId, answerId) => EXPERIENCE_V2_ENABLED
+  ? `${userId}/${projectId}/${answerId}` : `${userId}/${answerId}`;
+
+async function confirmExperienceBoundary(projectId, boundary) {
+  if (!EXPERIENCE_V2_ENABLED) return;
+  const { data: access, error } = await supabaseClient.rpc("get_experience_access", { input_project_id: projectId });
+  if (error) throw error;
+  if (access.policy_version !== "2.0") return;
+  if (boundary === "main" && access.main_started_at) return;
+  if (boundary === "paid" && access.production_started_at) return;
+  const confirmed = window.confirm(boundary === "main"
+    ? "ご本人の意思で本編をはじめますか？ ここから本体代金の返金保証の対象外になります。"
+    : "有料の「はじまりの章」をはじめますか？ ギフトの制作期間はここから1年間です。返金保証は本編開始前まで続きます。");
+  if (!confirmed) throw new Error("開始を取り消しました。");
+  const { error: startError } = await supabaseClient.rpc(boundary === "main" ? "start_main_experience" : "start_paid_starting_chapter", {
+    input_project_id: projectId, input_subject_intent_confirmed: true
+  });
+  if (startError) throw startError;
+}
 const FAMILY_INVITE_DISCOUNT_PERCENT = 30;
 const FAMILY_INVITE_PLAN_PRICE = 34860;
 
@@ -338,7 +371,6 @@ function getFreeTrialResumeQuestionIndex(questionSet) {
 
 function getAuthenticatedQuestionIndex(questionSet, project, profile) {
   if (
-    getEntryModeFromUrl() === "trial" &&
     hasRestrictedProjectAccess(project) &&
     !hasCompletedFreeTrial(questionSet)
   ) {
@@ -391,7 +423,7 @@ function getCommercialEntryScene({ project, questionSet, defaultScene }) {
   }
 
   if (hasCompletedFreeTrial(questionSet)) {
-    return defaultScene;
+    return TRIAL_CONVERSION_ENABLED ? "trial_complete" : defaultScene;
   }
 
   // The free taste should open quickly, without the full 10–15 minute
@@ -833,6 +865,7 @@ async function verifyTokenAuthOnServer({ token, pin }) {
 }
 
 function isDevMode() {
+  if (import.meta.env.PROD || import.meta.env.VITE_PUBLIC_TEST_MODE === 'true') return false;
   const params = new URLSearchParams(window.location.search);
   return params.get("dev") === "1";
 }
@@ -1814,12 +1847,22 @@ if (!questionSet) {
     };
   });
 
+  // Unassigned legacy rows use a partial unique index; PostgREST cannot infer
+  // it from onConflict(user_id,question_id). Reuse their stable IDs instead.
+  let questionInserts = inserts;
+  if (!projectId) {
+    const {data: legacyRows, error: legacyError} = await supabaseClient
+      .from("user_questions").select("id,question_id").eq("user_id", userId).is("book_project_id", null);
+    if (legacyError) throw legacyError;
+    const legacyIds = new Map((legacyRows || []).map(row => [row.question_id, row.id]));
+    questionInserts = inserts.map(row => ({...row, id:legacyIds.get(row.question_id) || crypto.randomUUID()}));
+  }
   const { error: insertError } = await supabaseClient
     .from("user_questions")
-    .upsert(inserts, {
+    .upsert(questionInserts, {
       onConflict: projectId
         ? "book_project_id,question_id"
-        : "user_id,question_id"
+        : "id"
     });
 
     if (insertError) {
@@ -2531,7 +2574,7 @@ async function respondToStoryRelationshipInvite(inviteId, accept) {
   if (error) throw error;
 }
 
-function derivePhotoStoryTitle(text) {
+export function derivePhotoStoryTitle(text) {
   const normalized = String(text || "")
     .replace(/[\r\n]+/g, " ")
     .replace(/^(えー|えっと|あの|まあ)[、,\s]*/g, "")
@@ -3559,6 +3602,10 @@ const handleSkipQuestion = async () => {
         ? { ...question, status: "skipped" }
         : question
     ));
+    if (currentQ?.onboarding_group === "starting_motivation" && foundation?.project?.id && foundation.project.onboarding_status !== "completed") {
+      await skipOnboardingMotivation();
+      return;
+    }
     await goToNextQuestion();
   } catch (e) {
     console.error("skip question error", e);
@@ -3605,6 +3652,12 @@ const handleDevLogout = async () => {
 
 const openSupportedProject = async (supportedProject) => {
   if (!supportedProject?.book_project_id) return;
+  if(import.meta.env.VITE_FAMILY_CONNECTION_TEST === 'true') {
+    const {data,error}=await supabaseClient.rpc('family_list_workspaces');
+    if(!error && data?.some(p=>p.project_id===supportedProject.book_project_id)) {
+      window.location.assign(`/?app=1&family=1&family_project=${encodeURIComponent(supportedProject.book_project_id)}`);return;
+    }
+  }
 
   try {
     setIsInitializing(true);
@@ -4227,7 +4280,7 @@ for (let i = 0; i < audioSegments.length; i++) {
           : "webm";
 
       const segmentNo = String(uploadStartIndex + i + 1).padStart(2, "0");
-      const path = `${user.id}/${targetAnswerId}/part-${segmentNo}.${ext}`;
+      const path = `${recordingStorageRoot(user.id, foundation.project.id, targetAnswerId)}/part-${segmentNo}.${ext}`;
 
       const { error: uploadError } = await supabaseClient.storage
         .from("audio")
@@ -4915,7 +4968,7 @@ const handleLifeOutlineAddRecording = async (txt, dur, _url, blob, details = {})
           : "webm";
 
       storagePath =
-        `${user.id}/introductions/${introduction.id}/` +
+        `${EXPERIENCE_V2_ENABLED ? `${user.id}/${foundation.project.id}` : user.id}/introductions/${introduction.id}/` +
         `addition-${String(additions.length + 1).padStart(2, "0")}-${additionId}.${ext}`;
 
       const { error: uploadError } = await supabaseClient.storage
@@ -5086,6 +5139,7 @@ const savePendingThemeTransition = async (themeOrder, phase = "complete") => {
 const openFirstThemeIntroduction = async () => {
   try {
     setIsInitializing(true);
+    await confirmExperienceBoundary(foundation.project.id, "main");
     await updateOnboardingRitualStep("theme_intro");
     setScene("theme_intro");
   } catch (error) {
@@ -5495,7 +5549,7 @@ useEffect(() => {
       // case the project already contains the authoritative paid state and
       // there is no need to depend on a second Stripe lookup.
       if (
-        checkoutReturn.purchaseFor === "self" &&
+        !EXPERIENCE_V2_ENABLED && checkoutReturn.purchaseFor === "self" &&
         checkoutReturn.context !== "book_builder" &&
         hasFullProjectAccess(foundation.project)
       ) {
@@ -5515,11 +5569,18 @@ useEffect(() => {
       if (!data.paid) {
         throw new Error("お支払いの完了をまだ確認できませんでした");
       }
+      if (data.accessStopped) {
+        setPurchaseError("この購入は返金手続き中、または返金済みです。契約・データ管理で確認してください。");
+        setScene("experience_contract_settings");
+        return;
+      }
 
       if (["gift", "family_trial_package"].includes(data.orderType) && checkoutReturn.familyInvitationId) {
-        await supabaseClient.functions.invoke("send-family-story-invite", {
-          body: { invitationId: checkoutReturn.familyInvitationId }
-        });
+        if (ALLOW_FAMILY_NOTIFICATIONS) {
+          await supabaseClient.functions.invoke("send-family-story-invite", {
+            body: { invitationId: checkoutReturn.familyInvitationId }
+          });
+        }
         setSentFamilyInvitations(await loadSentFamilyInvitations());
         setPurchaseResult({ order: data.order, gift: data.gift, familyInvitationId: checkoutReturn.familyInvitationId });
         setPurchaseStatus("paid");
@@ -5545,7 +5606,7 @@ useEffect(() => {
       // A successful webhook is the source of truth. If the optional return
       // page sync failed or timed out, read the project once more before
       // showing an error so a completed purchase never looks unpaid.
-      if (checkoutReturn.purchaseFor === "self") {
+      if (!EXPERIENCE_V2_ENABLED && checkoutReturn.purchaseFor === "self") {
         const { data: refreshedProject, error: refreshError } =
           await supabaseClient
             .from("book_projects")
@@ -5605,6 +5666,8 @@ const startPurchase = async ({
   returnContext = "purchase",
   gift = {},
   familyInvitationId = null,
+  expectedAmount = null,
+  expectedPolicyVersion = null,
   checkoutWindow = null
 } = {}) => {
   if (orderType === "self" && !foundation?.project?.id) {
@@ -5631,6 +5694,8 @@ const startPurchase = async ({
           shippingAddress,
           returnContext,
           gift,
+          expectedAmount,
+          expectedPolicyVersion,
           familyInvitationId
         }
       }
@@ -5649,9 +5714,11 @@ const startPurchase = async ({
     if (data.completed || data.alreadyPurchased) {
       closeCheckoutWindow(checkoutWindow);
       if (familyInvitationId && orderType !== "self") {
+        if (ALLOW_FAMILY_NOTIFICATIONS) {
         await supabaseClient.functions.invoke("send-family-story-invite", {
           body: { invitationId: familyInvitationId }
         });
+        }
         setSentFamilyInvitations(await loadSentFamilyInvitations());
         setPurchaseResult({ order: { id: data.orderId }, familyInvitationId });
         setPurchaseStatus("paid");
@@ -5887,7 +5954,7 @@ if (mediaStoragePaths.length > 0) {
               : "jpg";
 
           const photoNo = String(i + 1).padStart(2, "0");
-          const photoPath = `${user.id}/${finalAnswerId}/photo-${photoNo}.${ext}`;
+          const photoPath = `${recordingStorageRoot(user.id, foundation.project.id, finalAnswerId)}/photo-${photoNo}.${ext}`;
 
           const { error: photoUploadError } = await supabaseClient.storage
             .from("photos")
@@ -6103,7 +6170,9 @@ const reachedFreeTrialLimit =
   isLastFreeTrialQuestion(questionsDB, currentQ);
 
 if (reachedFreeTrialLimit) {
-  if (foundation?.project?.onboarding_preferences?.family_invitation_id) {
+  // v1.2: a completed trial is not a request to purchase. The new page records
+  // an explicit recipient decision instead; keep legacy behaviour outside local preview.
+  if (!TRIAL_CONVERSION_ENABLED && ALLOW_FAMILY_NOTIFICATIONS && !import.meta.env.DEV && foundation?.project?.onboarding_preferences?.family_invitation_id) {
     try {
       await supabaseClient.functions.invoke("notify-family-story-inviter", {
         body: { projectId: foundation.project.id }
@@ -6259,7 +6328,7 @@ setScene(1);
   };
 
   return (
-    <div className={`app-container ${scene === "family_invite_received" ? "app-container--family-invitation" : ""}`}>
+    <div className={`app-container ${scene === "family_invite_received" ? "app-container--family-invitation" : ""} ${TRIAL_CONVERSION_ENABLED && scene === "trial_complete" ? "app-container--trial-conversion" : ""}`}>
       {showGlobalHome && (
         <button
           type="button"
@@ -6481,12 +6550,25 @@ let sceneAfterInvite = nextScene;
 
       {scene === "trial_complete" && (
         <Scene_TrialComplete
+          key={`${user?.id}:${foundation?.project?.id}:${foundation?.project?.subject_person_id}`}
+          client={supabaseClient}
+          project={foundation?.project}
+          person={foundation?.person}
+          questions={getFreeTrialQuestions(questionsDB)}
+          purchaseFor={purchaseFor}
+          paid={hasFullProjectAccess(foundation?.project)}
+          onInvite={() => setScene("trial_parent_invite")}
+          onContracts={() => setScene("experience_contract_settings")}
           status={purchaseStatus}
           error={purchaseError}
           familyInvitation={receivedFamilyInvitation}
-          onPurchase={async () => {
-            if (receivedFamilyInvitation?.offer_type === "full_gift") {
+          onPurchase={async options => {
+            if (options?.orderType) {
+              return startPurchase({ ...options, checkoutWindow: null });
+            }
+            if (options?.resumePaid || receivedFamilyInvitation?.offer_type === "full_gift" || hasFullProjectAccess(foundation?.project)) {
               try {
+                await confirmExperienceBoundary(foundation.project.id, "paid");
                 const nextPreferences = {
                   ...(foundation?.project?.onboarding_preferences || {}),
                   family_start_mode: "full",
@@ -6504,10 +6586,13 @@ let sceneAfterInvite = nextScene;
                 url.searchParams.delete("entry");
                 url.searchParams.set("app", "1");
                 window.history.replaceState({}, "", url.toString());
-                setScene("home");
+                setScene(TRIAL_CONVERSION_ENABLED ? getInitialSceneForProject({
+                  project: updatedProject, notificationPref, sharingPreference
+                }) : "home");
               } catch (continueError) {
                 console.error("family gift trial continue error", continueError);
                 setPurchaseError("続きを開けませんでした。少し時間をおいて、もう一度お試しください。");
+                if (TRIAL_CONVERSION_ENABLED) throw new Error("続きを開けませんでした。開始を取り消した場合は、このまま戻れます。");
               }
               return;
             }
@@ -6682,7 +6767,10 @@ let sceneAfterInvite = nextScene;
 
       {scene === "onboarding_overview" && (
         <Scene_OnboardingOverview
-          onNext={() => setScene("onboarding_pace")}
+          onNext={async () => {
+            try { await confirmExperienceBoundary(foundation.project.id, "paid"); setScene("onboarding_pace"); }
+            catch (error) { alert(error.message || "開始できませんでした。"); }
+          }}
         />
       )}
 
@@ -7165,6 +7253,7 @@ let sceneAfterInvite = nextScene;
 
       {scene === "family_story_invite_flow" && (
         <FamilyStoryInviteFlow
+          allowNotifications={ALLOW_FAMILY_NOTIFICATIONS}
           supabaseClient={supabaseClient}
           inviterName={user?.display_name || user?.name || user?.preferred_name || "ご家族"}
           onBack={() => setScene("home")}
@@ -7188,8 +7277,26 @@ let sceneAfterInvite = nextScene;
         />
       )}
 
-      {scene === "family_story_payment_review" && familyPaymentInvitation && (
+      {scene === "trial_parent_invite" && (
         <FamilyStoryInviteFlow
+          conversionProjectId={TRIAL_CONVERSION_ENABLED ? foundation?.project?.id : null}
+          allowNotifications={ALLOW_FAMILY_NOTIFICATIONS}
+          supabaseClient={supabaseClient}
+          initialOfferType="trial_gift"
+          inviterName={user?.display_name || user?.name || "ご家族"}
+          onBack={() => setScene("trial_complete")}
+          onComplete={() => setScene("trial_complete")}
+        />
+      )}
+
+      {scene === "family_story_payment_review" && familyPaymentInvitation && (
+        TRIAL_CONVERSION_ENABLED && familyPaymentInvitation.pricing_policy_version === '2.0' ?
+        <TrialGiftPurchaseReview key={familyPaymentInvitation.id} client={supabaseClient}
+          projectId={foundation?.project?.id} invitation={familyPaymentInvitation}
+          onBack={() => {setFamilyPaymentInvitation(null);setScene('home');}}
+          onPurchase={options => startPurchase({...options,checkoutWindow:null})} /> :
+        <FamilyStoryInviteFlow
+          allowNotifications={ALLOW_FAMILY_NOTIFICATIONS}
           key={`payment-${familyPaymentInvitation.id}`}
           supabaseClient={supabaseClient}
           inviterName={user?.display_name || user?.name || user?.preferred_name || "ご家族"}
@@ -7216,7 +7323,7 @@ let sceneAfterInvite = nextScene;
 
       {scene === "family_story_mode" && (
         <Scene_FamilyStoryMode
-          onChooseFacilitator={() => setScene("family_story_facilitator_setup")}
+          onChooseFacilitator={() => import.meta.env.VITE_FAMILY_CONNECTION_TEST === 'true' ? window.location.assign('/?app=1&family=1&create=1') : setScene("family_story_facilitator_setup")}
           onBack={() => setScene("home")}
         />
       )}
@@ -7302,8 +7409,13 @@ let sceneAfterInvite = nextScene;
           onOpenPrivacy={() => setScene("sharing_privacy")}
           onOpenSupporters={() => setScene("supporter_management")}
           onOpenProfile={() => setScene("profile_settings")}
+          onOpenContract={EXPERIENCE_V2_ENABLED ? () => setScene("experience_contract_settings") : null}
           onBack={() => setScene("home")}
         />
+      )}
+
+      {scene === "experience_contract_settings" && EXPERIENCE_V2_ENABLED && (
+        <ExperienceContractSettings client={supabaseClient} onBack={() => setScene("settings")} />
       )}
 
       {scene === "sharing_privacy" && (
@@ -7500,7 +7612,13 @@ let sceneAfterInvite = nextScene;
         />
       )}
       {scene === 0 && (
-        <Scene0_Door
+        isChildhoodTrial(getFreeTrialQuestions(questionsDB)) && hasRestrictedProjectAccess(foundation?.project) ? <ChildhoodTrialIntro
+          resuming={getFreeTrialQuestions(questionsDB).some(question => question.status === 'answered')}
+          onStart={() => {
+            if (hasRecentMicCheck()) setScene(1);
+            else setScene("daily_mic_check");
+          }}
+        /> : <Scene0_Door
           onNext={() => {
             if (hasRecentMicCheck()) {
               setScene(1);
@@ -8913,10 +9031,11 @@ function Scene_PurchaseStart({
           </div>
         </div>
 
-        {orderType === "gift" && (
+        {(EXPERIENCE_V2_ENABLED || orderType === "gift") && (
           <div className="mt-6 rounded-2xl border border-amber-100/10 bg-amber-100/[0.035] px-5 py-4 text-xs leading-[1.9] text-amber-50/48">
-            パッケージのお届け完了から40日間、贈られた方が4つ目の問いへ進む前であれば、
-            本体代金の返金をご相談いただけます。発送後のパッケージ代は返金対象外です。
+            {EXPERIENCE_V2_ENABLED
+              ? `決済確定から${orderType === "gift" ? "45" : "30"}日以内、かつご本人が「本編をはじめる」を選ぶ前は、理由を問わずお支払いいただいた本体代金を全額返金します。同一語り手につき1回。一括・分割で保証条件は変わりません。発送済みパッケージ代は対象外です。`
+              : "パッケージのお届け完了から40日間、贈られた方が4つ目の問いへ進む前であれば、本体代金の返金をご相談いただけます。発送後のパッケージ代は返金対象外です。"}
           </div>
         )}
 
@@ -8977,7 +9096,9 @@ function Scene_PurchaseStart({
   );
 }
 
-function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFinish }) {
+function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFinish, ...connection }) {
+  if (TRIAL_CONVERSION_ENABLED) return <TrialCompletionConnected {...connection} familyInvitation={familyInvitation}
+    onPurchase={onPurchase} onPaidContinue={() => onPurchase({resumePaid:true})} onFinish={onFinish} />;
   const isWorking = status === "starting" || status === "checking";
   const isPaidFamilyGift = familyInvitation?.offer_type === "full_gift";
   const waitsForGiftSender = familyInvitation?.offer_type === "trial_gift"
@@ -9434,7 +9555,7 @@ function Scene_BetaIntro({ onNext }) {
   );
 }
 
-function Scene_OnboardingOverview({ onNext }) {
+export function Scene_OnboardingOverview({ onNext }) {
   return (
     <div className="flow-scene-shell fade-enter">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center">
@@ -9475,7 +9596,7 @@ function Scene_OnboardingOverview({ onNext }) {
 }
 
 
-function Scene_OnboardingPace({ onNext }) {
+export function Scene_OnboardingPace({ onNext }) {
   return (
     <div className="flow-scene-shell flex flex-col fade-enter">
       <div className="flex-1 flex flex-col justify-center">
@@ -9957,7 +10078,7 @@ function ThemePreview({
   );
 }
 
-function Scene_HajimariComplete({ onContinue }) {
+export function Scene_HajimariComplete({ onContinue, startLabel = '最初のテーマを見る' }) {
   return (
     <div className="flow-scene-shell fade-enter">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
@@ -9981,14 +10102,14 @@ function Scene_HajimariComplete({ onContinue }) {
           ここからは<br />9つのテーマごとに進めていきます。
         </p>
         <button type="button" onClick={onContinue} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">
-          最初のテーマを見る
+          {startLabel}
         </button>
       </div>
     </div>
   );
 }
 
-function Scene_ThemeComplete({ completedTheme, hasNextTheme, onRequestFamilyMemory, onContinue, onFinish }) {
+export function Scene_ThemeComplete({ completedTheme, hasNextTheme, onRequestFamilyMemory, onContinue, onFinish }) {
   if (!completedTheme) return null;
   return (
     <div className="flow-scene-shell fade-enter">
@@ -10034,7 +10155,7 @@ function Scene_ThemeComplete({ completedTheme, hasNextTheme, onRequestFamilyMemo
   );
 }
 
-function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onChangeDelivery, onWait, onContinue }) {
+export function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onChangeDelivery, onWait, onContinue }) {
   if (!theme) return null;
   return (
     <div className="flow-scene-shell fade-enter">
@@ -12180,7 +12301,7 @@ function CoverSuggestionPicker({
   );
 }
 
-function Scene_PhotoStoryStart({ onStart, onBack }) {
+export function Scene_PhotoStoryStart({ onStart, onBack }) {
   const [photo, setPhoto] = useState(null);
   const [photoCorrectionOpen, setPhotoCorrectionOpen] = useState(false);
   const choosePhoto = file => {
@@ -12922,6 +13043,7 @@ function SettingsMenuButton({ icon: Icon, label, detail, onClick }) {
 }
 
 function Scene_SettingsHome({
+  onOpenContract,
   notificationPref,
   sharingPreference,
   onOpenDelivery,
@@ -12978,6 +13100,7 @@ function Scene_SettingsHome({
           detail="登録氏名とメールアドレス"
           onClick={onOpenProfile}
         />
+        {onOpenContract && <SettingsMenuButton icon={Files} label="契約・データ管理" detail="返金保証・記録の保存" onClick={onOpenContract} />}
       </div>
     </div>
   );
@@ -13343,48 +13466,77 @@ function Scene_SharingPrivacySettings({
   );
 }
 
-function Scene_PrivateStorySettings({ user, questionSet = [], onBack }) {
+export function Scene_PrivateStorySettings({ user, questionSet = [], onBack, storyAccess = null, productionContext = false }) {
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
   const [expandedStoryIds, setExpandedStoryIds] = useState(() => new Set());
+  const privacySaveLock = useRef(false);
+  const privacyViewEpoch = useRef(0);
 
   useEffect(() => {
+    let live = true;
+    privacyViewEpoch.current++;
     const load = async () => {
       try {
+        setLoading(true);
+        setStories([]);
+        setExpandedStoryIds(new Set());
+        if (storyAccess) {
+          const rows = await storyAccess.list();
+          if (live) setStories(rows);
+          return;
+        }
         const { data, error } = await supabaseClient
           .from("answers")
           .select("id, sequence_order, transcript_edited, transcript_readable, transcript_clean, access_override, created_at")
           .eq("user_id", user.id)
           .order("sequence_order", { ascending: true });
         if (error) throw error;
-        setStories(data || []);
+        if (live) setStories(data || []);
       } catch (error) {
-        console.error("private story settings load error", error);
-        alert("語りの公開設定を読み込めませんでした。");
+        if (live) {
+          setStories([]);
+          if (!storyAccess) console.error("private story settings load error", error);
+          alert("語りの公開設定を読み込めませんでした。");
+        }
       } finally {
-        setLoading(false);
+        if (live) setLoading(false);
       }
     };
     load();
-  }, [user?.id]);
+    return () => { live = false; privacyViewEpoch.current++; };
+  }, [user?.id, storyAccess]);
 
   const togglePrivate = async story => {
+    if (privacySaveLock.current) return;
+    privacySaveLock.current = true;
+    const epoch = privacyViewEpoch.current;
     const nextValue = story.access_override === "private_forever" ? "inherit" : "private_forever";
     try {
       setSavingId(story.id);
+      if (storyAccess) {
+        // Read the server result back instead of assuming sharing succeeded.
+        const rows = await storyAccess.setPrivate(story.id, nextValue === "private_forever");
+        if (privacyViewEpoch.current === epoch) setStories(rows);
+        return;
+      }
       const { error } = await supabaseClient
         .from("answers")
         .update({ access_override: nextValue })
         .eq("id", story.id)
         .eq("user_id", user.id);
       if (error) throw error;
+      if (privacyViewEpoch.current !== epoch) return;
       setStories(prev => prev.map(item => item.id === story.id ? { ...item, access_override: nextValue } : item));
     } catch (error) {
-      console.error("private story setting save error", error);
+      if (privacyViewEpoch.current !== epoch) return;
+      if (storyAccess) setStories([]);
+      else console.error("private story setting save error", error);
       alert("非公開設定を保存できませんでした。");
     } finally {
-      setSavingId(null);
+      if (privacyViewEpoch.current === epoch) setSavingId(null);
+      privacySaveLock.current = false;
     }
   };
 
@@ -13409,13 +13561,14 @@ function Scene_PrivateStorySettings({ user, questionSet = [], onBack }) {
         <button type="button" onClick={onBack} className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center">
           <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
         </button>
-        <p className="text-white/88 text-[1rem] text-narrative">語りごとの非公開設定</p>
+        <p className="text-white/88 text-[1rem] text-narrative">{productionContext ? '家族への共有設定' : '語りごとの非公開設定'}</p>
       </div>
       <div className="shrink-0 glass-card px-5 py-4 mb-4 flex items-center justify-between">
         <p className="text-white/58 text-sm">非公開中</p>
         <p className="text-white/86 text-lg text-narrative">{privateCount}件</p>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pb-8">
+        {productionContext && <p className="text-white/65 text-sm">制作サポーターにはすべての語りが表示されます。ここでは、それ以外の共有先へ見せない語りを選びます。</p>}
         {loading && <p className="text-center text-white/38 text-sm py-10">読み込んでいます...</p>}
         {!loading && visibleStories.length === 0 && <p className="text-center text-white/42 text-sm py-10">設定できる語りはまだありません。</p>}
         {visibleStories.map(story => {
@@ -13443,7 +13596,7 @@ function Scene_PrivateStorySettings({ user, questionSet = [], onBack }) {
                 disabled={savingId === story.id}
                 className="w-full flex items-center justify-between rounded-xl border border-white/[0.08] px-4 py-3"
               >
-                <span className="text-white/58 text-sm">この語りは自分だけ</span>
+                <span className="text-white/58 text-sm">{productionContext ? 'この語りを家族に共有しない' : 'この語りは自分だけ'}</span>
                 <span className={`relative w-11 h-6 rounded-full transition ${isPrivate ? "bg-amber-100/45" : "bg-white/10"}`}>
                   <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition ${isPrivate ? "left-6" : "left-1"}`} />
                 </span>
@@ -14446,6 +14599,7 @@ export function Scene_SupportRecordingAssist({
 }
 
 export function Scene_BookBuilder({
+  productionContext = false,
   user,
   bookProjectId = null,
   project = null,
@@ -14517,6 +14671,26 @@ export function Scene_BookBuilder({
   const [bookMediaByAnswerId, setBookMediaByAnswerId] = useState({});
   const [storiesLoading, setStoriesLoading] = useState(false);
   const [includedStoryIds, setIncludedStoryIds] = useState([]);
+  const [bookWork, setBookWork] = useState(null);
+  const [workSaving, setWorkSaving] = useState(false);
+  const [workError, setWorkError] = useState("");
+  const workSaveLock = useRef(false);
+  const saveSelection = async ids => {
+    const {data,error}=await supabaseClient.rpc("save_book_selection",{
+      input_project_id:bookProjectId,input_answer_ids:ids,input_expected_revision:bookWork?.revision ?? 0
+    });
+    if(error)throw error;
+    setBookWork(data);setIncludedStoryIds(data.answer_ids);return data;
+  };
+  const toggleWorkStory = async answer => {
+    if(readOnly || bookWork?.confirmed_at || workSaveLock.current)return;
+    workSaveLock.current=true;setWorkSaving(true);setWorkError("");
+    try {
+      await saveSelection(includedStoryIds.includes(answer.id)
+        ? includedStoryIds.filter(id=>id!==answer.id):[...includedStoryIds,answer.id]);
+    }catch(error){setWorkError(error.message || "収録選択を保存できませんでした。再読み込みしてください。");}
+    finally {workSaveLock.current=false;setWorkSaving(false);}
+  };
 
   useEffect(() => {
     if (!orderCompletedAt) return;
@@ -14595,6 +14769,12 @@ export function Scene_BookBuilder({
       updated_at: new Date().toISOString()
     };
 
+    if(bookWork?.snapshot?.cover) {
+      // Reprints/shipping may change; the completed cover may not.
+      for(const key of ["title","subtitle","footer_text","cover_style","cloth_color","print_color","cover_photo_path","cover_photo_transform"]) {
+        payload[key]=bookWork.snapshot.cover[key];
+      }
+    }
     const { error } = await supabaseClient
       .from("book_cover_settings")
       .upsert(payload, { onConflict: "book_project_id" });
@@ -14640,7 +14820,7 @@ export function Scene_BookBuilder({
       }
 
       try {
-        const { data, error } = await supabaseClient
+        const { data: liveCover, error } = await supabaseClient
           .from("book_cover_settings")
           .select("title, subtitle, footer_text, cover_style, cloth_color, print_color, cover_photo_path, cover_photo_transform, suggestions, standard_extra_copy_count, premium_copy_count, include_gift_package, premium_title, premium_subtitle, premium_footer_text, premium_cover_style, premium_cloth_color, premium_print_color, premium_cover_photo_mode, premium_cover_photo_path, premium_cover_photo_transform, shipping_address")
           .eq("book_project_id", bookProjectId)
@@ -14648,6 +14828,10 @@ export function Scene_BookBuilder({
         if (error) throw error;
         if (cancelled) return;
 
+        const {data:coverWork,error:coverWorkError}=await supabaseClient.rpc("get_book_work",{input_project_id:bookProjectId});
+        if(coverWorkError)throw coverWorkError;
+        const fixedCover=coverWork?.publication?.snapshot_metadata?.cover || coverWork?.snapshot?.cover;
+        const data=fixedCover ? {...liveCover,...fixedCover} : liveCover;
         if (data) {
           setBookTitle(data.title || "わたしの物語");
           setBookSubtitle(data.subtitle || "");
@@ -14804,6 +14988,7 @@ export function Scene_BookBuilder({
   };
 
   const getQuestionForAnswer = (answer) => {
+    if(bookWork?.snapshot) return bookWork.snapshot.questions.find(q=>q.id===answer.user_question_id)||null;
     return (questionSet || []).find(q =>
       Number(q.sequence_order) === Number(answer.sequence_order)
     ) || null;
@@ -14830,98 +15015,28 @@ export function Scene_BookBuilder({
   };
 
   useEffect(() => {
-    const loadBookStories = async () => {
-      if (initialBookStories) {
-        setBookStories(initialBookStories);
-        setIncludedStoryIds(initialBookStories.map(row => row.id));
-        setBookMediaByAnswerId(initialBookMediaByAnswerId || {});
-        setStoriesLoading(false);
-        return;
+    let cancelled=false;
+    setBookWork(null);setBookStories([]);setIncludedStoryIds([]);setBookMediaByAnswerId({});
+    const load=async()=>{
+      if(!bookProjectId && initialBookStories) {
+        setBookStories(initialBookStories);setIncludedStoryIds(initialBookStories.map(row=>row.id));
+        setBookMediaByAnswerId(initialBookMediaByAnswerId||{});return;
       }
-
-      if (!user?.id) return;
-
+      if(!user?.id||!bookProjectId)return;
+      setStoriesLoading(true);setWorkError("");
       try {
-        setStoriesLoading(true);
-
-        const { data: answerRows, error: answerError } = await supabaseClient
-          .from("answers")
-          .select(`
-            id,
-            book_project_id,
-            sequence_order,
-            transcript_raw,
-            transcript_clean,
-            transcript_readable,
-            transcript_essay,
-            transcript_edited,
-            selected_style,
-            ai_mirror,
-            snippet,
-            meta_json,
-            created_at
-          `)
-          .eq("user_id", user.id)
-          .order("sequence_order", { ascending: true });
-
-        if (answerError) throw answerError;
-
-        const rows = answerRows || [];
-        setBookStories(rows);
-        setIncludedStoryIds(rows.map(row => row.id));
-
-        const answerIds = rows.map(row => row.id);
-
-        if (answerIds.length === 0) {
-          setBookMediaByAnswerId({});
-          return;
+        const {work,answers,mediaByAnswerId}=await loadBookWork(supabaseClient,bookProjectId);
+        if(cancelled)return;
+        setBookWork(work);setBookStories(answers);setIncludedStoryIds(work.answer_ids);setBookMediaByAnswerId(mediaByAnswerId);
+        if(work.snapshot?.cover) {
+          setBookTitle(work.snapshot.cover.title||"");setBookSubtitle(work.snapshot.cover.subtitle||"");
+          setBookFooterText(work.snapshot.cover.footer_text||"");
         }
-
-        const { data: mediaRows, error: mediaError } = await supabaseClient
-          .from("media_assets")
-          .select("id, answer_id, asset_type, storage_path, meta_json, created_at")
-          .in("answer_id", answerIds)
-          .order("created_at", { ascending: true });
-
-        if (mediaError) throw mediaError;
-
-        const grouped = {};
-
-        for (const media of mediaRows || []) {
-          if (!grouped[media.answer_id]) grouped[media.answer_id] = [];
-
-          let url = null;
-
-          if (media.asset_type === "photo") {
-            const { data: signed } = await supabaseClient.storage
-              .from("photos")
-              .createSignedUrl(media.storage_path, 60 * 60);
-
-            url = signed?.signedUrl || null;
-          }
-
-          if (media.asset_type === "audio") {
-            const { data: signed } = await supabaseClient.storage
-              .from("audio")
-              .createSignedUrl(media.storage_path, 60 * 60);
-
-            url = signed?.signedUrl || null;          
-          }
-
-          grouped[media.answer_id].push({ ...media, url });
-        }
-
-        setBookMediaByAnswerId(grouped);
-      } catch (e) {
-        console.error("book stories load error", e);
-        alert("語りの読み込みに失敗しました。");
-      } finally {
-        setStoriesLoading(false);
-      }
+      }catch(error){if(!cancelled)setWorkError(error.message||"作品を読み込めませんでした。");}
+      finally{if(!cancelled)setStoriesLoading(false);}
     };
-
-    loadBookStories();
-  }, [user?.id, initialBookStories, initialBookMediaByAnswerId]);
+    load();return()=>{cancelled=true;};
+  },[user?.id,bookProjectId,initialBookStories,initialBookMediaByAnswerId]);
 
   const handleCoverPhotoSelect = async draft => {
     if (!draft?.url) return;
@@ -15034,13 +15149,28 @@ export function Scene_BookBuilder({
   ].every(value => String(value || "").trim());
 
   const submitBookOrder = async () => {
-    if (!shippingAddressComplete || !orderQuote || !onPurchase) return;
+    if (!shippingAddressComplete || !orderQuote || !onPurchase || workSaving || workError || !bookWork) return;
+    if(!bookWork.confirmed_at && !window.confirm("選択した語りを、この紙ブックとWebブックの共通の収録内容として確定します。確定後は作品の内容を変更できません。ご本人が紙面を確認済みですか？"))return;
+    setWorkSaving(true);
     setShowCheckoutCancelled(false);
     const noPaymentRequired = Number(orderQuote.amount_total || 0) === 0;
     const checkoutWindow = noPaymentRequired ? null : prepareCheckoutWindow();
     try {
       setCoverSettingsSaveError("");
       await persistCoverSettings();
+      if(!bookWork.confirmed_at) {
+        const selection=await saveSelection(includedStoryIds);
+        const {data:confirmed,error}=await supabaseClient.rpc("confirm_book_work",{
+          input_project_id:bookProjectId,input_expected_revision:selection.revision,input_subject_confirmed:true
+        });
+        if(error)throw error;
+        setBookWork(confirmed);
+      }
+      const {data:publication,error:publishError}=await supabaseClient.functions.invoke("publish-voice-edition",{
+        // Fix the work without implicitly enabling anonymous QR access.
+        body:{action:"prepare",bookProjectId}
+      });
+      if(publishError || !publication?.success)throw publishError || Error(publication?.error||"Webブックを固定できませんでした");
       const started = await onPurchase({
         orderType: "self",
         discountCode: orderDiscountCode,
@@ -15059,13 +15189,15 @@ export function Scene_BookBuilder({
     } catch (error) {
       closeCheckoutWindow(checkoutWindow);
       console.error("book order settings save error", error);
-      setCoverSettingsSaveError("注文内容を保存できませんでした。もう一度お試しください。");
+      setCoverSettingsSaveError(error.message || "注文内容を保存できませんでした。もう一度お試しください。");
+    } finally {
+      setWorkSaving(false);
     }
   };
 
   const includedStories = [...bookStories]
     .filter(answer => includedStoryIds.includes(answer.id))
-    .sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0));
+    .sort((a, b) => includedStoryIds.indexOf(a.id) - includedStoryIds.indexOf(b.id));
 
   // 横組みの冊子では、右ページを奇数、左ページを偶数にします。
   // 扉を1ページ目とし、最初の見開きは左2・右3から始めます。
@@ -15199,7 +15331,7 @@ export function Scene_BookBuilder({
               />
             </div>
 
-            {!readOnly && <div className="glass-card p-5">
+            {!readOnly && !bookWork?.confirmed_at && <div className="glass-card p-5">
               <p className="text-white/82 text-[1.05rem] text-narrative mb-5">
                 基本パッケージ「スタンダード冊子」の表紙仕様
               </p>
@@ -15409,13 +15541,8 @@ export function Scene_BookBuilder({
                         <button
                           type="button"
                           aria-pressed={included}
-                          onClick={() => {
-                            setIncludedStoryIds(prev =>
-                              prev.includes(answer.id)
-                                ? prev.filter(id => id !== answer.id)
-                                : [...prev, answer.id]
-                            );
-                          }}
+                          disabled={workSaving || Boolean(bookWork?.confirmed_at) || (!productionContext && answer.access_override === "private_forever")}
+                          onClick={() => toggleWorkStory(answer)}
                           className={`relative w-14 h-8 rounded-full transition ${
                             included
                               ? "bg-emerald-700/85"
@@ -15548,7 +15675,7 @@ export function Scene_BookBuilder({
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-[0.82rem] text-white/76">縦糸横糸ブック-スタンダード冊子の増刷</p>
-                    <p className="mt-1 text-[0.62rem] text-white/32">2冊 10,000円・3冊目から1冊 4,000円</p>
+                    <p className="mt-1 text-[0.62rem] text-white/32">増刷1〜2冊目は1冊5,000円、3冊目以降は1冊4,000円（税込）</p>
                   </div>
                   <select
                     value={standardExtraCopyCount}
@@ -15556,7 +15683,7 @@ export function Scene_BookBuilder({
                     className="rounded-xl border border-white/12 bg-[#111b30] px-3 py-2 text-[0.76rem] text-white/72"
                     aria-label="スタンダード冊子の増刷冊数"
                   >
-                    {[0, ...Array.from({ length: 29 }, (_, index) => index + 2)].map(count => (
+                    {Array.from({ length: 31 }, (_, index) => index).map(count => (
                       <option key={count} value={count} disabled={count < Number(orderQuote?.standard_extra_copy_count_already_purchased || 0)}>
                         {count === 0 ? "増刷なし" : `${count}冊増刷`}
                       </option>
@@ -15836,7 +15963,7 @@ export function Scene_BookBuilder({
                     <button
                       type="button"
                       onClick={purchaseStatus === "checkout_opened" ? onReopenCheckout : submitBookOrder}
-                      disabled={!shippingAddressComplete || purchaseStatus === "starting" || purchaseStatus === "checking"}
+                      disabled={!shippingAddressComplete || workSaving || Boolean(workError) || !bookWork || purchaseStatus === "starting" || purchaseStatus === "checking"}
                       className="btn-quiet mt-5 w-full rounded-full bg-white/10 py-4 text-white/88 disabled:opacity-40"
                     >
                       {purchaseStatus === "checkout_opened"
@@ -15856,6 +15983,7 @@ export function Scene_BookBuilder({
           )
         )}
 
+        {workError && <p role="alert" className="text-rose-200">{workError}</p>}
         <div className="pt-5 border-t border-white/10 flex gap-3">
           <button
             type="button"
@@ -15941,7 +16069,7 @@ function RecordingQuestionPrompt({ question }) {
   );
 }
 
-function Scene1_MyPage({
+export function Scene1_MyPage({
   progress,
   storyProgress = progress,
   question,
@@ -17518,7 +17646,7 @@ function BookPageAddedVisual() {
   );
 }
 
-function Scene6_Completion({ onTalkMore, onHome, onEndToday }) {
+export function Scene6_Completion({ onTalkMore, onHome, onEndToday }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter text-center">
       <p className="text-white/90 text-[1.05rem] mb-2">
@@ -17590,7 +17718,7 @@ function Scene_TokenCompletion({ onLogin }) {
   );
 }
 
-function Scene_EndToday({
+export function Scene_EndToday({
   notificationPref,
   hasSavedAnswer,
   onOpenStoryPages,
@@ -18039,16 +18167,18 @@ handles.map(handle => (
 }
 
 
-function PhotoCorrectionFlow({
+export function PhotoCorrectionFlow({
   open,
   title = "写真を添える",
   initialFile = null,
   onClose,
-  onComplete
+  onComplete,
+  awaitCompletion = false
 }) {
   const libraryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const initializedFileRef = useRef(null);
+  const confirmationLock = useRef(false);
   const [scanPreview, setScanPreview] = useState(null);
 
   const isDesktopBrowser =
@@ -18330,10 +18460,28 @@ function PhotoCorrectionFlow({
     });
   };
 
-  const confirmPhoto = () => {
-    if (!scanPreview?.file) return;
+  const confirmPhoto = async () => {
+    if (!scanPreview?.file || confirmationLock.current) return;
 
     const file = scanPreview.file;
+    if (awaitCompletion) {
+      confirmationLock.current = true;
+      setScanPreview(prev => prev ? {...prev, processing: true} : prev);
+      try {
+        await onComplete?.(file);
+      } catch {
+        // Keep the corrected photo and retry the same pending upload.
+        setScanPreview(prev => prev ? {...prev, processing: false} : prev);
+        alert("写真を保存できませんでした。接続を確認して、もう一度お試しください。");
+        confirmationLock.current = false;
+        return;
+      }
+      releasePreviewUrls(scanPreview);
+      setScanPreview(null);
+      confirmationLock.current = false;
+      onClose?.();
+      return;
+    }
     releasePreviewUrls(scanPreview);
     setScanPreview(null);
     onClose?.();
@@ -18578,15 +18726,20 @@ function PhotoCorrectionFlow({
 }
 
 
-function Scene_StoryPages({
+export function Scene_StoryPages({
   user,
   foundation,
-  questionSet = [],
+  questionSet: suppliedQuestionSet = [],
   onOpenLifeOutline,
   onTalkMore,
   onEditRecord,
-  onBack
+  onBack,
+  storyAccess = null
 }) {
+  const [accessQuestions, setAccessQuestions] = useState([]);
+  const questionSet = storyAccess ? accessQuestions : suppliedQuestionSet;
+  const storyEpoch = useRef(0);
+  const storyWriteLock = useRef(false);
 
   const getStoryBody = (answer) => {
     const selectedStyle = answer?.selected_style || "";
@@ -18625,20 +18778,7 @@ function Scene_StoryPages({
   };
 
   const getQuestionForAnswer = (answer) => {
-    return (questionSet || []).find(q =>
-      Number(q.sequence_order) === Number(answer.sequence_order)
-    ) || null;
-  };
-
-  const getChapterTitleForAnswer = (answer) => {
-    const question = getQuestionForAnswer(answer);
-
-    return (
-      question?.chapter_label ||
-      question?.chapter_description ||
-      question?.chapter ||
-      "その他"
-    );
+    return questionForStory(answer, questionSet);
   };
 
   const getQuestionTextForAnswer = (answer) => {
@@ -18646,58 +18786,7 @@ function Scene_StoryPages({
     return question?.content || "";
   };
 
-  const isVisibleInStoryPages = (question) => (
-    question?.onboarding_group === "trial_experience"
-      ? question?.status === "answered"
-      : question?.include_in_story_list !== false ||
-        question?.onboarding_group === "starting_conversation"
-  );
-
-  const buildChapterSections = (answerRows) => {
-    const sections = [];
-
-    const storyQuestions = (questionSet || []).filter(
-      isVisibleInStoryPages
-    );
-
-    for (const question of storyQuestions) {
-      const chapterTitle =
-        question.chapter_label ||
-        question.chapter_description ||
-        question.chapter ||
-        "その他";
-
-      if (!sections.find(s => s.chapterTitle === chapterTitle)) {
-        sections.push({
-          chapterTitle,
-          answers: []
-        });
-      }
-    }
-
-    for (const answer of answerRows || []) {
-      const question = getQuestionForAnswer(answer);
-
-      if (!isVisibleInStoryPages(question)) {
-        continue;
-      }
-
-      const chapterTitle = getChapterTitleForAnswer(answer);
-      let section = sections.find(s => s.chapterTitle === chapterTitle);
-
-      if (!section) {
-        section = {
-          chapterTitle,
-          answers: []
-        };
-        sections.push(section);
-      }
-
-      section.answers.push(answer);
-    }
-
-    return sections;
-  };
+  const buildChapterSections = answerRows => buildStorySections(questionSet, answerRows);
 
   const [answers, setAnswers] = useState([]);
   const [mediaByAnswerId, setMediaByAnswerId] = useState({});
@@ -18736,6 +18825,7 @@ function Scene_StoryPages({
 
 const loadAnswers = async (options = {}) => {
   const { showLoading = true } = options;
+  const epoch = ++storyEpoch.current;
     if (!user?.id) {
       setAnswers([]);
       setMediaByAnswerId({});
@@ -18747,11 +18837,27 @@ const loadAnswers = async (options = {}) => {
     try {
      if (showLoading) setLoading(true);
 
-      const { data, error } = await supabaseClient
+      if (storyAccess) {
+        // A refresh may fail after access was revoked. Do not keep old contents.
+        if (showLoading) { setAnswers([]); setMediaByAnswerId({}); }
+        const loaded = await storyAccess.list();
+        if (storyEpoch.current !== epoch) return;
+        setAccessQuestions(loaded.questionSet);
+        setAnswers(loaded.answers);
+        setMediaByAnswerId(loaded.mediaByAnswerId);
+        setVideoStories(loaded.videoStories || []);
+        setApprovedThemeMemories(loaded.approvedThemeMemories || []);
+        setHasLifeOutline(Boolean(loaded.hasLifeOutline));
+        return;
+      }
+
+      const answerQuery = supabaseClient
         .from("answers")
         .select(`
           id,
           book_project_id,
+          user_question_id,
+          meta_json,
           sequence_order,
           transcript_raw,
           transcript_clean,
@@ -18765,6 +18871,11 @@ const loadAnswers = async (options = {}) => {
         `)
         .eq("user_id", user.id)
         .order("sequence_order", { ascending: true });
+
+      if (foundation?.project?.id) {
+        answerQuery.or(`book_project_id.eq.${foundation.project.id},book_project_id.is.null`);
+      }
+      const { data, error } = await answerQuery;
 
       if (error) throw error;
 
@@ -18864,16 +18975,23 @@ const loadAnswers = async (options = {}) => {
         setMediaByAnswerId({});
       }
     } catch (e) {
+      if (storyAccess) {
+        if (storyEpoch.current !== epoch) return;
+        setAnswers([]); setMediaByAnswerId({}); setAccessQuestions([]);
+        setVideoStories([]); setApprovedThemeMemories([]); setHasLifeOutline(false);
+        closeAnswerEditor();
+      }
       console.error("story pages load error", e);
       alert("これまでの語りの読み込みに失敗しました。");
     } finally {
-      if (showLoading) setLoading(false);
+      if (showLoading && (!storyAccess || storyEpoch.current === epoch)) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadAnswers();
-  }, [user?.id]);
+    return () => { storyEpoch.current++; };
+  }, [user?.id, storyAccess]);
 
 
 const pickAnswerTextByStyle = (answer, style) => {
@@ -18914,9 +19032,18 @@ const changeEditStyle = (style) => {
 
 const saveAnswerEdit = async () => {
   if (!editingAnswer?.id || !user?.id) return;
+  if (storyWriteLock.current) return;
+  storyWriteLock.current = true;
 
   try {
     setSavingEdit(true);
+
+    if (storyAccess) {
+      await storyAccess.saveEdit(editingAnswer, editSelectedStyle, editDraftText);
+      await loadAnswers({ showLoading: false });
+      closeAnswerEditor();
+      return;
+    }
 
     const { error } = await supabaseClient
       .from("answers")
@@ -18935,6 +19062,7 @@ const saveAnswerEdit = async () => {
     console.error("answer edit save error", e);
     alert("本文の保存に失敗しました。");
   } finally {
+    storyWriteLock.current = false;
     setSavingEdit(false);
   }
 };
@@ -18945,13 +19073,13 @@ const getAudioPathsForAnswer = (answerId) => {
     .map(item => item.storage_path);
 };
 
-const startEditRecordFromModal = (mode) => {
+const startEditRecordFromModal = async (mode) => {
   if (!editingAnswer || !onEditRecord) return;
 
   const answer = editingAnswer;
   const audioPaths = getAudioPathsForAnswer(answer.id);
 
-  const started = onEditRecord(answer, mode, audioPaths);
+  const started = await onEditRecord(answer, mode, audioPaths);
 
   if (started === false) return;
 
@@ -18966,6 +19094,12 @@ const startEditRecordFromModal = (mode) => {
 
     try {
       setDeletingPhotoPath(photo.storage_path);
+
+      if (storyAccess) {
+        await storyAccess.removePhoto(photo);
+        await loadAnswers({ showLoading: false });
+        return;
+      }
 
       const { error: storageError } = await supabaseClient.storage
         .from("photos")
@@ -19046,6 +19180,12 @@ const replaceStoryPhoto = async (file, target) => {
   try {
     setReplacingPhotoPath(photo.storage_path);
 
+    if (storyAccess) {
+      await storyAccess.addPhoto(file, target.answerId, photo.id);
+      await loadAnswers({ showLoading: false });
+      return;
+    }
+
     const { error: uploadError } = await supabaseClient.storage
       .from("photos")
       .upload(nextPath, file, {
@@ -19085,6 +19225,7 @@ const replaceStoryPhoto = async (file, target) => {
     await loadAnswers({ showLoading: false });
   } catch (e) {
     console.error("story photo replace error", e);
+    if (storyAccess) throw e;
     alert(e.message || "写真の差し替えに失敗しました。");
   } finally {
     setReplacingPhotoPath(null);
@@ -19100,6 +19241,12 @@ const handleStoryPhotoSelect = async (file, answerId) => {
 
     try {
       setUploadingPhotoAnswerId(answerId);
+
+      if (storyAccess) {
+        await storyAccess.addPhoto(file, answerId);
+        await loadAnswers({ showLoading: false });
+        return;
+      }
 
       const targetAnswer = answers.find(a => a.id === answerId);
       const existingMedia = mediaByAnswerId[answerId] || [];
@@ -19164,6 +19311,7 @@ const handleStoryPhotoSelect = async (file, answerId) => {
       await loadAnswers({ showLoading: false });
     } catch (e) {
       console.error(e);
+      if (storyAccess) throw e;
       alert(e.message || "写真の追加に失敗しました。");
     } finally {
       setUploadingPhotoAnswerId(null);
@@ -19204,7 +19352,7 @@ useEffect(() => {
   const visibleThemeMemories = selectedChapterIsChildhood ? approvedThemeMemories : [];
 
 return (
-  <div className="h-full flex flex-col fade-enter px-4 pt-0 pb-4 -mt-8 overflow-hidden">
+  <div data-story-pages-scroll className="h-full min-h-0 flex flex-col [&>*]:shrink-0 fade-enter px-4 pt-0 pb-4 overflow-y-auto">
     <VideoStoryFlow
       open={videoFlowOpen}
       user={user}
@@ -19218,20 +19366,32 @@ return (
     />
     <PhotoCorrectionFlow
       open={!!photoActionAnswerId}
+      awaitCompletion={Boolean(storyAccess)}
       onClose={() => setPhotoActionAnswerId(null)}
-      onComplete={(file) => {
+      onComplete={async (file) => {
         const answerId = photoActionAnswerId;
+        if (storyAccess) {
+          await handleStoryPhotoSelect(file, answerId);
+          setPhotoActionAnswerId(null);
+          return;
+        }
         setPhotoActionAnswerId(null);
         handleStoryPhotoSelect(file, answerId);
       }}
     />
     <PhotoCorrectionFlow
       open={!!editingPhoto}
+      awaitCompletion={Boolean(storyAccess)}
       title="写真を切り抜き・補正"
       initialFile={editingPhoto?.sourceFile || null}
       onClose={() => setEditingPhoto(null)}
-      onComplete={(file) => {
+      onComplete={async (file) => {
         const target = editingPhoto;
+        if (storyAccess) {
+          await replaceStoryPhoto(file, target);
+          setEditingPhoto(null);
+          return;
+        }
         setEditingPhoto(null);
         replaceStoryPhoto(file, target);
       }}
@@ -19406,26 +19566,28 @@ return (
       {chapterSections.map((section, index) => {
         const hasAnswers = section.answers.length > 0;
         const isSelected = index === safeChapterIndex;
+        const chapterNumber = chapterSections.slice(0, index + 1).filter(item => !item.isTrial).length;
 
         return (
           <button
-            key={section.chapterTitle}
+            key={section.key}
             type="button"
             disabled={!hasAnswers}
             onClick={() => {
               if (!hasAnswers) return;
               setSelectedChapterIndex(index);
             }}
-            className={`w-9 h-9 rounded-full shrink-0 border text-xs transition ${
+            className={`${section.isTrial ? "px-4" : "w-9"} h-9 rounded-full shrink-0 border text-[1rem] transition ${
               isSelected
                 ? "bg-white text-slate-900 border-white"
                 : hasAnswers
                   ? "bg-white/[0.07] text-white/55 border-white/[0.12]"
                   : "bg-transparent text-white/18 border-white/[0.06] opacity-45"
             }`}
-            aria-label={`章 ${index + 1}${hasAnswers ? "" : " 未回答"}`}
+            aria-pressed={isSelected}
+            aria-label={section.isTrial ? `無料体験の語り ${section.answers.length}件` : `章 ${chapterNumber}${hasAnswers ? "" : " 未回答"}`}
           >
-            {index + 1}
+            {section.isTrial ? `無料体験の語り（${section.answers.length}）` : chapterNumber}
           </button>
         );
       })}
@@ -19440,7 +19602,7 @@ return (
 )}
 
 
-      <div className="flex-1 overflow-y-auto space-y-5 pb-6">
+      <div className="space-y-5 pb-6" data-story-pages-content>
         {loading ? (
           <div className="h-full flex items-center justify-center">
             <p className="text-white/35 text-sm tracking-widest animate-pulse">読み込んでいます...</p>
@@ -19463,6 +19625,9 @@ return (
 
             return (
               <article key={answer.id} className="glass-card p-5 text-left">
+                {isTrialStoryQuestion(getQuestionForAnswer(answer)) && (
+                  <p className="mb-3 text-[1rem] text-white/60">無料３問</p>
+                )}
                 {questionText && (
                   <div className="border-l-2 border-amber-400/60 pl-4 mb-5">
                     <p className="text-white/58 text-[0.92rem] leading-loose text-narrative">
@@ -19616,18 +19781,20 @@ return (
     </div>
   );
 }
-function Scene_NotificationSetup({
+export function Scene_NotificationSetup({
   user,
   bookProjectId,
   storyName,
   recipientMode = "subject",
   initialPreference,
+  notificationAccess,
   onPreferenceSaved,
   onBack,
   onComplete,
   completeLabel = "次へ",
   showCompleteButton = false
 }) {
+  const emailUnavailable = Boolean(notificationAccess && !user?.email);
   const weekdayOptions = [
     "日曜日",
     "月曜日",
@@ -19639,7 +19806,9 @@ function Scene_NotificationSetup({
   ];
   const hourOptions = Array.from({ length: 24 }, (_, index) => index);
   const minuteOptions = [0, 15, 30, 45];
-  const initialSchedules = getNotificationSchedules(initialPreference);
+  // TEST delivery is inactive, but its saved editing choices still exist.
+  // This presentation-only normalization never enables a delivery schedule.
+  const initialSchedules = getNotificationSchedules(notificationAccess ? {...initialPreference,is_active:true} : initialPreference);
   const [schedules, setSchedules] = useState(() => (
     initialSchedules.length > 0
       ? initialSchedules.map((schedule, index) => ({ ...schedule, localId: schedule.id || `schedule-${index}` }))
@@ -19706,6 +19875,12 @@ function Scene_NotificationSetup({
     const request = saveQueueRef.current
       .catch(() => undefined)
       .then(async () => {
+        if (notificationAccess) {
+          const saved = await notificationAccess.saveSchedules(payload);
+          const savedSchedules = saved.schedules.map((schedule,index)=>({...schedule,sort_order:index+1,is_active:true}));
+          publishPreference(saved, savedSchedules);
+          return savedSchedules;
+        }
         const rpcName = bookProjectId
           ? "save_project_notification_schedules"
           : "save_own_notification_schedules";
@@ -19833,6 +20008,17 @@ function Scene_NotificationSetup({
   const saveSmsSetting = async enabled => {
     setPhoneState("saving");
     setPhoneMessage("");
+    if (notificationAccess) {
+      const request = saveQueueRef.current.catch(()=>undefined).then(()=>notificationAccess.saveSms(enabled));
+      saveQueueRef.current = request;
+      latestSaveRef.current = request;
+      const saved = await request;
+      smsEnabledRef.current = Boolean(saved.sms_enabled);
+      setSmsEnabled(Boolean(saved.sms_enabled));
+      publishPreference(saved);
+      setPhoneState("idle");
+      return;
+    }
     const { data, error } = await supabaseClient.rpc("save_own_sms_delivery_setting", {
       input_enabled: enabled
     });
@@ -19871,6 +20057,10 @@ function Scene_NotificationSetup({
   };
 
   const openPhoneSetup = () => {
+    if (notificationAccess) {
+      alert("認証に使う電話番号の変更は、縦糸横糸サポートへご連絡ください。");
+      return;
+    }
     setPhoneNumber(verifiedPhone || "");
     setVerificationCode("");
     setMaskedPhone("");
@@ -19951,7 +20141,7 @@ function Scene_NotificationSetup({
   const returnAfterSave = async () => {
     try {
       await latestSaveRef.current;
-      onBack?.();
+      await onBack?.();
     } catch (_error) {
       alert("配信日時を保存できませんでした。もう一度お試しください。");
     }
@@ -20044,12 +20234,12 @@ function Scene_NotificationSetup({
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-white/82 text-sm">メール</p>
-                  <Check size={14} className="text-emerald-200/70" strokeWidth={2} />
+                  <p className="text-white/82 text-[1rem]">メール</p>
+                  {!emailUnavailable && <Check size={14} className="text-emerald-200/70" strokeWidth={2} />}
                 </div>
-                <p className="mt-1 text-white/34 text-xs truncate">{user?.email || "登録メールアドレス"}</p>
+                <p className="mt-1 text-white/34 text-[1rem] truncate">{emailUnavailable ? "メール未登録" : user?.email || "登録メールアドレス"}</p>
               </div>
-              <span className="text-white/30 text-xs">常に受け取る</span>
+              <span className="text-white/30 text-[1rem]">{emailUnavailable ? "—" : "常に受け取る"}</span>
             </div>
 
             <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-4">
@@ -20059,11 +20249,11 @@ function Scene_NotificationSetup({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="text-white/82 text-sm">SMS</p>
+                    <p className="text-white/82 text-[1rem]">{notificationAccess && verifiedPhone ? "SMS認証済み" : "SMS"}</p>
                     {smsEnabled && <Check size={14} className="text-emerald-200/70" strokeWidth={2} />}
                   </div>
-                  <p className="mt-1 text-white/34 text-xs truncate">
-                    {verifiedPhone || "メールに加えて、SMSでも受け取れます"}
+                  <p className="mt-1 text-white/34 text-[1rem] truncate">
+                    {verifiedPhone || (emailUnavailable ? "携帯電話番号の認証が必要です" : "メールに加えて、SMSでも受け取れます")}
                   </p>
                 </div>
 
@@ -20205,7 +20395,7 @@ function Scene_NotificationSetup({
       </div>
 
       {onComplete && (!onBack || showCompleteButton) && (
-        <button type="button" onClick={finishAndContinue} disabled={saveState === "saving"} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white disabled:opacity-40">
+        <button type="button" onClick={finishAndContinue} disabled={saveState === "saving" || (notificationAccess && phoneState === "saving")} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white disabled:opacity-40">
           {completeLabel}
         </button>
       )}

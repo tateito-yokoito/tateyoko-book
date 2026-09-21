@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { requireExperienceProcessing } from "../_shared/experience-access.ts";
+import { requireFamilyProjectAccess, requireFamilyAssetAccess, familyPendingVoiceScope } from "../_shared/family-access.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -32,7 +34,6 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!openaiApiKey) throw new Error("OPENAI_API_KEY is not set");
     if (!supabaseUrl || !serviceRoleKey) {
       throw new Error("Supabase environment variables are not set");
     }
@@ -67,11 +68,6 @@ serve(async (req) => {
       throw new Error(`audioPaths must contain at most ${MAX_AUDIO_PARTS} items`);
     }
 
-    const userPathPrefix = `${user.id}/`;
-    if (audioPaths.some((path: string) => !path.startsWith(userPathPrefix))) {
-      throw new Error("Forbidden audio path");
-    }
-
     if (!bookProjectId) {
       const { data: answer } = await serviceClient
         .from("answers")
@@ -81,8 +77,20 @@ serve(async (req) => {
       bookProjectId = String(answer?.book_project_id || "").trim();
     }
 
+    const pendingVoice = await familyPendingVoiceScope(serviceClient, body, user.id);
+    if (pendingVoice) {
+      if (JSON.stringify(audioPaths) !== JSON.stringify(pendingVoice.paths)) throw new Error("Forbidden");
+    } else {
+      await requireExperienceProcessing(serviceClient, bookProjectId, user.id, answerId);
+    }
+    for (const path of audioPaths) {
+      const familyAsset = await requireFamilyAssetAccess(serviceClient, "audio", path, user.id, bookProjectId);
+      if (!familyAsset && !path.startsWith(`${user.id}/`)) throw new Error("Forbidden audio path");
+    }
+    if (!openaiApiKey) throw new Error("OPENAI_API_KEY is not set");
+
     let contextTerms: ContextTerm[] = [];
-    if (bookProjectId) {
+    if (bookProjectId && (!pendingVoice || pendingVoice.subject)) {
       await requireProjectAccess(serviceClient, bookProjectId, user.id);
       await seedSubjectName(serviceClient, bookProjectId, user.id);
       contextTerms = await loadRelevantTerms(
@@ -194,6 +202,7 @@ async function requireProjectAccess(
   bookProjectId: string,
   userId: string
 ) {
+  if (await requireFamilyProjectAccess(serviceClient, bookProjectId, userId)) return;
   const { data: project, error: projectError } = await serviceClient
     .from("book_projects")
     .select("owner_user_id")

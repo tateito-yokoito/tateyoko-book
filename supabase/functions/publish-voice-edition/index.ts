@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireExperienceProcessing } from "../_shared/experience-access.ts";
+import { requireFamilyProjectAccess, requireFamilyAssetAccess } from "../_shared/family-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -133,7 +135,7 @@ serve(async (req) => {
       return jsonResponse({ success: true, publicationId, status: "disabled", disabledAt });
     }
 
-    if (action !== "publish" && action !== "update") throw new HttpError("Unsupported action", 400);
+    if (!["publish", "prepare", "update"].includes(action)) throw new HttpError("Unsupported action", 400);
 
     let existingPublication: any = null;
     let bookProjectId = String(body.bookProjectId || "").trim();
@@ -154,100 +156,33 @@ serve(async (req) => {
     if (!isUuid(bookProjectId)) throw new HttpError("bookProjectId is required", 400);
     await requireProjectAccess(serviceClient, bookProjectId, user.id);
 
-    const { data: project, error: projectError } = await serviceClient
-      .from("book_projects")
-      .select("id, title, subject_person_id")
-      .eq("id", bookProjectId)
-      .maybeSingle();
-    if (projectError) throw projectError;
-    if (!project) throw new HttpError("Project not found", 404);
+    await requireExperienceProcessing(serviceClient, bookProjectId, user.id);
 
-    const [{ data: cover }, { data: subject }] = await Promise.all([
-      serviceClient
-        .from("book_cover_settings")
-        .select("title, subtitle, footer_text")
-        .eq("book_project_id", bookProjectId)
-        .maybeSingle(),
-      project.subject_person_id
-        ? serviceClient
-          .from("persons")
-          .select("display_name, preferred_name")
-          .eq("id", project.subject_person_id)
-          .maybeSingle()
-        : Promise.resolve({ data: null })
-    ]);
-
-    const { data: answerRows, error: answersError } = await serviceClient
-      .from("answers")
-      .select(`
-        id,
-        user_question_id,
-        sequence_order,
-        transcript_raw,
-        transcript_clean,
-        transcript_readable,
-        transcript_essay,
-        transcript_edited,
-        selected_style,
-        access_override,
-        meta_json,
-        created_at
-      `)
-      .eq("book_project_id", bookProjectId)
-      .order("sequence_order", { ascending: true })
-      .order("created_at", { ascending: true });
-    if (answersError) throw answersError;
-
-    const answers = (answerRows || []).filter((answer) => answer.access_override !== "private_forever");
-    const answerIds = answers.map((answer) => answer.id);
-
-    const questionIds = Array.from(new Set(answers.map((answer) => answer.user_question_id).filter(Boolean)));
-    const [
-      { data: questionRows, error: questionsError },
-      { data: audioRows, error: audioError },
-      { data: photoRows, error: photoError },
-      { data: videoRows, error: videosError }
-    ] = await Promise.all([
-      questionIds.length > 0
-        ? serviceClient
-          .from("user_questions")
-          .select("id, custom_question_text, question_text_snapshot, chapter_title_snapshot, chapter, sequence_order")
-          .in("id", questionIds)
-        : Promise.resolve({ data: [], error: null }),
-      answerIds.length > 0
-        ? serviceClient
-          .from("media_assets")
-          .select("id, answer_id, storage_path, meta_json, created_at")
-          .eq("book_project_id", bookProjectId)
-          .eq("asset_type", "audio")
-          .in("answer_id", answerIds)
-          .order("created_at", { ascending: true })
-        : Promise.resolve({ data: [], error: null }),
-      answerIds.length > 0
-        ? serviceClient
-          .from("media_assets")
-          .select("id, answer_id, storage_path, meta_json, created_at")
-          .eq("book_project_id", bookProjectId)
-          .eq("asset_type", "photo")
-          .in("answer_id", answerIds)
-          .order("created_at", { ascending: true })
-        : Promise.resolve({ data: [], error: null }),
-      serviceClient
-        .from("video_stories")
-        .select("id, slot_order, prompt_kind, prompt_text, title, transcript_text, video_storage_path, audio_storage_path, poster_storage_path, duration_seconds, mime_type, status, metadata")
-        .eq("book_project_id", bookProjectId)
-        .in("status", ["ready", "failed"])
-        .order("slot_order", { ascending: true })
-    ]);
-    if (questionsError) throw questionsError;
-    if (audioError) throw audioError;
-    if (photoError) throw photoError;
-    if (videosError) throw videosError;
+    // Paper and Web Book are rendered from one explicitly confirmed work.
+    // Never re-query living answers here, including during publication retries.
+    const { data: work, error: workError } = await serviceClient.from("book_work_manifests")
+      .select("*").eq("book_project_id", bookProjectId).maybeSingle();
+    if (workError) throw workError;
+    if (!work?.confirmed_at || !work.snapshot) throw new HttpError("先に紙面と収録内容を確定してください", 409);
+    if (action === "update") throw new HttpError("完成作品の内容は変更できません。共有設定のみ変更できます", 409);
+    const { data: prior, error: priorError } = await serviceClient.from("voice_publications")
+      .select("id, public_id, book_project_id, status, access_mode")
+      .eq("work_manifest_id", work.id).maybeSingle();
+    if (priorError) throw priorError;
+    if (prior && prior.status !== "draft") return jsonResponse({
+      success: true, publicationId: prior.id, publicId: prior.public_id,
+      publicUrl: `${APP_URL}/?voice=${encodeURIComponent(prior.public_id)}`,
+      status: prior.status, unchanged: true
+    });
+    existingPublication = prior;
+    const { project, cover, subject, answers, questions: questionRows, media, videos: videoRows } = work.snapshot;
+    const audioRows = media.filter((m: any) => m.asset_type === "audio");
+    const photoRows = media.filter((m: any) => m.asset_type === "photo");
 
     const questionsById = new Map((questionRows || []).map((question) => [question.id, question]));
     const audioByAnswerId = groupAndSortMedia(audioRows || []);
     const photosByAnswerId = groupAndSortMedia(photoRows || []);
-    const publishableAnswers = answers.filter((answer) => (audioByAnswerId.get(answer.id) || []).length > 0);
+    const publishableAnswers = answers;
     if (publishableAnswers.length === 0 && (videoRows || []).length === 0) {
       throw new HttpError("公開できる音声またはビデオがありません", 409);
     }
@@ -260,6 +195,7 @@ serve(async (req) => {
         .insert({
           public_id: publicId,
           book_project_id: bookProjectId,
+          work_manifest_id: work.id,
           status: "draft",
           book_title: String(cover?.title || project.title || "").trim(),
           book_subtitle: String(cover?.subtitle || "").trim(),
@@ -279,7 +215,17 @@ serve(async (req) => {
       publication = createdPublication;
     }
 
-    const revisionId = randomHex(8);
+    const revisionId = work.id;
+    const fixedCover = Object.fromEntries([
+      "title","subtitle","footer_text","cover_style","cloth_color","print_color",
+      "cover_photo_path","cover_photo_transform","premium_cover_photo_path","premium_cover_photo_transform"
+    ].map(key=>[key,cover?.[key] ?? null]));
+    for(const field of ["cover_photo_path", "premium_cover_photo_path"]) {
+      if(!fixedCover[field])continue;
+      const path=`published/${publication.id}/cover/${work.id}/${field}${safeExtension(fixedCover[field],".jpg")}`;
+      await copyOnce(serviceClient,PHOTO_BUCKET,fixedCover[field],path);
+      fixedCover[field]=path;
+    }
 
     const itemRows = [];
     let itemOrder = 0;
@@ -296,10 +242,8 @@ serve(async (req) => {
         const part = numericPart(media.meta_json?.part, index + 1);
         const extension = safeExtension(media.storage_path);
         const destinationPath = `published/${publication.id}/revisions/${revisionId}/${String(itemOrder).padStart(3, "0")}/${media.id}${extension}`;
-        const { error: copyError } = await serviceClient.storage
-          .from(AUDIO_BUCKET)
-          .copy(media.storage_path, destinationPath);
-        if (copyError) throw new Error(`音声の固定コピーに失敗しました: ${copyError.message}`);
+        await requireFamilyAssetAccess(serviceClient, AUDIO_BUCKET, media.storage_path, user.id, bookProjectId);
+        await copyOnce(serviceClient, AUDIO_BUCKET, media.storage_path, destinationPath);
 
         copiedAssets.push({
           storagePath: destinationPath,
@@ -313,10 +257,8 @@ serve(async (req) => {
         const media = sourcePhotos[index];
         const extension = safeExtension(media.storage_path, ".jpg");
         const destinationPath = `published/${publication.id}/revisions/${revisionId}/${String(itemOrder).padStart(3, "0")}/${media.id}${extension}`;
-        const { error: copyError } = await serviceClient.storage
-          .from(PHOTO_BUCKET)
-          .copy(media.storage_path, destinationPath);
-        if (copyError) throw new Error(`写真の固定コピーに失敗しました: ${copyError.message}`);
+        await requireFamilyAssetAccess(serviceClient, PHOTO_BUCKET, media.storage_path, user.id, bookProjectId);
+        await copyOnce(serviceClient, PHOTO_BUCKET, media.storage_path, destinationPath);
 
         copiedPhotos.push({
           storagePath: destinationPath,
@@ -349,27 +291,21 @@ serve(async (req) => {
     for (const videoStory of videoRows || []) {
       const destinationRoot = `published/${publication.id}/videos/${revisionId}/${String(videoStory.slot_order).padStart(2, "0")}`;
       const videoDestination = `${destinationRoot}/video${safeExtension(videoStory.video_storage_path)}`;
-      const { error: videoCopyError } = await serviceClient.storage
-        .from(VIDEO_BUCKET)
-        .copy(videoStory.video_storage_path, videoDestination);
-      if (videoCopyError) throw new Error(`ビデオの固定コピーに失敗しました: ${videoCopyError.message}`);
+      await requireFamilyAssetAccess(serviceClient, VIDEO_BUCKET, videoStory.video_storage_path, user.id, bookProjectId);
+      await copyOnce(serviceClient, VIDEO_BUCKET, videoStory.video_storage_path, videoDestination);
 
       let audioDestination = null;
       if (videoStory.audio_storage_path) {
         audioDestination = `${destinationRoot}/audio${safeExtension(videoStory.audio_storage_path)}`;
-        const { error: audioCopyError } = await serviceClient.storage
-          .from(VIDEO_BUCKET)
-          .copy(videoStory.audio_storage_path, audioDestination);
-        if (audioCopyError) throw new Error(`ビデオ音声の固定コピーに失敗しました: ${audioCopyError.message}`);
+        await requireFamilyAssetAccess(serviceClient, VIDEO_BUCKET, videoStory.audio_storage_path, user.id, bookProjectId);
+        await copyOnce(serviceClient, VIDEO_BUCKET, videoStory.audio_storage_path, audioDestination);
       }
 
       let posterDestination = null;
       if (videoStory.poster_storage_path) {
         posterDestination = `${destinationRoot}/poster${safeExtension(videoStory.poster_storage_path, ".jpg")}`;
-        const { error: posterCopyError } = await serviceClient.storage
-          .from(VIDEO_BUCKET)
-          .copy(videoStory.poster_storage_path, posterDestination);
-        if (posterCopyError) throw new Error(`ビデオ表紙の固定コピーに失敗しました: ${posterCopyError.message}`);
+        await requireFamilyAssetAccess(serviceClient, VIDEO_BUCKET, videoStory.poster_storage_path, user.id, bookProjectId);
+        await copyOnce(serviceClient, VIDEO_BUCKET, videoStory.poster_storage_path, posterDestination);
       }
 
       copiedVideos.push({
@@ -395,6 +331,7 @@ serve(async (req) => {
       input_book_subtitle: String(cover?.subtitle || "").trim(),
       input_subject_name: String(subject?.display_name || subject?.preferred_name || "").trim(),
       input_snapshot_metadata: {
+        cover: fixedCover,
         footerText: String(cover?.footer_text || "").trim(),
         sourceAnswerCount: publishableAnswers.length,
         sourceVideoCount: copiedVideos.length,
@@ -433,6 +370,7 @@ async function requireProjectAccess(
   projectId: string,
   userId: string
 ) {
+  if (await requireFamilyProjectAccess(client, projectId, userId)) return;
   const { data: project, error: projectError } = await client
     .from("book_projects")
     .select("owner_user_id")
@@ -526,4 +464,15 @@ function jsonResponse(payload: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" }
   });
+}
+
+// Publication-owned paths are immutable to clients. A retry reuses completed copies.
+async function copyOnce(client: ReturnType<typeof createClient>, bucket: string, source: string, destination: string) {
+  const parent = destination.slice(0, destination.lastIndexOf("/"));
+  const name = destination.slice(destination.lastIndexOf("/") + 1);
+  const { data, error } = await client.storage.from(bucket).list(parent, { search: name });
+  if (error) throw error;
+  if (data?.some((object: any) => object.name === name && Number(object.metadata?.size) > 0)) return;
+  const { error: copyError } = await client.storage.from(bucket).copy(source, destination);
+  if (copyError) throw copyError;
 }

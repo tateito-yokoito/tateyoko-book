@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { requireStripeEnvironment, commerceMode, requireCheckoutEnabled, requireEventMode, finalizeExperienceCheckout } from "../_shared/experience-commerce.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,7 +28,8 @@ function appReturnUrl(params: Record<string, string>) {
   const url = new URL(configured);
   url.search = "";
   Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
-  return url.toString();
+  // Stripe substitutes this literal token, not URLSearchParams' encoded braces.
+  return url.toString().replace(/%7BCHECKOUT_SESSION_ID%7D/g, "{CHECKOUT_SESSION_ID}");
 }
 
 function stripeMode(secret: string) {
@@ -189,11 +191,27 @@ serve(async request => {
   let orderId = "";
 
   try {
-    const token = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    try {
+      requireStripeEnvironment(stripeSecretKey);
+      requireCheckoutEnabled();
+      const {error:modeError}=await admin.rpc("require_commerce_mode",{input_mode:commerceMode()});
+      if(modeError)throw modeError;
+    } catch {
+      return json({success:false,error:"ただいま新しいお申し込みを停止しています。"},503);
+    }
+    const bearer = (request.headers.get("Authorization") || "").match(/^Bearer\s+(\S+)$/i);
+    if(!bearer) return json({success:false,error:'ログインが必要です'},401);
+    const token = bearer[1];
     const { data: authData, error: authError } = await admin.auth.getUser(token);
     if (authError || !authData.user) return json({ success: false, error: "ログインが必要です" }, 401);
 
     const body = await request.json().catch(() => ({}));
+    // Never sell v2 UI terms through a legacy/40-day backend. Release requires
+    // an explicit, separately approved backend rollout, not just a UI flag.
+    if (body.expectedPolicyVersion != null &&
+        (body.expectedPolicyVersion !== "2.0")) {
+      return json({success:false,error:"新しいお申し込み条件の公開準備中です。しばらくお待ちください。"},409);
+    }
     const projectId = String(body.projectId || "").trim();
     const orderType = body.orderType === "gift"
       ? "gift"
@@ -203,7 +221,7 @@ serve(async request => {
     const familyInvitationId = String(body.familyInvitationId || "").trim();
     let discountCode = String(body.discountCode || "").trim();
     const standardExtraCopyCount = orderType === "self"
-      ? Number.parseInt(String(body.standardExtraCopyCount ?? "0"), 10)
+      ? Number(String(body.standardExtraCopyCount ?? "0"))
       : 0;
     const premiumCopyCount = orderType === "self"
       ? Number.parseInt(String(body.premiumCopyCount ?? (body.includePremiumHardcover === true ? "1" : "0")), 10)
@@ -211,7 +229,7 @@ serve(async request => {
     const includeGiftPackage = orderType === "gift" || orderType === "family_trial_package"
       ? body.includeGiftPackage !== false
       : body.includeGiftPackage === true;
-    const returnContext = body.returnContext === "book_builder" ? "book_builder" : "purchase";
+    const returnContext = body.returnContext === "book_builder" ? "book_builder" : body.returnContext === "family" ? "family" : "purchase";
     const gift = typeof body.gift === "object" && body.gift ? body.gift : {};
     const shippingAddress = typeof body.shippingAddress === "object" && body.shippingAddress
       ? body.shippingAddress
@@ -219,6 +237,7 @@ serve(async request => {
 
     let project: any = null;
     let familyInvitation: any = null;
+    let managedFamily = false;
     if (familyInvitationId) {
       const invitationResult = await admin.from("family_story_invitations")
         .select("*").eq("id", familyInvitationId).maybeSingle();
@@ -303,12 +322,25 @@ serve(async request => {
         .select("id, owner_user_id, access_status, product_code, premium_hardcover_status, premium_hardcover_purchased_at")
         .eq("id", projectId).maybeSingle();
       project = result.data;
-      if (result.error || !project || project.owner_user_id !== authData.user.id) {
+      const {data:managed,error:managedError}=await admin.rpc('family_managed',{p:projectId});
+      if(managedError)throw managedError;
+      managedFamily=managed===true;
+      if (result.error || !project || (!managedFamily && project.owner_user_id !== authData.user.id)) {
         return json({ success: false, error: "この物語の購入手続きを開始できません" }, 403);
       }
+      if(managedFamily && returnContext!=='family'){
+        const {data:producer,error:producerError}=await admin.rpc('family_creator',{p:projectId,u:authData.user.id});
+        if(producerError || !producer || returnContext!=='book_builder')return json({success:false,error:'制作権限を確認してください'},403);
+      }
+      if (returnContext === "family") {
+        if (Deno.env.get('SUPABASE_URL') !== 'https://zpswxefgfabzvxdbtyvq.supabase.co') return json({success:false,error:'TEST only'},403);
+        const {data:permitted,error:permissionError}=await admin.rpc('family_supporter',{p:projectId,u:authData.user.id});
+        if(permissionError || !permitted) return json({success:false,error:'この物語の購入手続きを開始できません'},403);
+        if(standardExtraCopyCount!==0 || premiumCopyCount!==0 || includeGiftPackage) return json({success:false,error:'基本プランをご確認ください'},400);
+      }
       if (!Number.isInteger(standardExtraCopyCount)
-        || (standardExtraCopyCount !== 0 && (standardExtraCopyCount < 2 || standardExtraCopyCount > 30))) {
-        return json({ success: false, error: "スタンダード冊子の増刷は2冊から30冊で指定してください" }, 400);
+        || standardExtraCopyCount < 0 || standardExtraCopyCount > 30) {
+        return json({ success: false, error: "スタンダード冊子の増刷は1冊から30冊で指定してください" }, 400);
       }
       if (!Number.isInteger(premiumCopyCount) || premiumCopyCount < 0 || premiumCopyCount > 30) {
         return json({ success: false, error: "プレミアム冊子は0冊から30冊で指定してください" }, 400);
@@ -442,7 +474,15 @@ serve(async request => {
     let familyInviteDiscountPercent = 0;
     let familyInviteDiscountAmount = 0;
     if (familyInvitation && orderType !== "family_trial_package") {
-      familyInviteDiscountPercent = await getFamilyInviteDiscountPercent(admin);
+      if (familyInvitation.pricing_policy_version === "2.0") {
+        const { data: percent, error: qualificationError } = await admin.rpc("get_conversion_invitation_discount", {
+          input_invitation_id: familyInvitation.id
+        });
+        if (qualificationError) throw qualificationError;
+        familyInviteDiscountPercent = Number(percent);
+      } else {
+        familyInviteDiscountPercent = await getFamilyInviteDiscountPercent(admin);
+      }
       const baseBookAmount = Number(
         order.base_book_amount
         || quote.base_book_amount
@@ -484,6 +524,11 @@ serve(async request => {
       }
     }
 
+    if (body.expectedAmount != null && Number(body.expectedAmount) !== Number(quote.amount_total)) {
+      // New confirmation UI: never open Stripe with a silently changed total.
+      throw new Error("お申し込み金額が変更されました。内容・料金を再確認してください。");
+    }
+
     if (familyInvitation) {
       const linkedGiftId = created?.gift?.id || null;
       const { error: invitationLinkError } = await admin.from("family_story_invitations").update({
@@ -493,10 +538,22 @@ serve(async request => {
       if (invitationLinkError) throw invitationLinkError;
     }
 
+    const useV2 = order.includes_base_book;
+    if (useV2) {
+      requireStripeEnvironment(stripeSecretKey);
+      const { error } = await admin.rpc("register_experience_contract", { input_order_id: order.id });
+      if (error) throw error;
+    }
+
     // A fully discounted order does not need Stripe products, coupons, or a
     // Checkout Session. Finalize it directly as a zero-yen purchase.
     if (Number(order.amount_total) === 0) {
       const completionId = `zero-${order.id}`;
+      if (useV2) {
+        await finalizeExperienceCheckout(admin, { id: completionId, metadata: { order_id: order.id },
+          amount_total: 0, currency: "jpy", payment_status: "no_payment_required" }, new Date().toISOString(), commerceMode() === "live");
+        return json({ success: true, completed: true, orderId: order.id, quote });
+      }
       const { error: finalizeError } = await admin.rpc("finalize_commerce_order", {
         input_order_id: order.id,
         input_checkout_session_id: completionId,
@@ -515,6 +572,7 @@ serve(async request => {
       ? [
           { code: "self_book_v1", quantity: Number(order.base_book_amount ?? quote.base_book_amount ?? 0) > 0 ? 1 : 0 },
           { code: "standard_reprint_pair_v1", quantity: Number(quote.standard_reprint_pair_quantity || 0) },
+          { code: "standard_reprint_single_v1", quantity: Number(quote.standard_reprint_single_quantity || 0) },
           { code: "standard_reprint_additional_v1", quantity: Number(quote.standard_reprint_additional_quantity || 0) },
           { code: "premium_hardcover_v1", quantity: Number(quote.premium_copy_count_due || 0) },
           { code: "gift_package_v1", quantity: Number(quote.gift_package_amount || 0) > 0 ? 1 : 0 }
@@ -583,6 +641,7 @@ serve(async request => {
     form.set("mode", "payment");
     form.set("locale", "ja");
     form.set("payment_method_types[0]", "card");
+    if (useV2) form.set("payment_method_options[card][installments][enabled]", "true");
     form.set("customer_creation", "always");
     stripeLines.forEach((line, lineIndex) => {
       form.set(`line_items[${lineIndex}][price]`, line.priceId);
@@ -592,6 +651,7 @@ serve(async request => {
     form.set("client_reference_id", order.id);
     form.set("customer_email", authData.user.email || "");
     form.set("metadata[order_id]", order.id);
+    if (useV2) form.set("metadata[experience_policy_version]", "2.0");
     form.set("metadata[project_id]", projectId);
     form.set("metadata[user_id]", authData.user.id);
     form.set("metadata[order_type]", orderType);
@@ -605,6 +665,13 @@ serve(async request => {
     form.set("expires_at", String(Math.floor(Date.now() / 1000) + 60 * 60));
     const returnParams: Record<string, string> = { app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout: "success", session_id: "{CHECKOUT_SESSION_ID}" };
     const cancelParams: Record<string, string> = { app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout: "cancelled" };
+    if (managedFamily) {
+      Object.assign(returnParams,{family:'1',family_project:projectId});
+      Object.assign(cancelParams,{family:'1',family_project:projectId});
+      if(returnContext==='book_builder'){
+        returnParams.family_scene='book';cancelParams.family_scene='book';
+      }
+    }
     if (familyInvitationId) {
       returnParams.family_invite_checkout = familyInvitationId;
       cancelParams.family_invite_checkout = familyInvitationId;
@@ -613,6 +680,7 @@ serve(async request => {
     form.set("cancel_url", appReturnUrl(cancelParams));
 
     const checkout = await stripeRequest(stripeSecretKey, "checkout/sessions", form);
+    requireEventMode(checkout.livemode);
     if (!checkout?.id || !checkout?.url) throw new Error("購入画面を開けませんでした");
 
     const existingOrderMetadata = order.metadata && typeof order.metadata === "object" ? order.metadata : {};
@@ -635,8 +703,9 @@ serve(async request => {
         projectUpdate.premium_hardcover_status = "checkout_pending";
       }
       if (Object.keys(projectUpdate).length > 0) {
-        const { error: projectUpdateError } = await admin.from("book_projects").update(projectUpdate)
-          .eq("id", project.id).eq("owner_user_id", authData.user.id);
+        let updateQuery = admin.from("book_projects").update(projectUpdate).eq("id", project.id);
+        if(!managedFamily) updateQuery=updateQuery.eq("owner_user_id", authData.user.id);
+        const { error: projectUpdateError } = await updateQuery;
         if (projectUpdateError) throw projectUpdateError;
       }
     }

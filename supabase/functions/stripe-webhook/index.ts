@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { finalizeExperienceCheckout, applyRefundObject, stripeRequest, requireEventMode } from "../_shared/experience-commerce.ts";
 
 function hex(bytes: ArrayBuffer) {
   return [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, "0")).join("");
@@ -38,6 +39,7 @@ serve(async request => {
 
   try {
     const event = JSON.parse(payload);
+    requireEventMode(event.livemode);
     const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
     const { data: existingReceipt, error: receiptLookupError } = await admin
@@ -54,6 +56,10 @@ serve(async request => {
       const checkout = event.data.object;
       const orderId = String(checkout?.metadata?.order_id || "");
       if (orderId && ["paid", "no_payment_required"].includes(checkout.payment_status)) {
+        if (checkout.metadata?.experience_policy_version === "2.0") {
+          if (!Number.isFinite(event.created)) throw new Error("Payment event timestamp required");
+          await finalizeExperienceCheckout(admin, checkout, new Date(event.created * 1000).toISOString(), event.livemode);
+        } else {
         const { error } = await admin.rpc("finalize_commerce_order", {
           input_order_id: orderId,
           input_checkout_session_id: checkout.id,
@@ -65,9 +71,10 @@ serve(async request => {
           input_purchased_at: checkout.created ? new Date(checkout.created * 1000).toISOString() : new Date().toISOString()
         });
         if (error) throw error;
+        }
 
         const familyInvitationId = String(checkout?.metadata?.family_invitation_id || "");
-        if (familyInvitationId) {
+        if (Deno.env.get("EXPERIENCE_NOTIFICATIONS_ENABLED") === "true" && familyInvitationId && checkout.metadata?.experience_policy_version !== "2.0") {
           const deliveryResponse = await fetch(`${supabaseUrl}/functions/v1/send-family-story-invite`, {
             method: "POST",
             headers: {
@@ -112,6 +119,15 @@ serve(async request => {
       const charge = event.data.object;
       const paymentIntentId = typeof charge.payment_intent === "string" ? charge.payment_intent : "";
       if (paymentIntentId) {
+        const { data: matchedOrder, error: orderError } = await admin.from("commerce_orders").select("id")
+          .eq("stripe_payment_intent_id", paymentIntentId).maybeSingle();
+        if (orderError) throw orderError;
+        const { data: contract, error: contractError } = matchedOrder
+          ? await admin.from("experience_contracts").select("order_id").eq("order_id", matchedOrder.id).maybeSingle()
+          : { data: null, error: null };
+        if (contractError) throw contractError;
+        // charge.refunded can include pending refunds. v2 only trusts a Refund status, below.
+        if (!contract) {
         const { data, error } = await admin.rpc("record_commerce_refund", {
           input_payment_intent_id: paymentIntentId,
           input_refund_amount: Number(charge.amount_refunded || 0),
@@ -123,7 +139,16 @@ serve(async request => {
             .eq("stripe_payment_intent_id", paymentIntentId);
           if (legacyError) throw legacyError;
         }
+        }
       }
+    }
+
+    if (["refund.created", "refund.updated", "refund.failed"].includes(event.type)
+      && event.data.object.metadata?.experience_refund_request_id) {
+      requireEventMode(event.livemode);
+      // Fetch current status so an out-of-order webhook cannot roll back the processor state.
+      const refund = await stripeRequest(Deno.env.get("STRIPE_SECRET_KEY") || "", `refunds/${encodeURIComponent(event.data.object.id)}`);
+      await applyRefundObject(admin, refund, new Date().toISOString());
     }
 
     const { error: receiptError } = await admin.from("stripe_event_receipts").insert({
