@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
 import {createClient} from '@supabase/supabase-js';
-const ref='zpswxefgfabzvxdbtyvq',origin='http://127.0.0.1:5195';
+const ref='zpswxefgfabzvxdbtyvq',origin=process.env.QA_TEST_ORIGIN||'http://127.0.0.1:5195';
+assert.ok(['http://127.0.0.1:5195','https://tateyoko-book-test.vercel.app'].includes(origin));
 const [caseName,step]=process.argv.slice(2);assert.ok(['A','B'].includes(caseName));
 assert.ok(['create','inspect','record','purchase','starting','main','book','edit','append','replace'].includes(step));
 const dir=process.env.QA_OUTPUT_DIR||'output/production-supporter';fs.mkdirSync(dir,{recursive:true,mode:0o700});
@@ -28,7 +29,7 @@ const context=await browser.newContext({viewport:{width:430,height:932},serviceW
 await context.addInitScript(({key,session,origin})=>{if(location.origin===origin)localStorage.setItem(key,JSON.stringify(session));},{key:`sb-${ref}-auth-token`,session:auth.data.session,origin});
 await context.route('**/*',route=>{
  const u=new URL(route.request().url());
- if(route.request().isNavigationRequest() && u.origin==='https://tateyoko-book-test.vercel.app' && u.searchParams.get('checkout')==='success')return route.fulfill({status:302,headers:{Location:origin+u.pathname+u.search}});
+ if(origin!==u.origin && route.request().isNavigationRequest() && u.origin==='https://tateyoko-book-test.vercel.app' && u.searchParams.get('checkout')==='success')return route.fulfill({status:302,headers:{Location:origin+u.pathname+u.search}});
  if(!(u.origin===origin || u.hostname===`${ref}.supabase.co` || u.hostname==='checkout.stripe.com' || u.hostname.endsWith('.stripe.com') || u.hostname.endsWith('.stripe.network')) || u.pathname.endsWith('/auth/v1/otp'))return route.abort();
  return route.continue();
 });

@@ -39,6 +39,9 @@ for(const relative of assets){
  const dest=path.join(outDir,relative);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(source,dest);
 }
 fs.copyFileSync('scripts/deploy/public-test.vercel.json',path.join(outDir,'vercel.json'));
+// Link only the independently deployed TEST project, never tateyoko-book.
+fs.mkdirSync(path.join(outDir,'.vercel'),{recursive:true});
+fs.writeFileSync(path.join(outDir,'.vercel/project.json'),JSON.stringify({projectId:'prj_sPwDR1BfQBpYUQAgu1ElFlU4QeCX',orgId:'team_027fdPcnI7A33ybpJtw7Db4D',projectName:'tateyoko-book-test'}));
 fs.cpSync('public/pwa',path.join(outDir,'pwa'),{recursive:true});
 fs.copyFileSync('public/pwa-sw.js',path.join(outDir,'pwa-sw.js'));
 const files=filesUnder(outDir);

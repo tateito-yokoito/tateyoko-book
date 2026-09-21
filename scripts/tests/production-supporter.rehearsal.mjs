@@ -24,7 +24,7 @@ const needles={
  'save_book_selection(uuid,uuid[],integer)':["a.access_override is distinct from 'private_forever'"],
  'confirm_book_work(uuid,integer,boolean)':["a.access_override is distinct from 'private_forever'"]};
 const dynamicNames=['can_manage_book_cover','can_manage_video_stories','assert_experience_processing','family_original_asset_read','family_storage_access','family_recipient_allowed','family_finish_starting_chapter','family_photo_question','family_commit_photo_voice','family_edit_story','family_remove_story_photo','family_attach_story_photo','family_voice_edit_context','family_revise_voice','family_order_privacy_guard'];
-const report={at:new Date().toISOString(),sourceCapturedAt:prod.at,remoteReadOnly:true,userDataCopied:false,stubs:['auth.uid/jwt/role','auth.users structure','storage.objects structure'],applied:[],replacementChecks:[],comparison:[]};
+const report={at:new Date().toISOString(),sourceCapturedAt:prod.at,remoteReadOnly:true,userDataCopied:false,atomicMigrationBatch:true,migrationHashes:[],stubs:['auth.uid/jwt/role','auth.users structure','storage.objects structure'],applied:[],replacementChecks:[],comparison:[]};
 const norm=s=>s.replace(/\s+/g,' ').trim(),hash=s=>createHash('sha256').update(s).digest('hex');
 try{
  assert.equal(Object.keys(prod.indexConflicts||{}).length,4,'Read-only uniqueness checks are required');
@@ -50,6 +50,7 @@ try{
  for(const p of prod.policies)await db.exec(`create policy ${q(p.policyname)} on ${q(p.schemaname)}.${q(p.tablename)} as ${p.permissive} for ${p.cmd} to ${p.roles.map(q).join(',')}${p.qual?' using ('+p.qual+')':''}${p.with_check?' with check ('+p.with_check+')':''}`);
  await db.exec('set check_function_bodies=on;');
  const defs=async()=> (await db.query("select p.oid::regprocedure::text signature,p.proname name,pg_get_functiondef(p.oid) definition from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in('public','family_private') and p.prokind='f'")).rows;
+ await db.exec('begin;');
  for(const name of migrations){
   assert.ok(!prod.migrations.some(m=>m.version===name.split('_')[0]),'Do not reapply an existing migration');
   if(name.startsWith('202609210003')){
@@ -61,7 +62,11 @@ try{
     for(const needle of strings){const count=f.definition.split(needle).length-1;assert.ok(count>0,`Absent replacement ${signature}: ${needle}`);report.replacementChecks.push({signature,needle,count});}
    }
   }
-  await db.exec(await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8'));
+  const source=await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8');
+  assert.equal((source.match(/^begin;$/gm)||[]).length,1);
+  assert.equal((source.match(/^commit;$/gm)||[]).length,1);
+  await db.exec(source.replace(/^begin;$/gm,'').replace(/^commit;$/gm,''));
+  report.migrationHashes.push({name,sha256:hash(source)});
   report.applied.push(name);console.log('LOCAL_APPLIED '+name);
  }
  const after=await defs();
@@ -81,6 +86,7 @@ try{
   const a=after.find(f=>f.name===name),b=test.functions.find(f=>f.name===name);
   assert.equal(norm(a.definition),norm(b.definition),`Preserve current SMS support and family guards: ${name}`);
  }
+ await db.exec('commit;');
  await writeFile(`${dir}/rehearsed-functions.json`,JSON.stringify(after,null,2),{mode:0o600});
  report.pass=true;
 }catch(e){report.pass=false;report.error=e.message;report.where=e.where;console.error({error:e.message,where:e.where});process.exitCode=1;}
