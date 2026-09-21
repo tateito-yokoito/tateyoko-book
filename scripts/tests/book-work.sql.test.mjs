@@ -1,0 +1,51 @@
+import {readFile} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const {PGlite}=await import(process.env.QA_PGLITE_PATH);
+const db=new PGlite(),id=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
+await db.exec(`
+create role anon;create role authenticated;create role service_role;
+create schema auth;
+create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('test.uid',true),'')::uuid $$;
+create table auth.users(id uuid primary key);
+create table persons(id uuid primary key,display_name text);
+create table book_projects(id uuid primary key,owner_user_id uuid,subject_person_id uuid,title text);
+create table answers(id uuid primary key,book_project_id uuid,subject_person_id uuid,user_question_id uuid,sequence_order integer,created_at timestamptz default now(),access_override text,transcript_edited text);
+create table user_questions(id uuid primary key,meta_json jsonb);
+create table book_cover_settings(book_project_id uuid,title text);
+create table media_assets(id uuid,answer_id uuid,book_project_id uuid,created_at timestamptz);
+create table video_stories(id uuid,book_project_id uuid,status text,metadata jsonb,slot_order int);
+create table voice_publications(id uuid primary key,status text);
+create table voice_publication_items(publication_id uuid,item_order int,source_answer_id uuid);
+create function can_manage_book_cover(pid uuid) returns boolean language sql as $$ select exists(select 1 from book_projects where id=pid and owner_user_id=auth.uid()) $$;
+create function experience_data_allowed(pid uuid,w boolean) returns boolean language sql as $$ select coalesce(current_setting('test.access',true),'true')<>'false' $$;
+create function assert_experience_processing(pid uuid,actor uuid) returns void language plpgsql as $$ begin if not can_manage_book_cover(pid) then raise exception 'Forbidden'; end if; end; $$;
+insert into auth.users values('${id(1)}');
+insert into persons values('${id(2)}','QA'),('${id(3)}','Other');
+insert into book_projects values('${id(4)}','${id(1)}','${id(2)}','QA');
+insert into user_questions values('${id(5)}','{"onboarding_group":"trial_experience"}');
+insert into answers(id,book_project_id,subject_person_id,sequence_order,transcript_edited) values
+ ('${id(10)}','${id(4)}','${id(2)}',1,'Selected original'),('${id(11)}','${id(4)}','${id(2)}',2,'Excluded'),
+ ('${id(12)}','${id(4)}','${id(3)}',3,'Other Person');
+insert into answers(id,book_project_id,subject_person_id,user_question_id,sequence_order) values('${id(13)}','${id(4)}','${id(2)}','${id(5)}',4);
+set test.uid='${id(1)}';
+`);
+for(const file of ['202609160004_book_work_manifest.sql','202609160009_work_access_grace.sql'])
+ await db.exec(await readFile('supabase/migrations/'+file,'utf8'));
+const rpc=async(name,args)=>(await db.query('select '+name+'('+args.map((_,i)=>'$'+(i+1)).join(',')+') as result',args)).rows[0].result;
+assert.deepEqual((await rpc('get_book_work',[id(4)])).answer_ids,[id(10),id(11)]);
+for(const ids of [[id(12)],[id(10),id(10)]])await assert.rejects(rpc('save_book_selection',[id(4),ids,0]),/Invalid/);
+const selection=await rpc('save_book_selection',[id(4),[id(10)],0]);
+await assert.rejects(rpc('save_book_selection',[id(4),[id(11)],0]),/changed/);
+await assert.rejects(rpc('confirm_book_work',[id(4),selection.revision,false]),/confirmation/);
+const fixed=await rpc('confirm_book_work',[id(4),selection.revision,true]);
+assert.deepEqual(fixed.snapshot.answers.map(a=>a.id),[id(10)]);
+await db.query('update answers set transcript_edited=$1 where id=$2',['Changed later',id(10)]);
+assert.equal((await rpc('get_book_work',[id(4)])).snapshot.answers[0].transcript_edited,'Selected original');
+await assert.rejects(rpc('save_book_selection',[id(4),[id(11)],1]),/confirmed/);
+await assert.rejects(db.exec("update book_work_manifests set answer_ids='{}'"),/immutable/);
+await db.exec("set test.access='false'");
+await assert.rejects(rpc('get_book_work',[id(4)]),/Forbidden/);
+await db.exec("set test.access='true';set test.uid=''");
+await assert.rejects(rpc('get_book_work',[id(4)]),/Forbidden/);
+console.log('PASS work SQL: defaults, other-Person rejection, duplicate rejection, optimistic lock, explicit confirmation, fixed selection/text, immutable DB, grace gate, anonymous denial');
+await db.close();

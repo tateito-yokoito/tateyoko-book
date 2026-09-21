@@ -1,0 +1,2 @@
+# Generated schema-only fixture; review migrations and executable tests first.
+scripts/tests/fixtures/family-baseline-schema.json linguist-generated=true
