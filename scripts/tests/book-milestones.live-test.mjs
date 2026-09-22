@@ -53,4 +53,5 @@ const server=http.createServer((req,res)=>{
  if(req.url==='/app.css'){res.setHeader('Content-Type','text/css');return res.end(fs.readFileSync(`dist/assets/${css}`));}
  res.setHeader('Content-Type','text/html');res.end('<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TEST実収録｜縦糸横糸</title><link rel="stylesheet" href="/app.css"><style>.app-container{min-height:100dvh;height:auto}.test-banner{position:fixed;bottom:0;left:0;right:0;z-index:10050;padding:12px;background:#342b16;color:#fff;text-align:center;font-size:12px}.fixed.inset-0{bottom:46px!important}</style><div id="root"></div><script type="module" src="/app.js"></script></html>');
 });
-server.listen(0,'127.0.0.1',()=>console.log(`Real capture TEST: http://127.0.0.1:${server.address().port} (synthetic account, no production writes)`));
+// Keep the review link stable across server restarts.
+server.listen(52536,'127.0.0.1',()=>console.log(`Real capture TEST: http://127.0.0.1:${server.address().port} (synthetic account, no production writes)`));

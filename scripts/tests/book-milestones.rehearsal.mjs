@@ -5,10 +5,11 @@ import {pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
 const runtime=process.env.QA_PGLITE_PATH;assert.ok(runtime);
 const {PGlite}=await import(runtime),{pgcrypto}=await import(new URL('./contrib/pgcrypto.js',pathToFileURL(runtime)));
-const dir='output/book-milestones-preflight',quote=s=>'"'+s.replaceAll('"','""')+'"';
+const dir=process.env.QA_PREFLIGHT_DIR || 'output/book-milestones-preflight',quote=s=>'"'+s.replaceAll('"','""')+'"';
+assert.ok(/^output\/[a-z0-9-]+$/.test(dir));
 const file='supabase/migrations/202609220002_book_milestones.sql',source=await readFile(file,'utf8');
 const report={at:new Date().toISOString(),migration:file,sha256:createHash('sha256').update(source).digest('hex'),remoteWrites:false,results:[]};
-for(const label of ['test','production']){
+for(const label of process.argv.includes('--production-only')?['production']:['test','production']){
  const schema=JSON.parse(await readFile(`${dir}/${label}-schema.json`)),db=new PGlite({extensions:{pgcrypto}});
  try{
   assert.ok(!schema.migrations.some(m=>m.version==='202609220002'),'Already applied');
