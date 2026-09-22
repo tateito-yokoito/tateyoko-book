@@ -1,10 +1,23 @@
 import React, {useEffect,useMemo,useRef,useState} from 'react';
 import {Scene1_MyPage,Scene_Recording,Scene3_5_VoiceCheck,Scene6_Completion,Scene_EndToday,derivePhotoStoryTitle} from './App.jsx';
 import {createFamilyVoiceService,familyQuestion} from './lib/familyVoice.js';
+import BookMilestoneFlow from './BookMilestoneFlow.jsx';
+import {BOOK_MILESTONES_ENABLED,isMilestone} from './lib/bookMilestones.js';
 
 // No independent family recorder/review markup. Data belongs to the selected
 // Person; authentication continues to identify the real operating Account.
-export default function FamilyRecordingFlow({client,api,workspace,question,continuation=null,photo=null,edit=null,onSaved,onBack,onNext,onSkip,onStories}) {
+export default function FamilyRecordingFlow(props) {
+  if(BOOK_MILESTONES_ENABLED && isMilestone(props.question) && !props.photo)return <BookMilestoneFlow
+    client={props.client} projectId={props.workspace.project_id} question={familyQuestion(props.question)} userName={props.workspace.name}
+    mode={props.edit?.mode || (props.continuation?'append':'initial')} onBack={props.onBack}
+    onDone={async result=>{
+      if(props.edit){await props.onSaved?.();props.onStories?.();return;}
+      if(result.closing && props.onClosing){await props.onClosing();return;}
+      const navigated=await props.onSaved?.();if(!navigated)await props.onNext?.();
+    }}/>;
+  return <StandardFamilyRecording {...props}/>;
+}
+function StandardFamilyRecording({client,api,workspace,question,continuation=null,photo=null,edit=null,onSaved,onBack,onNext,onSkip,onStories}) {
   const service=useMemo(()=>createFamilyVoiceService(client,api,workspace.project_id),[client,api,workspace.project_id]);
   const current=familyQuestion(question);
   const available=workspace.questions.filter(q=>q.available && q.group===question.group && (!question.theme_code || q.theme_code===question.theme_code));

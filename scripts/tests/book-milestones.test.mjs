@@ -1,0 +1,33 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {videoAvailability,audioAvailability,isMilestone,createMilestoneService} from '../../src/lib/bookMilestones.js';
+test('one current video slot, independent of the operation which created it',()=>{
+ assert.ok(videoAvailability({hasVideo:true,videoCount:1},'append'));
+ assert.equal(videoAvailability({hasVideo:true,videoCount:2},'replace'),'');
+ assert.equal(videoAvailability({hasVideo:false,videoCount:1},'append'),'');
+ assert.ok(videoAvailability({hasVideo:false,videoCount:2},'initial'));
+ assert.equal(audioAvailability({hasVideo:true,audioPartCount:1},'append'),'');
+ assert.ok(audioAvailability({audioPartCount:5},'append'));
+ assert.equal(videoAvailability({audioPartCount:5,hasVideo:false,videoCount:0},'append'),'','Five audio answers do not consume the video slot');
+ assert.equal(audioAvailability({audioPartCount:4,hasVideo:true},'append'),'','Video does not consume the fifth audio slot');
+ assert.ok(audioAvailability({audioPartCount:5,hasVideo:true},'append'));
+ assert.equal(isMilestone({id:'normal'}),false);
+ assert.equal(isMilestone({meta_json:{answer_formats:['audio','video']}}),true);
+});
+test('failed upload retry retains reservation; video and extracted audio saved only once',async()=>{
+ const calls=[];let fail=true;
+ const client={rpc:async(name,args)=>{calls.push({name,args});return {data:{id:'upload',answer_id:'answer',family_upload_id:'family-upload',audio_path:'audio/path',video_path:'video/path'}};},storage:{from:bucket=>({upload:async(path,blob,options)=>{calls.push({bucket,path,size:blob.size,options});if(bucket==='videos'&&fail){fail=false;return{error:Error('offline')};}return {};}})},functions:{invoke:async(name,{body})=>{calls.push({name,body});return{data:{success:true,transcript_raw:'new words',transcript_readable:'combined words'}};}}};
+ const service=createMilestoneService(client,'p','q','append');
+ const part={audioBlob:new Blob(['audio'],{type:'audio/webm'}),videoBlob:new Blob(['video'],{type:'video/webm'}),duration:20};
+ const context={revision:'r',text:'Question',textBody:'old words'};
+ await assert.rejects(()=>service.process(part,context),/offline/);
+ const review=await service.process(part,context);
+ assert.equal(calls.filter(c=>c.name==='book_milestone_reserve').length,1);
+ assert.equal(calls.filter(c=>c.bucket==='audio').length,1);
+ assert.ok(calls.filter(c=>c.bucket).every(c=>c.options.upsert===false));
+ assert.equal(review.transcript,'old words\n\nnew words');
+ assert.deepEqual(calls.find(c=>c.name==='transcribe-audio').body.familyUploadIds,['family-upload']);
+ await service.save(part,review);
+ assert.equal(calls.at(-1).args.upload,'upload');
+ assert.equal(calls.at(-1).args.duration,20);
+});

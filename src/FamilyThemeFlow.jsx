@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Scene_HajimariComplete,Scene_ThemeComplete,Scene_ThemeIntro} from './App.jsx';
 import {STORY_THEMES} from './lib/storyThemes.js';
+import {BOOK_MILESTONES_ENABLED} from './lib/bookMilestones.js';
 
 // Existing screens, with persisted Person-scoped navigation instead of local
 // chapter counters. Delivery settings remain a caller-owned existing screen.
@@ -33,7 +34,7 @@ export default function FamilyThemeFlow({api,workspace,notificationLabel,onDeliv
     {!current.access?.main_started_at && canProduce(current)
       ? <Scene_HajimariComplete startLabel="本編をはじめる" onContinue={()=>act('main')}/>
       : nav?.phase==='complete'
-        ? <Scene_ThemeComplete completedTheme={completed} hasNextTheme={nav.order<9} onContinue={()=>act('next')} onFinish={()=>act('finish','stories')}/>
+        ? <Scene_ThemeComplete completedTheme={completed} hasNextTheme={nav.order<9} onContinue={()=>act('next')} onFinish={()=>act('finish',BOOK_MILESTONES_ENABLED?'closing':'stories')}/>
         : intro && ['intro','first_intro'].includes(nav?.phase)
           ? <Scene_ThemeIntro theme={intro} isFirstTheme={nav.phase==='first_intro'} notificationLabel={notificationLabel}
               onChangeDelivery={onDeliverySettings?()=>act('delivery'):undefined} onWait={()=>act('enter','home')} onContinue={()=>act('enter','question')}/>

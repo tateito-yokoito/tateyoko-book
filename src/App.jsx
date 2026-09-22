@@ -18,6 +18,10 @@ import { resolveDeliveryEntry, withoutDeliveryToken } from "./lib/deliveryEntry.
 import { createRecordingClock, mergeRecordingDuration, RECORDING_LIMIT_SECONDS, RECORDING_WARNING_SECONDS, RECORDING_LIMIT_NOTICE } from "./lib/recordingTime.js";
 import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
+import BookMilestoneFlow, {JourneyClosing} from "./BookMilestoneFlow.jsx";
+import MilestoneCapture from "./MilestoneCapture.jsx";
+import MilestoneVideo from "./MilestoneVideo.jsx";
+import {BOOK_MILESTONES_ENABLED, isMilestone, isClosing, OPENING_TEXT} from "./lib/bookMilestones.js";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
 import { ThemeMemoryRequestComposer, ThemeMemoryRequestManager } from "./ThemeMemoryRequestFlow.jsx";
 import "./family-invitation.css";
@@ -1149,7 +1153,7 @@ function getFirstMainStoryIndex(questionSet) {
   if (explicitIndex >= 0) return explicitIndex;
 
   return (questionSet || []).findIndex(
-    question => question?.include_in_story_list !== false
+    question => question?.include_in_story_list !== false && (!BOOK_MILESTONES_ENABLED || (!isFormalOnboardingQuestion(question) && !isClosing(question)))
   );
 }
 
@@ -1393,7 +1397,7 @@ async function createChildLedFamilyStory({ subjectName, relationshipLabel, creat
 
 function getMainStoryProgress(questionSet, currentIndex) {
   const mainStoryQuestions = (questionSet || []).filter(
-    question => question?.include_in_story_list !== false
+    question => question?.include_in_story_list !== false && (!BOOK_MILESTONES_ENABLED || (!isFormalOnboardingQuestion(question) && !isClosing(question)))
   );
   const currentQuestion = questionSet?.[currentIndex] || null;
   const mainStoryIndex = mainStoryQuestions.findIndex(question =>
@@ -1957,6 +1961,8 @@ function normalizeUserQuestions(rows) {
       flow_type: meta.flow_type || null,
       flow_phase: meta.flow_phase || null,
       onboarding_group: meta.onboarding_group || null,
+      answer_formats: meta.answer_formats || ["audio"],
+      video_slot_key: meta.video_slot_key || null,
       onboarding_order: meta.onboarding_order ?? null,
       question_role: meta.question_role || null,
       theme_code: meta.theme_code || null,
@@ -3070,6 +3076,7 @@ if (perspectivePoints) {
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [scene, setScene] = useState(-1);
+  const [milestoneEdit, setMilestoneEdit] = useState(null);
   const [user, setUser] = useState(null);
   const [questionsDB, setQuestionsDB] = useState([]);
   const [notificationPref, setNotificationPref] = useState(null);
@@ -4131,6 +4138,14 @@ const startEditRecording = (
 ) => {
   if (!answer?.id) return false;
 
+  const milestoneQuestion = questionsDB.find(q => q.user_question_id === answer.user_question_id);
+  if (BOOK_MILESTONES_ENABLED && isMilestone(milestoneQuestion)) {
+    if (mode === "replace" && !window.confirm("今の語り（音声・動画・文章）を新しい語りに置き換えます。写真は残ります。よろしいですか？")) return false;
+    setMilestoneEdit({question:milestoneQuestion,mode,returnScene:editReturnScene});
+    setScene("milestone_edit");
+    return true;
+  }
+
   if (mode === "replace") {
     const ok = window.confirm(
       "語り直すと、今保存されている音声と文章は新しい内容に置き換わります。写真は残ります。よろしいですか？"
@@ -5178,6 +5193,31 @@ const leaveThemeTransition = async nextScene => {
   } finally {
     setIsInitializing(false);
   }
+};
+
+const openClosingChapter = async () => {
+  try {
+    const {data:id,error} = await supabaseClient.rpc("book_ensure_closing",{p:foundation.project.id});
+    if(error)throw error;
+    await savePendingThemeTransition(null);
+    if(!id){setScene("book_builder");return;}
+    const qs=await loadUserQuestionSet(user.id,foundation);
+    setQuestionsDB(qs);
+    const q=qs.find(q=>q.user_question_id===id);
+    if(!q)throw Error("Closing question unavailable");
+    setMilestoneEdit({question:q,mode:q.status==='answered'?'replace':'initial',returnScene:'closing_complete'});
+    setScene(q.status==='answered'?'closing_complete':'milestone_edit');
+  } catch { alert("おわりの章を開けませんでした。もう一度お試しください。"); }
+};
+
+const completeMilestone = async ({closing}) => {
+  const qs=await loadUserQuestionSet(user.id,foundation);
+  setQuestionsDB(qs);
+  if(milestoneEdit?.returnScene && milestoneEdit.returnScene!=='closing_complete')setScene(milestoneEdit.returnScene);
+  else if(closing)setScene("closing_complete");
+  else if(foundation?.project?.onboarding_status!=="completed")await skipOnboardingMotivation();
+  else setScene("story_pages");
+  setMilestoneEdit(null);
 };
 
 const openThemeGuideAfterConversation = async () => {
@@ -6839,7 +6879,11 @@ let sceneAfterInvite = nextScene;
       )}
 
       {scene === "starting_motivation_prompt" && (
-        <Scene_StartingMotivationPrompt
+        BOOK_MILESTONES_ENABLED && isMilestone(questionsDB.find(q=>q.onboarding_group==='starting_motivation')) ?
+        <BookMilestoneFlow client={supabaseClient} projectId={foundation?.project?.id}
+          question={questionsDB.find(q=>q.onboarding_group==='starting_motivation')}
+          userName={user?.name} onDone={completeMilestone} onBack={()=>setScene('home')}/>
+        : <Scene_StartingMotivationPrompt
           onRecord={startOnboardingMotivation}
           onSkip={skipOnboardingMotivation}
         />
@@ -7639,7 +7683,14 @@ let sceneAfterInvite = nextScene;
         />
       )}
 
-      {scene === 1 && (
+      {BOOK_MILESTONES_ENABLED && (scene === "milestone_edit" || (scene === 1 && isMilestone(currentQ))) && (
+        <BookMilestoneFlow key={`${milestoneEdit?.question?.user_question_id || currentQ?.user_question_id}:${milestoneEdit?.mode || 'initial'}`}
+          client={supabaseClient} projectId={foundation?.project?.id} question={milestoneEdit?.question || currentQ}
+          userName={user?.name} mode={milestoneEdit?.mode || 'initial'} onDone={completeMilestone}
+          onBack={()=>{setScene(milestoneEdit?.returnScene || 'home');setMilestoneEdit(null);}}/>
+      )}
+      {scene === "closing_complete" && <JourneyClosing onBook={()=>setScene("book_builder")} onStories={()=>setScene("story_pages")}/>}
+      {scene === 1 && !(BOOK_MILESTONES_ENABLED && isMilestone(currentQ)) && (
         <Scene1_MyPage
           progress={progress}
           storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
@@ -7810,7 +7861,7 @@ onRetry={() => {
             setScene("theme_memory_request");
           } : null}
           onContinue={openNextThemeIntroduction}
-          onFinish={() => leaveThemeTransition("story_pages")}
+          onFinish={() => BOOK_MILESTONES_ENABLED ? openClosingChapter() : leaveThemeTransition("story_pages")}
         />
       )}
       {scene === "theme_memory_request" && (
@@ -7876,6 +7927,7 @@ onRetry={() => {
     setScene(themeResumeContext ? "theme_resume" : 1);
   }}
   onEditRecord={startEditRecording}
+  onAnswerMilestone={q=>{setMilestoneEdit({question:q,mode:'initial',returnScene:'story_pages'});setScene('milestone_edit');}}
   onBack={() => setScene("home")}
 />
 
@@ -9822,8 +9874,7 @@ function Scene_StartingMotivationPrompt({ onRecord, onSkip }) {
 
             <div className="glass-card mt-8 px-6 py-8">
               <p className="text-[1.05rem] leading-[2.15] text-white/78 text-narrative">
-                物語を始めようと思ったきっかけや、<br className="hidden sm:block" />
-                この扉をひらく今のお気持ちを、聞かせてください。
+                {BOOK_MILESTONES_ENABLED ? OPENING_TEXT : <>物語を始めようと思ったきっかけや、<br className="hidden sm:block" />この扉をひらく今のお気持ちを、聞かせてください。</>}
               </p>
             </div>
 
@@ -9839,7 +9890,7 @@ function Scene_StartingMotivationPrompt({ onRecord, onSkip }) {
             onClick={onRecord}
             className="btn-quiet w-full rounded-full bg-white/10 py-4 text-white"
           >
-            声で残す
+            {BOOK_MILESTONES_ENABLED ? '語る' : '声で残す'}
           </button>
           <button
             type="button"
@@ -10148,7 +10199,7 @@ export function Scene_ThemeComplete({ completedTheme, hasNextTheme, onRequestFam
           <div>
             <p className="text-[1.35rem] leading-[1.9] text-white/92 text-narrative">九つのテーマを、<br />すべてたどりました</p>
             <p className="mt-6 text-sm leading-[2] text-white/48">重ねてきた声が、あなたの物語の輪郭になりました。</p>
-            <button type="button" onClick={onFinish} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">物語を見る</button>
+            <button type="button" onClick={onFinish} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">{BOOK_MILESTONES_ENABLED ? 'おわりの章へ' : '物語を見る'}</button>
           </div>
         )}
       </div>
@@ -16033,7 +16084,7 @@ function Scene0_Door({ onNext }) {
   );
 }
 
-function RecordingQuestionPrompt({ question }) {
+export function RecordingQuestionPrompt({ question }) {
   const hasGuidance = !!(
     question.prompt_hint ||
     question.reassurance_text
@@ -16054,7 +16105,7 @@ function RecordingQuestionPrompt({ question }) {
           </p>
 
           {question.prompt_hint && (
-            <p className="text-white/55 text-sm leading-loose">
+            <p className="text-white/55 text-sm leading-loose whitespace-pre-line">
               {question.prompt_hint}
             </p>
           )}
@@ -16077,12 +16128,13 @@ export function Scene1_MyPage({
   userName,
   onNext,
   onSkip,
-  onEndToday
+  onEndToday,
+  milestone = false
 }) {
   const isFormalOnboarding = isFormalOnboardingQuestion(question);
   const isOnboardingQuestion = isFormalOnboarding;
 
-  const sectionLabel = isFormalOnboarding
+  const sectionLabel = milestone ? (isClosing(question)?'おわりの章':'はじまりの章') : isFormalOnboarding
     ? question.onboarding_group === "trial_experience"
       ? "体験の一頁"
       : question.onboarding_group === "starting_motivation"
@@ -16106,7 +16158,7 @@ export function Scene1_MyPage({
             {sectionLabel}
           </p>
 
-          {!isOnboardingQuestion && (
+          {!isOnboardingQuestion && !milestone && (
             <>
               <div className="w-full h-[2px] bg-white/10 rounded-full">
                 <div
@@ -16134,15 +16186,16 @@ export function Scene1_MyPage({
           type="button"
           onClick={onNext}
           className="recording-icon-button recording-icon-button--start"
-          aria-label="録音を始める"
+          aria-label={BOOK_MILESTONES_ENABLED ? "語る画面へ" : "録音を始める"}
         >
           <Mic size={30} strokeWidth={1.55} aria-hidden="true" />
         </button>
       </div>
+      {BOOK_MILESTONES_ENABLED && <p className="text-center text-white/65 text-sm mt-2">語る</p>}
 
       {!isTokenMode() && (
         <div className="mt-5 flex items-center justify-center gap-3 pb-2">
-          {!isOnboardingQuestion && (
+          {(!isOnboardingQuestion || milestone) && (
             <button
               onClick={onSkip}
               className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-sm underline underline-offset-4"
@@ -16385,7 +16438,13 @@ function Scene_DailyMicCheck({ onComplete }) {
   );
 }
 
-export function Scene_Recording({
+export function Scene_Recording(props) {
+  if(props.milestoneCapture)return <MilestoneCapture {...props} {...props.milestoneCapture}/>;
+  // All questions share deliberate, user-initiated capture in the new BOOK flow.
+  // Keep the closed release's existing behavior until this feature is enabled.
+  return <AudioRecording {...props} autoStart={BOOK_MILESTONES_ENABLED ? false : props.autoStart}/>;
+}
+function AudioRecording({
   question,
   progress,
   storyProgress = progress,
@@ -17337,6 +17396,8 @@ return (
         )}
 
         <div className="glass-card p-5 mb-6">
+
+        {data.videoUrl && <video src={data.videoUrl} controls playsInline preload="metadata" className="w-full max-h-64 mb-5 rounded-xl" aria-label="今回の動画を確認"/>}
 
         {/* 音声確認は文字起こしの補助操作として、控えめに表示する。 */}
         {data.audioUrl && (
@@ -18734,6 +18795,7 @@ export function Scene_StoryPages({
   onOpenLifeOutline,
   onTalkMore,
   onEditRecord,
+  onAnswerMilestone,
   onBack,
   storyAccess = null
 }) {
@@ -19074,6 +19136,13 @@ const getAudioPathsForAnswer = (answerId) => {
     .map(item => item.storage_path);
 };
 
+// Milestones have separate audio (5) and video (1) capacities. Their capture
+// screen checks each format against fresh server context before recording.
+const editingUsesMilestoneCapture = BOOK_MILESTONES_ENABLED && editingAnswer &&
+  isMilestone(questionForStory(editingAnswer, questionSet));
+const editingAppendBlocked = !editingUsesMilestoneCapture && editingAnswer &&
+  getAudioPathsForAnswer(editingAnswer.id).length >= MAX_AUDIO_PARTS_PER_QUESTION;
+
 const startEditRecordFromModal = async (mode) => {
   if (!editingAnswer || !onEditRecord) return;
 
@@ -19354,7 +19423,7 @@ useEffect(() => {
 
 return (
   <div data-story-pages-scroll className="h-full min-h-0 flex flex-col [&>*]:shrink-0 fade-enter px-4 pt-0 pb-4 overflow-y-auto">
-    <VideoStoryFlow
+    {!BOOK_MILESTONES_ENABLED && <VideoStoryFlow
       open={videoFlowOpen}
       user={user}
       foundation={foundation}
@@ -19364,7 +19433,7 @@ return (
       supabaseClient={supabaseClient}
       onReload={() => loadAnswers({ showLoading: false })}
       onClose={() => setVideoFlowOpen(false)}
-    />
+    />}
     <PhotoCorrectionFlow
       open={!!photoActionAnswerId}
       awaitCompletion={Boolean(storyAccess)}
@@ -19461,9 +19530,9 @@ return (
       <button
         type="button"
         onClick={() => startEditRecordFromModal("append")}
-        disabled={savingEdit || getAudioPathsForAnswer(editingAnswer.id).length >= MAX_AUDIO_PARTS_PER_QUESTION}
+        disabled={savingEdit || editingAppendBlocked}
         className={`py-3 rounded-full border border-white/10 text-sm ${
-          getAudioPathsForAnswer(editingAnswer.id).length >= MAX_AUDIO_PARTS_PER_QUESTION
+          editingAppendBlocked
             ? "text-white/20 opacity-50"
             : "text-white/45"
         }`}
@@ -19472,7 +19541,7 @@ return (
       </button>
     </div>
 
-    {getAudioPathsForAnswer(editingAnswer.id).length >= MAX_AUDIO_PARTS_PER_QUESTION && (
+    {editingAppendBlocked && (
       <p className="mt-2 text-center text-white/28 text-xs leading-loose">
         語り足しの上限に達しました<br />
         ここからは本文の編集で整えられます。
@@ -19520,7 +19589,7 @@ return (
   </p>
 </div>
 
-<button
+{!BOOK_MILESTONES_ENABLED && <button
   type="button"
   onClick={() => setVideoFlowOpen(true)}
   className="glass-card mb-3 flex min-h-[64px] items-center justify-between px-5 text-left"
@@ -19536,7 +19605,14 @@ return (
     <span className="text-white/34 text-sm">{videoStories.length}/2</span>
     <ChevronRight size={18} className="text-white/28" strokeWidth={1.7} />
   </div>
-</button>
+</button>}
+
+{BOOK_MILESTONES_ENABLED && onAnswerMilestone && questionSet.filter(q=>isMilestone(q) && !answers.some(a=>a.user_question_id===q.user_question_id)).map(q=>
+  <button key={q.user_question_id} className="glass-card p-4 mb-3 text-left" onClick={()=>onAnswerMilestone(q)}>
+    <span className="text-white/60 text-sm">{isClosing(q)?'おわりの章':'はじまりの章'}</span><span className="block mt-2">{q.content}</span><span className="block mt-3 text-white/60">語る</span>
+  </button>
+)}
+{BOOK_MILESTONES_ENABLED && videoStories.filter(v=>!v.source_answer_id || !answers.some(a=>a.id===v.source_answer_id)).map(v=><MilestoneVideo key={v.id} client={supabaseClient} story={v}/>)}
 
 {hasLifeOutline && onOpenLifeOutline && (
   <button
@@ -19626,6 +19702,7 @@ return (
 
             return (
               <article key={answer.id} className="glass-card p-5 text-left">
+                {BOOK_MILESTONES_ENABLED && videoStories.filter(v=>v.source_answer_id===answer.id).map(v=><MilestoneVideo key={v.id} client={supabaseClient} story={v}/>)}
                 {isTrialStoryQuestion(getQuestionForAnswer(answer)) && (
                   <p className="mb-3 text-[1rem] text-white/60">無料３問</p>
                 )}

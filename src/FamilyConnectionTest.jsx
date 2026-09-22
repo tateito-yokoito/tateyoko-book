@@ -7,6 +7,8 @@ import './family-connection-test.css';
 import HomePage from './home/HomePage.jsx';
 import HomeInstall, {installWasShown} from './home/HomeInstall.jsx';
 import {familyJourney} from './home/familyHomeModel.js';
+import {BOOK_MILESTONES_ENABLED} from './lib/bookMilestones.js';
+import {JourneyClosing} from './BookMilestoneFlow.jsx';
 import {firstStoryGuideState, finishFirstStoryGuide, firstStoryDestination} from './home/firstStoryGuide.js';
 
 // Person-bound adapter. Do not mount App's legacy Person bootstrap here.
@@ -186,6 +188,9 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
     const next=familyJourney(refreshed);
     if(['purchase','startingConsent','mainConsent','inactive'].includes(next.stage)){setScene(next.stage);return;}
     if(canProduce(refreshed) && refreshed.theme_navigation && renderTheme){setScene('theme');return;}
+    if(BOOK_MILESTONES_ENABLED && recordingQuestion?.group==='starting_motivation'){
+      await api.finishChapter(workspace.project_id);await open(workspace.project_id);setScene('mainConsent');return;
+    }
     const following=refreshed.questions.find(q=>q.available && !q.answered && !q.skipped && q.id!==question && q.group===recordingQuestion.group
       && (!recordingQuestion.theme_code || q.theme_code===recordingQuestion.theme_code));
     if(!following){setScene('home');return;}
@@ -208,12 +213,27 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
       onStories:()=>run(async()=>{await open(workspace.project_id);setScene('stories');}),
       onNext:()=>run(advanceRecording),
       onSkip:async()=>{await api.skipQuestion(workspace.project_id,question);await advanceRecording();},
+      onClosing:async()=>{await open(workspace.project_id);setScene('closingComplete');},
     });
+  if(session && producer && scene==='closingComplete')return <div className="fixed inset-0 bg-[#0f172a] text-white p-6"><div className="max-w-[600px] mx-auto"><JourneyClosing onBook={()=>setScene('book')} onStories={()=>setScene('stories')}/></div></div>;
   if(session && !inviteToken && !install && producer && ['theme','mainConsent'].includes(scene) && renderTheme) return renderTheme({workspace,api,
     notificationLabel:release.test?'TESTでは通知を送りません':'ご自身のペースで進められます',
     onDeliverySettings:renderDelivery ? async fresh=>{if(identity.current!==session.user.id)return;setWorkspace(fresh);setDeliveryReturn('theme');setScene(fresh.role==='subject'?'delivery':'settings');} : undefined,
     onNavigate:async(fresh,destination)=>{
       if(identity.current!==session.user.id)return;
+      if(destination==='closing'){
+        const {data:id,error}=await client.rpc('book_ensure_closing',{p:fresh.project_id});
+        if(error)throw error;
+        const updated=await api.workspace(fresh.project_id);
+        if(identity.current!==session.user.id)return;
+        setWorkspace(updated);setContinuation(null);
+        if(!id){setScene('book');return;}
+        const closing=updated.questions.find(q=>q.id===id);
+        if(!closing)throw Error('Closing question unavailable');
+        if(closing.answered){setScene('closingComplete');return;}
+        if(updated.role==='supporter' && !window.confirm('ご本人と一緒にいて、録音の同意を確認しましたか？')){setScene('stories');return;}
+        setQuestion(id);setTogether(updated.role==='supporter');setScene('record');return;
+      }
       setWorkspace(fresh);setContinuation(null);
       const next=familyJourney(fresh).next;
       if(destination==='question' && next){
@@ -401,7 +421,11 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
         </>}</section>}
         {scene==='family' && workspace.role==='subject' && <section><h2>家族とのつながり</h2><label className="check"><input type="checkbox" checked={workspace.progress_enabled} onChange={e=>run(async()=>{await api.progress(workspace.project_id,e.target.checked);await open(workspace.project_id);})}/>見守り中の支援者に件数と最後に保存した日を伝える</label><p>制作を任せたサポーターは、この設定にかかわらず制作中の語り・素材を確認できます。一般の家族への内容共有は別に設定します。</p></section>}
         {scene==='settings' && <section><h2>設定</h2>{workspace.role==='subject' && renderPrivacy && <button className="secondary" onClick={()=>setScene('privacy')}>語りごとの非公開設定</button>}{workspace.role==='subject' && renderDelivery && <button className="secondary" onClick={()=>{setDeliveryReturn('settings');setScene('delivery');}}>問いの届け方</button>}<button className="secondary" onClick={()=>setInstall(true)}>ホーム画面への追加方法</button><button className="secondary" disabled={busy} onClick={()=>run(async()=>{const {error}=await client.auth.signOut({scope:'local'});if(error)throw error;})}>この端末からログアウト</button></section>}
-        {home && producer && journey.stage==='starting' && journey.starting.filter(q=>q.group!=='starting_motivation' && q.answered).length>=3 && <button disabled={busy} onClick={()=>run(async()=>{await api.finishChapter(workspace.project_id);await open(workspace.project_id);setScene('mainConsent');})}>はじまりの章を終える</button>}
+        {home && producer && journey.stage==='starting' && journey.starting.filter(q=>q.group!=='starting_motivation' && q.answered).length>=3 && <button disabled={busy} onClick={()=>run(async()=>{
+          const opening=workspace.questions.find(q=>q.group==='starting_motivation' && q.available && !q.answered && !q.skipped);
+          if(BOOK_MILESTONES_ENABLED && opening){selectRecording(opening.id);return;}
+          await api.finishChapter(workspace.project_id);await open(workspace.project_id);setScene('mainConsent');
+        })}>{BOOK_MILESTONES_ENABLED?'はじまりの章の最後の問いへ':'はじまりの章を終える'}</button>}
       </>}
     </>}
   </main>;

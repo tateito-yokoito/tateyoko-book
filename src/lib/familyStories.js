@@ -1,4 +1,5 @@
 import {familyQuestion} from './familyVoice.js';
+import {BOOK_MILESTONES_ENABLED} from './bookMilestones.js';
 
 // The selected Person/Project, never the original recording actor, is the scope.
 export function createFamilyStoryAccess(client, api, projectId) {
@@ -35,7 +36,13 @@ export function createFamilyStoryAccess(client, api, projectId) {
           (mediaByAnswerId[m.answer_id] ||= []).push({...m,url});
         }
       }
-      return {answers,mediaByAnswerId,questionSet};
+      let videoStories=[];
+      if(BOOK_MILESTONES_ENABLED){
+        const result=await client.from('video_stories').select('*').eq('book_project_id',projectId).order('slot_order');
+        if(result.error)throw Error('動画を読み込めませんでした。');
+        videoStories=result.data || [];
+      }
+      return {answers,mediaByAnswerId,questionSet,videoStories:videoStories || []};
     },
     async saveEdit(answer,style,body){
       await subject();

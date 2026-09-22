@@ -4,7 +4,9 @@ import {mkdirSync,writeFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 const cli=process.env.QA_SUPABASE_CLI;assert.ok(cli);
 assert.equal(process.argv[2],'--read-only');
-const dir='output/supporter-preflight';mkdirSync(dir,{recursive:true,mode:0o700});
+const dir=process.env.QA_PREFLIGHT_DIR || 'output/supporter-preflight';
+assert.ok(/^output\/[a-z0-9-]+$/.test(dir));
+mkdirSync(dir,{recursive:true,mode:0o700});
 const sql=`begin read only;set local statement_timeout='15s';
 select jsonb_build_object(
  'read_only',current_setting('transaction_read_only'),
