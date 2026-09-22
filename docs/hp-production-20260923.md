@@ -1,5 +1,20 @@
 # HP visual release — 2026-09-23
 
+## Latest follow-up: approved standard book photograph
+
+- Source commit: `973b399c7cd73ff11c5f7b8f2cb7e94831e5405d` (`codex/hp-release-20260923`).
+- Live deployment: `dpl_8kREz1EhGbAEEHYKcC96iC1eydJ6`, https://tateyoko-book-gn6uynxys-tateito-yokoito.vercel.app .
+- Rollback: `dpl_4cKrW9NGRkAweJUKoi8XAgpeiBi9` (the earlier release below).
+- Replaced only the standard book presentation with the approved wide-photo image `public/site/hp-renewal/standard-softcover-wide-photo-v6.webp` (740×1180, 89,412 bytes). Derived from the approved v6 PNG by trimming outer background only and WebP encoding. The approved cover/photo is not cropped.
+- Four color names/swatches remain as static samples; no misleading color-switch buttons for the single approved sage image. No checkout changes.
+- Other HP sections and all app/Auth/payment/DB/Edge source unchanged. No main merge or push.
+- Production build settings deep-equal the earlier release; commit and manifest verified. JS `index-3mgdrUKK.js`, CSS `index-BQeD9kon.css`.
+- Local final artifact verified at 1440, 813 and 390px: image loaded, no horizontal overflow or page errors, four swatches present. Screenshots in ignored `output/hp-standard-photo-release/`.
+- Deployed with `--prod --skip-domain`; authenticated browser confirmed the candidate without changing protection. Confirmed the live custom domain still pointed to the previous deployment, then promoted this candidate.
+- Public HTML and image return HTTP 200; expected JS/CSS and `noindex, nofollow` (meta + HTTP header) verified. Public mobile rendering visually confirmed in the authenticated in-app browser, then viewport reset.
+
+## Earlier release
+
 - Public URL: https://www.tateito-yokoito.jp/
 - Source commit: `c13d57ab70cd0dcf6e4ce033131fb522aa5a5de2`
 - Branch: `codex/hp-release-20260923`
