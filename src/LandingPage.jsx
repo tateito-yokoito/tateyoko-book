@@ -1,420 +1,165 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import LandingWebBookPreview from "./landing/LandingWebBookPreview.jsx";
 import "./landing.css";
 
-const APP_ENTRY_URL = "/?app=1&entry=login";
-const TRIAL_ENTRY_URL = "/?app=1&entry=trial";
-const PURCHASE_ENTRY_URL = "/?app=1&entry=purchase";
-const CONTACT_EMAIL = "sugawara@saltlight.co.jp";
+const LOGIN = "/?app=1&entry=login";
+const TRIAL = "/?app=1&entry=trial";
+const PURCHASE = "/?app=1&entry=purchase";
+const EMAIL = "sugawara@saltlight.co.jp";
+const QUESTIONS = [
+  "幼い頃、どんなところに住んでいましたか？",
+  "その頃、よく一緒にいた人を一人思い浮かべてください。どんな人でしたか？",
+  "その頃、どんな遊びが好きでしたか？"
+];
+const THEMES = ["幼い頃", "学生時代", "好きなこと", "暮らし", "仕事・役割", "人とのつながり", "家族の記憶", "人生の転機", "今とこれから"];
+const FAQS = [
+  ["スマートフォンが苦手でも使えますか？", "問いを読み、録音ボタンを押して話すところから始められます。写真や文章の整理、本に仕上げる作業は、信頼する方に手伝ってもらうこともできます。"],
+  ["親の物語を、子どものスマホだけで作れますか？", "ご本人の同意のもと、一緒に思い出を辿り、制作を手伝う使い方を想定しています。ご本人のアカウントがない場合の始め方は、現在ご案内を準備しています。"],
+  ["離れていても手伝えますか？", "信頼する方をサポーターとして招き、離れた場所から制作を手伝ってもらう仕組みです。利用できる範囲と手順は、ご案内時に確認できます。"],
+  ["無料体験後に自動課金されますか？", "自動課金はありません。無料の3問にカード登録は不要です。続けたいと思ったときに、ご自身で購入を選べます。"],
+  ["どのくらいで完成しますか？", "語る量やペースによって異なります。一度にすべてを話す必要はありません。製本・発送の時期は、内容が確定してからご案内します。"],
+  ["語った内容は誰に見えますか？", "完成した物語を家族に見せる範囲は、自分たちで選べます。Webブックの共有リンクや暗証番号は、見せたい相手にお伝えください。"],
+  ["サポーターには何が見えますか？", "サポーターは、本づくりを手伝うために語りや写真などの制作情報を扱います。完成した物語を閲覧する家族とは役割が異なります。依頼するときに、制作のために共有する範囲を確認してください。"],
+  ["途中で休んでも大丈夫ですか？", "一度に語り終える必要はありません。無理のないペースで進められます。利用期間などの条件は、お申し込み時の案内をご確認ください。"]
+];
+const MORE_FAQS = [
+  ["49,800円には何が含まれますか？", "人生を辿る問い、音声・文章・写真の保存、標準の縦糸横糸ブック（ソフトカバー）1冊、縦糸横糸Webブックが含まれます。税込・国内送料込みです。"],
+  ["プレミアムブックは標準ブックと入れ替わりますか？", "入れ替わりません。標準ブック1冊に加えて、30,000円（税込）でプレミアムブックをもう1冊追加するオプションです。"],
+  ["本から声を聴けますか？", "縦糸横糸ブックのQRから、縦糸横糸Webブックへ進み、声を聴けます。紙の作品を読む時間と、声に触れる時間のどちらも楽しめます。"]
+];
 
-const INFORMATION_PANELS = {
-  contact: {
-    kicker: "CONTACT",
-    title: "お問い合わせ",
-    content: (
-      <>
-        <p>使い方、贈り方、製本やご注文について、メールでご相談いただけます。</p>
-        <a className="landing-primary-button" href={`mailto:${CONTACT_EMAIL}`}>
-          メールを送る <span aria-hidden="true">→</span>
-        </a>
-        <p className="landing-modal-address">{CONTACT_EMAIL}</p>
-      </>
-    )
-  },
-  privacy: {
-    kicker: "PRIVACY",
-    title: "プライバシーについて",
-    content: (
-      <>
-        <p>語り手が、物語を見せる相手を選べます。物語全体だけでなく、一つの語りごとに非公開を設定できます。</p>
-        <p>録音、文章、写真、アカウント情報は、サービスの提供とサポートに必要な範囲で取り扱います。取り扱いに関するご質問は、運営窓口へご連絡ください。</p>
-      </>
-    )
-  },
-  commerce: {
-    kicker: "LEGAL",
-    title: "特定商取引法に基づく表記",
-    content: (
-      <dl className="landing-legal-list">
-        <div><dt>販売事業者</dt><dd>株式会社SaltLight</dd></div>
-        <div><dt>運営責任者</dt><dd>菅原 英俊</dd></div>
-        <div><dt>連絡先</dt><dd><a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></dd></div>
-        <div><dt>販売価格</dt><dd>49,800円（税込・国内送料込み）。追加冊子等のオプションは注文前に表示します。</dd></div>
-        <div><dt>支払方法</dt><dd>クレジットカード決済（Stripe）</dd></div>
-        <div><dt>提供時期</dt><dd>購入後すぐに語りを始められます。冊子は内容確定後に製本し、発送時にご案内します。</dd></div>
-        <div><dt>取消・返金</dt><dd>適用条件を確認のうえ個別にご案内します。お申し込み前にご相談いただけます。</dd></div>
-        <div><dt>所在地・電話番号</dt><dd>請求があった場合、遅滞なく電子メールで開示します。</dd></div>
-      </dl>
-    )
-  }
-};
-
-function BrandMark({ compact = false }) {
-  return (
-    <span
-      className={`landing-brand ${compact ? "is-compact" : ""}`}
-      role="img"
-      aria-label="縦糸横糸"
-    >
-      <img className="landing-brand-lockup" src="/brand-logo-lockup-kyokasho.svg" alt="" />
-      <img className="landing-brand-symbol" src="/brand-logo-symbol.svg" alt="" />
-    </span>
-  );
+function TrialLink() {
+  return <a className="hp-button" href={TRIAL}>無料で3問、話してみる <span aria-hidden="true">↗</span></a>;
 }
+function Placeholder({ name, children, className = "" }) {
+  return <div className={"hp-placeholder " + className}><span className="hp-placeholder-label">ビジュアル仮置き · {name}</span>{children}</div>;
+}
+function SectionLabel({ children }) { return <p className="hp-label">{children}</p>; }
 
-function ArrowLink({ children }) {
-  return <span className="landing-arrow-link">{children}<span aria-hidden="true">→</span></span>;
+function InformationDialog({ panel, close }) {
+  const dialog = useRef(null);
+  useEffect(() => {
+    const previous = document.activeElement;
+    dialog.current.showModal();
+    return () => { previous?.focus(); };
+  }, []);
+  const title = { contact: "お問い合わせ", privacy: "残すことと、見せること", commerce: "特定商取引法に基づく表記" }[panel];
+  return <dialog className="hp-dialog" ref={dialog} aria-labelledby="hp-dialog-title" onCancel={close} onClick={e => { if (e.target === e.currentTarget) close(); }}>
+    <div className="hp-dialog-inner"><button className="hp-dialog-close" onClick={close} aria-label="閉じる">×</button>
+      <h2 id="hp-dialog-title">{title}</h2>
+      {panel === "contact" && <><p>使い方、制作やご注文について、メールでご相談いただけます。</p><a href={"mailto:" + EMAIL}>{EMAIL}</a></>}
+      {panel === "privacy" && <><p>本づくりを手伝うサポーターと、完成した物語を見る家族は別の役割です。</p><p>サポーターは制作に必要な情報を扱います。完成した物語の共有範囲とは分けて、ご本人の同意のもとで依頼してください。</p><p>録音、文章、写真、アカウント情報は、サービスの提供とサポートに必要な範囲で取り扱います。ご質問は運営窓口へご連絡ください。</p></>}
+      {panel === "commerce" && <dl>{[
+        ["販売事業者", "株式会社SaltLight"], ["運営責任者", "菅原 英俊"], ["連絡先", EMAIL],
+        ["販売価格", "縦糸横糸 49,800円（税込・国内送料込み）。プレミアムブックの追加は30,000円（税込）。"],
+        ["支払方法", "クレジットカード決済（Stripe）"],
+        ["提供時期", "購入後にご利用を開始できます。冊子は内容確定後に製本し、発送時にご案内します。"],
+        ["取消・返金", "適用条件を確認のうえ個別にご案内します。お申し込み前にご相談いただけます。"],
+        ["所在地・電話番号", "請求があった場合、遅滞なく電子メールで開示します。"]
+      ].map(([k,v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>}
+    </div></dialog>;
 }
 
 export default function LandingPage() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [informationPanel, setInformationPanel] = useState(null);
-
+  const [menu, setMenu] = useState(false);
+  const [panel, setPanel] = useState(null);
+  const [moreFaq, setMoreFaq] = useState(false);
   useEffect(() => {
     document.body.classList.add("landing-page-active");
     return () => document.body.classList.remove("landing-page-active");
   }, []);
-
   useEffect(() => {
-    if (!informationPanel) return undefined;
+    if (!menu) return;
+    const close = e => { if (e.key === "Escape") { setMenu(false); document.getElementById("hp-menu-toggle")?.focus(); } };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [menu]);
+  return <div className="landing-site">
+    <a className="hp-skip" href="#hp-main">本文へ移動</a>
+    <div className="hp-preview-note">HP Preview <span>画像・音声の一部は確認用です。本番未反映。</span></div>
+    <header className="hp-header">
+      <a href="#top" aria-label="縦糸横糸 トップへ"><img src="/brand-logo-lockup-kyokasho.svg" alt="縦糸横糸" width="200" height="48" /></a>
+      <div className="hp-header-actions"><a href={LOGIN}>ログイン</a><button id="hp-menu-toggle" aria-label={menu ? "メニューを閉じる" : "メニューを開く"} aria-expanded={menu} aria-controls="hp-nav" onClick={() => setMenu(!menu)}>{menu ? "閉じる ×" : "メニュー ☰"}</button></div>
+      {menu && <nav id="hp-nav" aria-label="メインメニュー">{[["#experience", "縦糸横糸とは"], ["#works", "二つの作品"], ["#price", "料金"], ["#support", "制作のお手伝い"], ["#faq", "よくある質問"]].map(([href,label]) => <a key={href} href={href} onClick={() => setMenu(false)}>{label}<span aria-hidden="true">↗</span></a>)}</nav>}
+    </header>
 
-    const closeOnEscape = event => {
-      if (event.key === "Escape") setInformationPanel(null);
-    };
+    <main id="hp-main">
+      <section className="hp-hero hp-shell" id="top" aria-labelledby="hp-title">
+        <div className="hp-hero-title"><SectionLabel>あなたの人生に、耳を澄ます。</SectionLabel><h1 id="hp-title">人生を、<br />声でのこす。</h1></div>
+        <Placeholder name="HERO" className="hp-hero-art"><div className="hp-thread" aria-hidden="true" /><span className="hp-art-caption">語る時間の、<br />静かな気配を。</span></Placeholder>
+        <div className="hp-hero-body"><p>問いに答えるように、<br />思い出したことを話す。</p><p>声と言葉、写真が、<br />一冊の物語になります。</p><TrialLink /><p className="hp-note">約10分・カード登録不要。</p></div>
+      </section>
 
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [informationPanel]);
+      <section className="hp-why hp-section hp-shell" id="experience">
+        <SectionLabel>辿ることで、見えてくる。</SectionLabel><h2>人生を、慈しむ。</h2>
+        <div className="hp-why-layout"><figure><img src="/site/hajimari-doorway-v2.jpg" alt="庭の光が差し込む戸口で、思い出のページをひらく" loading="lazy" width="1200" height="800" /></figure>
+          <div className="hp-why-copy"><p>幼い頃の景色。出会った人。<br />夢中になったこと。家族との時間。</p><p>辿ってみると、忘れていた景色や、<br />今だから気づけることがあります。</p><p>自分の人生を慈しみ、<br />大切な人の人生を、丁寧に受け取る。</p></div></div>
+      </section>
 
-  const closeMenu = () => setMenuOpen(false);
+      <section className="hp-how hp-section hp-shell" id="how-it-works">
+        <SectionLabel>思い出すきっかけを、少しずつ。</SectionLabel><h2>書かなくていい。<br />声で、人生を辿る。</h2>
+        <p>縦糸横糸から届く問いに、<br />思い出したことを、そのまま話してください。</p>
+        <ol className="hp-how-flow"><li><span className="hp-flow-mark" aria-hidden="true">？</span><h3>問い</h3></li><li><span className="hp-wave" aria-hidden="true"><i /><i /><i /><i /><i /></span><h3>話す</h3></li><li><span className="hp-lines" aria-hidden="true"><i /><i /><i /></span><h3>言葉になる</h3></li></ol>
+        <p className="hp-note">人生を辿る、九つのテーマ</p><ul className="hp-themes">{THEMES.map((t,i) => <li key={t}><span>{String(i+1).padStart(2,"0")}</span>{t}</li>)}</ul>
+      </section>
 
-  return (
-    <div className="landing-site">
-      <header className="landing-header">
-        <button
-          type="button"
-          className="landing-menu-button"
-          onClick={() => setMenuOpen(value => !value)}
-          aria-expanded={menuOpen}
-          aria-controls="landing-navigation"
-        >
-          <span>Menu</span>
-          <span className="landing-menu-lines" aria-hidden="true"><i /><i /></span>
-        </button>
+      <section className="hp-trial hp-dark" id="trial"><div className="hp-shell hp-section">
+        <SectionLabel>無料で体験する、三つの問い</SectionLabel><h2>まずは、三つだけ。</h2><p>最初は思い出しやすい幼い頃から。</p>
+        <ol className="hp-questions">{QUESTIONS.map((q,i) => <li key={q}><span>0{i+1}</span><p>{q}</p></li>)}</ol>
+        <TrialLink /><p className="hp-note">約10分・カード登録不要・自動課金なし。</p>
+      </div></section>
 
-        <a className="landing-header-brand" href="#top" aria-label="縦糸横糸 トップへ">
-          <BrandMark compact />
-        </a>
-
-        <a className="landing-login" href={APP_ENTRY_URL}>ログイン</a>
-
-        <nav
-          id="landing-navigation"
-          className={`landing-navigation ${menuOpen ? "is-open" : ""}`}
-          aria-hidden={!menuOpen}
-        >
-          <a href="#experience" onClick={closeMenu}>体験</a>
-          <a href="#how-it-works" onClick={closeMenu}>仕組み</a>
-          <a href="#price" onClick={closeMenu}>料金</a>
-          <a href="#faq" onClick={closeMenu}>よくある質問</a>
-          <a href={APP_ENTRY_URL}>ログイン</a>
-        </nav>
-      </header>
-
-      <main id="top">
-        <section className="landing-hero landing-shell" aria-labelledby="landing-title">
-          <div className="landing-hero-media">
-            <img src="/site/hero-book.jpg" alt="深緑の布張りで仕上げた縦糸横糸ブック" />
-            <div className="landing-hero-copy">
-              <p className="landing-eyebrow">声で残す、家族の物語</p>
-              <h1 id="landing-title">声を、<br />本にする。</h1>
-              <p className="landing-hero-lead">時を越えて、<br />家族に残る声がある。</p>
-              <p className="landing-hero-description">
-                毎週届く問いに、声で答える。<br />
-                語った言葉と写真を、音声QR付きの一冊に仕上げます。
-              </p>
-              <div className="landing-actions">
-                <a className="landing-primary-button" href={TRIAL_ENTRY_URL}>
-                  無料で3問を試す <span aria-hidden="true">→</span>
-                </a>
-                <a
-                  className="landing-secondary-link"
-                  href={PURCHASE_ENTRY_URL}
-                >
-                  購入して始める
-                </a>
-              </div>
-              <p className="landing-hero-note">約10分・カード登録不要・自動課金なし</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="landing-intro landing-shell landing-section" id="experience">
-          <div className="landing-section-number">01</div>
-          <div className="landing-intro-copy">
-            <p className="landing-kicker">ひとつのサービスから、三つの始まり方。</p>
-            <h2>語る人と、残したい人に合わせて。</h2>
-            <p>
-              自分自身の歩みも、大切な人への贈りものも、故人を囲む記憶も。<br />
-              それぞれに合った入口から始められます。
-            </p>
-          </div>
-
-          <div className="landing-paths">
-            <article>
-              <p className="landing-path-label">自分</p>
-              <h3>自分の物語をつくる</h3>
-              <p>ご自身の声で、これまでの歩みを残します。</p>
-              <a href={TRIAL_ENTRY_URL}><ArrowLink>無料で試す</ArrowLink></a>
-            </article>
-            <article>
-              <p className="landing-path-label">贈る</p>
-              <h3>大切な人へ、<br />物語づくりを届ける</h3>
-              <p>贈る方が先に手続きをし、語る方へ届けます。一人で進めても、一緒につくってもかまいません。</p>
-              <a href="#gift-details"><ArrowLink>贈り方を見る</ArrowLink></a>
-            </article>
-            <article>
-              <p className="landing-path-label">偲ぶ</p>
-              <h3>故人の記憶を残す</h3>
-              <p>家族や親しい方の記憶を集め、ひとつの物語に。複数の方に語ってもらうこともできます。</p>
-              <a href="#memorial-details"><ArrowLink>残し方を見る</ArrowLink></a>
-            </article>
-          </div>
-
-          <div className="landing-use-details" aria-label="贈る場合と故人の記憶を残す場合の進め方">
-            <article id="gift-details">
-              <p className="landing-path-label">大切な人へ贈る</p>
-              <h3>贈る人と、語る人を分けられます。</h3>
-              <ol>
-                <li><span>01</span><p>贈る方が購入し、専用の案内を届けます。</p></li>
-                <li><span>02</span><p>語る方は、ご自身のスマートフォンで始めます。</p></li>
-                <li><span>03</span><p>希望すれば、贈る方が進行や写真をお手伝いできます。</p></li>
-              </ol>
-              <a href={`${PURCHASE_ENTRY_URL}&purchase_for=gift`}><ArrowLink>贈る手続きを見る</ArrowLink></a>
-            </article>
-            <article id="memorial-details">
-              <p className="landing-path-label">故人を偲ぶ</p>
-              <h3>それぞれの記憶を、一つの物語へ。</h3>
-              <ol>
-                <li><span>01</span><p>まず一人が、残したい方の物語をつくります。</p></li>
-                <li><span>02</span><p>家族や親しい方を招き、それぞれの声を集めます。</p></li>
-                <li><span>03</span><p>語りと写真を確かめながら、一冊に整えます。</p></li>
-              </ol>
-              <a href={TRIAL_ENTRY_URL}><ArrowLink>自分の声で体験する</ArrowLink></a>
-            </article>
-          </div>
-        </section>
-
-        <section className="landing-trial landing-section" id="trial">
-          <div className="landing-shell landing-trial-grid">
-            <div>
-              <div className="landing-section-number">02</div>
-              <p className="landing-kicker">最初は、味見から。</p>
-              <h2>無料で、三つの問いに<br />語ってみる。</h2>
-              <p className="landing-body-copy">
-                話すことに慣れる問いから始まり、答えやすい記憶へ。最後は、少し心に触れる問いへ進みます。
-                約10分で、声が文章になる体験まで確認できます。
-              </p>
-              <div className="landing-actions landing-actions-dark">
-                <a className="landing-primary-button" href={TRIAL_ENTRY_URL}>無料体験を始める <span>→</span></a>
-              </div>
-              <p className="landing-small-note">体験した内容は、購入後もそのまま引き継がれます。</p>
-            </div>
-
-            <ol className="landing-trial-steps">
-              <li><span>01</span><div><strong>声を出してみる</strong><p>お名前と、今いる場所から。</p></div></li>
-              <li><span>02</span><div><strong>ひとつ思い出す</strong><p>答えやすい記憶を、短く。</p></div></li>
-              <li><span>03</span><div><strong>心に触れる</strong><p>少し大切な記憶を、言葉に。</p></div></li>
-            </ol>
-          </div>
-        </section>
-
-        <section className="landing-story landing-shell landing-section" id="how-it-works">
-          <div className="landing-story-grid">
-            <figure className="landing-figure">
-              <img src="/site/lifestyle.jpg" alt="家族で縦糸横糸ブックを開く時間のイメージ" />
-              <figcaption>語った時間が、家族に手渡せる一冊になります。</figcaption>
-            </figure>
-            <div>
-              <div className="landing-section-number">03</div>
-              <p className="landing-kicker">声だから、残せるもの。</p>
-              <h2>うまく話さなくて、<br />大丈夫です。</h2>
-              <p className="landing-body-copy">
-                質問に答えるように、思い出したことをそのまま話してください。
-                言い直しも、沈黙も、その人らしい時間として受け止めます。
-              </p>
-              <blockquote>
-                いつもの声と、語った言葉。<br />
-                その両方を、未来へ残します。
-              </blockquote>
-            </div>
-          </div>
-        </section>
-
-        <section className="landing-process landing-section">
-          <div className="landing-shell">
-            <div className="landing-section-head">
-              <div className="landing-section-number">04</div>
-              <p className="landing-kicker">始めてから、一冊になるまで。</p>
-              <h2>少しずつ語り、最後に整える。</h2>
-            </div>
-            <ol className="landing-process-list">
-              <li><span>01</span><strong>問いが届く</strong><p>受け取りやすい曜日と時間を選べます。</p></li>
-              <li><span>02</span><strong>声で語る</strong><p>スマートフォンから、好きな時に録音します。</p></li>
-              <li><span>03</span><strong>写真を添える</strong><p>思い出の写真を、その場で補正して残せます。</p></li>
-              <li><span>04</span><strong>文章を確かめる</strong><p>文字起こしと文章を確認し、自分で直せます。</p></li>
-              <li><span>05</span><strong>本に仕上げる</strong><p>紙面を確認してから、完成を注文します。</p></li>
-            </ol>
-          </div>
-        </section>
-
-        <section className="landing-book landing-shell landing-section" id="book">
-          <div className="landing-book-grid">
-            <div>
-              <div className="landing-section-number">05</div>
-              <p className="landing-kicker">紙の温かみと、声の記録。</p>
-              <h2>開けば読めて、<br />かざせば声に会える。</h2>
-              <p className="landing-body-copy">
-                一つひとつの語りを、B5判の縦糸横糸ブック-スタンダード冊子へ。
-                紙面のQRコードから、語ったそのままの声を聴くことができます。
-              </p>
-              <dl className="landing-specs">
-                <div><dt>判型</dt><dd>B5・182 × 257 mm</dd></div>
-                <div><dt>製本</dt><dd>ソフトカバー（縦糸横糸ブック-プレミアム冊子はオプション）</dd></div>
-                <div><dt>音声</dt><dd>各語りに音声QR</dd></div>
-              </dl>
-            </div>
-            <figure className="landing-figure landing-book-figure">
-              <img src="/site/book-spread.jpg" alt="質問、写真、音声QRを収録した本の見開きイメージ" />
-              <figcaption>縦糸横糸ブックの仕上がりイメージ</figcaption>
-            </figure>
-          </div>
-        </section>
-
-        <section className="landing-price landing-section" id="price">
-          <div className="landing-shell landing-price-grid">
-            <div>
-              <div className="landing-section-number">06</div>
-              <p className="landing-kicker">料金と、含まれるもの。</p>
-              <h2>一冊の物語を、<br />最後まで。</h2>
-              <p className="landing-price-value">49,800<span>円（税込）</span></p>
-              <p className="landing-price-note">増刷・縦糸横糸ブック-プレミアム冊子・ギフトパッケージは、完成時に選択。注文前に総額を確認できます。</p>
-              <div className="landing-assurance">
-                親御さんが途中で止まった場合も、録音済みの内容は保存されます。使い方や進め方をご相談いただけます。
-              </div>
-            </div>
-            <div>
-              <p className="landing-included-title">基本料金に含まれるもの</p>
-              <ul className="landing-included-list">
-                <li>問いの配信と音声録音</li>
-                <li>文字起こしと文章づくり</li>
-                <li>写真の補正と紙面編集</li>
-                <li>B5判・縦糸横糸ブック-スタンダード冊子 1冊</li>
-                <li>語った声を聴ける音声QR</li>
-                <li>完成前の確認と操作サポート</li>
-              </ul>
-              <div className="landing-actions landing-actions-dark">
-                <a
-                  className="landing-primary-button"
-                  href={PURCHASE_ENTRY_URL}
-                >
-                  購入して始める <span>→</span>
-                </a>
-                <a className="landing-secondary-link" href={TRIAL_ENTRY_URL}>先に無料で試す</a>
-              </div>
-            </div>
-            <div className="landing-purchase-facts" aria-label="購入前に確認できること">
-              <article><span>01</span><h3>進める期間</h3><p>1〜3か月を目安に、自分のペースで少しずつ語れます。</p></article>
-              <article><span>02</span><h3>完成まで</h3><p>文章と紙面を確認してから注文。国内送料は基本料金に含まれます。</p></article>
-              <article><span>03</span><h3>途中で休んでも</h3><p>保存済みの声と文章は残り、時間を置いて続きから再開できます。</p></article>
-            </div>
-          </div>
-        </section>
-
-        <section className="landing-privacy landing-shell landing-section" id="privacy">
-          <div className="landing-section-number">07</div>
-          <div className="landing-privacy-grid">
-            <div>
-              <p className="landing-kicker">語り手の尊厳を、中心に。</p>
-              <h2>見せる相手は、<br />自分で決められます。</h2>
-            </div>
-            <div className="landing-body-copy">
-              <p>物語全体は「ファミリー」「選んだ人」「自分だけ」から設定できます。</p>
-              <p>一つの語りだけを非公開にすることもできます。お手伝いする方にも、非公開の語りは表示されません。</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="landing-faq landing-section" id="faq">
-          <div className="landing-shell">
-            <div className="landing-section-head">
-              <div className="landing-section-number">08</div>
-              <p className="landing-kicker">よくあるご質問</p>
-              <h2>始める前の不安を、ひとつずつ。</h2>
-            </div>
-            <div className="landing-faq-list">
-              <details><summary>スマートフォンに慣れていなくても使えますか？</summary><p>問いを開き、録音ボタンを押して話すことから始められます。ご家族をお手伝いする人として設定することもできます。</p></details>
-              <details><summary>無料体験の後、自動で課金されますか？</summary><p>自動課金はありません。続けたい場合だけ、ご本人または贈り主が購入手続きへ進みます。</p></details>
-              <details><summary>途中でやめた場合、録音は消えますか？</summary><p>保存済みの録音と文章は残ります。時間を置いて、前回の続きから再開できます。</p></details>
-              <details><summary>家族以外に贈ることもできますか？</summary><p>できます。受け取った方がご自身で進める形と、贈り主がお手伝いする形を選べます。</p></details>
-              <details><summary>どのくらいの期間で完成しますか？</summary><p>1〜3か月を目安にしています。毎週届く問いに少しずつ答え、語り足りない時は多く残すことも、途中で休むこともできます。</p></details>
-              <details><summary>本はいつ注文しますか？</summary><p>語り終えた後、文章、写真、紙面を確認してから注文します。お届け先とオプションを選び、支払総額を確認して製本へ進みます。</p></details>
-              <details><summary>録音や写真を見せる相手は選べますか？</summary><p>選べます。物語全体の公開範囲に加え、一つの語りだけを非公開にすることもできます。</p></details>
-            </div>
-          </div>
-        </section>
-
-        <section className="landing-final-cta landing-section">
-          <BrandMark />
-          <h2>最初の声から、<br />物語は始まります。</h2>
-          <p>まずは三つの問いで、声が文章になる体験をお試しください。</p>
-          <div className="landing-actions landing-actions-dark">
-            <a className="landing-primary-button" href={TRIAL_ENTRY_URL}>無料で試す <span>→</span></a>
-            <a
-              className="landing-secondary-link"
-              href={PURCHASE_ENTRY_URL}
-            >
-              購入して始める
-            </a>
-          </div>
-        </section>
-      </main>
-
-      <footer className="landing-footer landing-shell">
-        <BrandMark compact />
-        <div className="landing-footer-links">
-          <a href="#experience">縦糸横糸について</a>
-          <a href="#faq">よくある質問</a>
-          <button type="button" onClick={() => setInformationPanel("contact")}>お問い合わせ</button>
-          <button type="button" onClick={() => setInformationPanel("privacy")}>プライバシー</button>
-          <button type="button" onClick={() => setInformationPanel("commerce")}>特定商取引法</button>
+      <section className="hp-who hp-section hp-shell">
+        <h2>自分でも、<br className="hp-mobile-break" />大切な人とでも。</h2>
+        <div className="hp-who-grid">
+          <article><Placeholder name="WHO · 自分"><span className="hp-person-circle" aria-hidden="true" /></Placeholder><h3>自分の物語</h3><p>自分のスマホで、<br />自分のペースで。</p></article>
+          <article><Placeholder name="WHO · 大切な人"><span className="hp-person-circle hp-pair" aria-hidden="true" /></Placeholder><h3>大切な人の物語</h3><p>一緒でも。<br />おまかせでも。</p></article>
         </div>
-        <p>© 縦糸横糸</p>
-      </footer>
+        <div className="hp-who-foot"><h3>語る人と、つくる人は、<br className="hp-mobile-break" />同じでなくていい。</h3><p>写真や本への仕上げは、信頼する方に手伝ってもらえます。<br />お手伝いする方を「サポーター」と呼びます。</p></div>
+      </section>
 
-      {informationPanel && (
-        <div
-          className="landing-modal-backdrop"
-          role="presentation"
-          onMouseDown={event => {
-            if (event.target === event.currentTarget) setInformationPanel(null);
-          }}
-        >
-          <section className="landing-modal" role="dialog" aria-modal="true" aria-labelledby="landing-information-title">
-            <button
-              type="button"
-              className="landing-modal-close"
-              onClick={() => setInformationPanel(null)}
-              aria-label="閉じる"
-            >
-              ×
-            </button>
-            <p className="landing-kicker">{INFORMATION_PANELS[informationPanel].kicker}</p>
-            <h2 id="landing-information-title">{INFORMATION_PANELS[informationPanel].title}</h2>
-            <div className="landing-modal-content">{INFORMATION_PANELS[informationPanel].content}</div>
-          </section>
-        </div>
-      )}
+      <section className="hp-process hp-section hp-shell"><h2>少しずつ語り、<br className="hp-mobile-break" />一冊に仕上げる。</h2>
+        <ol>{["問いが届く", "声で語る", "写真を添える", "一冊に仕上げる"].map((s,i) => <li key={s}><span>0{i+1}</span><h3>{s}</h3></li>)}</ol>
+      </section>
 
-    </div>
-  );
+      <section className="hp-works" id="works">
+        <div className="hp-shell hp-section hp-works-heading"><SectionLabel>人生が、かたちになる。</SectionLabel><h2>語った人生は、<br />二つの作品として残ります。</h2><p>どちらも「縦糸横糸」に含まれます。</p></div>
+        <article className="hp-paper-work hp-shell">
+          <div className="hp-work-copy"><SectionLabel>縦糸横糸ブック</SectionLabel><h2>人生を、囲む。</h2><p>手に取り、ページをめくる。<br />一冊を囲むことで、<br />家族の会話が生まれる。</p></div>
+          <figure><img src="/site/lifestyle.jpg" alt="二人で本を開き、ページを見ながら過ごす時間" loading="lazy" width="1400" height="933" /><figcaption>本を囲む時間のイメージ。標準本はソフトカバーです。</figcaption></figure>
+        </article>
+        <article className="hp-web-work hp-section hp-shell">
+          <div className="hp-work-copy"><SectionLabel>縦糸横糸Webブック</SectionLabel><h2>人生に、逢う。</h2><p>離れていても、<br />言葉や写真、そして本人の声に。<br />その人らしさに、また触れられる。</p><p className="hp-web-bridge">縦糸横糸ブックのQRから、<br />縦糸横糸Webブックへ。</p></div>
+          <LandingWebBookPreview />
+        </article>
+      </section>
+
+      <section className="hp-price hp-section hp-shell" id="price">
+        <SectionLabel>体験と、二つの作品。</SectionLabel><h2>縦糸横糸</h2>
+        <p className="hp-price-amount">49,800<span>円（税込）</span></p><p>人生を声で辿る体験から、<br />二つの作品として残すところまで。</p>
+        <ul className="hp-inclusions"><li>人生を辿る問い</li><li>音声・文章・写真の保存</li><li>縦糸横糸ブック 1冊<span>標準のソフトカバー</span></li><li>縦糸横糸Webブック</li></ul>
+        <p className="hp-note">国内送料込み</p><div className="hp-price-actions"><a className="hp-button" href={PURCHASE}>購入して始める <span aria-hidden="true">↗</span></a><a className="hp-text-link" href={TRIAL}>先に無料で試す</a></div>
+        <aside className="hp-premium"><div><SectionLabel>追加オプション</SectionLabel><h3>より上質な一冊も残したい方へ</h3><p>縦糸横糸プレミアムブック</p></div><div><p className="hp-premium-price">＋30,000円（税込）</p><p>布貼り等の上質な製本で、もう1冊。<br />標準ブックとの置換ではなく、追加です。</p></div></aside>
+      </section>
+
+      <section className="hp-support hp-section hp-shell" id="support">
+        <div><SectionLabel>ともに、かたちにする。</SectionLabel><h2>一人で、全部<br className="hp-mobile-break" />やらなくていい。</h2><p>写真を選ぶ。文章を整える。本に仕上げる。<br />家族や友人など、信頼する方と進められます。</p>
+          <div className="hp-support-staff"><h3>頼める方がいない場合も。</h3><p>スタッフによる制作サポートを、<br />少人数で試験的にご案内する予定です。</p><span className="hp-status">希望受付は準備中</span><p className="hp-note">受付開始後は、ご希望を伺ってからスタッフがご連絡します。<br />希望受付の時点で、利用が確定するものではありません。</p></div></div>
+        <Placeholder name="SUPPORT"><div className="hp-support-lines" aria-hidden="true" /><span className="hp-art-caption">一緒に選ぶ。<br />一緒に残す。</span></Placeholder>
+      </section>
+
+      <section className="hp-privacy hp-section hp-shell"><SectionLabel>大切なことだから。</SectionLabel><h2>残すことと、<br className="hp-mobile-break" />見せることは別です。</h2><p>家族に共有するものは、自分たちで選べます。</p><p>本づくりを手伝う「サポーター」と、<br />完成した物語を見る家族は別です。</p><button className="hp-text-link" onClick={() => setPanel("privacy")}>詳しく見る <span aria-hidden="true">＋</span></button></section>
+
+      <section className="hp-life" id="life"><img src="/site/theme-now-future.jpg" alt="広がる空の下、枝葉を重ねて立つ大きな木" loading="lazy" width="1536" height="1024" /><div className="hp-life-copy hp-shell"><SectionLabel>その先の時間へ。</SectionLabel><h2>そして、<br />人生は続いていく。</h2><p className="hp-life-name">縦糸横糸ライフ</p><span className="hp-status">COMING SOON</span><p>今を残し続け、<br />人生の年輪を重ねていく。</p><p className="hp-note">縦糸横糸の完成後に続く、新しいサービスです。</p></div></section>
+      <section className="hp-vision hp-shell hp-section"><SectionLabel>辿る。触れる。重ねる。また、辿る。</SectionLabel><h2>いつでも、<br />“家族に還れる”場所を。</h2><div className="hp-vision-ring" aria-hidden="true" /></section>
+
+      <section className="hp-faq hp-section hp-shell" id="faq"><SectionLabel>安心して、始めるために。</SectionLabel><h2>よくあるご質問</h2><div>{FAQS.map(([q,a]) => <details key={q}><summary>{q}<span aria-hidden="true">＋</span></summary><p>{a}</p></details>)}</div>
+        <button className="hp-text-link hp-more-faq" aria-expanded={moreFaq} aria-controls="hp-more-faq" onClick={() => setMoreFaq(!moreFaq)}>{moreFaq ? "追加の質問を閉じる −" : "すべての質問を見る ＋"}</button>
+        <div id="hp-more-faq" hidden={!moreFaq}>{MORE_FAQS.map(([q,a]) => <details key={q}><summary>{q}<span aria-hidden="true">＋</span></summary><p>{a}</p></details>)}</div>
+      </section>
+      <section className="hp-final hp-dark hp-section"><div className="hp-shell"><img src="/brand-logo-symbol.svg" alt="" width="52" height="52" /><h2>まずは、三つだけ。</h2><p>幼い頃のことを、<br />少し話してみませんか。</p><TrialLink /><p className="hp-note">約10分・カード登録不要・自動課金なし。</p></div></section>
+    </main>
+    <footer className="hp-footer hp-shell"><a href="#top"><img src="/brand-logo-lockup-kyokasho.svg" alt="縦糸横糸" width="200" height="48" /></a><div><button onClick={() => setPanel("contact")}>お問い合わせ</button><button onClick={() => setPanel("privacy")}>プライバシー</button><button onClick={() => setPanel("commerce")}>特定商取引法に基づく表記</button></div><p>© SaltLight</p></footer>
+    {panel && <InformationDialog panel={panel} close={() => setPanel(null)} />}
+  </div>;
 }
