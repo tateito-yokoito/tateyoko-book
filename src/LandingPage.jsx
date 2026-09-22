@@ -28,15 +28,15 @@ const MORE_FAQS = [
   ["本から声を聴けますか？", "縦糸横糸ブックのQRから、縦糸横糸Webブックへ進み、声を聴けます。紙の作品を読む時間と、声に触れる時間のどちらも楽しめます。"]
 ];
 
-function TrialLink() {
-  return <a className="hp-button" href={TRIAL}>無料で3問、話してみる <span aria-hidden="true">↗</span></a>;
+function TrialLink({ reviewOnly = false }) {
+  return <a className="hp-button" href={reviewOnly ? "#hp-review-notice" : TRIAL}>無料で3問、話してみる <span aria-hidden="true">↗</span></a>;
 }
 function Placeholder({ name, children, className = "" }) {
   return <div className={"hp-placeholder " + className}><span className="hp-placeholder-label">ビジュアル仮置き · {name}</span>{children}</div>;
 }
 function SectionLabel({ children }) { return <p className="hp-label">{children}</p>; }
 
-function InformationDialog({ panel, close }) {
+function InformationDialog({ panel, close, reviewOnly }) {
   const dialog = useRef(null);
   useEffect(() => {
     const previous = document.activeElement;
@@ -47,7 +47,7 @@ function InformationDialog({ panel, close }) {
   return <dialog className="hp-dialog" ref={dialog} aria-labelledby="hp-dialog-title" onCancel={close} onClick={e => { if (e.target === e.currentTarget) close(); }}>
     <div className="hp-dialog-inner"><button className="hp-dialog-close" onClick={close} aria-label="閉じる">×</button>
       <h2 id="hp-dialog-title">{title}</h2>
-      {panel === "contact" && <><p>使い方、制作やご注文について、メールでご相談いただけます。</p><a href={"mailto:" + EMAIL}>{EMAIL}</a></>}
+      {panel === "contact" && <><p>使い方、制作やご注文について、メールでご相談いただけます。</p><a href={reviewOnly ? "#hp-review-notice" : "mailto:" + EMAIL}>{EMAIL}</a></>}
       {panel === "privacy" && <><p>本づくりを手伝うサポーターと、完成した物語を見る家族は別の役割です。</p><p>サポーターは制作に必要な情報を扱います。完成した物語の共有範囲とは分けて、ご本人の同意のもとで依頼してください。</p><p>録音、文章、写真、アカウント情報は、サービスの提供とサポートに必要な範囲で取り扱います。ご質問は運営窓口へご連絡ください。</p></>}
       {panel === "commerce" && <dl>{[
         ["販売事業者", "株式会社SaltLight"], ["運営責任者", "菅原 英俊"], ["連絡先", EMAIL],
@@ -60,7 +60,7 @@ function InformationDialog({ panel, close }) {
     </div></dialog>;
 }
 
-export default function LandingPage() {
+export default function LandingPage({ reviewOnly = false }) {
   const [menu, setMenu] = useState(false);
   const [panel, setPanel] = useState(null);
   const [moreFaq, setMoreFaq] = useState(false);
@@ -76,10 +76,10 @@ export default function LandingPage() {
   }, [menu]);
   return <div className="landing-site">
     <a className="hp-skip" href="#hp-main">本文へ移動</a>
-    <div className="hp-preview-note">HP Preview <span>画像・音声の一部は確認用です。本番未反映。</span></div>
+    <div id="hp-review-notice" className="hp-preview-note" role="note">HP Preview <span>{reviewOnly ? "表示確認専用：登録・購入・ログイン・送信はできません。" : "画像・音声の一部は確認用です。本番未反映。"}</span></div>
     <header className="hp-header">
       <a href="#top" aria-label="縦糸横糸 トップへ"><img src="/brand-logo-lockup-kyokasho.svg" alt="縦糸横糸" width="200" height="48" /></a>
-      <div className="hp-header-actions"><a href={LOGIN}>ログイン</a><button id="hp-menu-toggle" aria-label={menu ? "メニューを閉じる" : "メニューを開く"} aria-expanded={menu} aria-controls="hp-nav" onClick={() => setMenu(!menu)}>{menu ? "閉じる ×" : "メニュー ☰"}</button></div>
+      <div className="hp-header-actions"><a href={reviewOnly ? "#hp-review-notice" : LOGIN}>ログイン</a><button id="hp-menu-toggle" aria-label={menu ? "メニューを閉じる" : "メニューを開く"} aria-expanded={menu} aria-controls="hp-nav" onClick={() => setMenu(!menu)}>{menu ? "閉じる ×" : "メニュー ☰"}</button></div>
       {menu && <nav id="hp-nav" aria-label="メインメニュー">{[["#experience", "縦糸横糸とは"], ["#works", "二つの作品"], ["#price", "料金"], ["#support", "制作のお手伝い"], ["#faq", "よくある質問"]].map(([href,label]) => <a key={href} href={href} onClick={() => setMenu(false)}>{label}<span aria-hidden="true">↗</span></a>)}</nav>}
     </header>
 
@@ -87,7 +87,7 @@ export default function LandingPage() {
       <section className="hp-hero hp-shell" id="top" aria-labelledby="hp-title">
         <div className="hp-hero-title"><SectionLabel>あなたの人生に、耳を澄ます。</SectionLabel><h1 id="hp-title">人生を、<br />声でのこす。</h1></div>
         <Placeholder name="HERO" className="hp-hero-art"><div className="hp-thread" aria-hidden="true" /><span className="hp-art-caption">語る時間の、<br />静かな気配を。</span></Placeholder>
-        <div className="hp-hero-body"><p>問いに答えるように、<br />思い出したことを話す。</p><p>声と言葉、写真が、<br />一冊の物語になります。</p><TrialLink /><p className="hp-note">約10分・カード登録不要。</p></div>
+        <div className="hp-hero-body"><p>問いに答えるように、<br />思い出したことを話す。</p><p>声と言葉、写真が、<br />一冊の物語になります。</p><TrialLink reviewOnly={reviewOnly} /><p className="hp-note">約10分・カード登録不要。</p></div>
       </section>
 
       <section className="hp-why hp-section hp-shell" id="experience">
@@ -106,7 +106,7 @@ export default function LandingPage() {
       <section className="hp-trial hp-dark" id="trial"><div className="hp-shell hp-section">
         <SectionLabel>無料で体験する、三つの問い</SectionLabel><h2>まずは、三つだけ。</h2><p>最初は思い出しやすい幼い頃から。</p>
         <ol className="hp-questions">{QUESTIONS.map((q,i) => <li key={q}><span>0{i+1}</span><p>{q}</p></li>)}</ol>
-        <TrialLink /><p className="hp-note">約10分・カード登録不要・自動課金なし。</p>
+        <TrialLink reviewOnly={reviewOnly} /><p className="hp-note">約10分・カード登録不要・自動課金なし。</p>
       </div></section>
 
       <section className="hp-who hp-section hp-shell">
@@ -138,7 +138,7 @@ export default function LandingPage() {
         <SectionLabel>体験と、二つの作品。</SectionLabel><h2>縦糸横糸</h2>
         <p className="hp-price-amount">49,800<span>円（税込）</span></p><p>人生を声で辿る体験から、<br />二つの作品として残すところまで。</p>
         <ul className="hp-inclusions"><li>人生を辿る問い</li><li>音声・文章・写真の保存</li><li>縦糸横糸ブック 1冊<span>標準のソフトカバー</span></li><li>縦糸横糸Webブック</li></ul>
-        <p className="hp-note">国内送料込み</p><div className="hp-price-actions"><a className="hp-button" href={PURCHASE}>購入して始める <span aria-hidden="true">↗</span></a><a className="hp-text-link" href={TRIAL}>先に無料で試す</a></div>
+        <p className="hp-note">国内送料込み</p><div className="hp-price-actions"><a className="hp-button" href={reviewOnly ? "#hp-review-notice" : PURCHASE}>購入して始める <span aria-hidden="true">↗</span></a><a className="hp-text-link" href={reviewOnly ? "#hp-review-notice" : TRIAL}>先に無料で試す</a></div>
         <aside className="hp-premium"><div><SectionLabel>追加オプション</SectionLabel><h3>より上質な一冊も残したい方へ</h3><p>縦糸横糸プレミアムブック</p></div><div><p className="hp-premium-price">＋30,000円（税込）</p><p>布貼り等の上質な製本で、もう1冊。<br />標準ブックとの置換ではなく、追加です。</p></div></aside>
       </section>
 
@@ -157,9 +157,9 @@ export default function LandingPage() {
         <button className="hp-text-link hp-more-faq" aria-expanded={moreFaq} aria-controls="hp-more-faq" onClick={() => setMoreFaq(!moreFaq)}>{moreFaq ? "追加の質問を閉じる −" : "すべての質問を見る ＋"}</button>
         <div id="hp-more-faq" hidden={!moreFaq}>{MORE_FAQS.map(([q,a]) => <details key={q}><summary>{q}<span aria-hidden="true">＋</span></summary><p>{a}</p></details>)}</div>
       </section>
-      <section className="hp-final hp-dark hp-section"><div className="hp-shell"><img src="/brand-logo-symbol.svg" alt="" width="52" height="52" /><h2>まずは、三つだけ。</h2><p>幼い頃のことを、<br />少し話してみませんか。</p><TrialLink /><p className="hp-note">約10分・カード登録不要・自動課金なし。</p></div></section>
+      <section className="hp-final hp-dark hp-section"><div className="hp-shell"><img src="/brand-logo-symbol.svg" alt="" width="52" height="52" /><h2>まずは、三つだけ。</h2><p>幼い頃のことを、<br />少し話してみませんか。</p><TrialLink reviewOnly={reviewOnly} /><p className="hp-note">約10分・カード登録不要・自動課金なし。</p></div></section>
     </main>
     <footer className="hp-footer hp-shell"><a href="#top"><img src="/brand-logo-lockup-kyokasho.svg" alt="縦糸横糸" width="200" height="48" /></a><div><button onClick={() => setPanel("contact")}>お問い合わせ</button><button onClick={() => setPanel("privacy")}>プライバシー</button><button onClick={() => setPanel("commerce")}>特定商取引法に基づく表記</button></div><p>© SaltLight</p></footer>
-    {panel && <InformationDialog panel={panel} close={() => setPanel(null)} />}
+    {panel && <InformationDialog reviewOnly={reviewOnly} panel={panel} close={() => setPanel(null)} />}
   </div>;
 }

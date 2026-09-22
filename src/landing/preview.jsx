@@ -4,4 +4,4 @@ import "../index.css";
 import LandingPage from "../LandingPage.jsx";
 
 // Isolated HP preview: do not initialize App, authentication, or backend clients.
-createRoot(document.getElementById("root")).render(<React.StrictMode><LandingPage /></React.StrictMode>);
+createRoot(document.getElementById("root")).render(<React.StrictMode><LandingPage reviewOnly /></React.StrictMode>);
