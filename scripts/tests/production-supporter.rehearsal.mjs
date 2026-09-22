@@ -87,6 +87,9 @@ try{
   const a=after.find(f=>f.name===name),b=test.functions.find(f=>f.name===name);
   assert.equal(norm(a.definition),norm(b.definition),`Preserve current SMS support and family guards: ${name}`);
  }
+ const gate=(await db.query('select enabled,cardinality(allowed_actor_ids) as allowlist_count,subject_connection_enabled from family_private.rollout where id')).rows;
+ assert.deepEqual(gate,[{enabled:false,allowlist_count:0,subject_connection_enabled:false}],'Prepared production rollout must remain closed with no pilot accounts');
+ report.initialReleaseGate=gate[0];
  await db.exec('commit;');
  await writeFile(`${dir}/rehearsed-functions.json`,JSON.stringify(after,null,2),{mode:0o600});
  report.pass=true;

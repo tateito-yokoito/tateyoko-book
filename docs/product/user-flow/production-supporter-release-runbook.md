@@ -6,6 +6,9 @@
 **本番変更は未実行。A/B先行利用とCの公開承認は分離する。** C未完了だけを理由に、本人AccountなしのA/B先行利用を止めない。A/Bも本番反映には別途承認が必要。
 HP一般公開・全面開放・新しい商品仕様は対象外。
 
+最新の反映直前準備結果：[`production-supporter-final-preparation.md`](./production-supporter-final-preparation.md)。
+`8e69507`の方向性は承認済みだが、本番への反映承認とは別。今回はREAD ONLY照合とローカル退避・リハーサルのみ。
+
 2026-09-22、承認された005・006をTEST `zpswxefgfabzvxdbtyvq` に個別適用。履歴登録まで完了した。
 TEST公開先：<https://tateyoko-book-test.vercel.app>。
 Vercelは **tateyoko-book-test** (`prj_sPwDR1BfQBpYUQAgu1ElFlU4QeCX`) のみ更新。
@@ -26,7 +29,7 @@ TESTには追加migration `202609220001`、`FAMILY_TEST_ENABLED=true`、後述�
 |公開gateのリモートTEST拒否確認|PASS：未認証・allowlist外／別Personのworkspace／制作了承／checkout／素材取得を拒否。CのUI・招待発行・接続確定も拒否、SMS送信0|
 |認可・契約・Book回帰|41件PASS（PGlite／adapter）。未認証・allowlist外・Viewer・別Person／Project・rollout OFF・既発行接続リンクの拒否を含む。Cの実画面PASSの代替ではない|
 |停止UI単体|取消・拒否・成功・再読込PASS。ネットワーク遮断＋mock APIであり、Cとは別|
-|最新本番カタログ照合|2026-09-22 02:04 JST、READ ONLY取得。71テーブル・884列・176関数・97 migration|
+|最新本番カタログ照合|2026-09-22 10:13 JST、READ ONLY再取得。71テーブル・884列・176関数・97 migration|
 |移行リハーサル|最新カタログをローカルに再現、17本を外側単一トランザクションで適用PASS。動的置換23か所の対象確認・TEST照合PASS、変更される既存関数の差分なし|
 
 認証済みの架空QA Accountを使用。ログイン自体・実マイクの品質・実機SMS・印刷発送の検証ではない。
@@ -41,16 +44,25 @@ TESTには追加migration `202609220001`、`FAMILY_TEST_ENABLED=true`、後述�
 非公開証跡（Git対象外）：公開gate追加後は `output/supporter-pilot-gates/` のスクリーンショット、各ケースのstep記録、監査照合。追加前の証跡は `output/supporter-remote-final/`。
 スキーマ生データは `output/supporter-preflight/`。秘密のセッションや接続リンクをレビュー資料に添付しない。
 
-## A/B先行利用の必須Release Gate
+## 閉じた状態での本番反映に必須（先行Account未指定で可）
 
 - [x] 公開gate追加後のリモートTEST A/B、本人Smoke、拒否確認、41件の回帰、17本の移行リハーサル。
-- [ ] 本コミットの本番用gateパッチを独立レビューする。本番側のflagはまだ設定・解除しない。
-- [ ] CのUI flagとDB flagをOFFのままにし、先行利用者には本人スマホ後付けを案内しない。
-- [ ] 先行利用者の実Account UUIDを運営が指定・承認する。架空QA IDを本番に転記しない。
-- [ ] 現行本番artifact／Edgeソース・設定を退避し、PITR・バックアップの復旧可能性を確認。
-- [ ] 環境設定の値を管理者が確認。今回取得したのは設定名のみ。
+- [x] `8e69507`の公開パッチを独立レビューし方向性承認。本番側flagはまだ設定・解除しない。
+- [x] 移行直後のDBをローカル再現し、rollout OFF／allowlist空／C OFFをassert。
+- [x] 本番Vercel deploymentを特定、配信中entryと静的に発見可能な依存30ファイル、対象Edge 8本、設定メタデータを退避。
+- [x] 物理バックアップ7件COMPLETEDを確認。PITRはOFF。実際のrestoreは未実行。
+- [x] 非秘密設定のURL／live／checkout flagをダイジェスト照合。秘密鍵の実値・webhook到達性は未確認。
+- [ ] PITRなしの復旧リスク・必要な事前対策を運営と確認。日次バックアップ以降の更新を失う全DB復元を通常のrollbackにしない。
 - [ ] 実行直前に本番カタログを再取得。差分があれば再リハーサルし、止める。
 - [ ] ユーザーの本番反映承認を取得。
+
+## A/Bを先行利用者へ開ける前の必須Release Gate
+
+- [ ] 閉じた状態での本番DB／Edge／フロント反映と、本人既存導線・拒否系Smokeを完了。
+- [ ] 娘さんが本番でメール認証・Account登録を完了。母Personの作成・購入はまだ案内しない。通常登録に伴う本人用初期レコードと、母の制作Projectを混同しない。
+- [ ] 当該AccountのUUIDをREAD ONLYで確認し、運営が明示承認。架空QA ID・メールだけの推定・同名別Accountは使わない。
+- [ ] 承認されたSupporter UUIDだけをallowlistへ追加して別途開放承認。Cは引き続きOFF。
+- [ ] DB rollout／本番Edge flagを開け、対象者の権限と非対象者の拒否を確認後、利用開始を案内。
 
 ## 本人Account後付け公開に必須のRelease Gate（A/Bとは独立）
 
@@ -115,7 +127,7 @@ A・Bは注文確定済みなので、Cの「制作途中」確認には別の�
 今回TESTで更新した5関数はcreate-checkout-session／transcribe-audio／polish-transcript／publish-voice-edition／export-experience-data。
 sync-checkout-session／stripe-webhook／request-experience-refundは今回未変更。公開停止で既に受領した決済同期・署名済みwebhook・正当な返金まで止めない。既存の認証・支払人・Stripe mode／署名検証を維持する。
 共有コードを取り込む関数はbundle単位で更新する。JWT gateway設定は表と現行設定を再照合し、コード内部認証／webhook署名検証を省略しない。
-現時点は版番号・設定の照合であり、現行bundle全体とのソース同一性確認ではない。無関係な差分を含む旧bundleを本番へ一括上書きしない。
+2026-09-22に本番ソースを関数ごとのディレクトリへ退避・比較。sync-checkout-session／stripe-webhook／request-experience-refundは取り込まれたexperience-commerce.tsも含めレビューbranchと同一で、再デプロイ対象から除外する。更新対象は残り5本。無関係な差分を含む旧bundleを本番へ一括上書きしない。
 
 フロント対象はレビューbranchの `src/Family*`、`src/lib/family*`、`src/main.jsx`、`src/App.jsx` のfamily導線接続と契約／Book adapter。
 最新本番フロントとの差分を改めて限定し、元worktreeの未コミット変更や別機能を混ぜない。
@@ -154,17 +166,18 @@ sync-checkout-session／stripe-webhook／request-experience-refundは今回未�
 |SERVICE_ROLE_KEY／OPENAI_API_KEY|現行の正しいプロジェクト用設定を保持|
 |EXPERIENCE_NOTIFICATIONS_ENABLED／SMS関連|今回自動的に有効化しない。TEST通知先を本番に移さない|
 
-現状のmain pushはPages deployを起動するため、レビュー前のmain pushを切替手段にしない。現行の本番ホスティング先と公開artifactの同一性も確認する。
+正式ドメインはVercel project `prj_WZM2OzVMdtm4x6VbwWLeISqMzjM4`、現行deployment `dpl_3kJtpyti1nfqn79EZ8mJwxdvFf37`（main `ad017b8`）。main pushはVercelと別のPages workflowにも影響するため、今回の切替手段にしない。TEST projectへ本番を配信することも禁止。
 
 ## 5. 実行順序（承認後のみ）
 
-1. A/B先行利用の必須ゲートを満たす。C公開は別承認とし、接続flagはOFFを維持。実行責任者・対象UUID・戻すartifactを記録。
+1. 「閉じた状態での本番反映」の必須ゲートと承認を満たす。C公開は別承認、先行UUIDは未指定でよい。実行責任者・戻すdeploymentを記録。
 2. 最新READ ONLYカタログ取得→17本リハーサル→差分なしを確認。
 3. 本番family公開flag OFF、DB rollout OFFで17 migrationを適用。commit前に005認可・006 SMS保全・新gate・RLS・権限を再確認し、履歴も同じトランザクションで登録。
 4. Edgeを反映。未認証／未許可のfamilyアクセスは閉じたまま、本人利用の既存APIをSmoke。
-5. 本番gateパッチを含む静的artifactを公開。一般HPの入口は変更しない。
-6. 承認済み先行Accountのみallowlist登録し、family公開flag／rolloutを開ける。
-7. 下記Smoke後に当該先行利用者へ案内。失敗なら新規入口を閉じ、必要なら既存制作も停止する。
+5. 本番gateパッチを含む静的artifactを、Vercelの本番projectへ明示的に配信する手順を承認後実行。C false、TEST false。本番用family UI flagを有効にしてもDB rolloutとEdge flagはOFFのまま。HP一般CTA・本人向け既存の全体rollout flagは変更しない。
+6. 本番が閉じていることと、本人既存導線をSmokeしていったん停止。娘さんにはAccount登録だけ案内する。
+7. 実Account UUIDの確認・承認後、別の開放手順で当該UUIDのみallowlistへ登録し、family公開flag／rolloutを開ける。CはOFF。
+8. 下記Smoke後に当該先行利用者へ案内。失敗なら入口を閉じ、必要なら既存制作も停止する。
 
 ## 6. 本番Smoke
 
@@ -184,6 +197,7 @@ sync-checkout-session／stripe-webhook／request-experience-refundは今回未�
 3. 新規checkout停止は既存本人購入にも影響。決済障害時だけ影響を説明して実施。受領済みStripe webhookは停止しない。
 4. 関連フロント／Edgeを保全済みartifactへ戻すかforward fix。ただしfamily Projectが生じた後、family認可を持たない旧Edgeへ単純rollbackしない。
 5. Person・Project・語り・Book・注文・同意／監査履歴は削除しない。旧Account単位unique indexへの復元やDB全体巻戻しは自動実行しない。
+   PITRはOFF。最新確認済み物理バックアップは2026-09-22 04:24 JST。全DB restoreはそれ以降の更新を失い得るうえ、StripeやStorageの外部状態を同時に巻き戻さない。通常はgate close＋forward fix。全DB復旧は影響確認・停止時間・整合回復計画を含め別承認とする。
 6. 既発行signed URLやダウンロード済み素材は即時回収できない。以降の新規取得拒否と、残存アクセスの有効期限を分けて確認する。
 
-**本書の存在は本番公開の承認を意味しない。A/B公開パッチのレビュー・先行利用者UUIDの承認後にA/Bを公開できる。Cは別のRelease Gateを通るまで案内・利用を停止する。**
+**本書の存在は本番反映・開放の承認を意味しない。閉じた本番反映と、UUID指定後のA/B開放を別々に承認する。Cは別のRelease Gateを通るまで案内・利用を停止する。**
