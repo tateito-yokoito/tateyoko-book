@@ -1,18 +1,19 @@
-/* HP-only book presentation. No generated marks or product silhouettes: official SVG +
-   clipped photo/material assets are composed with separately sized CSS covers/pages. */
+/* HP-only presentation: approved standard book image; existing CSS Premium mockup. */
 .hp-editions { text-align:center; border-top:1px solid var(--line); margin-top:60px; padding-top:42px; }
 .hp-editions-pair { display:grid; grid-template-columns:minmax(0,1fr) 64px minmax(0,1fr); column-gap:20px; }
 .hp-edition { display:grid; grid-template-rows:90px 86px 410px 1fr; min-width:0; }
 .hp-edition header .hp-label { margin-bottom:12px!important; }
 .hp-edition header h3 { font-size:25px; line-height:1.7; }
 .hp-edition-options { display:grid; grid-template-columns:1fr 1fr; gap:4px 20px; align-content:center; max-width:355px; margin:auto; text-align:left; }
-.hp-edition-options button { display:flex; gap:10px; align-items:center; min-height:34px; font-size:15px; white-space:nowrap; padding:2px 0; }
+.hp-edition-color { display:flex; gap:10px; align-items:center; min-height:34px; font-size:15px; white-space:nowrap; padding:2px 0; }
 .hp-edition-swatch { display:inline-block; flex-shrink:0; width:19px; height:19px; border-radius:50%; border:1px solid #192b352c; }
 .hp-edition-options [aria-pressed="true"] .hp-edition-swatch { outline:1px solid #576659; outline-offset:3px; }
 .hp-edition-binding { display:flex; gap:10px; align-items:center; justify-content:center; color:var(--muted); font-size:16px; }
 .hp-edition-binding .hp-edition-swatch { background:#173b2f; }
 .hp-edition-scene { position:relative; perspective:1100px; width:100%; height:410px; }
 .hp-edition-scene::after { content:""; position:absolute; bottom:23px; left:23%; width:58%; height:14px; background:#333b2e20; border-radius:50%; filter:blur(10px); }
+.hp-edition-scene-approved::after { display:none; }
+.hp-edition-approved-image { position:absolute; height:380px; width:auto; max-width:100%; object-fit:contain; left:50%; bottom:18px; transform:translateX(-50%); mix-blend-mode:multiply; mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent),linear-gradient(transparent,#000 3%,#000 97%,transparent); mask-composite:intersect; }
 .hp-edition-object { --book-w:254px; --book-h:calc(var(--book-w) * 257 / 182); --cover-color:#173b2f; --cover-ink:#bd9c5b; position:absolute; width:var(--book-w); height:var(--book-h); left:50%; bottom:32px; margin-left:calc(var(--book-w) / -2); transform-style:preserve-3d; transform:rotateY(-24deg) rotateX(3deg) rotateZ(2deg); z-index:1; }
 .hp-edition-scene-premium .hp-edition-object { transform:rotateY(-24deg) rotateX(3deg) rotateZ(-1deg); }
 .hp-edition-back { position:absolute; inset:0; background:var(--cover-color); transform:translateZ(-4px); box-shadow:0 1px 0 #38422d70; }
@@ -50,7 +51,8 @@
   .hp-edition header h3 { font-size:20px; min-height:68px; }
   .hp-edition-object { --book-w:210px; }
   .hp-edition-options { gap:4px 12px; }
-  .hp-edition-options button { font-size:15px; gap:6px; }
+  .hp-edition-color { font-size:15px; gap:6px; }
+  .hp-edition-approved-image { height:315px; bottom:20px; }
 }
 @media(max-width:620px) {
   .hp-editions { margin-top:45px; padding-top:30px; }
@@ -60,7 +62,8 @@
   .hp-edition-scene { height:380px; }
   .hp-edition-object { --book-w:235px; bottom:28px; }
   .hp-edition-options { gap:8px 20px; }
-  .hp-edition-options button { min-height:38px; }
+  .hp-edition-color { min-height:38px; }
+  .hp-edition-approved-image { height:352px; bottom:15px; }
   .hp-editions-plus { padding:24px 0; font-size:42px; line-height:1; }
   .hp-edition-description h4 { font-size:22px; }
   .hp-edition-description > p { font-size:16px; }

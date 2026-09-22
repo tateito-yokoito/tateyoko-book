@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import './book-editions.css';
 
 const COLORS = [
@@ -31,15 +31,16 @@ function BookObject({ premium = false, color }) {
 }
 
 export default function LandingBookEditions() {
-  const [color, setColor] = useState(COLORS[2]);
   return <aside className="hp-editions" id="book-editions" aria-label="標準ブックと追加のプレミアムブック">
     <div className="hp-editions-pair">
       <section className="hp-edition hp-edition-standard" aria-labelledby="hp-standard-title">
         <header><p className="hp-label">標準の一冊</p><h3 id="hp-standard-title">縦糸横糸ブック</h3></header>
-        <div className="hp-edition-options" role="group" aria-label="表紙カラーの表示見本">
-          {COLORS.map(c=><button key={c.id} type="button" aria-pressed={color.id === c.id} onClick={()=>setColor(c)}><span className="hp-edition-swatch" style={{backgroundColor:c.color}} /><span>{c.label}</span></button>)}
+        <div className="hp-edition-options" role="group" aria-label="表紙カラー4色の見本。掲載画像はセージグリーン。">
+          {COLORS.map(c=><span key={c.id} className="hp-edition-color"><span className="hp-edition-swatch" style={{backgroundColor:c.color}} /><span>{c.label}</span></span>)}
         </div>
-        <BookObject color={color} />
+        <div className="hp-edition-scene hp-edition-scene-approved">
+          <img className="hp-edition-approved-image" src="/site/hp-renewal/standard-softcover-wide-photo-v6.webp" width="740" height="1180" loading="lazy" decoding="async" alt="セージグリーンの縦糸横糸ブック。薄いソフトカバーと上部・側面の小口が見え、表紙には家族の自然なひとときの写真を大きく配置。" />
+        </div>
         <div className="hp-edition-description"><h4>写真とともに、<br />その人らしい一冊を。</h4><p>B5・ソフトカバー</p><p>基本料金に1冊含まれます。</p></div>
       </section>
       <div className="hp-editions-plus" aria-label="標準ブックに追加"><span aria-hidden="true">＋</span></div>
