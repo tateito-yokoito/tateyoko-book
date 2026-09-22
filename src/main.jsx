@@ -82,20 +82,42 @@ function RootScreen() {
 function FamilyTestGate({params}) {
   const [ready, setReady] = React.useState(false);
   const [phoneAccount, setPhoneAccount] = React.useState(false);
+  const [existingSubject, setExistingSubject] = React.useState(false);
+  const [routeError, setRouteError] = React.useState(false);
   React.useEffect(() => {
-    let live = true;
-    adminSupabaseClient.auth.getSession().then(({data}) => {
-      if (!live) return;
-      setPhoneAccount(Boolean(data?.session?.user?.phone)); setReady(true);
-    }).catch(()=>{if(live)setReady(true);});
-    const {data}=adminSupabaseClient.auth.onAuthStateChange((_event,session)=>{if(live)setPhoneAccount(Boolean(session?.user?.phone));});
+    let live = true, revision = 0;
+    const resolve = async session => {
+      const ticket=++revision;
+      if(!live)return;
+      setReady(false);setRouteError(false);
+      const phone=Boolean(session?.user?.phone);
+      let bound=false;
+      // An already verified email subject can be adopted without the C/SMS
+      // flow. Do not let legacy bootstrap create/rewrite their existing story.
+      if(session?.user && !phone && !params.has('family') && !params.has('family_connect')) {
+        const {data,error}=await adminSupabaseClient.from('family_subject_bindings')
+          .select('person_id').eq('subject_user_id',session.user.id).maybeSingle();
+        if(!live||ticket!==revision)return;
+        if(error){setRouteError(true);setReady(true);return;}
+        bound=Boolean(data);
+      }
+      if(!live||ticket!==revision)return;
+      setPhoneAccount(phone);setExistingSubject(bound);setReady(true);
+    };
+    adminSupabaseClient.auth.getSession().then(({data})=>resolve(data?.session))
+      .catch(()=>{if(live){setRouteError(true);setReady(true);}});
+    // No awaited Supabase request inside the Auth callback/lock.
+    const {data}=adminSupabaseClient.auth.onAuthStateChange((event,session)=>{
+      if(event!=='TOKEN_REFRESHED')setTimeout(()=>{if(live)resolve(session);},0);
+    });
     return () => {live=false;data.subscription.unsubscribe();};
   }, []);
   if (!ready) return <p>準備しています…</p>;
+  if (routeError) return <p role="alert">物語の接続を確認できませんでした。<button onClick={()=>location.reload()}>もう一度確認する</button></p>;
   // Phone-only subjects must never enter the legacy auto-create Person path.
-  if (phoneAccount || params.has('family_connect') || params.has('family')) return <FamilyConnectionTest
+  if (phoneAccount || existingSubject || params.has('family_connect') || params.has('family')) return <FamilyConnectionTest
     client={adminSupabaseClient}
-    onOwnStory={phoneAccount ? undefined : ()=>location.assign('/?app=1')}
+    onOwnStory={phoneAccount || existingSubject ? undefined : ()=>location.assign('/?app=1')}
     renderBook={props=><FamilyBookFlow {...props} client={adminSupabaseClient}/>}
     renderRecording={({key,...props})=><FamilyRecordingFlow key={key} {...props}/>}
     renderSharedStories={({workspace,api,onBack})=><FamilySharedStories key={workspace.project_id} api={api} projectId={workspace.project_id} onBack={onBack}/>}

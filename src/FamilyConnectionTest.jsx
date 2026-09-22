@@ -144,7 +144,9 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
   };
   const journey=workspace? familyJourney(workspace):null;
   const producer=canProduce(workspace);
-  const guidePending=workspace?.role==='subject' && firstStoryGuideState(session?.user?.id,workspace.person_id)==='pending';
+  // Existing stories are progress, even on a new device or after operator adoption.
+  const guidePending=workspace?.role==='subject' && !(workspace.answers?.length>0) &&
+    firstStoryGuideState(session?.user?.id,workspace.person_id)==='pending';
   const guideWelcome=Boolean(session && !inviteToken && workspace && !install && scene==='home' && guidePending && !guideActive && firstStoryDestination(workspace).scene!=='home');
   const startGuidedQuestion=next=>{
     const destination=firstStoryDestination(next);

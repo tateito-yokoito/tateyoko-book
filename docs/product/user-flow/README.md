@@ -79,3 +79,8 @@ Codexや実装担当者は、利用動線を変更する前にこのExcelを確�
 - 本人Accountを後付けしても同じPersonへ接続し、本人から制作支援を停止できる。一度本人が停止した後、Supporterの自己申告だけでは再有効化できない。
 
 事前照合の証跡・本番移行条件は [`production-supporter-preflight.md`](./production-supporter-preflight.md) を参照する。
+
+既存本人Account・購入済みProjectに登録済みのSupporterを制作支援へ移行する手順は
+[`existing-supporter-adoption-runbook.md`](./existing-supporter-adoption-runbook.md) を参照する。
+新規の本人Accountなしフローとは別に検証し、既存の本人関係・契約・共有を保持する。
+SupporterとしてのAccount登録や母の語りの操作を、Supporter自身の物語開始・無料3問の実施履歴として扱わない。

@@ -7,7 +7,7 @@ import {resolve} from 'node:path';
 import {createClient} from '@supabase/supabase-js';
 const ref='zpswxefgfabzvxdbtyvq',origin=process.env.QA_TEST_ORIGIN||'http://127.0.0.1:5195';
 assert.ok(['http://127.0.0.1:5195','https://tateyoko-book-test.vercel.app'].includes(origin));
-const [caseName,step]=process.argv.slice(2);assert.ok(['A','B'].includes(caseName));
+const [caseName,step]=process.argv.slice(2);assert.ok(['A','B','EXISTING'].includes(caseName));
 assert.ok(['create','inspect','record','purchase','starting','main','book','edit','append','replace'].includes(step));
 const dir=process.env.QA_OUTPUT_DIR||'output/production-supporter';fs.mkdirSync(dir,{recursive:true,mode:0o700});
 const statePath=`${dir}/${caseName}-private.json`;
@@ -15,7 +15,12 @@ const state=fs.existsSync(statePath)?JSON.parse(fs.readFileSync(statePath)):{ref
 const save=()=>fs.writeFileSync(statePath,JSON.stringify(state,null,2),{mode:0o600});
 const authPath=process.env.QA_SESSION_FILE;assert.ok(authPath,'QA_SESSION_FILE must name an existing synthetic TEST session');
 const original=JSON.parse(fs.readFileSync(authPath));
-assert.equal(original.ref,ref);const actor=original.actors.family;assert.ok(actor.email.endsWith('@example.invalid'));
+assert.equal(original.ref,ref);const actor=caseName==='EXISTING'?original.actors.daughter:original.actors.family;assert.ok(actor.email.endsWith('@example.invalid'));
+if(caseName==='EXISTING'){
+ assert.ok(original.adopted);assert.ok(['record','edit','append','replace','book'].includes(step));
+ if(state.projectId)assert.equal(state.projectId,original.target.project);
+ state.projectId=original.target.project;state.personId=original.target.person;
+}
 const raw=execFileSync(process.env.QA_SUPABASE_CLI,['projects','api-keys','--project-ref',ref,'--output','json'],{encoding:'utf8',stdio:['ignore','pipe','pipe']});
 const anon=JSON.parse(raw.slice(raw.indexOf('['))).find(k=>k.name==='anon').api_key;
 const client=createClient(`https://${ref}.supabase.co`,anon,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -75,13 +80,22 @@ try{
    for(let i=0;i<Number(process.env.QA_RECORD_COUNT||1);i++){
    if(i)await home();
    await page.getByRole('button',{name:'一緒に語る',exact:true}).click();
+   if(caseName==='EXISTING'){
+    const rec=page.getByRole('button',{name:'録音を始める',exact:true});
+    const nextTheme=page.getByRole('button',{name:'次のテーマを見る',exact:true});
+    const advance=page.getByRole('button',{name:/このまま.*進む/});
+    await rec.or(nextTheme).or(advance).waitFor();
+    if(await nextTheme.count()){await nextTheme.click();await rec.or(advance).waitFor();}
+    if(await advance.count())await advance.click();
+   }
    await page.getByRole('button',{name:'録音を始める',exact:true}).click();
    await page.getByRole('button',{name:'録音を終了',exact:true}).waitFor();
    await page.waitForTimeout(9500); // Synthetic speech fixture capture, not a readiness wait.
    await page.getByRole('button',{name:'録音を終了',exact:true}).click();
    const next=page.getByRole('button',{name:'この内容で進む',exact:true});await next.waitFor({timeout:90000});
    await next.click();
-   await page.getByRole('button',{name:'ホームへ',exact:true}).waitFor({timeout:45000});
+   const homeButton=page.getByRole('button',{name:'ホームへ',exact:true});
+   await (caseName==='EXISTING'?homeButton.or(page.getByRole('button',{name:'次のテーマを見る',exact:true})):homeButton).waitFor({timeout:45000});
    }
   }else if(step==='starting'){
    await page.getByRole('button',{name:'一緒に語る',exact:true}).click();
@@ -138,7 +152,7 @@ try{
   }
  }
  const {data:w,error}=await client.rpc('family_journey',{p:state.projectId});assert.ifError(error);
- assert.equal(w.connected,false);assert.equal(w.role,'supporter');assert.equal(w.can_produce,true);
+ assert.equal(w.connected,caseName==='EXISTING');assert.equal(w.role,'supporter');assert.equal(w.can_produce,true);
  assert.deepEqual(failures,[], 'No failed application API requests or page errors');
  if(step==='book'||(step==='inspect'&&w.access.main_started_at)){
   const {data:work,error:workError}=await client.rpc('get_book_work',{input_project_id:state.projectId});assert.ifError(workError);
