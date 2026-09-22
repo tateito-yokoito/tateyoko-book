@@ -3,18 +3,18 @@
 ## 判定と範囲
 
 対象コード基準：`624a837`／`b448666`に、本Runbookと同じコミットのpilot公開パッチを追加。
-**本番変更は未実行。A/B先行利用とCの公開承認は分離する。** C未完了だけを理由に、本人AccountなしのA/B先行利用を止めない。A/Bも本番反映には別途承認が必要。
+**2026-09-22：ユーザー承認後、閉じた状態での本番反映を完了。A/Bの利用開放とCの公開は未承認・未実行。** 現在結果は [`production-supporter-closed-release-result.md`](./production-supporter-closed-release-result.md)。C未完了だけを理由に、本人AccountなしのA/B先行利用を止めない。
 HP一般公開・全面開放・新しい商品仕様は対象外。
 
 最新の反映直前準備結果：[`production-supporter-final-preparation.md`](./production-supporter-final-preparation.md)。
-`8e69507`の方向性は承認済みだが、本番への反映承認とは別。今回はREAD ONLY照合とローカル退避・リハーサルのみ。
+以下の準備記録は反映前時点のもの。PITRなしの復旧条件を含む閉鎖反映が別途承認され、17本・5 Edge・本番フロントへ適用された。DB・サーバーに加えてフロントのfamily flagもOFFを維持している。
 
 2026-09-22、承認された005・006をTEST `zpswxefgfabzvxdbtyvq` に個別適用。履歴登録まで完了した。
 TEST公開先：<https://tateyoko-book-test.vercel.app>。
 Vercelは **tateyoko-book-test** (`prj_sPwDR1BfQBpYUQAgu1ElFlU4QeCX`) のみ更新。
 公開gateパッチのTEST deployment: `dpl_HxEY5EHE8nMkudUYbtiFKSaeSC8j`、JS `index-DomZt4et.js`。
 Vercelのtargetがproductionでも、これはTEST専用プロジェクトの固定URLであり、実サービスの本番公開ではない。
-この作業では本番DB・Edge・環境変数・サイトを変更していない。
+このTEST作業の段階では本番DB・Edge・環境変数・サイトを変更していない。その後の閉鎖反映は上記結果へ分離して記録する。
 TESTには追加migration `202609220001`、`FAMILY_TEST_ENABLED=true`、後述の5 Edgeの公開gateを反映。DB／フロント両方でCはOFF。
 
 ## 受入記録
