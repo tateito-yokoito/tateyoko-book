@@ -38,6 +38,8 @@ body.landing-page-active { margin: 0; background: #f5f3ed; color: #182a35; }
 .hp-placeholder { position:relative; overflow:hidden; background:linear-gradient(150deg,#e1e5da,#c9d3c5 52%,#dce2d5); color:#4c6052; border:1px solid #bbc8b8; }
 .hp-placeholder-label { position:absolute; top:16px; left:18px; right:16px; font:15px/1.6 "Noto Sans JP",sans-serif; z-index:1; }
 .hp-hero-art { grid-column:2; grid-row:1 / span 2; min-height:680px; border-radius:46% 46% 2px 2px; background:radial-gradient(ellipse at 65% 25%,#f4eeda 0%,#e3e6d7 40%,#becdbd 100%); }
+.hp-hero-photo { position:relative; overflow:hidden; }
+.hp-hero-photo img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:70% 50%; }
 .hp-hero-art .hp-placeholder-label { top:90px; text-align:center; }
 .hp-art-caption { position:absolute; bottom:50px; left:40px; font-size:25px; letter-spacing:.14em; line-height:2; }
 .hp-thread { position:absolute; inset:25% -14% -12% 25%; border:1px solid #889b815e; border-radius:50%; transform:rotate(-26deg); }
@@ -98,8 +100,13 @@ body.landing-page-active { margin: 0; background: #f5f3ed; color: #182a35; }
 .hp-work-copy > p:not(.hp-label) { margin-top:25px; }
 .hp-paper-work img { aspect-ratio:1.25; width:100%; }
 .hp-paper-work figcaption { margin-top:15px; color:#5b685f; font:15px/1.75 "Noto Sans JP",sans-serif; }
-.hp-web-work { display:grid; grid-template-columns:.8fr 1.2fr; gap:65px; align-items:center; }
-.hp-web-bridge { padding-top:28px; border-top:1px solid #b8c7b5; font-size:16px; }
+.hp-web-work { display:grid; grid-template-columns:.8fr 1.2fr; gap:65px; align-items:start; }
+/* Copy is HTML; show the approved text-free visual in full, including the phone's top edge. */
+.hp-web-experience { min-width:0; }
+.hp-web-experience h3 { font-size:24px; line-height:1.7; }
+.hp-webbook-visual { width:100%; margin-top:28px!important; }
+.hp-webbook-visual img { display:block; width:100%; height:auto; }
+.hp-web-bridge { margin-top:16px!important; font-size:16px; }
 .hp-webbook-demo { background:#f2eee5; border:1px solid #d8d6c9; border-radius:8px; box-shadow:0 22px 50px #21372812; overflow:hidden; color:#11203a; }
 .hp-webbook-demo header { padding:18px 24px; display:flex; align-items:center; gap:12px; border-bottom:1px solid #11203a25; font-size:16px; }
 .hp-demo-badge { margin-left:auto; font:15px/1.5 "Noto Sans JP",sans-serif; color:#53614f; }
@@ -187,6 +194,14 @@ body.landing-page-active { margin: 0; background: #f5f3ed; color: #182a35; }
 .hp-mobile-break { display:none; }
 .hp-skip,.hp-sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
 .hp-skip:focus { position:fixed; top:10px; left:10px; width:auto; height:auto; clip-path:none; padding:15px; background:white; z-index:100; }
+/* Approved B3: unified desktop HERO. Mobile retains copy → photo → body → CTA. */
+@media(min-width:621px) {
+  .hp-hero-integrated { position:relative; isolation:isolate; }
+  .hp-hero-integrated::before { content:""; grid-column:2; grid-row:1 / span 2; min-height:680px; pointer-events:none; }
+  .hp-hero-integrated .hp-hero-photo { position:absolute; grid-column:auto; grid-row:auto; inset:50px 0 90px; min-height:0; border-radius:0 36% 2px 2px / 0 65% 2px 2px; background:#f5f3ed; z-index:-1; }
+  .hp-hero-integrated .hp-hero-photo img { left:12%; width:88%; object-position:50% 0%; }
+  .hp-hero-integrated .hp-hero-photo::after { content:""; position:absolute; inset:0; background:linear-gradient(90deg,#f5f3ed 0%,#f5f3ed 35%,#f5f3edf7 40%,#f5f3ede8 44%,#f5f3ed8c 50%,#f5f3ed00 60%); pointer-events:none; }
+}
 @media(max-width:900px) {
   .hp-shell { width:calc(100% - 56px); }
   .hp-hero { gap:32px; }
@@ -196,6 +211,14 @@ body.landing-page-active { margin: 0; background: #f5f3ed; color: #182a35; }
   .hp-demo-transport { gap:6px; }
   .hp-support { grid-template-columns:1fr; }
   .hp-support > .hp-placeholder { min-height:230px; }
+}
+/* Keep the approved integrated HERO in narrow desktop / tablet panels too. */
+@media(min-width:621px) and (max-width:1023px) {
+  .hp-hero-integrated { column-gap:24px; }
+  .hp-hero-integrated h1 { font-size:clamp(36px,5.5vw,54px); }
+  .hp-hero-integrated .hp-hero-photo img { object-position:70% 0%; }
+  .hp-hero-integrated .hp-button { width:100%; padding:18px 16px; gap:12px; font-size:16px; }
+  .hp-hero-integrated .hp-button span { flex-shrink:0; }
 }
 @media(max-width:620px) {
   .landing-site { font-size:17px; }
@@ -212,7 +235,8 @@ body.landing-page-active { margin: 0; background: #f5f3ed; color: #182a35; }
   .hp-hero { grid-template-columns:1fr; padding-top:30px; padding-bottom:65px; gap:25px; }
   .hp-hero-title { grid-row:auto; padding-top:0; }
   .hp-hero h1 { font-size:52px; line-height:1.5; }
-  .hp-hero-art { grid-column:1; grid-row:auto; min-height:235px; border-radius:130px 130px 2px 2px; }
+  .hp-hero-art { grid-column:1; grid-row:auto; min-height:235px; border-radius:0 130px 2px 2px; }
+  .hp-hero-photo img { object-position:68% 42%; transform:scale(1.16); transform-origin:70% 30%; }
   .hp-hero-art .hp-placeholder-label { top:40px; }
   .hp-hero-art .hp-art-caption { left:35px; bottom:25px; font-size:20px; }
   .hp-hero-body { grid-row:auto; padding:0; }

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import LandingWebBookPreview from "./landing/LandingWebBookPreview.jsx";
 import "./landing.css";
+import LandingBookEditions from './landing/LandingBookEditions.jsx';
 
 const LOGIN = "/?app=1&entry=login";
 const TRIAL = "/?app=1&entry=trial";
@@ -60,7 +60,7 @@ function InformationDialog({ panel, close, reviewOnly }) {
     </div></dialog>;
 }
 
-export default function LandingPage({ reviewOnly = false }) {
+export default function LandingPage({ reviewOnly = false, heroLayout = 'integrated' }) {
   const [menu, setMenu] = useState(false);
   const [panel, setPanel] = useState(null);
   const [moreFaq, setMoreFaq] = useState(false);
@@ -84,10 +84,10 @@ export default function LandingPage({ reviewOnly = false }) {
     </header>
 
     <main id="hp-main">
-      <section className="hp-hero hp-shell" id="top" aria-labelledby="hp-title">
+      <section className={`hp-hero hp-shell${heroLayout === 'integrated' ? ' hp-hero-integrated' : ''}`} id="top" aria-labelledby="hp-title">
         <div className="hp-hero-title"><SectionLabel>あなたの人生に、耳を澄ます。</SectionLabel><h1 id="hp-title">人生を、<br />声でのこす。</h1></div>
-        <Placeholder name="HERO" className="hp-hero-art"><div className="hp-thread" aria-hidden="true" /><span className="hp-art-caption">語る時間の、<br />静かな気配を。</span></Placeholder>
-        <div className="hp-hero-body"><p>問いに答えるように、<br />思い出したことを話す。</p><p>声と言葉、写真が、<br />一冊の物語になります。</p><TrialLink reviewOnly={reviewOnly} /><p className="hp-note">約10分・カード登録不要。</p></div>
+        <figure className="hp-hero-art hp-hero-photo"><img src="/site/hp-renewal/hero-woman-remembering.png" alt="窓辺でスマートフォンを手に、アルバムを前に思い出を辿る女性" width="1536" height="1024" fetchPriority="high" /></figure>
+        <div className="hp-hero-body"><p>スマホで問いに答えながら、<br />声で、人生を辿る。</p><p>声と言葉、写真が、<br />一冊の物語になります。</p><TrialLink reviewOnly={reviewOnly} /><p className="hp-note">約10分・カード登録不要。</p></div>
       </section>
 
       <section className="hp-why hp-section hp-shell" id="experience">
@@ -129,8 +129,13 @@ export default function LandingPage({ reviewOnly = false }) {
           <figure><img src="/site/lifestyle.jpg" alt="二人で本を開き、ページを見ながら過ごす時間" loading="lazy" width="1400" height="933" /><figcaption>本を囲む時間のイメージ。標準本はソフトカバーです。</figcaption></figure>
         </article>
         <article className="hp-web-work hp-section hp-shell">
-          <div className="hp-work-copy"><SectionLabel>縦糸横糸Webブック</SectionLabel><h2>人生に、逢う。</h2><p>離れていても、<br />言葉や写真、そして本人の声に。<br />その人らしさに、また触れられる。</p><p className="hp-web-bridge">縦糸横糸ブックのQRから、<br />縦糸横糸Webブックへ。</p></div>
-          <LandingWebBookPreview />
+          <div className="hp-work-copy"><SectionLabel>縦糸横糸Webブック</SectionLabel><h2>人生に、逢う。</h2><p>言葉と写真、そして本人の声とともに。<br />離れていても、時が経っても、<br />その人らしさに、また逢える。</p></div>
+          <div className="hp-web-experience">
+          <h3>本を片手に、<br className="hp-mobile-break" />あの時の声を聞く。</h3>
+          <p className="hp-web-bridge">縦糸横糸ブックのQRから、<br />縦糸横糸Webブックへ。</p>
+          {/* TODO: Replace this interim visual when a real story's photo, text, voice and Web book UI exceed its quality. Keep the existing UI component available for that review. */}
+          <figure className="hp-webbook-visual"><img src="/site/hp-renewal/web-book-qr-voice-screen-v2.png" alt="同じ思い出の写真と文章を載せた本と、声の再生画面を表示するスマートフォンのイメージ" width="1536" height="1024" loading="lazy" /></figure>
+          </div>
         </article>
       </section>
 
@@ -139,7 +144,7 @@ export default function LandingPage({ reviewOnly = false }) {
         <p className="hp-price-amount">49,800<span>円（税込）</span></p><p>人生を声で辿る体験から、<br />二つの作品として残すところまで。</p>
         <ul className="hp-inclusions"><li>人生を辿る問い</li><li>音声・文章・写真の保存</li><li>縦糸横糸ブック 1冊<span>標準のソフトカバー</span></li><li>縦糸横糸Webブック</li></ul>
         <p className="hp-note">国内送料込み</p><div className="hp-price-actions"><a className="hp-button" href={reviewOnly ? "#hp-review-notice" : PURCHASE}>購入して始める <span aria-hidden="true">↗</span></a><a className="hp-text-link" href={reviewOnly ? "#hp-review-notice" : TRIAL}>先に無料で試す</a></div>
-        <aside className="hp-premium"><div><SectionLabel>追加オプション</SectionLabel><h3>より上質な一冊も残したい方へ</h3><p>縦糸横糸プレミアムブック</p></div><div><p className="hp-premium-price">＋30,000円（税込）</p><p>布貼り等の上質な製本で、もう1冊。<br />標準ブックとの置換ではなく、追加です。</p></div></aside>
+        <LandingBookEditions />
       </section>
 
       <section className="hp-support hp-section hp-shell" id="support">
