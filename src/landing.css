@@ -96,7 +96,7 @@ body.landing-page-active { margin: 0; background: #f5f3ed; color: #182a35; }
 .hp-works { background:#e9eee6; }
 .hp-works-heading { text-align:center; padding-bottom:80px; }
 .hp-works-heading > p:last-child { margin-top:24px; }
-.hp-works-overview { margin-bottom:80px!important; }
+.landing-site .hp-works-overview { margin:0 auto 80px; }
 .hp-works-overview img { display:block; width:100%; height:auto; }
 .hp-paper-work { display:grid; grid-template-columns:.8fr 1.2fr; align-items:center; gap:65px; }
 .hp-work-copy > p:not(.hp-label) { margin-top:25px; }
@@ -274,7 +274,7 @@ body.landing-page-active { margin: 0; background: #f5f3ed; color: #182a35; }
   .hp-process h3 { font-size:19px; }
   .hp-works-heading { text-align:left; padding-bottom:45px; }
   .hp-works-heading h2 { font-size:29px; }
-  .hp-works-overview { margin-bottom:45px!important; }
+  .landing-site .hp-works-overview { width:100%; margin:0 0 45px; }
   .hp-paper-work,.hp-web-work { grid-template-columns:1fr; gap:30px; }
   .hp-paper-work img { aspect-ratio:1.25; }
   .hp-web-work { padding-top:70px; }
