@@ -1,5 +1,14 @@
 # HP visual release — 2026-09-23
 
+## Two works image alignment follow-up
+
+- Source commit: `4f86a1206dfd677c223c00a3074118220cf363fe` (`codex/hp-release-20260923`).
+- Live deployment: `dpl_4H924SdD6xDvy2DVNJ4aNVr8A6Sq`, https://www.tateito-yokoito.jp/#works .
+- Rollback deployment: `dpl_EouiZG5K99v4KHfvub4LCk1uE121`.
+- Corrected the figure's margin rule: 1440px has 130px on each side; 430px, 390px and 375px use their full viewport width with 0px side margins. No overflow or page errors in local Chrome checks.
+- Only `src/landing.css` changed. Images, text, app code, checkout and CTA are unchanged. No main merge or push.
+- Built with unchanged `--book-milestones` production settings. Candidate verified as Ready; public domain serves JS `index-BDC6Emwb.js`, CSS `index-BelbAYWB.css`, with `X-Robots-Tag: noindex, nofollow`.
+
 ## Two works overview visual follow-up
 
 - Source commit: `f11002ce334e83725d6b4834f4132d398e2a7017` (`codex/hp-release-20260923`).
