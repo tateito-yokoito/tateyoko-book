@@ -234,10 +234,11 @@ body.landing-page-active { margin: 0; background: #f5f3ed; color: #182a35; }
   .hp-header-actions button { font-size:15px; }
   .hp-header nav { top:75px; }
   .hp-label { font-size:15px; margin-bottom:18px!important; letter-spacing:.055em; }
-  .hp-hero { grid-template-columns:1fr; padding-top:30px; padding-bottom:65px; gap:25px; }
+  .hp-hero { grid-template-columns:minmax(0,1fr); padding-top:30px; padding-bottom:65px; gap:25px; }
   .hp-hero-title { grid-row:auto; padding-top:0; }
   .hp-hero h1 { font-size:52px; line-height:1.5; }
-  .hp-hero-art { grid-column:1; grid-row:auto; min-height:235px; border-radius:0 130px 2px 2px; }
+  .hp-hero-art { grid-column:1; grid-row:auto; min-height:0; aspect-ratio:3/2; border-radius:0 130px 2px 2px; }
+  .landing-site .hp-hero-art { width:calc(100% + 40px); margin-left:-20px; }
   .hp-hero-photo img { object-position:68% 42%; transform:scale(1.16); transform-origin:70% 30%; }
   .hp-hero-art .hp-placeholder-label { top:40px; }
   .hp-hero-art .hp-art-caption { left:35px; bottom:25px; font-size:20px; }
@@ -247,6 +248,7 @@ body.landing-page-active { margin: 0; background: #f5f3ed; color: #182a35; }
   .hp-note { font-size:15px; }
   .hp-hero-body .hp-note { font-size:15px; }
   .hp-why-layout { display:flex; flex-direction:column; gap:28px; margin-top:28px; align-items:stretch; }
+  .landing-site .hp-why-layout figure { width:calc(100% + 40px); margin-left:-20px; }
   .hp-why-layout img { aspect-ratio:1.25; }
   .hp-why-copy p { font-size:16px; }
   .hp-how { padding-top:22px; }
@@ -275,7 +277,9 @@ body.landing-page-active { margin: 0; background: #f5f3ed; color: #182a35; }
   .hp-works-heading { text-align:left; padding-bottom:45px; }
   .hp-works-heading h2 { font-size:29px; }
   .landing-site .hp-works-overview { width:100%; margin:0 0 45px; }
-  .hp-paper-work,.hp-web-work { grid-template-columns:1fr; gap:30px; }
+  .hp-paper-work,.hp-web-work { grid-template-columns:minmax(0,1fr); gap:30px; }
+  .landing-site .hp-paper-work figure,.landing-site .hp-webbook-visual { width:calc(100% + 40px); margin-left:-20px; }
+  .hp-paper-work figcaption { padding-inline:20px; }
   .hp-paper-work img { aspect-ratio:1.25; }
   .hp-web-work { padding-top:70px; }
   .hp-work-copy > p:not(.hp-label) { margin-top:18px; }
