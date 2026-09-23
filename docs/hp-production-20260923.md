@@ -1,5 +1,17 @@
 # HP visual release — 2026-09-23
 
+## Two works overview visual follow-up
+
+- Source commit: `f11002ce334e83725d6b4834f4132d398e2a7017` (`codex/hp-release-20260923`).
+- Live deployment: `dpl_EouiZG5K99v4KHfvub4LCk1uE121`, https://www.tateito-yokoito.jp/#works .
+- Rollback deployment: `dpl_8kREz1EhGbAEEHYKcC96iC1eydJ6`.
+- Inserted the supplied image immediately after the two works introduction, before the book and Web book details. The existing Web book visual remains in its prior position unchanged.
+- New image: `public/site/hp-renewal/book-and-webbook-approved.png`, copied byte for byte from the approved attachment; SHA-256 `3c3b231191d2c42544a914a71a6829d5f13969ee31ff219a9dc1cd690e0eeed6`.
+- Other changes: only responsive spacing for the new image. No app, Family/Supporter, Auth, payment, DB or Edge source changed; no main merge or push.
+- Local Chrome checks at 1440px and 390px: image loaded after heading, earlier Web book image restored, no horizontal overflow or page errors. Evidence in ignored `output/hp-approved-visual/`.
+- Built with unchanged `--book-milestones` production settings. Candidate verified as Ready with expected JS `index-D617dyXP.js`, CSS `index-x6sYeJEj.css`, image HTTP 200 and noindex. Promoted after verifying custom domain still served the earlier build.
+- Public custom domain now serves those JS/CSS assets, the image returns HTTP 200, and `X-Robots-Tag: noindex, nofollow` remains active.
+
 ## Latest follow-up: approved standard book photograph
 
 - Source commit: `973b399c7cd73ff11c5f7b8f2cb7e94831e5405d` (`codex/hp-release-20260923`).
