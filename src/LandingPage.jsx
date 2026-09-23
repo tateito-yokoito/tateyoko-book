@@ -124,6 +124,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
 
       <section className="hp-works" id="works">
         <div className="hp-shell hp-section hp-works-heading"><SectionLabel>人生が、かたちになる。</SectionLabel><h2>語った人生は、<br />二つの作品として残ります。</h2><p>どちらも「縦糸横糸」に含まれます。</p></div>
+        <figure className="hp-works-overview hp-shell"><img src="/site/hp-renewal/book-and-webbook-approved.png" alt="縦糸横糸ブックと、写真・文章・本人の声に触れる縦糸横糸Webブックのイメージ" width="1536" height="1024" loading="lazy" /></figure>
         <article className="hp-paper-work hp-shell">
           <div className="hp-work-copy"><SectionLabel>縦糸横糸ブック</SectionLabel><h2>人生を、囲む。</h2><p>手に取り、ページをめくる。<br />一冊を囲むことで、<br />家族の会話が生まれる。</p></div>
           <figure><img src="/site/lifestyle.jpg" alt="二人で本を開き、ページを見ながら過ごす時間" loading="lazy" width="1400" height="933" /><figcaption>本を囲む時間のイメージ。標準本はソフトカバーです。</figcaption></figure>
