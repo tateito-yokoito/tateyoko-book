@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import {requireFamilyRelease} from '../_shared/family-release.ts';
+import {completeBookOrder} from '../_shared/book-completion.ts';
+import {recoverCompletionCheckout} from '../_shared/completion-checkout.ts';
 import { requireStripeEnvironment, commerceMode, requireCheckoutEnabled, requireEventMode, finalizeExperienceCheckout } from "../_shared/experience-commerce.ts";
 
 const corsHeaders = {
@@ -37,11 +39,12 @@ function stripeMode(secret: string) {
   return secret.startsWith("sk_live_") || secret.startsWith("rk_live_") ? "live" : "test";
 }
 
-async function stripeRequest(secret: string, path: string, form?: URLSearchParams) {
+async function stripeRequest(secret: string, path: string, form?: URLSearchParams, idempotencyKey?:string) {
   const response = await fetch(`https://api.stripe.com/v1/${path}`, {
     method: form ? "POST" : "GET",
     headers: {
       Authorization: `Bearer ${secret}`,
+      ...(idempotencyKey?{'Idempotency-Key':idempotencyKey}:{}),
       ...(form ? { "Content-Type": "application/x-www-form-urlencoded" } : {})
     },
     ...(form ? { body: form } : {})
@@ -190,6 +193,7 @@ serve(async request => {
     auth: { persistSession: false, autoRefreshToken: false }
   });
   let orderId = "";
+  let completionRequest = false;
 
   try {
     try {
@@ -371,10 +375,37 @@ serve(async request => {
       }
     }
 
+    const completionId=String(body.completionCandidateId||'');
+    completionRequest=Boolean(completionId);
+    if(completionId && (Deno.env.get('BOOK_COMPLETION_ENABLED')!=='true'||returnContext!=='book_builder'||orderType!=='self'))return json({success:false,error:'Completion is not enabled'},403);
+    if(completionId){
+      const {data:c,error}=await admin.from('book_completion_candidates').select('id,book_project_id,requested_by,state,order_id').eq('id',completionId).maybeSingle();
+      if(error)throw error;
+      if(!c || c.book_project_id!==projectId || c.requested_by!==authData.user.id)return json({success:false,error:'注文内容を確認できません'},403);
+      if(c.order_id){
+        const {data:o,error:orderError}=await admin.from('commerce_orders').select('*').eq('id',c.order_id).single();
+        if(orderError)throw orderError;
+        if(['paid','zero_paid'].includes(o.status)){await completeBookOrder(admin,o.id);return json({success:true,completed:true,orderId:o.id});}
+        if(o.stripe_checkout_session_id?.startsWith('cs_')||o.metadata?.book_completion_checkout_request){
+          const response=await recoverCompletionCheckout(stripeSecretKey,o);
+          if(response?.id&&!o.stripe_checkout_session_id){
+            const {error:recoveryError}=await admin.from('commerce_orders').update({stripe_checkout_session_id:response.id}).eq('id',o.id);
+            if(recoveryError)throw recoveryError;
+          }
+          if(response?.status==='open'&&response.url)return json({success:true,checkoutUrl:response.url,orderId:o.id});
+        }
+        return json({success:false,error:'注文を確認中です。決済確認、または注文の取りやめ後に再開してください'},409);
+      }
+    }
+    if(Deno.env.get('BOOK_COMPLETION_ENABLED')==='true' && returnContext==='book_builder'){
+      const {data:work,error:workError}=await admin.from('book_work_manifests').select('confirmed_at').eq('book_project_id',projectId).maybeSingle();
+      if(workError)throw workError;
+      if(!work?.confirmed_at && !completionId)return json({success:false,error:'注文内容を確認してください'},409);
+    }
     const createRequest = orderType === "self"
-      ? admin.rpc("create_book_commerce_order", {
+      ? admin.rpc(completionId?'create_book_completion_order':"create_book_commerce_order", {
           input_purchaser_user_id: authData.user.id,
-          input_book_project_id: projectId,
+          ...(completionId?{input_candidate_id:completionId}:{input_book_project_id:projectId}),
           input_discount_code: discountCode || null,
           input_standard_extra_copy_count: standardExtraCopyCount,
           input_premium_copy_count: premiumCopyCount,
@@ -554,6 +585,7 @@ serve(async request => {
       if (useV2) {
         await finalizeExperienceCheckout(admin, { id: completionId, metadata: { order_id: order.id },
           amount_total: 0, currency: "jpy", payment_status: "no_payment_required" }, new Date().toISOString(), commerceMode() === "live");
+        await completeBookOrder(admin,order.id);
         return json({ success: true, completed: true, orderId: order.id, quote });
       }
       const { error: finalizeError } = await admin.rpc("finalize_commerce_order", {
@@ -567,6 +599,7 @@ serve(async request => {
         input_purchased_at: new Date().toISOString()
       });
       if (finalizeError) throw finalizeError;
+      await completeBookOrder(admin,order.id);
       return json({ success: true, completed: true, orderId: order.id, quote });
     }
 
@@ -681,11 +714,18 @@ serve(async request => {
     form.set("success_url", appReturnUrl(returnParams));
     form.set("cancel_url", appReturnUrl(cancelParams));
 
-    const checkout = await stripeRequest(stripeSecretKey, "checkout/sessions", form);
+    const existingOrderMetadata = order.metadata && typeof order.metadata === "object" ? order.metadata : {};
+    if(completionId){
+      existingOrderMetadata.book_completion_checkout_request=Array.from(form.entries());
+      // Cancellation locks the same order; once expired, no checkout may be sent.
+      const {data:saved,error:saveError}=await admin.from('commerce_orders')
+        .update({metadata:existingOrderMetadata}).eq('id',order.id).eq('status','checkout_pending').select('id').single();
+      if(saveError||!saved)throw Error('注文状態が変わりました。再確認してください。');
+    }
+    const checkout = await stripeRequest(stripeSecretKey, "checkout/sessions", form,completionId?`book-completion-${order.id}`:undefined);
     requireEventMode(checkout.livemode);
     if (!checkout?.id || !checkout?.url) throw new Error("購入画面を開けませんでした");
 
-    const existingOrderMetadata = order.metadata && typeof order.metadata === "object" ? order.metadata : {};
     const { error: orderUpdateError } = await admin.from("commerce_orders").update({
       stripe_checkout_session_id: checkout.id,
       stripe_mode: stripeMode(stripeSecretKey),
@@ -715,7 +755,9 @@ serve(async request => {
     return json({ success: true, checkoutUrl: checkout.url, orderId: order.id, quote });
   } catch (error) {
     console.error("create checkout session error", error);
-    if (orderId) {
+    // A failed finalizer/network response does NOT mean payment was cancelled.
+    // Completion orders are reconciled/retried or explicitly cancelled via Stripe.
+    if (orderId && !completionRequest) {
       await admin.from("commerce_orders").update({ status: "cancelled" }).eq("id", orderId);
       await admin.from("discount_redemptions").update({ status: "released" }).eq("commerce_order_id", orderId).eq("status", "pending");
     }

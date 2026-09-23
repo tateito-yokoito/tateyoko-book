@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireExperienceProcessing } from "../_shared/experience-access.ts";
+import {compareMediaChronologically} from '../_shared/media-order.js';
 import { requireFamilyProjectAccess, requireFamilyAssetAccess } from "../_shared/family-access.ts";
 
 const corsHeaders = {
@@ -74,13 +75,16 @@ serve(async (req) => {
 
       const { data: publication, error: publicationError } = await serviceClient
         .from("voice_publications")
-        .select("id, book_project_id, status")
+        .select("id, book_project_id, status, published_at")
         .eq("id", publicationId)
         .maybeSingle();
       if (publicationError) throw publicationError;
       if (!publication) throw new HttpError("Publication not found", 404);
 
       await requireProjectAccess(serviceClient, publication.book_project_id, user.id);
+      if(!['published','disabled'].includes(publication.status)||!publication.published_at){
+        throw new HttpError('完成後に共有設定を変更できます',409);
+      }
       if (action === "resume") {
         const { error: resumeError } = await serviceClient
           .from("voice_publications")
@@ -104,8 +108,8 @@ serve(async (req) => {
 
       if (action === "set_access") {
         const accessCode = String(body.accessCode || "").trim();
-        if (accessCode && !/^[0-9]{4,8}$/.test(accessCode)) {
-          throw new HttpError("暗証番号は4〜8桁の数字で入力してください", 400);
+        if (accessCode && !/^[0-9]{4}$/.test(accessCode)) {
+          throw new HttpError("PINは4桁の数字で入力してください", 400);
         }
 
         const { error: accessError } = await serviceClient.rpc("set_voice_publication_access_code", {
@@ -135,7 +139,8 @@ serve(async (req) => {
       return jsonResponse({ success: true, publicationId, status: "disabled", disabledAt });
     }
 
-    if (!["publish", "prepare", "update"].includes(action)) throw new HttpError("Unsupported action", 400);
+    if (!["publish", "prepare", "prepare_completion", "update"].includes(action)) throw new HttpError("Unsupported action", 400);
+    if(action==='prepare_completion' && Deno.env.get('BOOK_COMPLETION_ENABLED')!=='true')throw new HttpError('Completion is not enabled',403);
 
     let existingPublication: any = null;
     let bookProjectId = String(body.bookProjectId || "").trim();
@@ -160,10 +165,19 @@ serve(async (req) => {
 
     // Paper and Web Book are rendered from one explicitly confirmed work.
     // Never re-query living answers here, including during publication retries.
-    const { data: work, error: workError } = await serviceClient.from("book_work_manifests")
+    const { data: storedWork, error: workError } = await serviceClient.from("book_work_manifests")
       .select("*").eq("book_project_id", bookProjectId).maybeSingle();
     if (workError) throw workError;
-    if (!work?.confirmed_at || !work.snapshot) throw new HttpError("先に紙面と収録内容を確定してください", 409);
+    let candidate:any=null;
+    if(action==='prepare_completion'){
+      if(!isUuid(String(body.candidateId||'')))throw new HttpError('Candidate required',400);
+      const result=await serviceClient.from('book_completion_candidates').select('*').eq('id',body.candidateId).eq('book_project_id',bookProjectId).eq('requested_by',user.id).maybeSingle();
+      if(result.error)throw result.error;
+      candidate=result.data;
+      if(!candidate || candidate.state!=='prepared' || storedWork?.confirmed_at || candidate.work_manifest_id!==storedWork?.id)throw new HttpError('Order candidate is unavailable',409);
+    }
+    const work=candidate?{...storedWork,snapshot:candidate.snapshot}:storedWork;
+    if (!work?.snapshot || (!candidate&&!work.confirmed_at)) throw new HttpError("先に紙面と収録内容を確認してください", 409);
     if (action === "update") throw new HttpError("完成作品の内容は変更できません。共有設定のみ変更できます", 409);
     const { data: prior, error: priorError } = await serviceClient.from("voice_publications")
       .select("id, public_id, book_project_id, status, access_mode")
@@ -175,12 +189,14 @@ serve(async (req) => {
       status: prior.status, unchanged: true
     });
     existingPublication = prior;
-    const { project, cover, subject, answers, questions: questionRows, media, videos: videoRows } = work.snapshot;
+    const merged = {...work.snapshot};
+    for (const key of ['answers','questions','media']) merged[key]=[...new Map([...(work.snapshot[key]||[]),...(work.snapshot.web_intro?.[key]||[])].map((row:any)=>[row.id,row])).values()];
+    const { project, cover, subject, answers, questions: questionRows, media, videos: videoRows } = merged;
     const audioRows = media.filter((m: any) => m.asset_type === "audio");
     const photoRows = media.filter((m: any) => m.asset_type === "photo");
 
     const questionsById = new Map((questionRows || []).map((question) => [question.id, question]));
-    const audioByAnswerId = groupAndSortMedia(audioRows || []);
+    const audioByAnswerId = groupAndSortMedia(audioRows || [], true);
     const photosByAnswerId = groupAndSortMedia(photoRows || []);
     const publishableAnswers = answers;
     if (publishableAnswers.length === 0 && (videoRows || []).length === 0) {
@@ -215,14 +231,14 @@ serve(async (req) => {
       publication = createdPublication;
     }
 
-    const revisionId = work.id;
+    const revisionId = candidate?.id || work.id;
     const fixedCover = Object.fromEntries([
       "title","subtitle","footer_text","cover_style","cloth_color","print_color",
       "cover_photo_path","cover_photo_transform","premium_cover_photo_path","premium_cover_photo_transform"
     ].map(key=>[key,cover?.[key] ?? null]));
     for(const field of ["cover_photo_path", "premium_cover_photo_path"]) {
       if(!fixedCover[field])continue;
-      const path=`published/${publication.id}/cover/${work.id}/${field}${safeExtension(fixedCover[field],".jpg")}`;
+      const path=`published/${publication.id}/cover/${revisionId}/${field}${safeExtension(fixedCover[field],".jpg")}`;
       await copyOnce(serviceClient,PHOTO_BUCKET,fixedCover[field],path);
       fixedCover[field]=path;
     }
@@ -246,6 +262,7 @@ serve(async (req) => {
         await copyOnce(serviceClient, AUDIO_BUCKET, media.storage_path, destinationPath);
 
         copiedAssets.push({
+          videoId: media.meta_json?.video_id || null,
           storagePath: destinationPath,
           part,
           durationSeconds: finiteNumber(media.meta_json?.duration_seconds),
@@ -281,6 +298,10 @@ serve(async (req) => {
         audio_assets: copiedAssets,
         photo_assets: copiedPhotos,
         metadata: {
+          mainFormat: answer.meta_json?.main_response_format || 'audio',
+          questionId: question?.question_id || null,
+          themeCode: question?.meta_json?.theme_code || null,
+          slot: question?.meta_json?.video_slot_key || null,
           sourceSequenceOrder: answer.sequence_order,
           hidePromptInBook: Boolean(answer.meta_json?.hide_prompt_in_book)
         }
@@ -309,6 +330,8 @@ serve(async (req) => {
       }
 
       copiedVideos.push({
+        sourceAnswerId: videoStory.source_answer_id || null,
+        slot: videoStory.metadata?.milestone_key || null,
         slotOrder: videoStory.slot_order,
         title: String(videoStory.title || "").trim(),
         promptKind: String(videoStory.prompt_kind || "free"),
@@ -324,21 +347,22 @@ serve(async (req) => {
     }
 
     const publishedAt = new Date().toISOString();
-    const { error: replaceError } = await serviceClient.rpc("replace_voice_publication_snapshot", {
+    const snapshotMetadata={
+      cover:fixedCover,footerText:String(cover?.footer_text||'').trim(),
+      sourceAnswerCount:publishableAnswers.length,sourceVideoCount:copiedVideos.length,
+      sourceProjectTitle:String(project.title||'').trim(),revisionId,updatedAt:publishedAt,
+      ...(candidate?{completionCandidateId:candidate.id,qrInBook:candidate.qr_in_book}:{})
+    };
+    const { error: replaceError } = candidate?await serviceClient.rpc('write_book_completion_publication',{
+      input_candidate_id:candidate.id,input_publication_id:publication.id,
+      input_metadata:snapshotMetadata,input_items:itemRows,input_videos:copiedVideos
+    }):await serviceClient.rpc("replace_voice_publication_snapshot", {
       input_publication_id: publication.id,
       input_expected_status: publication.status,
       input_book_title: String(cover?.title || project.title || "").trim(),
       input_book_subtitle: String(cover?.subtitle || "").trim(),
       input_subject_name: String(subject?.display_name || subject?.preferred_name || "").trim(),
-      input_snapshot_metadata: {
-        cover: fixedCover,
-        footerText: String(cover?.footer_text || "").trim(),
-        sourceAnswerCount: publishableAnswers.length,
-        sourceVideoCount: copiedVideos.length,
-        sourceProjectTitle: String(project.title || "").trim(),
-        revisionId,
-        updatedAt: publishedAt
-      },
+      input_snapshot_metadata: snapshotMetadata,
       input_video_assets: copiedVideos,
       input_items: itemRows,
       input_published_at: publishedAt,
@@ -400,14 +424,14 @@ async function requireProjectAccess(
   if (!supporter) throw new HttpError("Forbidden", 403);
 }
 
-function groupAndSortMedia(mediaRows: any[]) {
+function groupAndSortMedia(mediaRows: any[], chronological = false) {
   const grouped = new Map<string, any[]>();
   for (const media of mediaRows) {
     if (!grouped.has(media.answer_id)) grouped.set(media.answer_id, []);
     grouped.get(media.answer_id)?.push(media);
   }
   for (const media of grouped.values()) {
-    media.sort((a, b) => {
+    media.sort(chronological ? compareMediaChronologically : (a, b) => {
       const partDifference = numericPart(a.meta_json?.part, 999999) - numericPart(b.meta_json?.part, 999999);
       if (partDifference !== 0) return partDifference;
       return String(a.created_at || "").localeCompare(String(b.created_at || ""));

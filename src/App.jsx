@@ -6,6 +6,11 @@ import {isChildhoodTrial} from './lib/childhoodTrial.js';
 import {experienceRollout} from './lib/experienceRollout.js';
 import {familyRollout} from './lib/familyRollout.js';
 import {loadBookWork} from './lib/bookWork.js';
+import BookWebQR from './BookWebQR.jsx';
+import {isWebBookPin} from './lib/webBookPin.js';
+const BOOK_COMPLETION_ENABLED=import.meta.env.VITE_BOOK_COMPLETION_ENABLED==='true';
+import {STORY_THEMES} from './lib/storyThemes.js';
+import CoverPhotoFrame, {normalizeCoverPhotoTransform} from './CoverPhotoFrame.jsx';
 import {questionForStory,buildStorySections,isTrialStoryQuestion} from './lib/storyPages.js';
 import {assertPublicTestEnvironment} from './lib/publicTestSafety.js';
 assertPublicTestEnvironment(import.meta.env);
@@ -69,116 +74,7 @@ const STORY_RELATIONSHIP_LABELS = {
   other: "その他"
 };
 
-const STORY_THEMES = [
-  {
-    code: "ty_theme_childhood",
-    label: "幼い頃のこと",
-    order: 1,
-    summary: "幼少期から中学生くらいまでを振り返ります。",
-    opening: "",
-    hint: "昔のアルバムを開いたり、住んでいた家や通学路、よく遊んだ場所を思い浮かべたりしてみるのもよいかもしれません。",
-    completion: "幼い頃の景色が、あなたの物語に残りました。",
-    image: "/site/theme-childhood-triptych.jpg",
-    imageAlt: "誕生、友達との遊び、家族の食卓をつないだ幼い頃の情景",
-    visual: "childhood"
-  },
-  {
-    code: "ty_theme_youth",
-    label: "学生時代",
-    order: 2,
-    summary: "学びや出会い、夢中になったことをたどります。",
-    opening: "あの頃にしかなかった時間へ、戻ってみましょう。",
-    hint: "卒業アルバムや当時よく聴いた音楽、通っていた道が、記憶の入口になるかもしれません。",
-    completion: "若い日の時間が、ひとつの章になりました。",
-    image: "/site/theme-student-triptych.jpg",
-    imageAlt: "友人、部活動と淡い恋、卒業と恩師をつないだ学生時代の情景",
-    visual: "youth"
-  },
-  {
-    code: "ty_theme_likes",
-    label: "好きなこと",
-    order: 3,
-    summary: "心が動いたものや、夢中になった時間を振り返ります。",
-    opening: "好きだったもののそばには、その頃の自分がいます。",
-    hint: "今も手元にあるものや、何度も聴いた曲、好きだった味を一つ思い浮かべてみてください。",
-    completion: "あなたを彩ってきたものが、物語に加わりました。",
-    image: "/site/theme-likes-triptych.jpg",
-    imageAlt: "読書と音楽、自然の写真、仲間とのものづくりをつないだ好きなことの情景",
-    visual: "likes"
-  },
-  {
-    code: "ty_theme_living",
-    label: "暮らし",
-    order: 4,
-    summary: "住まいや食卓、旅など、日々の風景をたどります。",
-    opening: "何気ない暮らしの中にも、残しておきたい景色があります。",
-    hint: "長く使っている道具や、思い出の料理、窓から見えていた景色を手がかりにしてみましょう。",
-    completion: "日々の風景が、物語の中に灯りました。",
-    image: "/site/theme-living-triptych.jpg",
-    imageAlt: "住まいの朝、ペットとの日常、列車の旅をつないだ暮らしの情景",
-    visual: "living"
-  },
-  {
-    code: "ty_theme_work",
-    label: "仕事・役割",
-    order: 5,
-    summary: "担ってきた仕事や役割、その中で得たものを振り返ります。",
-    opening: "積み重ねてきた時間に、あらためて目を向けます。",
-    hint: "初めて働いた場所、使っていた道具、忘れられない人の顔から思い出してみるのもよさそうです。",
-    completion: "歩みを支えた仕事と役割が、ひとつの章になりました。",
-    image: "/site/theme-work-role-triptych.jpg",
-    imageAlt: "家族のための食事づくり、職場での協働、地域での共同作業をつないだ仕事と役割の情景",
-    visual: "work"
-  },
-  {
-    code: "ty_theme_connections",
-    label: "人とのつながり",
-    order: 6,
-    summary: "人生で出会い、支え合ってきた人たちをたどります。",
-    opening: "人を思い出すとき、その頃の自分も見えてきます。",
-    hint: "年賀状や古い連絡先、集合写真に写る人を眺めてみると、忘れていた出来事が浮かぶかもしれません。",
-    completion: "大切なつながりが、物語の中に結ばれました。",
-    image: "/site/theme-connections-triptych.jpg",
-    imageAlt: "恩師と学生、職場の仲間、旧友との再会をつないだ人とのつながりの情景",
-    visual: "connections"
-  },
-  {
-    code: "ty_theme_family",
-    label: "家族の記憶",
-    order: 7,
-    summary: "家族と過ごした時間や、受け取ったものを振り返ります。",
-    opening: "家族の記憶には、言葉になっていない気持ちがあります。",
-    hint: "家族の口癖や食卓の風景、季節ごとの習慣を一つ思い出してみてください。",
-    completion: "家族と過ごした時間が、物語に受け継がれました。",
-    image: "/site/theme-family-memory-triptych.jpg",
-    imageAlt: "雨の日に世話をする両親、祖父母と楽しむ線香花火、三世代で祝う傘寿をつないだ家族の情景",
-    visual: "family"
-  },
-  {
-    code: "ty_theme_turning_points",
-    label: "人生の転機",
-    order: 8,
-    summary: "決断や変化、乗り越えてきた出来事をたどります。",
-    opening: "振り返ると、道が大きく動いた瞬間があります。",
-    hint: "住む場所が変わった日、新しい役割を引き受けた時、誰かの言葉に背中を押された場面を思い返してみましょう。",
-    completion: "人生を動かした出来事が、ひとつの章になりました。",
-    image: "/site/theme-turning-points.jpg",
-    imageAlt: "朝の光が差す町の分岐路を、一人の人物が歩いていく情景",
-    visual: "turning-points"
-  },
-  {
-    code: "ty_theme_now_future",
-    label: "今とこれから",
-    order: 9,
-    summary: "今大切にしていることと、これからへ残したい言葉を見つめます。",
-    opening: "これまでをたどった今だからこそ、見えるものがあります。",
-    hint: "今の一日で心がほどける時間や、これから会いたい人、未来へ手渡したい言葉を考えてみてください。",
-    completion: "これまでとこれからが、あなたの物語として結ばれました。",
-    image: "/site/theme-now-future.jpg",
-    imageAlt: "大きな木の向こうに、爽やかな青空と町並み、人々の歩く姿が広がる情景",
-    visual: "now-future"
-  }
-];
+// App and Web Book share the same formal theme names, order and assets.
 
 const STORY_QUESTION_CANDIDATES = {
   ty_theme_childhood: [
@@ -5709,7 +5605,8 @@ const startPurchase = async ({
   familyInvitationId = null,
   expectedAmount = null,
   expectedPolicyVersion = null,
-  checkoutWindow = null
+  checkoutWindow = null,
+  completionCandidateId = null
 } = {}) => {
   if (orderType === "self" && !foundation?.project?.id) {
     closeCheckoutWindow(checkoutWindow);
@@ -5737,7 +5634,8 @@ const startPurchase = async ({
           gift,
           expectedAmount,
           expectedPolicyVersion,
-          familyInvitationId
+          familyInvitationId,
+          completionCandidateId
         }
       }
     );
@@ -11696,110 +11594,6 @@ function normalizeBookShippingAddress(value = {}) {
   );
 }
 
-function normalizeCoverPhotoTransform(value = {}) {
-  const panX = Number(value?.pan_x);
-  const panY = Number(value?.pan_y);
-  const zoom = Number(value?.zoom);
-  const rotation = Number(value?.rotation);
-  const brightness = Number(value?.brightness);
-  const contrast = Number(value?.contrast);
-  // 既存の保存データは従来どおり枠いっぱいに表示し、新しく選ぶ写真だけ
-  // DEFAULT_COVER_PHOTO_TRANSFORM の contain から始めます。
-  const fitMode = value?.fit_mode === "contain" ? "contain" : "cover";
-
-  return {
-    pan_x: Number.isFinite(panX) ? Math.max(-2, Math.min(2, panX)) : 0,
-    pan_y: Number.isFinite(panY) ? Math.max(-2, Math.min(2, panY)) : 0,
-    zoom: Number.isFinite(zoom) ? Math.max(1, Math.min(3, zoom)) : 1,
-    rotation: Number.isFinite(rotation) ? ((rotation % 360) + 360) % 360 : 0,
-    brightness: Number.isFinite(brightness) ? Math.max(-35, Math.min(35, brightness)) : 0,
-    contrast: Number.isFinite(contrast) ? Math.max(0.7, Math.min(1.35, contrast)) : 1,
-    fit_mode: fitMode
-  };
-}
-
-function CoverPhotoFrame({ photo, showGrid = false, backgroundColor = "rgba(0,0,0,.1)", className = "" }) {
-  const frameRef = useRef(null);
-  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
-  const [loadedImage, setLoadedImage] = useState({ url: null, width: 0, height: 0 });
-  const imageSize = loadedImage.url === photo?.url
-    ? loadedImage
-    : { width: 0, height: 0 };
-  const transform = normalizeCoverPhotoTransform(photo?.transform);
-
-  useEffect(() => {
-    const node = frameRef.current;
-    if (!node) return undefined;
-    const update = () => {
-      const rect = node.getBoundingClientRect();
-      setFrameSize({ width: rect.width, height: rect.height });
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-
-  const rotated = transform.rotation % 180 !== 0;
-  const rotatedWidth = rotated ? imageSize.height : imageSize.width;
-  const rotatedHeight = rotated ? imageSize.width : imageSize.height;
-  const scaleForFrame = transform.fit_mode === "contain" ? Math.min : Math.max;
-  const baseScale = frameSize.width && frameSize.height && rotatedWidth && rotatedHeight
-    ? scaleForFrame(frameSize.width / rotatedWidth, frameSize.height / rotatedHeight)
-    : 1;
-  const renderedWidth = rotatedWidth * baseScale * transform.zoom;
-  const renderedHeight = rotatedHeight * baseScale * transform.zoom;
-  const maxX = Math.max(0, (renderedWidth - frameSize.width) / 2);
-  const maxY = Math.max(0, (renderedHeight - frameSize.height) / 2);
-  const offsetX = Math.max(-maxX, Math.min(maxX, transform.pan_x * frameSize.width));
-  const offsetY = Math.max(-maxY, Math.min(maxY, transform.pan_y * frameSize.height));
-
-  return (
-    <div
-      ref={frameRef}
-      className={`overflow-hidden ${className}`}
-      style={{ backgroundColor }}
-    >
-      {photo?.url && (
-        <div
-          className="absolute left-1/2 top-1/2"
-          style={{
-            width: imageSize.width ? imageSize.width * baseScale : "100%",
-            height: imageSize.height ? imageSize.height * baseScale : "100%",
-            transform: `translate(-50%, -50%) translate(${offsetX}px, ${offsetY}px)`
-          }}
-        >
-          <img
-            key={photo.url}
-            src={photo.url}
-            alt=""
-            draggable="false"
-            onLoad={event => setLoadedImage({
-              url: photo.url,
-              width: event.currentTarget.naturalWidth || 1,
-              height: event.currentTarget.naturalHeight || 1
-            })}
-            className="h-full w-full max-w-none select-none object-fill"
-            style={{
-              transform: `rotate(${transform.rotation}deg) scale(${transform.zoom})`,
-              transformOrigin: "center",
-              filter: `brightness(${100 + transform.brightness}%) contrast(${transform.contrast})`
-            }}
-          />
-        </div>
-      )}
-      {showGrid && (
-        <div className="pointer-events-none absolute inset-0">
-          <span className="absolute left-1/3 top-0 h-full w-px bg-white/35" />
-          <span className="absolute left-2/3 top-0 h-full w-px bg-white/35" />
-          <span className="absolute left-0 top-1/3 h-px w-full bg-white/35" />
-          <span className="absolute left-0 top-2/3 h-px w-full bg-white/35" />
-          <span className="absolute inset-0 border border-white/70" />
-        </div>
-      )}
-    </div>
-  );
-}
 
 function getCoverPlaneTransform(width, height) {
   if (!width || !height) return "none";
@@ -12465,10 +12259,13 @@ function Scene_ConnectionComplete({ connection, onOpen, onConnectionsHome }) {
   );
 }
 
-function Scene_ConnectionsHome({
+export function Scene_ConnectionsHome({
   userName,
+  ownedProjects = [],
   receivedProjects = [],
   supportedProjects = [],
+  readOnly = false,
+  onOpenOwnedProject,
   onOpenReceivedProject,
   onOpenSupportedProject,
   onStartOwnStory
@@ -12481,6 +12278,16 @@ function Scene_ConnectionsHome({
       </div>
 
       <div className="space-y-7">
+        {ownedProjects.length > 0 && (
+          <section className="space-y-3">
+            <p className="text-white/38 text-xs tracking-[0.18em] px-1">自分の物語</p>
+            {ownedProjects.map(project => (
+              <HomeMenuButton key={`owned-${project.id}`} icon={BookOpen}
+                label={`${project.subject_name || userName}の物語`}
+                onClick={() => onOpenOwnedProject?.(project)} />
+            ))}
+          </section>
+        )}
         {receivedProjects.length > 0 && (
           <section className="space-y-3">
             <p className="text-white/38 text-xs tracking-[0.18em] px-1">受け取っている物語</p>
@@ -12509,12 +12316,12 @@ function Scene_ConnectionsHome({
           </section>
         )}
 
-        <section className="pt-7 border-t border-white/[0.08] text-center space-y-4">
+        {!readOnly && <section className="pt-7 border-t border-white/[0.08] text-center space-y-4">
           <p className="text-white/38 text-xs leading-loose">ご自身の物語も、いつでも始められます。</p>
           <button type="button" onClick={onStartOwnStory} className="w-full py-3 text-white/50 text-sm underline underline-offset-4">
             自分の物語を始める
           </button>
-        </section>
+        </section>}
       </div>
     </div>
   );
@@ -14148,8 +13955,10 @@ function Scene_QuestionLibrary({ foundation, questionSet = [], onAdded, onBack }
   );
 }
 
-function Scene_SupportProjectHome({
+export function Scene_SupportProjectHome({
   project,
+  readOnly = false,
+  isOwner = false,
   onOpenQuestions,
   onOpenStories,
   onOpenBookBuilder,
@@ -14174,7 +13983,7 @@ function Scene_SupportProjectHome({
       <div className="flex-1 flex flex-col justify-center">
         <div className="text-center mb-12 space-y-3">
           <p className="text-white/38 text-xs tracking-[0.18em]">
-            {isFacilitator ? "進行役として開いています" : "物語づくりをお手伝い中"}
+            {isOwner ? "自分の物語" : isFacilitator ? "進行役として開いています" : "物語づくりをお手伝い中"}
           </p>
 
           <p className="text-white/86 text-[1.08rem] text-narrative">
@@ -14183,7 +13992,7 @@ function Scene_SupportProjectHome({
         </div>
 
         <div className="space-y-4">
-          {project?.can_operate_recording && (
+          {!readOnly && project?.can_operate_recording && (
             <HomeMenuButton
               icon={Mic}
               label={isFacilitator ? "届いた問いから語る" : "問いの録音を手伝う"}
@@ -14199,7 +14008,7 @@ function Scene_SupportProjectHome({
             />
           )}
 
-          {project?.can_build_book && (
+          {!readOnly && project?.can_build_book && (
             <HomeMenuButton
               icon={BookOpen}
               label="本に仕上げる"
@@ -14207,7 +14016,7 @@ function Scene_SupportProjectHome({
             />
           )}
 
-          {onOpenDelivery && (
+          {!readOnly && onOpenDelivery && (
             <HomeMenuButton
               icon={Bell}
               label="問いの受け取り方"
@@ -14231,10 +14040,12 @@ export function Scene_SupportedStoryPages({
   storyRows = [],
   mediaByAnswerId = {},
   mode = "supporter",
+  adminReview = false,
   onBack
 }) {
   const isReceived = mode === "received";
   const isAdmin = mode === "admin";
+  const isOwner = mode === "owner";
   const questionBySequence = new Map(
     (questionSet || []).map(question => [
       Number(question.sequence_order),
@@ -14247,7 +14058,8 @@ export function Scene_SupportedStoryPages({
     .sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0));
 
   return (
-    <div className="fixed inset-0 mx-auto min-h-0 max-w-[600px] bg-[#0f172a] flex flex-col fade-enter px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+    <div className="fixed inset-0 mx-auto min-h-0 max-w-[600px] bg-[#0f172a] flex flex-col fade-enter px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)]"
+      style={adminReview ? { top: 48 } : undefined}>
       <div className="shrink-0 relative flex items-center justify-center h-11 mb-5">
         <button
           type="button"
@@ -14265,7 +14077,7 @@ export function Scene_SupportedStoryPages({
 
       <div className="shrink-0 text-center mb-7">
         <p className="text-white/38 text-xs tracking-[0.16em] mb-2">
-          {isAdmin ? "管理者プレビュー・閲覧専用" : isReceived ? "共有された物語" : "物語づくりをお手伝い中"}
+          {isAdmin ? "管理者プレビュー・閲覧専用" : isOwner ? "自分の物語" : isReceived ? "共有された物語" : "物語づくりをお手伝い中"}
         </p>
         <p className="text-white/72 text-sm">
           {isAdmin
@@ -14724,6 +14536,32 @@ export function Scene_BookBuilder({
   const [storiesLoading, setStoriesLoading] = useState(false);
   const [includedStoryIds, setIncludedStoryIds] = useState([]);
   const [bookWork, setBookWork] = useState(null);
+  const [completionCandidate,setCompletionCandidate]=useState(null);
+  const [completionStatus,setCompletionStatus]=useState(BOOK_COMPLETION_ENABLED&&!readOnly?'loading':'ready');
+  const [completionError,setCompletionError]=useState('');
+  const [qrInBook,setQrInBook]=useState(true);
+  const [useWebPin,setUseWebPin]=useState(false);
+  const [webPin,setWebPin]=useState('');
+  const completionPending=BOOK_COMPLETION_ENABLED&&['prepared','checkout'].includes(completionCandidate?.state);
+  const completionBlocked=BOOK_COMPLETION_ENABLED&&(completionStatus!=='ready'||completionPending||completionCandidate?.state==='completed');
+  useEffect(()=>{
+    if(!BOOK_COMPLETION_ENABLED||readOnly||!bookProjectId)return;
+    let live=true;
+    setCompletionStatus('loading');setCompletionError('');setCompletionCandidate(null);
+    supabaseClient.rpc('get_book_completion',{input_project_id:bookProjectId}).then(({data,error})=>{
+      if(!live)return;
+      if(error){setCompletionStatus('error');setCompletionError('注文状態を確認できませんでした。再読み込みしてください。');return;}
+      setCompletionCandidate(data);
+      if(data){setQrInBook(data.qr_in_book);setUseWebPin(data.pin_enabled);if(data.shipping_address)setShippingAddress(data.shipping_address);}
+      if(data?.state==='completed'){setOrderCompleted(true);setStepIndex(steps.length-1);}
+      setCompletionStatus('ready');
+    }).catch(()=>{
+      if(live){setCompletionStatus('error');setCompletionError('注文状態を確認できませんでした。再読み込みしてください。');}
+    });
+    return()=>{live=false;};
+  },[bookProjectId,readOnly]);
+  const fixedWebBookUrl=bookWork?.publication?.status === 'published' && /^[a-f0-9]{48}$/.test(bookWork.publication.public_id || '')
+    ? `${window.location.origin}/?voice=${bookWork.publication.public_id}` : '';
   const [workSaving, setWorkSaving] = useState(false);
   const [workError, setWorkError] = useState("");
   const workSaveLock = useRef(false);
@@ -14735,7 +14573,7 @@ export function Scene_BookBuilder({
     setBookWork(data);setIncludedStoryIds(data.answer_ids);return data;
   };
   const toggleWorkStory = async answer => {
-    if(readOnly || bookWork?.confirmed_at || workSaveLock.current)return;
+    if(readOnly || completionBlocked || bookWork?.confirmed_at || workSaveLock.current)return;
     workSaveLock.current=true;setWorkSaving(true);setWorkError("");
     try {
       await saveSelection(includedStoryIds.includes(answer.id)
@@ -14747,6 +14585,7 @@ export function Scene_BookBuilder({
   useEffect(() => {
     if (!orderCompletedAt) return;
     setOrderCompleted(true);
+    setCompletionCandidate(current=>current?{...current,state:'completed'}:current);
     setStepIndex(steps.length - 1);
   }, [orderCompletedAt, steps.length]);
 
@@ -14777,7 +14616,7 @@ export function Scene_BookBuilder({
   ].join("\n"))}`;
 
   const persistCoverSettings = async (overrides = {}) => {
-    if (!bookProjectId || readOnly) return;
+    if (!bookProjectId || readOnly || completionBlocked) return;
     const nextPhoto = Object.prototype.hasOwnProperty.call(overrides, "coverPhoto")
       ? overrides.coverPhoto
       : coverPhoto;
@@ -14952,13 +14791,13 @@ export function Scene_BookBuilder({
   }, [bookProjectId, project?.premium_hardcover_status, project?.premium_hardcover_purchased_at]);
 
   useEffect(() => {
-    if (!coverSettingsReady || readOnly || !bookProjectId || coverSuggestionRequestedRef.current) return;
+    if (!coverSettingsReady || readOnly || completionBlocked || !bookProjectId || coverSuggestionRequestedRef.current) return;
     coverSuggestionRequestedRef.current = true;
     generateCoverSuggestions();
-  }, [coverSettingsReady, readOnly, bookProjectId]);
+  }, [coverSettingsReady, readOnly, completionBlocked, bookProjectId]);
 
   useEffect(() => {
-    if (!coverSettingsReady || readOnly || !bookProjectId) return undefined;
+    if (!coverSettingsReady || readOnly || completionBlocked || workSaving || !bookProjectId) return undefined;
     const timer = window.setTimeout(async () => {
       try {
         setCoverSettingsSaveError("");
@@ -14971,6 +14810,8 @@ export function Scene_BookBuilder({
     return () => window.clearTimeout(timer);
   }, [
     coverSettingsReady,
+    completionBlocked,
+    workSaving,
     readOnly,
     bookProjectId,
     bookTitle,
@@ -15201,15 +15042,36 @@ export function Scene_BookBuilder({
   ].every(value => String(value || "").trim());
 
   const submitBookOrder = async () => {
-    if (!shippingAddressComplete || !orderQuote || !onPurchase || workSaving || workError || !bookWork) return;
-    if(!bookWork.confirmed_at && !window.confirm("選択した語りを、この紙ブックとWebブックの共通の収録内容として確定します。確定後は作品の内容を変更できません。ご本人が紙面を確認済みですか？"))return;
+    if (!onPurchase || workSaving || !bookWork || (BOOK_COMPLETION_ENABLED&&completionStatus!=='ready')) return;
+    if (!completionPending&&(!shippingAddressComplete || !orderQuote || workError)) return;
+    if(BOOK_COMPLETION_ENABLED&&!completionPending&&useWebPin&&(!webPin||!isWebBookPin(webPin))){setCoverSettingsSaveError('PINは4桁の数字で入力してください。');return;}
+    if(!completionPending&&!bookWork.confirmed_at && !window.confirm(BOOK_COMPLETION_ENABLED?
+      'この内容で注文手続きへ進みます。注文完了時に紙ブックとWebブックが完成し、内容は変更できなくなります。ご本人が紙面を確認済みですか？':
+      "選択した語りを、この紙ブックとWebブックの共通の収録内容として確定します。確定後は作品の内容を変更できません。ご本人が紙面を確認済みですか？"))return;
     setWorkSaving(true);
     setShowCheckoutCancelled(false);
-    const noPaymentRequired = Number(orderQuote.amount_total || 0) === 0;
+    const noPaymentRequired = !completionPending&&Number(orderQuote?.amount_total || 0) === 0;
     const checkoutWindow = noPaymentRequired ? null : prepareCheckoutWindow();
     try {
       setCoverSettingsSaveError("");
       await persistCoverSettings();
+      let candidate=completionCandidate;
+      if(BOOK_COMPLETION_ENABLED&&!bookWork.confirmed_at){
+        if(!candidate){
+          const selection=await saveSelection(includedStoryIds);
+          const {data,error}=await supabaseClient.rpc('prepare_book_completion',{
+            input_project_id:bookProjectId,input_expected_revision:selection.revision,
+            input_qr_in_book:qrInBook,input_pin:useWebPin?webPin:'',input_subject_confirmed:true
+          });
+          if(error)throw error;candidate=data;setCompletionCandidate(data);setWebPin('');
+        }
+        if(candidate.state==='prepared'){
+          const {data,error}=await supabaseClient.functions.invoke('publish-voice-edition',{
+            body:{action:'prepare_completion',bookProjectId,candidateId:candidate.id}
+          });
+          if(error||!data?.success)throw error||Error(data?.error||'注文内容を準備できませんでした');
+        }
+      }else{
       if(!bookWork.confirmed_at) {
         const selection=await saveSelection(includedStoryIds);
         const {data:confirmed,error}=await supabaseClient.rpc("confirm_book_work",{
@@ -15223,6 +15085,7 @@ export function Scene_BookBuilder({
         body:{action:"prepare",bookProjectId}
       });
       if(publishError || !publication?.success)throw publishError || Error(publication?.error||"Webブックを固定できませんでした");
+      }
       const started = await onPurchase({
         orderType: "self",
         discountCode: orderDiscountCode,
@@ -15231,10 +15094,19 @@ export function Scene_BookBuilder({
         includeGiftPackage,
         shippingAddress,
         returnContext: "book_builder",
+        completionCandidateId:BOOK_COMPLETION_ENABLED?candidate?.id:null,
         checkoutWindow
       });
-      if (noPaymentRequired && started) {
+      if (BOOK_COMPLETION_ENABLED&&candidate&&started) {
+        // Checkout opening is not payment completion. The server owns this state,
+        // including zero-yen orders and retries after a lost response.
+        const {data:latest,error}=await supabaseClient.rpc('get_book_completion',{input_project_id:bookProjectId});
+        if(error)throw error;
+        setCompletionCandidate(latest);
+        if(latest?.state==='completed'){setOrderCompleted(true);setStepIndex(steps.length-1);}
+      } else if (noPaymentRequired && started) {
         setOrderCompleted(true);
+        setCompletionCandidate(current=>current?{...current,state:'completed'}:current);
       } else if (!started) {
         closeCheckoutWindow(checkoutWindow);
       }
@@ -15247,13 +15119,23 @@ export function Scene_BookBuilder({
     }
   };
 
+  const cancelCompletion=async()=>{
+    if(!completionCandidate||workSaving)return;
+    setWorkSaving(true);setCoverSettingsSaveError('');
+    try{
+      const {data,error}=await supabaseClient.functions.invoke('cancel-book-completion',{body:{candidateId:completionCandidate.id}});
+      if(error||!data?.success)throw Error(data?.error||'決済状況を確認して再試行してください。');
+      setCompletionCandidate(null);setWorkError('');setShowCheckoutCancelled(false);
+    }catch(error){setCoverSettingsSaveError(error.message);}finally{setWorkSaving(false);}
+  };
+
   const includedStories = [...bookStories]
     .filter(answer => includedStoryIds.includes(answer.id))
     .sort((a, b) => includedStoryIds.indexOf(a.id) - includedStoryIds.indexOf(b.id));
 
   // 横組みの冊子では、右ページを奇数、左ページを偶数にします。
   // 扉を1ページ目とし、最初の見開きは左2・右3から始めます。
-  let previewPageNumber = 2;
+  let previewPageNumber = fixedWebBookUrl ? 3 : 2;
 
   let photoStoryCounter = 0;
   const previewPageGroups = includedStories.map(answer => {
@@ -15303,6 +15185,18 @@ export function Scene_BookBuilder({
     };
   });
 
+  if(BOOK_COMPLETION_ENABLED&&!readOnly&&completionStatus!=='ready')return <div className="fixed inset-0 max-w-[760px] mx-auto overflow-auto bg-[#0f172a] text-white p-6" aria-live="polite">
+    <p>{completionError||'注文状態を確認しています。'}</p>
+    <button type="button" onClick={onBack} className="mt-8 text-white/60">ホームへ戻る</button>
+  </div>;
+  if(completionPending&&!orderCompleted)return <div className="fixed inset-0 max-w-[760px] mx-auto overflow-auto bg-[#0f172a] text-white p-6">
+    <p className="text-lg">確認した内容で、注文を準備しています。</p>
+    <p className="mt-4 text-sm leading-7 text-white/60">注文が完了すると、ブックとWebブックが本棚に収まります。内容を変更する場合は、先に注文手続きを取りやめてください。</p>
+    <button type="button" disabled={workSaving||!bookWork||purchaseStatus==='starting'} onClick={submitBookOrder} className="mt-6 rounded-full bg-white/10 px-6 py-4 disabled:opacity-40">{workSaving?'注文を準備しています…':'注文手続きを続ける'}</button>
+    <button type="button" disabled={workSaving} onClick={cancelCompletion} className="block mt-4 underline text-white/60">注文手続きを取りやめて編集へ戻る</button>
+    <button type="button" onClick={onBack} className="block mt-8 text-white/50">ホームへ戻る</button>
+    {(coverSettingsSaveError||purchaseError||workError)&&<p role="alert" className="mt-5 text-rose-200">{coverSettingsSaveError||purchaseError||workError}</p>}
+  </div>;
   return (
     <div className="fixed inset-0 max-w-[760px] mx-auto min-h-0 bg-[#0f172a] flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
       {!readOnly && (
@@ -15617,6 +15511,7 @@ export function Scene_BookBuilder({
 
         {stepIndex === 2 && (
           <div className="space-y-5">
+            {fixedWebBookUrl && <BookWebQR url={fixedWebBookUrl} placement="after-title"/>}
             <div className="glass-card p-5 text-center">
               <p className="text-white/82 text-[1.05rem] text-narrative mb-3">
                 紙面プレビュー
@@ -15678,6 +15573,7 @@ export function Scene_BookBuilder({
           </div>
         )}
 
+        {stepIndex === 2 && fixedWebBookUrl && <BookWebQR url={fixedWebBookUrl} placement="back-cover"/>}
         {stepIndex === 3 && !readOnly && (
           <div className="space-y-5">
             <p className="px-1 text-white/82 text-[1.05rem] text-narrative">基本パッケージ</p>
@@ -15912,8 +15808,9 @@ export function Scene_BookBuilder({
         {stepIndex === 4 && !readOnly && (
           orderCompleted ? (
             <div className="glass-card p-7 text-center">
-              <p className="text-white/82 text-[1.05rem] text-narrative">注文を受け付けました</p>
-              <p className="mt-5 text-sm leading-loose text-white/42">選んだ内容とお届け先を保存しました。</p>
+              <p className="text-white/82 text-[1.05rem] text-narrative">{BOOK_COMPLETION_ENABLED?'一冊が、できました。':'注文を受け付けました'}</p>
+              <p className="mt-5 text-sm leading-loose text-white/42">{BOOK_COMPLETION_ENABLED?'語ってきた人生を、ブックとWebブックの二つの作品として本棚に収めました。':'選んだ内容とお届け先を保存しました。'}</p>
+              {BOOK_COMPLETION_ENABLED&&<a className="inline-block mt-6 rounded-full border border-white/20 px-6 py-3" href="/?library=1">私の本棚へ</a>}
             </div>
           ) : (
             <div className="space-y-5">
@@ -15924,6 +15821,20 @@ export function Scene_BookBuilder({
                   </p>
                 </div>
               )}
+              {BOOK_COMPLETION_ENABLED&&!bookWork?.confirmed_at&&<div className="glass-card p-5 space-y-4">
+                <p className="text-white/80">声と言葉を、Webブックにも。</p>
+                <fieldset className="space-y-3"><legend>WebブックへのQRを本に載せますか？</legend>
+                  <label className="block"><input type="radio" name="book-qr" checked={qrInBook} onChange={()=>setQrInBook(true)}/> 載せる</label>
+                  <label className="block"><input type="radio" name="book-qr" checked={!qrInBook} onChange={()=>setQrInBook(false)}/> 載せない</label>
+                  <p className="text-xs text-white/50">載せない場合も、Webブックは完成後に本棚から開けます。</p>
+                </fieldset>
+                <fieldset className="space-y-3"><legend>閲覧にPINを設定しますか？</legend>
+                  <label className="block"><input type="radio" name="book-pin" checked={!useWebPin} onChange={()=>setUseWebPin(false)}/> 設定しない</label>
+                  <p className="text-xs text-white/50">QRや共有リンクを知っている方が、そのまま開けます。</p>
+                  <label className="block"><input type="radio" name="book-pin" checked={useWebPin} onChange={()=>setUseWebPin(true)}/> PINを設定する</label>
+                  {useWebPin&&<input type="password" inputMode="numeric" autoComplete="off" maxLength={4} aria-label="4桁の閲覧PIN" value={webPin} onChange={e=>setWebPin(e.target.value.replace(/\D/g,'').slice(0,4))} className="quiet-input" placeholder="4桁の数字"/>}
+                </fieldset>
+              </div>}
               <div className="glass-card p-5">
                 <p className="text-white/82 text-[1.05rem] text-narrative">お届け先</p>
                 <div className="mt-5 space-y-3">
@@ -16014,11 +15925,11 @@ export function Scene_BookBuilder({
                     </div>
                     <button
                       type="button"
-                      onClick={purchaseStatus === "checkout_opened" ? onReopenCheckout : submitBookOrder}
+                      onClick={!BOOK_COMPLETION_ENABLED&&purchaseStatus === "checkout_opened" ? onReopenCheckout : submitBookOrder}
                       disabled={!shippingAddressComplete || workSaving || Boolean(workError) || !bookWork || purchaseStatus === "starting" || purchaseStatus === "checking"}
                       className="btn-quiet mt-5 w-full rounded-full bg-white/10 py-4 text-white/88 disabled:opacity-40"
                     >
-                      {purchaseStatus === "checkout_opened"
+                      {!BOOK_COMPLETION_ENABLED&&purchaseStatus === "checkout_opened"
                         ? "決済画面を開き直す"
                         : purchaseStatus === "starting" || purchaseStatus === "checking"
                         ? "注文を準備しています…"
@@ -16036,7 +15947,7 @@ export function Scene_BookBuilder({
         )}
 
         {workError && <p role="alert" className="text-rose-200">{workError}</p>}
-        <div className="pt-5 border-t border-white/10 flex gap-3">
+        {!orderCompleted&&<div className="pt-5 border-t border-white/10 flex gap-3">
           <button
             type="button"
             onClick={stepIndex === 0 ? onBack : () => setStepIndex(prev => Math.max(prev - 1, 0))}
@@ -16057,7 +15968,7 @@ export function Scene_BookBuilder({
             >
               次へ
             </button>
-          </div>
+          </div>}
 
       </div>
 

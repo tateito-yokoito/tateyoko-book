@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import "./voice-library.css";
+import {isWebBookPin} from './lib/webBookPin.js';
 
 const relationshipLabels = {
   owner: "自分の物語",
@@ -17,7 +18,7 @@ function formatPublishedAt(value) {
   }).format(new Date(value));
 }
 
-export default function VoiceLibraryPage({ supabaseClient }) {
+export default function VoiceLibraryPage({ supabaseClient, reviewContext = null }) {
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [publications, setPublications] = useState([]);
@@ -25,6 +26,7 @@ export default function VoiceLibraryPage({ supabaseClient }) {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
+    if (reviewContext) { setAuthReady(true); setStatus("ready"); setPublications(reviewContext.publications || []); return; }
     let mounted = true;
     supabaseClient.auth.getSession().then(({ data }) => {
       if (!mounted) return;
@@ -39,13 +41,13 @@ export default function VoiceLibraryPage({ supabaseClient }) {
       mounted = false;
       listener.subscription.unsubscribe();
     };
-  }, [supabaseClient]);
+  }, [supabaseClient, reviewContext]);
 
   const loadLibrary = useCallback(async () => {
     if (!session) return;
     setStatus("loading");
     setMessage("");
-    const { data, error } = await supabaseClient.rpc("list_voice_library");
+    const { data, error } = await supabaseClient.rpc("list_completed_web_book_library");
     if (error) {
       setStatus("error");
       setMessage("本棚を読み込めませんでした。時間をおいて、もう一度お試しください。");
@@ -56,9 +58,10 @@ export default function VoiceLibraryPage({ supabaseClient }) {
   }, [session, supabaseClient]);
 
   useEffect(() => {
+    if (reviewContext) return;
     if (authReady && session) loadLibrary();
     if (authReady && !session) setStatus("signed-out");
-  }, [authReady, loadLibrary, session]);
+  }, [authReady, loadLibrary, session, reviewContext]);
 
   const grouped = useMemo(() => {
     return publications.reduce((result, publication) => {
@@ -71,9 +74,9 @@ export default function VoiceLibraryPage({ supabaseClient }) {
 
   async function updateAccess(publicationId, accessCode) {
     setMessage("");
-    const normalizedCode = accessCode.replace(/\D/g, "").slice(0, 8);
-    if (normalizedCode && normalizedCode.length < 4) {
-      setMessage("暗証番号は4〜8桁の数字で入力してください。");
+    const normalizedCode = accessCode.trim();
+    if (!isWebBookPin(normalizedCode)) {
+      setMessage("PINは4桁の数字で入力してください。");
       return false;
     }
 
@@ -97,19 +100,30 @@ export default function VoiceLibraryPage({ supabaseClient }) {
     return true;
   }
 
+  async function updateSharing(publicationId, enabled) {
+    setMessage('');
+    const {data,error}=await supabaseClient.functions.invoke('publish-voice-edition',{
+      body:{action:enabled?'resume':'disable',publicationId}
+    });
+    if(error||!data?.success){setMessage('共有状態を変更できませんでした。もう一度お試しください。');return;}
+    setPublications(current=>current.map(p=>p.publication_id===publicationId?{...p,status:enabled?'published':'disabled'}:p));
+    setMessage(enabled?'リンクからの閲覧を再開しました。':'リンクからの閲覧を停止しました。本棚からは引き続き開けます。');
+  }
+
   return (
     <main className="voice-library-page">
       <header className="voice-library-header">
         <a href="/" aria-label="縦糸横糸のトップへ">
           <img src="/brand-logo-lockup-kyokasho.svg" alt="縦糸横糸" />
         </a>
-        {session && <a className="voice-library-home-link" href="/?app=1">ホームへ</a>}
+        {reviewContext ? <button className="voice-library-home-link" type="button" onClick={reviewContext.onHome}>ホームへ</button>
+          : session && <a className="voice-library-home-link" href="/?app=1">ホームへ</a>}
       </header>
 
       <section className="voice-library-intro">
         <p>VOICE LIBRARY</p>
         <h1>声の本棚</h1>
-        <span>ご自身の物語と、ご家族から共有された物語を静かに並べておく場所です。</span>
+        <span>一冊のブックとWebブックを、ひとつの作品として並べておく場所です。</span>
       </section>
 
       {!authReady || status === "loading" ? (
@@ -125,7 +139,7 @@ export default function VoiceLibraryPage({ supabaseClient }) {
       ) : publications.length === 0 ? (
         <section className="voice-library-empty">
           <h2>本棚は、まだ空です。</h2>
-          <p>完成した声の冊子や、ご家族から共有された物語がここに並びます。</p>
+          <p>完成した作品や、共有された物語がここに並びます。</p>
           <a href="/?app=1">ホームへ戻る</a>
         </section>
       ) : (
@@ -140,10 +154,12 @@ export default function VoiceLibraryPage({ supabaseClient }) {
                 <div className="voice-library-grid">
                   {entries.map((publication) => (
                     <VoiceBookCard
-                      key={publication.publication_id}
+                      key={publication.work_set_id || publication.publication_id}
                       publication={publication}
-                      canManageAccess={relationship === "owner" || relationship === "managed"}
+                      canManageAccess={publication.can_manage_access===true}
+                      onOpen={reviewContext?.onOpenPublication}
                       onUpdateAccess={updateAccess}
+                      onUpdateSharing={updateSharing}
                     />
                   ))}
                 </div>
@@ -153,7 +169,7 @@ export default function VoiceLibraryPage({ supabaseClient }) {
         </section>
       )}
 
-      {session && (
+      {session && !reviewContext && (
         <aside className="voice-library-next">
           <p>物語を聴いた先で、また残しておきたい声が見つかったときに。</p>
           <a href="/?app=1">新しい語りを残す</a>
@@ -164,7 +180,7 @@ export default function VoiceLibraryPage({ supabaseClient }) {
   );
 }
 
-function VoiceBookCard({ publication, canManageAccess, onUpdateAccess }) {
+function VoiceBookCard({ publication, canManageAccess, onUpdateAccess, onUpdateSharing, onOpen }) {
   const [accessCode, setAccessCode] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -178,28 +194,38 @@ function VoiceBookCard({ publication, canManageAccess, onUpdateAccess }) {
 
   return (
     <article className="voice-book-card">
-      <a className="voice-book-cover" href={`/?voice=${encodeURIComponent(publication.public_id)}`}>
+      <a className="voice-book-cover" href={`/?voice=${encodeURIComponent(publication.public_id)}`}
+        onClick={onOpen ? event => { event.preventDefault(); onOpen(publication); } : undefined}>
         <small>{publication.subject_name || "縦糸横糸"}</small>
         <h3>{publication.title || "残された声"}</h3>
         {publication.subtitle && <p>{publication.subtitle}</p>}
-        <span>声を聴く</span>
+        <span>Webブックを開く</span>
       </a>
+      <div className="voice-book-work-set" aria-label="作品の内容">
+        {publication.paper_book_ordered === true && <div><span>縦糸横糸ブック</span><small>注文済み</small></div>}
+        <div><span>縦糸横糸 Webブック</span><small>閲覧できます</small></div>
+      </div>
       <div className="voice-book-meta">
         {publication.published_at && <time>{formatPublishedAt(publication.published_at)} 公開</time>}
         {publication.access_mode === "code" && <span>暗証番号あり</span>}
+        {publication.status === 'disabled' && <span>リンクからの閲覧は停止中</span>}
       </div>
       {canManageAccess && (
         <details className="voice-book-access">
           <summary>閲覧方法</summary>
-          <p>{publication.access_mode === "code" ? "現在は暗証番号が必要です。" : "現在はQRやリンクを知っている方が聴けます。"}</p>
+          <p>{publication.status==='disabled'?'現在、QRやリンクからの閲覧は停止しています。':publication.access_mode === "code" ? "現在は暗証番号が必要です。" : "現在はQRやリンクを知っている方が聴けます。"}</p>
+          <button type="button" disabled={saving} onClick={async()=>{setSaving(true);try{await onUpdateSharing(publication.publication_id,publication.status==='disabled');}finally{setSaving(false);}}}>
+            {publication.status==='disabled'?'リンクからの閲覧を再開':'リンクからの閲覧を停止'}
+          </button>
           <form onSubmit={saveAccess}>
             <input
               aria-label="新しい暗証番号"
               inputMode="numeric"
               autoComplete="off"
-              placeholder="4〜8桁。空欄で解除"
+              placeholder="4桁のPIN。空欄で解除"
               value={accessCode}
-              onChange={(event) => setAccessCode(event.target.value.replace(/\D/g, "").slice(0, 8))}
+              maxLength={4}
+              onChange={(event) => setAccessCode(event.target.value.replace(/\D/g, "").slice(0, 4))}
             />
             <button type="submit" disabled={saving}>{saving ? "保存中" : "保存"}</button>
           </form>

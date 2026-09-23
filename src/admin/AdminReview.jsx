@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import WebBookPage from '../WebBookPage.jsx';
+import VoiceLibraryPage from '../VoiceLibraryPage.jsx';
 import { createPortal } from "react-dom";
 import {
   AlertCircle,
@@ -26,7 +28,7 @@ import {
   UsersRound,
   X
 } from "lucide-react";
-import { Scene_BookBuilder, Scene_SupportedStoryPages } from "../App.jsx";
+import { Scene_BookBuilder, Scene_ConnectionsHome, Scene_SupportProjectHome, Scene_SupportedStoryPages } from "../App.jsx";
 import { AccountImpactSummary, AccountProjectFacts, AccountRetirementDialog, summarizeAccountImpact } from "./AccountImpact.jsx";
 import "./admin-accounts.css";
 
@@ -1295,6 +1297,7 @@ function AccountDetailPanel({
   detail,
   loading,
   onClose,
+  onOpenCustomerExperience,
   onOpenProject,
   onMoveToTrash,
   onRestore,
@@ -1326,6 +1329,10 @@ function AccountDetailPanel({
                 <div><dt className="text-xs text-slate-400">登録日</dt><dd className="mt-1">{formatDate(account.created_at)}</dd></div>
                 <div><dt className="text-xs text-slate-400">最終ログイン</dt><dd className="mt-1">{formatDate(account.last_sign_in_at)}</dd></div>
               </dl>
+              <button type="button" onClick={() => onOpenCustomerExperience(account.id)}
+                className="mt-5 inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                顧客体験を見る <ChevronRight size={15} />
+              </button>
             </section>
 
             <AccountImpactSummary impact={detail.impact} />
@@ -1387,6 +1394,103 @@ function AccountDetailPanel({
           </div>
         )}
       </aside>
+    </div>
+  );
+}
+
+function CustomerExperienceReview({ supabaseClient, targetAccountId, onClose }) {
+  const [data, setData] = useState(null);
+  const [screen, setScreen] = useState("home");
+  const [project, setProject] = useState(null);
+  const [stories, setStories] = useState(null);
+  const [publication, setPublication] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+    supabaseClient.rpc("get_admin_customer_experience", { input_account_id: targetAccountId })
+      .then(({ data: result, error: failure }) => {
+        if (!active) return;
+        if (failure) throw failure;
+        setData(result);
+      }).catch(failure => { if (active) setError(failure?.message || "顧客体験を読み込めませんでした。"); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [supabaseClient, targetAccountId]);
+
+  async function openStories(selected) {
+    setProject(selected);
+    setScreen("loading-stories");
+    setError("");
+    const projectId = selected.book_project_id || selected.id;
+    try {
+      const { data: result, error: failure } = await supabaseClient.rpc("get_admin_customer_project_stories", {
+        input_account_id: targetAccountId, input_project_id: projectId
+      });
+      if (failure) throw failure;
+      const withMedia = await attachAdminMediaUrls(supabaseClient, result);
+      setStories(normalizeAdminPreview(withMedia, selected.subject_name));
+      setScreen("stories");
+    } catch (failure) {
+      setError(failure?.message || "このアカウントでは語りを閲覧できません。");
+      setScreen("project");
+    }
+  }
+
+  const libraryContext = useMemo(() => data ? ({
+    publications: data.bookshelf || [],
+    onHome: () => setScreen("home"),
+    onOpenPublication: item => { setPublication(item); setScreen("web-book"); }
+  }) : null, [data]);
+
+  const ownProjects = data?.owned_projects || [];
+  const supportedProjects = data?.supported_projects || [];
+  return (
+    <div className="fixed inset-0 z-[110] flex flex-col bg-[#0f172a]">
+      <div className="z-[1] flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0b1425] px-4 py-2 text-xs text-white/75">
+        <span>顧客体験を見る · 閲覧専用 · 対象：{data?.display_name || "読み込み中"}</span>
+        <button type="button" onClick={onClose} className="rounded-full border border-white/20 px-3 py-1.5">管理画面へ戻る</button>
+      </div>
+      {error && <p role="alert" className="z-[1] bg-rose-950 px-4 py-3 text-sm text-white">{error}</p>}
+      {loading || screen === "loading-stories" ? (
+        <div className="flex flex-1 items-center justify-center text-white/60"><LoaderCircle className="animate-spin" /></div>
+      ) : !data ? (
+        <div className="flex flex-1 items-center justify-center text-white/60">表示できませんでした。</div>
+      ) : screen === "web-book" && publication ? (
+        <div className="min-h-0 flex-1 overflow-auto bg-[#f8f7f4]">
+          <WebBookPage client={supabaseClient} publicId={publication.public_id}
+            reviewTargetId={targetAccountId} onClose={() => setScreen("library")} />
+        </div>
+      ) : screen === "library" ? (
+        <div className="min-h-0 flex-1 overflow-auto bg-[#f8f7f4]">
+          <VoiceLibraryPage supabaseClient={supabaseClient} reviewContext={libraryContext} />
+        </div>
+      ) : screen === "stories" && stories ? (
+        <div className="relative min-h-0 flex-1">
+          <Scene_SupportedStoryPages project={stories.project} questionSet={stories.questionSet}
+            storyRows={stories.storyRows} mediaByAnswerId={stories.mediaByAnswerId}
+            mode={project?.id ? "owner" : "supporter"} adminReview onBack={() => setScreen("project")} />
+        </div>
+      ) : screen === "project" && project ? (
+        <div className="mx-auto min-h-0 w-full max-w-[600px] flex-1 overflow-auto">
+          <Scene_SupportProjectHome project={project} readOnly isOwner={Boolean(project.id)}
+            onOpenStories={() => openStories(project)} onBack={() => setScreen("home")} />
+        </div>
+      ) : (
+        <div className="mx-auto min-h-0 w-full max-w-[600px] flex-1 overflow-auto">
+          <Scene_ConnectionsHome userName={data.display_name} ownedProjects={ownProjects}
+            supportedProjects={supportedProjects} readOnly
+            onOpenOwnedProject={item => { setProject({ ...item, can_edit_book_text: true }); setScreen("project"); }}
+            onOpenSupportedProject={item => { setProject(item); setScreen("project"); }} />
+          <div className="px-4 pb-10">
+            <button type="button" onClick={() => setScreen("library")}
+              className="w-full rounded-2xl border border-white/10 px-5 py-4 text-left text-white/80">私の本棚を見る</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1492,7 +1596,7 @@ function DetailPanel({
   canTrash,
   hiddenEntry,
   trashLoading,
-  onOpenStoryPreview,
+  onOpenCustomerExperience,
   onOpenBookPreview,
   previewLoading,
   voicePublicationBusy,
@@ -1562,123 +1666,24 @@ function DetailPanel({
               <div className="mt-6 grid gap-3 border-t border-slate-100 pt-5 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={onOpenStoryPreview}
+                  onClick={onOpenCustomerExperience}
                   disabled={previewLoading}
                   className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
                 >
-                  <span className="flex items-center gap-2"><Files size={16} />語りを見る</span>
+                  <span className="flex items-center gap-2"><Files size={16} />顧客体験を見る</span>
                   <ChevronRight size={16} className="text-slate-300" />
                 </button>
-                <button
-                  type="button"
-                  onClick={onOpenBookPreview}
-                  disabled={previewLoading}
-                  className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
-                >
-                  <span className="flex items-center gap-2"><BookOpen size={16} />本に仕上げる</span>
-                  <ChevronRight size={16} className="text-slate-300" />
-                </button>
+
               </div>
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="flex items-center gap-2 text-sm font-medium"><BookOpen size={16} className="text-slate-400" />Web冊子・音声プレイヤー</h3>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">公開すると、URLを知っている方だけが語り・写真・ビデオを閲覧できます。検索結果には表示されません。</p>
-                </div>
-                {detail.voice_publication?.status === "published" ? (
-                  <StatusPill tone="success">限定公開中</StatusPill>
-                ) : detail.voice_publication?.status === "disabled" ? (
-                  <StatusPill tone="warning">{String(detail.voice_publication?.disabled_reason || "").startsWith("automatic_playback_limit:") ? "アクセス急増で自動停止" : "公開停止"}</StatusPill>
-                ) : (
-                  <StatusPill tone="neutral">未公開</StatusPill>
-                )}
-              </div>
-
-              {!publicationReadiness.canPublish && (
-                <div role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
-                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                  <span>{publicationReadiness.message}</span>
-                </div>
-              )}
-              {!!voicePublicationError && (
-                <div role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs leading-5 text-rose-700">
-                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                  <span>{voicePublicationError}</span>
-                </div>
-              )}
-
-              {detail.voice_publication?.status === "published" ? (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <a
-                    href={detail.voice_publication.publicUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50"
-                  >
-                    <BookOpen size={15} />プレイヤーを開く
-                  </a>
-                  <button
-                    type="button"
-                    disabled={voicePublicationBusy || !publicationReadiness.canPublish}
-                    onClick={onUpdateVoiceEdition}
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-                    限定公開を更新
-                  </button>
-                  <button
-                    type="button"
-                    disabled={voicePublicationBusy}
-                    onClick={onDisableVoiceEdition}
-                    className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-4 py-2.5 text-sm text-rose-700 transition hover:bg-rose-50 disabled:opacity-40"
-                  >
-                    {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <EyeOff size={15} />}
-                    公開を停止
-                  </button>
-                </div>
-              ) : detail.voice_publication?.status === "disabled" ? (
-                <div className="mt-4">
-                  <p className="mb-3 text-xs leading-5 text-amber-700">同じQR・URLのまま公開を再開できます。アクセス状況を確認してから再開してください。</p>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={voicePublicationBusy}
-                      onClick={onResumeVoiceEdition}
-                      className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm text-amber-800 transition hover:bg-amber-50 disabled:opacity-40"
-                    >
-                      {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <BookOpen size={15} />}
-                      公開を再開
-                    </button>
-                    <button
-                      type="button"
-                      disabled={voicePublicationBusy || !publicationReadiness.canPublish}
-                      onClick={onUpdateVoiceEdition}
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-                      限定公開を更新
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-4">
-                  <button
-                    type="button"
-                    disabled={voicePublicationBusy || !publicationReadiness.canPublish}
-                    onClick={onPublishVoiceEdition}
-                    aria-describedby={!publicationReadiness.canPublish ? "voice-publication-requirement" : undefined}
-                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {voicePublicationBusy ? <LoaderCircle size={15} className="animate-spin" /> : <BookOpen size={15} />}
-                    限定公開を生成
-                  </button>
-                  {!publicationReadiness.canPublish && (
-                    <p id="voice-publication-requirement" className="sr-only">{publicationReadiness.message}</p>
-                  )}
-                </div>
-              )}
+              <h3 className="text-sm font-medium">Webブック・運営確認</h3>
+              {['published','disabled'].includes(detail.voice_publication?.status) ?
+                <p className="mt-2 text-xs leading-5 text-slate-500">完成作品は顧客の本棚から確認します。制作中のLive Previewは終了しています。</p> : <>
+                <p className="mt-2 text-xs leading-5 text-slate-500">現在の制作データを表示します。確認しても公開・注文・共有設定は変更されません。</p>
+                <button type="button" onClick={onOpenBookPreview} className="mt-4 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white">Webブックをプレビュー</button>
+              </>}
             </section>
 
             {!!detail.attention_items?.length && (
@@ -1826,12 +1831,14 @@ export default function AdminReview({ supabaseClient }) {
   const [salesBusy, setSalesBusy] = useState(false);
   const [salesMessage, setSalesMessage] = useState("");
   const [detailId, setDetailId] = useState(null);
+  const [webPreview, setWebPreview] = useState(false);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [voicePublicationBusy, setVoicePublicationBusy] = useState(false);
   const [voicePublicationError, setVoicePublicationError] = useState("");
   const [attentionActionId, setAttentionActionId] = useState("");
   const [accountDetailId, setAccountDetailId] = useState(null);
+  const [customerExperienceTarget, setCustomerExperienceTarget] = useState(null);
   const [accountDetail, setAccountDetail] = useState(null);
   const [accountDetailLoading, setAccountDetailLoading] = useState(false);
   const accountDetailRequestRef = useRef(0);
@@ -2987,8 +2994,8 @@ export default function AdminReview({ supabaseClient }) {
           trashLoading={trashTarget.includes(`book_project:${detailId}`)}
           onMoveToTrash={(project) => moveToTrash("book_project", project)}
           onRestore={restoreFromTrash}
-          onOpenStoryPreview={() => openPreview("stories")}
-          onOpenBookPreview={() => openPreview("book")}
+          onOpenCustomerExperience={() => setCustomerExperienceTarget(detail?.purchase?.purchaser_user_id || detail?.project?.owner_user_id || null)}
+          onOpenBookPreview={() => setWebPreview(true)}
           voicePublicationBusy={voicePublicationBusy}
           voicePublicationError={voicePublicationError}
           onPublishVoiceEdition={publishVoiceEdition}
@@ -3006,6 +3013,7 @@ export default function AdminReview({ supabaseClient }) {
         <AccountDetailPanel
           detail={accountDetail}
           loading={accountDetailLoading}
+          onOpenCustomerExperience={setCustomerExperienceTarget}
           onOpenProject={(projectId) => {
             if (trashEntries.some(item => item.entity_type === "book_project" && item.entity_id === projectId) && !organizationModeActive) {
               setTrashActionError("非表示の物語の詳細を見るには、整理モードを有効にしてください。");
@@ -3065,6 +3073,10 @@ export default function AdminReview({ supabaseClient }) {
         />
       )}
 
+      {webPreview && detailId && createPortal(<div className="fixed inset-0 z-[100] overflow-auto"><WebBookPage client={supabaseClient} projectId={detailId} adminPreview onClose={() => setWebPreview(false)}/></div>, document.body)}
+      {customerExperienceTarget && createPortal(<CustomerExperienceReview
+        supabaseClient={supabaseClient} targetAccountId={customerExperienceTarget}
+        onClose={() => setCustomerExperienceTarget(null)} />, document.body)}
       {previewMode && createPortal((
         previewLoading ? (
           <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#0f172a] text-white">

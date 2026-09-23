@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { findPaymentConfirmation, finalizeExperienceCheckout, requireStripeEnvironment, requireEventMode } from "../_shared/experience-commerce.ts";
+import {completeBookOrder} from '../_shared/book-completion.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,6 +62,7 @@ serve(async request => {
         const confirmedAt = contract.payment_confirmed_at || await findPaymentConfirmation(stripeSecretKey, checkout);
         if (!confirmedAt) return json({ success: true, paid: false, pendingConfirmation: true });
         const finalized = await finalizeExperienceCheckout(admin, checkout, confirmedAt, checkout.livemode);
+        await completeBookOrder(admin,orderId);
         let project = null;
         if (finalized.order?.book_project_id) {
           const { data, error: projectError } = await admin.from("book_projects").select("*").eq("id", finalized.order.book_project_id).single();
@@ -81,6 +83,7 @@ serve(async request => {
         input_purchased_at: checkout.created ? new Date(checkout.created * 1000).toISOString() : new Date().toISOString()
       });
       if (finalizeError) throw finalizeError;
+      await completeBookOrder(admin,orderId);
 
       const order = finalized?.order || null;
       let project = null;

@@ -32,6 +32,7 @@ body:has(.voice-library-page) {
 
 .voice-library-header img { display: block; width: min(220px, 48vw); height: 48px; object-fit: contain; object-position: left center; }
 .voice-library-home-link { color: var(--navy); text-decoration: none; border-bottom: 1px solid; padding-bottom: 5px; }
+.voice-library-header button.voice-library-home-link { border: 0; border-bottom: 1px solid; background: transparent; padding-inline: 0; cursor: pointer; }
 
 .voice-library-intro,
 .voice-library-shelves,
@@ -71,6 +72,11 @@ body:has(.voice-library-page) {
 .voice-book-cover h3 { margin: 0; font-size: 1.4rem; font-weight: 400; line-height: 1.55; letter-spacing: .08em; }
 .voice-book-cover p { margin: 18px 0 0; font-size: .82rem; line-height: 1.7; }
 .voice-book-cover > span { margin-top: 48px; padding-bottom: 4px; border-bottom: 1px solid currentColor; font-size: .74rem; }
+
+.voice-book-work-set { margin-top: 18px; padding-block: 8px; border-block: 1px solid var(--line); }
+.voice-book-work-set > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 9px 0; font-size: .82rem; }
+.voice-book-work-set > div + div { border-top: 1px solid var(--line); }
+.voice-book-work-set small { flex: none; color: var(--muted); font-size: .71rem; }
 
 .voice-book-meta { display: flex; gap: 12px; justify-content: space-between; margin-top: 20px; color: var(--muted); font-size: .73rem; }
 .voice-book-access { margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--line); }

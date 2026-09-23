@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { finalizeExperienceCheckout, applyRefundObject, stripeRequest, requireEventMode } from "../_shared/experience-commerce.ts";
+import {completeBookOrder} from '../_shared/book-completion.ts';
 
 function hex(bytes: ArrayBuffer) {
   return [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, "0")).join("");
@@ -73,6 +74,7 @@ serve(async request => {
         if (error) throw error;
         }
 
+        await completeBookOrder(admin,orderId);
         const familyInvitationId = String(checkout?.metadata?.family_invitation_id || "");
         if (Deno.env.get("EXPERIENCE_NOTIFICATIONS_ENABLED") === "true" && familyInvitationId && checkout.metadata?.experience_policy_version !== "2.0") {
           const deliveryResponse = await fetch(`${supabaseUrl}/functions/v1/send-family-story-invite`, {

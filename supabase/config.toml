@@ -40,6 +40,10 @@ verify_jwt = false
 [functions.sync-checkout-session]
 verify_jwt = false
 
+# Explicit auth.getUser plus candidate ownership, project and release checks.
+[functions.cancel-book-completion]
+verify_jwt = false
+
 # 回答する家族はアカウントを持たないため、十分に長い依頼IDを使い、
 # 関数内で公開範囲を最小限に検証する。
 [functions.theme-memory-request-response]

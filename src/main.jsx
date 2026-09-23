@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import App, { supabaseClient as adminSupabaseClient } from "./App.jsx";
 import LandingPage from "./LandingPage.jsx";
 import VoiceLibraryPage from "./VoiceLibraryPage.jsx";
-import VoicePlaybackPage from "./VoicePlaybackPage.jsx";
+import WebBookPage from "./WebBookPage.jsx";
 import { ThemeMemoryRequestRecipient } from "./ThemeMemoryRequestFlow.jsx";
 import "./index.css";
 import FamilyConnectionTest from './FamilyConnectionTest.jsx';
@@ -60,8 +60,8 @@ function RootScreen() {
 
   if (params.has("voice")) {
     return (
-      <VoicePlaybackPage
-        supabaseClient={adminSupabaseClient}
+      <WebBookPage
+        client={adminSupabaseClient}
         publicId={params.get("voice") || ""}
       />
     );

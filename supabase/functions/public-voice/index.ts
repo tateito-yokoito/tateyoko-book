@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {requireFamilyRelease} from '../_shared/family-release.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,18 +39,57 @@ serve(async (req) => {
 
     const { data: publication, error: publicationError } = await admin
       .from("voice_publications")
-      .select("id, book_project_id, book_title, book_subtitle, subject_name, snapshot_metadata, video_assets, published_at, access_mode")
+      .select("id, work_manifest_id, book_project_id, book_title, book_subtitle, subject_name, snapshot_metadata, video_assets, published_at, access_mode, status")
       .eq("public_id", publicId)
-      .eq("status", "published")
+      .in("status", ["published", "disabled"])
       .maybeSingle();
     if (publicationError) throw publicationError;
     if (!publication) throw new HttpError("Not found", 404);
+
+    // Read-only administrator review of a particular customer's entitlement.
+    // The administrator stays authenticated as themselves; the target ID is
+    // checked by a narrowly scoped RPC and never becomes a session identity.
+    let reviewAccess = false;
+    const reviewTargetId = String(body.reviewTargetId || '').trim();
+    if (reviewTargetId) {
+      const authorization = req.headers.get('Authorization') || '';
+      const caller = createClient(supabaseUrl, serviceRoleKey, {
+        global: { headers: { Authorization: authorization } },
+        auth: { persistSession: false, autoRefreshToken: false }
+      });
+      const { data: { user }, error: authError } = await caller.auth.getUser();
+      if (authError || !user) throw new HttpError('Not found', 404);
+      const { data: allowed, error: reviewError } = await caller.rpc('admin_customer_can_read_publication', {
+        input_account_id: reviewTargetId,
+        input_publication_id: publication.id
+      });
+      if (reviewError || allowed !== true) throw new HttpError('Not found', 404);
+      await requireFamilyRelease(admin, publication.book_project_id, reviewTargetId);
+      reviewAccess = true;
+    }
+
+    // Public sharing can stop without taking the completed work off its creator's shelf.
+    // A PIN, old access token, payer or generic admin role cannot bypass this boundary.
+    let privateAccess = publication.status === 'disabled' && reviewAccess;
+    if(publication.status==='disabled') {
+      if(!publication.published_at)throw new HttpError('Not found',404);
+      if (!privateAccess) {
+        const authorization=req.headers.get('Authorization')||'';
+        const caller=createClient(supabaseUrl,serviceRoleKey,{global:{headers:{Authorization:authorization}},auth:{persistSession:false,autoRefreshToken:false}});
+        const {data:{user},error:authError}=await caller.auth.getUser();
+        if(!authError&&user){
+          const {data:allowed,error}=await caller.rpc('can_read_private_web_book',{input_project_id:publication.book_project_id});
+          if(!error&&allowed===true){await requireFamilyRelease(admin,publication.book_project_id,user.id);privateAccess=true;}
+        }
+      }
+      if(!privateAccess)throw new HttpError('Not found',404);
+    }
 
     const clientHash = await requestClientHash(req, serviceRoleKey);
     const requestKind = action === "asset" && String(body.kind || "").toLowerCase().startsWith("video")
       ? "video_asset"
       : action;
-    const { data: rateRows, error: rateError } = await admin.rpc("register_voice_publication_request", {
+    const { data: rateRows, error: rateError } = await admin.rpc(privateAccess?'register_private_web_book_request':"register_voice_publication_request", {
       input_publication_id: publication.id,
       input_client_hash: clientHash,
       input_request_kind: requestKind
@@ -66,7 +106,7 @@ serve(async (req) => {
       }, 429, { "Retry-After": String(retryAfter) });
     }
 
-    const accessResult = await authorizePublication({
+    const accessResult = privateAccess || reviewAccess ? {authorized:true} : await authorizePublication({
       req,
       body,
       admin,
@@ -86,13 +126,26 @@ serve(async (req) => {
 
     const { data: itemRows, error: itemsError } = await admin
       .from("voice_publication_items")
-      .select("item_order, chapter_title, question_text, transcript_text, audio_assets, photo_assets")
+      .select("item_order, source_answer_id, metadata, chapter_title, question_text, transcript_text, audio_assets, photo_assets")
       .eq("publication_id", publication.id)
       .order("item_order", { ascending: true });
     if (itemsError) throw itemsError;
 
+    // Older immutable publications may not have question identity in item metadata.
+    // Resolve only against their frozen manifest, never today's live answers.
+    let frozen: any = null;
+    if (publication.work_manifest_id) {
+      const {data:work,error}=await admin.from('book_work_manifests').select('snapshot').eq('id',publication.work_manifest_id).eq('book_project_id',publication.book_project_id).maybeSingle();
+      if(error)throw error;
+      frozen=work?.snapshot;
+    }
+    const frozenAnswers=new Map([...(frozen?.answers||[]),...(frozen?.web_intro?.answers||[])].map((a:any)=>[a.id,a]));
+    const frozenQuestions=new Map([...(frozen?.questions||[]),...(frozen?.web_intro?.questions||[])].map((q:any)=>[q.id,q]));
+
     const items = [];
     for (const item of itemRows || []) {
+      const source:any=frozenAnswers.get(item.source_answer_id);
+      const question:any=frozenQuestions.get(source?.user_question_id);
       const audio = [];
       const photos = [];
       const assets = Array.isArray(item.audio_assets) ? item.audio_assets : [];
@@ -101,6 +154,7 @@ serve(async (req) => {
         const storagePath = String(asset?.storagePath || "").trim();
         if (!storagePath.startsWith(`published/${publication.id}/`)) continue;
         audio.push({
+          videoId: asset?.videoId || null,
           assetIndex,
           part: finiteNumber(asset?.part),
           durationSeconds: finiteNumber(asset?.durationSeconds)
@@ -120,9 +174,15 @@ serve(async (req) => {
         });
       }
 
-      if (audio.length === 0) continue;
+      if (audio.length === 0 && photos.length === 0 && !item.transcript_text) continue;
       items.push({
+        mainFormat: item.metadata?.mainFormat || source?.meta_json?.main_response_format || 'audio',
+        sourceAnswerId: item.source_answer_id,
+        questionId: item.metadata?.questionId || question?.question_id || null,
+        themeCode: item.metadata?.themeCode || question?.meta_json?.theme_code || null,
+        slot: item.metadata?.slot || question?.meta_json?.video_slot_key || null,
         order: item.item_order,
+        sourceSequenceOrder: item.metadata?.sourceSequenceOrder ?? source?.sequence_order ?? item.item_order,
         chapterTitle: String(item.chapter_title || "").trim(),
         question: String(item.question_text || "").trim(),
         transcript: String(item.transcript_text || "").trim(),
@@ -135,9 +195,12 @@ serve(async (req) => {
     const videoAssets = Array.isArray(publication.video_assets) ? publication.video_assets : [];
     for (let videoIndex = 0; videoIndex < videoAssets.length; videoIndex += 1) {
       const video = videoAssets[videoIndex];
+      const frozenVideo=(frozen?.videos||[]).find((v:any)=>v.slot_order===video?.slotOrder);
       const videoPath = String(video?.videoStoragePath || "").trim();
       if (!videoPath.startsWith(`published/${publication.id}/videos/`)) continue;
       videos.push({
+        sourceAnswerId: video?.sourceAnswerId || frozenVideo?.source_answer_id || null,
+        slot: video?.slot || frozenVideo?.metadata?.milestone_key || null,
         videoIndex,
         slotOrder: finiteInteger(video?.slotOrder) || videoIndex + 1,
         title: String(video?.title || "残したビデオ").trim(),
@@ -159,6 +222,8 @@ serve(async (req) => {
         subtitle: String(publication.book_subtitle || "").trim(),
         subjectName: String(publication.subject_name || "").trim(),
         footerText: String(publication.snapshot_metadata?.footerText || "").trim(),
+        hasCover: String(publication.snapshot_metadata?.cover?.cover_photo_path || '').startsWith(`published/${publication.id}/cover/`),
+        coverTransform: publication.snapshot_metadata?.cover?.cover_photo_transform || null,
         publishedAt: publication.published_at,
         accessProtected: publication.access_mode === "code",
         items,
@@ -175,6 +240,13 @@ serve(async (req) => {
 
 async function createAssetResponse({ admin, body, publication }: any) {
   const kind = String(body.kind || "").trim().toLowerCase();
+  if (kind === 'cover') {
+    const path = String(publication.snapshot_metadata?.cover?.cover_photo_path || '');
+    if (!path.startsWith(`published/${publication.id}/cover/`)) throw new HttpError('Not found',404);
+    const {data,error}=await admin.storage.from(PHOTO_BUCKET).createSignedUrl(path,SIGNED_URL_LIFETIME_SECONDS);
+    if(error||!data?.signedUrl)throw new HttpError('Playback unavailable',503);
+    return jsonResponse({success:true,asset:{kind,url:data.signedUrl,expiresInSeconds:SIGNED_URL_LIFETIME_SECONDS}});
+  }
   const videoKinds = new Set(["video", "video_audio", "video_poster"]);
   if (kind !== "audio" && kind !== "photo" && !videoKinds.has(kind)) {
     throw new HttpError("Invalid asset", 400);
