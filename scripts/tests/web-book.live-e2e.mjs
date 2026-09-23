@@ -6,9 +6,9 @@ import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 
 const ref = 'zpswxefgfabzvxdbtyvq';
-const origin = 'http://127.0.0.1:5173';
+const origin = process.env.QA_TEST_ORIGIN || 'http://127.0.0.1:5173';
 const step = process.argv[2] || 'inspect';
-assert.ok(['bootstrap','inspect','open-book','selection','options','order','checkout-open','cancel','pay','library','decline'].includes(step));
+assert.ok(['bootstrap','inspect','open-book','selection','options','order','checkout-open','cancel','pay','pay-existing','library','decline'].includes(step));
 const account = JSON.parse(fs.readFileSync(process.env.QA_TEST_ACCOUNT_FILE, 'utf8'));
 assert.equal(account.ref, ref);
 assert.ok(account.email.startsWith('webbook-e2e-') && account.email.endsWith('@example.com'));
@@ -53,7 +53,22 @@ try {
   if(step==='bootstrap') await page.waitForTimeout(7000);
   else if(step==='library') await page.getByText('Webブックを開く',{exact:true}).waitFor({timeout:60000});
   else await page.getByText('縦糸横糸ブック', {exact:true}).waitFor({timeout:60000});
-  if (!['bootstrap','inspect','library'].includes(step)) {
+  if (step==='pay-existing') {
+    const checkout=JSON.parse(fs.readFileSync('output/web-book-e2e/checkout-test-url.json','utf8'));
+    assert.equal(checkout.testOnly,true);
+    assert.match(checkout.url,/^https:\/\/checkout\.stripe\.com\/c\/pay\/cs_test_/);
+    const popup=await context.newPage();
+    await popup.goto(checkout.url,{waitUntil:'domcontentloaded'});
+    await popup.locator('#cardNumber').fill('4242424242424242');
+    await popup.locator('#cardExpiry').fill('1230');
+    await popup.locator('#cardCvc').fill('123');
+    await popup.locator('#billingName').fill('WEB BOOK MEDIA TEST');
+    await popup.getByRole('button',{name:/支払う|Pay/}).click();
+    await popup.waitForURL(url=>url.origin===origin&&url.searchParams.get('checkout')==='success',{timeout:90000});
+    await popup.waitForTimeout(10000);
+    await popup.screenshot({path:'output/web-book-e2e/media-paid-return.png',fullPage:true});
+    console.log(JSON.stringify({testOnly:true,step:'media-paid-return',url:popup.url(),body:(await popup.locator('body').innerText()).slice(-2200)}));
+  } else if (!['bootstrap','inspect','library'].includes(step)) {
     await page.getByText('本に仕上げる', {exact:true}).click();
     if (step === 'cancel') {
       const cancel = page.getByRole('button',{name:'注文手続きを取りやめて編集へ戻る',exact:true});
