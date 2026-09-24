@@ -382,6 +382,8 @@ serve(async request => {
       const {data:c,error}=await admin.from('book_completion_candidates').select('id,book_project_id,requested_by,state,order_id').eq('id',completionId).maybeSingle();
       if(error)throw error;
       if(!c || c.book_project_id!==projectId || c.requested_by!==authData.user.id)return json({success:false,error:'注文内容を確認できません'},403);
+      const {data:enabled,error:rolloutError}=await admin.rpc('book_completion_account_allowed',{input_account_id:authData.user.id});
+      if(rolloutError || enabled!==true)return json({success:false,error:'Completion is not enabled for this Account'},403);
       if(c.order_id){
         const {data:o,error:orderError}=await admin.from('commerce_orders').select('*').eq('id',c.order_id).single();
         if(orderError)throw orderError;

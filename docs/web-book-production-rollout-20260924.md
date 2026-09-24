@@ -2,7 +2,7 @@
 
 2026-09-24追記：cleanupの整合性問題は修正・障害注入TESTを終え、CONDITIONAL GOへ更新。結果は `web-book-copy-integrity-20260924.md`。以下は別途公開承認を受けて使う未実行の手順。本番は変更していない。以前のNO-GO監査は `web-book-production-source-audit-20260924.md` に履歴として残す。
 
-最終リリース判定は `web-book-final-release-plan-20260924.md` を優先する。現行rolloutは全体booleanで先行Account限定にできず、統合Front artifactも未固定のため、限定公開の実行判定は現在NO-GO。以下の全体ON手順は、限定gateの追加・再TEST後に置き換えること。
+最終リリース判定は `web-book-final-release-plan-20260924.md` を優先する。Account限定gateはTEST済・本番未反映。統合Front artifactが未固定のため、限定公開の実行判定は現在NO-GO。以下の旧全体ON手順はそのまま実行せず、`web-book-account-rollout-20260924.md` と最終release candidateで更新すること。
 
 ## 現在の本番と反映範囲
 
@@ -96,7 +96,7 @@ Frontは完成フラグOFF版とON版を同じcommitから用意する。まずO
 3. 最後にDB `book_completion_rollout.enabled=true`。候補作成を開始可能にする。
 4. 非課金smokeとエラーログ確認。実ユーザーの初回完成を監視対象とする。実課金TESTはこの手順へ含めない。
 
-現行BOOK完成rolloutは全体booleanでありAccount別allowlistではない。Familyのallowlistで本人起点の完成まで限定できるとは表現しない。先行Account限定の要件があるため、上記1～3の全体ON手順は現状実行しない。限定gateを実装して再検証した後、`web-book-final-release-plan-20260924.md` に従って更新する。Family/Cの開放は含めない。
+この節の1～3はAccount限定gate導入前の旧全体ON手順であり、現状実行しない。Account限定gateはTEST済だが本番未反映で、HP統合Front release candidateも未確定。最終の有効化順序は `web-book-final-release-plan-20260924.md` を優先する。Family/Cの開放は含めない。
 
 **開放後のgate closeと復帰:**
 

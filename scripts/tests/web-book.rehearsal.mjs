@@ -9,6 +9,10 @@ const dir=process.env.QA_PREFLIGHT_DIR || 'output/book-milestones-release-prefli
 assert.ok(/^output\/[a-z0-9-]+$/.test(dir));
 const files=['202609230001_web_book_preview.sql','202609230002_web_book_pin.sql','202609230003_web_book_admin_live.sql','202609230004_book_completion_candidates.sql','202609230005_completed_web_book_library.sql','202609230006_book_print_handoff.sql','202609230007_completed_work_sets.sql','202609230008_admin_customer_experience.sql'];
 if(process.argv.includes('--with-source-guard'))files.push('202609240001_publication_source_asset_guard.sql','202609240002_publication_legacy_question_compat.sql');
+if(process.argv.includes('--with-account-rollout')){
+ assert.ok(process.argv.includes('--with-source-guard'),'Account rollout rehearsal requires the source-guard migrations');
+ files.push('202609240003_book_completion_account_rollout.sql');
+}
 const file=files.join(', '),source=(await Promise.all(files.map(f=>readFile('supabase/migrations/'+f,'utf8')))).join('\n');
 const report={at:new Date().toISOString(),migration:file,sha256:createHash('sha256').update(source).digest('hex'),remoteWrites:false,results:[]};
 for(const label of process.argv.includes('--production-only')?['production']:['test','production']){

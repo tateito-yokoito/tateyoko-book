@@ -16,11 +16,11 @@ const {build}=require('esbuild'),fs=require('node:fs'),os=require('node:os'),pat
  const browser=await chromium.launch({executablePath:process.env.QA_CHROME_PATH,headless:true});
  try{
   const base=`http://127.0.0.1:${server.address().port}`;
-  async function open(state='checkout',failure=false){
+  async function open(state='checkout',failure=false,allowed=true){
    const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];
    page.on('pageerror',e=>errors.push(e.message));page.errors=errors;
    await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
-   await page.addInitScript(({state,failure})=>{
+   await page.addInitScript(({state,failure,allowed})=>{
     window.calls=[];window.open=()=>({closed:false,close(){},document:{open(){},write(){},close(){}}});
     window.confirm=()=>true;
     window.candidate=state?{id:'candidate',state,qr_in_book:true,pin_enabled:false}:null;
@@ -29,6 +29,7 @@ const {build}=require('esbuild'),fs=require('node:fs'),os=require('node:os'),pat
     window.mockClient={
      rpc:async(name,args)=>{
       window.calls.push({type:name,args});
+      if(name==='can_use_book_completion')return {data:allowed};
       if(name==='get_book_completion')return failure?{error:{message:'offline'}}:{data:window.candidate};
       if(name==='get_book_work'||name==='save_book_selection')return {data:work};
       if(name==='get_book_order_quote')return {data:{amount_total:0,configuration_total:0,base_already_purchased:true}};
@@ -43,7 +44,7 @@ const {build}=require('esbuild'),fs=require('node:fs'),os=require('node:os'),pat
      functions:{invoke:async(name)=>{window.calls.push({type:name});if(name==='cancel-book-completion')window.candidate=null;return {data:{success:true}};}},
      storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:''}})})}
     };
-   },{state,failure});
+   },{state,failure,allowed});
    await page.goto(base);return page;
   }
   const pending=await open();
@@ -67,9 +68,20 @@ const {build}=require('esbuild'),fs=require('node:fs'),os=require('node:os'),pat
   assert.equal(await failed.evaluate(()=>window.calls.some(c=>c.type==='write-cover'||c.type==='purchase')),false);
   const paid=await open();await paid.evaluate(()=>window.finishPayment=true);
   await paid.getByRole('button',{name:'注文手続きを続ける'}).click();await paid.getByText('一冊が、できました。',{exact:true}).waitFor();
-  for(const p of [pending,completed,failed,paid])assert.deepEqual(p.errors,[]);
+  const unlisted=await open(null,false,false);
+  assert.equal(await unlisted.getByText('声と言葉を、Webブックにも。',{exact:true}).count(),0);
+  await unlisted.getByRole('button',{name:'決済画面を開き直す'}).click();
+  await unlisted.waitForFunction(()=>window.calls.some(c=>c.type==='stale-checkout'));
+  assert.equal(await unlisted.evaluate(()=>window.calls.some(c=>c.type==='prepare_book_completion')),false);
+  assert.equal(await unlisted.evaluate(()=>window.calls.some(c=>c.type==='purchase')),false);
+  const revoked=await open('prepared',false,false);
+  await revoked.getByRole('button',{name:'注文手続きを続ける'}).click();
+  await revoked.getByText('この注文は現在ご利用いただけません。注文手続きを取りやめてください。').waitFor();
+  assert.equal(await revoked.evaluate(()=>window.calls.some(c=>c.type==='purchase')),false);
+  await revoked.getByRole('button',{name:'注文手続きを取りやめて編集へ戻る'}).waitFor();
+  for(const p of [pending,completed,failed,paid,unlisted,revoked])assert.deepEqual(p.errors,[]);
   await completed.screenshot({path:path.join(tmp,'completed-390.png')});
-  console.log('PASS 390px actual BookBuilder: pending retry, no premature completion, no stale checkout, cancellation/new candidate, PIN default/leading zero, completed reload, failure closed, server-confirmed completion');
+  console.log('PASS 390px actual BookBuilder: pending retry, no premature completion, no stale checkout, cancellation/new candidate, PIN default/leading zero, completed reload, failure closed, server-confirmed completion, unlisted legacy UI, revoked candidate blocked');
   console.log('Screenshot: '+path.join(tmp,'completed-390.png'));
  }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

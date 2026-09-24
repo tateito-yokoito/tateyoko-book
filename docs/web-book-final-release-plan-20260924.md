@@ -1,12 +1,12 @@
 # 初回BOOK＋Webブック完成 最終リリース計画（本番未実行）
 
-更新: 2026-09-24 JST。実装候補commitは `231f581ce2470e802c2b8878112e3bcddb097a1e`（`codex/production-supporter-delegation`）。素材認可・コピー再試行・Stripe TEST完成の証跡は `web-book-copy-integrity-20260924.md`。この文書は計画であり、DB・Edge・Front・Stripeの本番変更や公開ゲート操作は行っていない。
+更新: 2026-09-24 JST。素材認可・コピー再試行の証跡は `web-book-copy-integrity-20260924.md`、Account限定gateの実装・TEST結果は `web-book-account-rollout-20260924.md`。この文書は計画であり、DB・Edge・Front・Stripeの本番変更や公開ゲート操作は行っていない。最終release commitは未確定。
 
 ## 判定
 
-**NO-GO：先行利用者だけを対象にする本番公開を、このcommitのまま開始することはできない。** `book_completion_rollout` は `enabled boolean` だけを持ち、`prepare_book_completion` はその全体値を確認する。Edge `BOOK_COMPLETION_ENABLED` とFront `VITE_BOOK_COMPLETION_ENABLED` も全体値である。3つをONにすると、権限のある全顧客が新しい完成導線に入れる。Family用allowlistは本人起点BOOK完成の制御には使えない。
+Account限定gateは追加し、TESTで対象外Account・直接RPC/Edge・別Project・Viewer・失効Supporterを拒否すること、対象AccountのStripe TEST決済から完成／本棚までを確認した。TESTは終了時にDB rollout OFF／allowlist空／Edge flag OFFへ復帰済み。この変更は本番未反映。
 
-閉鎖反映に必要なDB・素材互換性・EdgeのTESTはPASS。ただし、Front候補ブランチは現在配信中のHPソースと異なる。現在配信されているHPを保った統合Front artifact、および限定公開のサーバー側gateがまだ固定・TESTされていない。**本番反映開始の総合判定も現時点ではNO-GO。** これらを解消してから、対象release commitを確定し再判定する。Safari実機・実動画E2Eだけを理由に止めているわけではない。
+**本番反映開始の総合判定は引き続きNO-GO。** HP改修ブランチの最終commit確定後に、最新HPと今回のアプリ／Webブック実装を統合したFront release candidateを作り、現行HPを巻き戻さないことを確認する必要がある。Front artifact／最終release commit／実行直前の本番drift照合は未完了。Safari実機・実動画E2Eだけを理由に止めているわけではない。
 
 ## 対象と除外
 
@@ -19,24 +19,24 @@
 |項目|確認結果|
 |---|---|
 |GitHub main|`ad017b8e1846ca22783bf8a3085b129f461540a6`|
-|対象ブランチ|GitHub上の `f129118aca765a33bf78079e7ce1981837d1bbd6` は実装候補commitの祖先。候補commitはローカル固定、未push。最終release commitではない|
+|対象ブランチ|`codex/production-supporter-delegation`。Account限定gateの検証済み差分は最終release commitではない|
 |本番DB|READ ONLYでmigration 115本、最新 `202609220002`。完成候補・rollout tableは未作成|
 |本番Edge|`public-voice` 26、`publish-voice-edition` 27、`create-checkout-session` 49、`sync-checkout-session` 33、`stripe-webhook` 32。`cancel-book-completion`／`web-book-preview` は未作成|
 |本番設定|`BOOK_COMPLETION_ENABLED` は未設定＝現行判定OFF。`FAMILY_PRODUCTION_ENABLED` 未設定。商用決済モードはlive。秘密値は取得・表示していない|
 |本番Front|HTML SHA-256 `3a638e4774fa0e54665544544d7209f081accccb5308afe4b1f9c36070a15e1a`、JS `index-B9e-VcVW.js`、CSS `index-CyDNISLh.css`。以前のVercel deployment ID `dpl_HGcncon2HkXVUp6MbaiUXAWmu7CA` は実行直前に再確認|
 |本番素材|READ ONLY監査で使用中27件（音声25、表紙2）、新認可で27件許可・拒否0。既存公開Webブック0、動画0。未参照音声2件は未変更|
-|DB再リハーサル|最新本番catalog取得後、未適用10 migrationをローカル復元へ順次適用PASS。結合SQL SHA-256 `06f92150b7adb0a137d147f87adb9a235e1c6f9d93666cb34c6fba2eed5a166c`。本番への適用はゼロ|
+|DB再リハーサル|保存済み本番catalog（取得 2026-09-24 00:31 UTC）へ未適用11 migrationをローカルで順次適用PASS。結合SQL SHA-256 `1b0cacb77f459b91c5f2cb7d6177c95f7dbce2eb77767fa47465f431942f8695`。本番への適用はゼロ。実行直前の最新catalog再照合は別途必須|
 
 ## 実行前に確定するもの
 
-1. **限定公開gate**: 既存 `book_completion_rollout` にAccount allowlistを追加する最小変更を設計し、`prepare_book_completion` の本人／制作Supporter actorをサーバー側で照合する。checkout／publishは許可済みcandidateに結びつくことを検証する。Frontも対象外Accountに完成導線を出さない。allowlist外、別Account／Project、失効Supporter、既存候補再試行、支払中のgate closeをTESTする。既存の全体OFFを維持し、allowlistは空で初期化する。これに伴うmigration・ハッシュ・対象commit・TEST証跡を更新する。
+1. **限定公開gate（TEST済・本番未反映）**: `202609240003` で全体booleanとAccount allowlistをAND条件にし、候補作成／素材準備／Checkoutを実際の操作者兼購入者Accountで検証する。Project制作権限は別条件として維持する。支払成功済みCheckoutの確定はgate close後も同一candidateへ収束させる。TEST証跡は `web-book-account-rollout-20260924.md`。本番では初期OFF／allowlist空とし、実行直前に最新catalogで再リハーサルする。
 2. **Front統合artifact**: 現行本番HPの実ソース／deploymentを特定し、そのデザインと配信assetを保持したまま承認済みWebブック／本棚／管理者導線を統合する。`VITE_BOOK_COMPLETION_ENABLED=false/true` の2 artifactを同じ統合commitからbuildし、画面差分・HP・本人導線の回帰を確認する。現在の候補ブランチをそのままVercelへ反映しない。
-3. **release commit固定**: 1・2の変更を含むcommit SHA、10本＋追加があればそのmigration一覧／ハッシュ、7 Edge bundle・JWT設定、Front 2 artifact・ハッシュを確定する。対象外の未コミット変更を含めない。現行配信Frontのdeployment ID、対象Edgeの版と設定、本番catalogを実行直前に再取得し、差異があれば停止して再リハーサルする。
+3. **release commit固定**: 1・2の変更を含むcommit SHA、11 migrationの一覧／ハッシュ、7 Edge bundle・JWT設定、Front 2 artifact・ハッシュを確定する。対象外の未コミット変更を含めない。現行配信Frontのdeployment ID、対象Edgeの版と設定、本番catalogを実行直前に再取得し、差異があれば停止して再リハーサルする。
 4. **復旧資料**: 現行Front deployment、5既存Edgeの版・JWT設定、非秘密環境値と秘密設定の存在、DB関数定義、DBバックアップ／PITR状態、注文候補0件の基準値を退避する。PITRは前回OFF。Storage・StripeはDB全体復元と同時には戻らない。
 
 ## 閉じた本番反映の順序（上記解消・別途承認後）
 
-1. DB: 本番の実際のmigration履歴・関数定義・表・素材監査をREAD ONLYで再照合。未適用分だけを検証済み順序で適用する。現候補は `202609230001`～`202609230008`、`202609240001`、`202609240002` の10本。限定公開用migrationを追加した場合は最後に置き、ローカル再リハーサルをやり直す。外側transactionで適用し、commit前にrollout OFF・allowlist空・権限・既存データ不変を確認。失敗時はtransaction rollback。無差別な `db push` は使わない。
+1. DB: 本番の実際のmigration履歴・関数定義・表・素材監査をREAD ONLYで再照合。未適用分だけを検証済み順序で適用する。現候補は `202609230001`～`202609230008`、`202609240001`～`202609240003` の11本。外側transactionで適用し、commit前にrollout OFF・allowlist空・権限・既存データ不変を確認。失敗時はtransaction rollback。無差別な `db push` は使わない。
 2. Edge: `BOOK_COMPLETION_ENABLED=false` を明示して、`public-voice`、`publish-voice-edition`、`create-checkout-session`、`sync-checkout-session`、`stripe-webhook`、`cancel-book-completion`、`web-book-preview` の7本だけ反映。既存のgateway JWT設定、Stripe署名検証、商用キー／Webhook設定を維持。publish bundleに `_shared/immutable-publication-copy.ts` と素材認可の修正が入ることを確認。
 3. Front: 現行HPを保持した統合artifactの完成フラグOFF版を反映。Family/Cと一般HP CTAは現行状態を維持。配信HTMLとJS/CSSのハッシュを記録。
 4. DB rollout OFF、allowlist空、Edge OFF、Front OFFのまま、表・関数・Edge版・ログ、既存顧客の画面を確認する。新候補、公開Webブック、本棚作品セットが想定外に増えていないことを確認。ここでは購入・録音・編集・実課金を行わない。
@@ -69,4 +69,4 @@ DB rollout OFFは新candidateの作成を止めるが、決済中を自動キャ
 
 ## 未確認・後続
 
-iPhone Safari実機、実動画E2E、大きい動画のEdge実行時間、孤児Storageの安全なGC、未参照音声2件の由来は未確認・後続タスク。Premium追加・完成後増刷・QR実入稿も今回の公開範囲外。これらをPASS扱いにしない。今回のNO-GO理由は限定公開gateとFront統合artifact／最終release commitの未確定である。
+iPhone Safari実機、実動画E2E、大きい動画のEdge実行時間、孤児Storageの安全なGC、未参照音声2件の由来は未確認・後続タスク。Premium追加・完成後増刷・QR実入稿も今回の公開範囲外。これらをPASS扱いにしない。今回のNO-GO理由はFront統合artifact／最終release commit・実行直前drift照合の未確定である。

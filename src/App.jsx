@@ -14537,20 +14537,29 @@ export function Scene_BookBuilder({
   const [includedStoryIds, setIncludedStoryIds] = useState([]);
   const [bookWork, setBookWork] = useState(null);
   const [completionCandidate,setCompletionCandidate]=useState(null);
+  const [completionAllowed,setCompletionAllowed]=useState(false);
   const [completionStatus,setCompletionStatus]=useState(BOOK_COMPLETION_ENABLED&&!readOnly?'loading':'ready');
   const [completionError,setCompletionError]=useState('');
   const [qrInBook,setQrInBook]=useState(true);
   const [useWebPin,setUseWebPin]=useState(false);
   const [webPin,setWebPin]=useState('');
-  const completionPending=BOOK_COMPLETION_ENABLED&&['prepared','checkout'].includes(completionCandidate?.state);
+  // A pending order stays in the completion flow even if its Account is later
+  // removed from the allowlist; it must not fall into the legacy order path.
+  const completionFlow=BOOK_COMPLETION_ENABLED&&(completionAllowed||Boolean(completionCandidate));
+  const completionPending=completionFlow&&['prepared','checkout'].includes(completionCandidate?.state);
   const completionBlocked=BOOK_COMPLETION_ENABLED&&(completionStatus!=='ready'||completionPending||completionCandidate?.state==='completed');
   useEffect(()=>{
     if(!BOOK_COMPLETION_ENABLED||readOnly||!bookProjectId)return;
     let live=true;
     setCompletionStatus('loading');setCompletionError('');setCompletionCandidate(null);
-    supabaseClient.rpc('get_book_completion',{input_project_id:bookProjectId}).then(({data,error})=>{
+    Promise.all([
+      supabaseClient.rpc('can_use_book_completion',{input_project_id:bookProjectId}),
+      supabaseClient.rpc('get_book_completion',{input_project_id:bookProjectId})
+    ]).then(([capability,completion])=>{
       if(!live)return;
-      if(error){setCompletionStatus('error');setCompletionError('注文状態を確認できませんでした。再読み込みしてください。');return;}
+      if(capability.error||completion.error){setCompletionStatus('error');setCompletionError('注文状態を確認できませんでした。再読み込みしてください。');return;}
+      const data=completion.data;
+      setCompletionAllowed(capability.data===true);
       setCompletionCandidate(data);
       if(data){setQrInBook(data.qr_in_book);setUseWebPin(data.pin_enabled);if(data.shipping_address)setShippingAddress(data.shipping_address);}
       if(data?.state==='completed'){setOrderCompleted(true);setStepIndex(steps.length-1);}
@@ -15043,9 +15052,10 @@ export function Scene_BookBuilder({
 
   const submitBookOrder = async () => {
     if (!onPurchase || workSaving || !bookWork || (BOOK_COMPLETION_ENABLED&&completionStatus!=='ready')) return;
+    if(completionFlow&&!completionAllowed){setCoverSettingsSaveError('この注文は現在ご利用いただけません。注文手続きを取りやめてください。');return;}
     if (!completionPending&&(!shippingAddressComplete || !orderQuote || workError)) return;
-    if(BOOK_COMPLETION_ENABLED&&!completionPending&&useWebPin&&(!webPin||!isWebBookPin(webPin))){setCoverSettingsSaveError('PINは4桁の数字で入力してください。');return;}
-    if(!completionPending&&!bookWork.confirmed_at && !window.confirm(BOOK_COMPLETION_ENABLED?
+    if(completionFlow&&!completionPending&&useWebPin&&(!webPin||!isWebBookPin(webPin))){setCoverSettingsSaveError('PINは4桁の数字で入力してください。');return;}
+    if(!completionPending&&!bookWork.confirmed_at && !window.confirm(completionFlow?
       'この内容で注文手続きへ進みます。注文完了時に紙ブックとWebブックが完成し、内容は変更できなくなります。ご本人が紙面を確認済みですか？':
       "選択した語りを、この紙ブックとWebブックの共通の収録内容として確定します。確定後は作品の内容を変更できません。ご本人が紙面を確認済みですか？"))return;
     setWorkSaving(true);
@@ -15056,7 +15066,7 @@ export function Scene_BookBuilder({
       setCoverSettingsSaveError("");
       await persistCoverSettings();
       let candidate=completionCandidate;
-      if(BOOK_COMPLETION_ENABLED&&!bookWork.confirmed_at){
+      if(completionFlow&&!bookWork.confirmed_at){
         if(!candidate){
           const selection=await saveSelection(includedStoryIds);
           const {data,error}=await supabaseClient.rpc('prepare_book_completion',{
@@ -15094,10 +15104,10 @@ export function Scene_BookBuilder({
         includeGiftPackage,
         shippingAddress,
         returnContext: "book_builder",
-        completionCandidateId:BOOK_COMPLETION_ENABLED?candidate?.id:null,
+        completionCandidateId:completionFlow?candidate?.id:null,
         checkoutWindow
       });
-      if (BOOK_COMPLETION_ENABLED&&candidate&&started) {
+      if (completionFlow&&candidate&&started) {
         // Checkout opening is not payment completion. The server owns this state,
         // including zero-yen orders and retries after a lost response.
         const {data:latest,error}=await supabaseClient.rpc('get_book_completion',{input_project_id:bookProjectId});
@@ -15808,9 +15818,9 @@ export function Scene_BookBuilder({
         {stepIndex === 4 && !readOnly && (
           orderCompleted ? (
             <div className="glass-card p-7 text-center">
-              <p className="text-white/82 text-[1.05rem] text-narrative">{BOOK_COMPLETION_ENABLED?'一冊が、できました。':'注文を受け付けました'}</p>
-              <p className="mt-5 text-sm leading-loose text-white/42">{BOOK_COMPLETION_ENABLED?'語ってきた人生を、ブックとWebブックの二つの作品として本棚に収めました。':'選んだ内容とお届け先を保存しました。'}</p>
-              {BOOK_COMPLETION_ENABLED&&<a className="inline-block mt-6 rounded-full border border-white/20 px-6 py-3" href="/?library=1">私の本棚へ</a>}
+              <p className="text-white/82 text-[1.05rem] text-narrative">{completionFlow?'一冊が、できました。':'注文を受け付けました'}</p>
+              <p className="mt-5 text-sm leading-loose text-white/42">{completionFlow?'語ってきた人生を、ブックとWebブックの二つの作品として本棚に収めました。':'選んだ内容とお届け先を保存しました。'}</p>
+              {completionFlow&&<a className="inline-block mt-6 rounded-full border border-white/20 px-6 py-3" href="/?library=1">私の本棚へ</a>}
             </div>
           ) : (
             <div className="space-y-5">
@@ -15821,7 +15831,7 @@ export function Scene_BookBuilder({
                   </p>
                 </div>
               )}
-              {BOOK_COMPLETION_ENABLED&&!bookWork?.confirmed_at&&<div className="glass-card p-5 space-y-4">
+              {completionFlow&&!bookWork?.confirmed_at&&<div className="glass-card p-5 space-y-4">
                 <p className="text-white/80">声と言葉を、Webブックにも。</p>
                 <fieldset className="space-y-3"><legend>WebブックへのQRを本に載せますか？</legend>
                   <label className="block"><input type="radio" name="book-qr" checked={qrInBook} onChange={()=>setQrInBook(true)}/> 載せる</label>
@@ -15925,11 +15935,11 @@ export function Scene_BookBuilder({
                     </div>
                     <button
                       type="button"
-                      onClick={!BOOK_COMPLETION_ENABLED&&purchaseStatus === "checkout_opened" ? onReopenCheckout : submitBookOrder}
+                      onClick={!completionFlow&&purchaseStatus === "checkout_opened" ? onReopenCheckout : submitBookOrder}
                       disabled={!shippingAddressComplete || workSaving || Boolean(workError) || !bookWork || purchaseStatus === "starting" || purchaseStatus === "checking"}
                       className="btn-quiet mt-5 w-full rounded-full bg-white/10 py-4 text-white/88 disabled:opacity-40"
                     >
-                      {!BOOK_COMPLETION_ENABLED&&purchaseStatus === "checkout_opened"
+                      {!completionFlow&&purchaseStatus === "checkout_opened"
                         ? "決済画面を開き直す"
                         : purchaseStatus === "starting" || purchaseStatus === "checking"
                         ? "注文を準備しています…"

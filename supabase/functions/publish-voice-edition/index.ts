@@ -177,6 +177,8 @@ serve(async (req) => {
       candidate=result.data;
       if(!candidate || !['prepared','checkout','completed'].includes(candidate.state) ||
         (candidate.state!=='completed'&&storedWork?.confirmed_at) || candidate.work_manifest_id!==storedWork?.id)throw new HttpError('Order candidate is unavailable',409);
+      const {data:enabled,error:rolloutError}=await serviceClient.rpc('book_completion_account_allowed',{input_account_id:user.id});
+      if(rolloutError || enabled!==true)throw new HttpError('Completion is not enabled for this Account',403);
     }
     const work=candidate?{...storedWork,snapshot:candidate.snapshot}:storedWork;
     if (!work?.snapshot || (!candidate&&!work.confirmed_at)) throw new HttpError("先に紙面と収録内容を確認してください", 409);
