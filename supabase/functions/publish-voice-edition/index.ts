@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireExperienceProcessing } from "../_shared/experience-access.ts";
 import {compareMediaChronologically} from '../_shared/media-order.js';
 import { requireFamilyProjectAccess, requireFamilyAssetAccess } from "../_shared/family-access.ts";
+import { copyImmutablePublicationAsset } from "../_shared/immutable-publication-copy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -159,7 +160,7 @@ serve(async (req) => {
       bookProjectId = publication.book_project_id;
     }
     if (!isUuid(bookProjectId)) throw new HttpError("bookProjectId is required", 400);
-    await requireProjectAccess(serviceClient, bookProjectId, user.id);
+    const familyManaged = await requireProjectAccess(serviceClient, bookProjectId, user.id);
 
     await requireExperienceProcessing(serviceClient, bookProjectId, user.id);
 
@@ -174,15 +175,25 @@ serve(async (req) => {
       const result=await serviceClient.from('book_completion_candidates').select('*').eq('id',body.candidateId).eq('book_project_id',bookProjectId).eq('requested_by',user.id).maybeSingle();
       if(result.error)throw result.error;
       candidate=result.data;
-      if(!candidate || candidate.state!=='prepared' || storedWork?.confirmed_at || candidate.work_manifest_id!==storedWork?.id)throw new HttpError('Order candidate is unavailable',409);
+      if(!candidate || !['prepared','checkout','completed'].includes(candidate.state) ||
+        (candidate.state!=='completed'&&storedWork?.confirmed_at) || candidate.work_manifest_id!==storedWork?.id)throw new HttpError('Order candidate is unavailable',409);
     }
     const work=candidate?{...storedWork,snapshot:candidate.snapshot}:storedWork;
     if (!work?.snapshot || (!candidate&&!work.confirmed_at)) throw new HttpError("先に紙面と収録内容を確認してください", 409);
     if (action === "update") throw new HttpError("完成作品の内容は変更できません。共有設定のみ変更できます", 409);
     const { data: prior, error: priorError } = await serviceClient.from("voice_publications")
-      .select("id, public_id, book_project_id, status, access_mode")
+      .select("id, public_id, book_project_id, status, access_mode, snapshot_metadata")
       .eq("work_manifest_id", work.id).maybeSingle();
     if (priorError) throw priorError;
+    if(candidate && candidate.state!=='prepared') {
+      if(!candidate.media_ready_at || prior?.id!==candidate.publication_id ||
+        prior?.snapshot_metadata?.completionCandidateId!==candidate.id ||
+        (candidate.state==='completed'?!['published','disabled'].includes(prior.status):prior.status!=='draft')) {
+        throw new HttpError('Order publication is inconsistent',409);
+      }
+      return jsonResponse({success:true,publicationId:prior.id,publicId:prior.public_id,
+        publicUrl:`${APP_URL}/?voice=${encodeURIComponent(prior.public_id)}`,status:prior.status,unchanged:true});
+    }
     if (prior && prior.status !== "draft") return jsonResponse({
       success: true, publicationId: prior.id, publicId: prior.public_id,
       publicUrl: `${APP_URL}/?voice=${encodeURIComponent(prior.public_id)}`,
@@ -201,6 +212,46 @@ serve(async (req) => {
     const publishableAnswers = answers;
     if (publishableAnswers.length === 0 && (videoRows || []).length === 0) {
       throw new HttpError("公開できる音声またはビデオがありません", 409);
+    }
+
+    if (project?.id !== bookProjectId || !isUuid(String(project?.subject_person_id || "")) ||
+        subject?.id !== project.subject_person_id) {
+      throw new HttpError("Invalid work ownership", 403);
+    }
+    // Check every source before creating even a draft publication or copying
+    // anything. The snapshot is frozen, but its paths are still untrusted data.
+    const sources: Array<{bucket: string; path: string; kind: string; id: string}> = [];
+    for (const [field, kind] of [["cover_photo_path", "cover"], ["premium_cover_photo_path", "premium_cover"]]) {
+      if (cover?.[field]) sources.push({bucket: PHOTO_BUCKET, path: cover[field], kind, id: bookProjectId});
+    }
+    for (const answer of publishableAnswers) {
+      if (!isUuid(String(answer.id || "")) || answer.book_project_id !== bookProjectId ||
+          answer.subject_person_id !== project.subject_person_id ||
+          (answer.user_question_id && !questionsById.has(answer.user_question_id))) {
+        throw new HttpError("Invalid answer ownership", 403);
+      }
+      for (const media of [...(audioByAnswerId.get(answer.id) || []), ...(photosByAnswerId.get(answer.id) || [])]) {
+        if (media.answer_id !== answer.id || !isUuid(String(media.id || ""))) throw new HttpError("Invalid media ownership", 403);
+        sources.push({bucket: media.asset_type === "audio" ? AUDIO_BUCKET : PHOTO_BUCKET,
+          path: media.storage_path, kind: media.asset_type, id: media.id});
+      }
+    }
+    for (const video of videoRows || []) {
+      if (!isUuid(String(video.id || ""))) throw new HttpError("Invalid video ownership", 403);
+      sources.push({bucket: VIDEO_BUCKET, path: video.video_storage_path, kind: "video", id: video.id});
+      if (video.audio_storage_path) sources.push({bucket: VIDEO_BUCKET, path: video.audio_storage_path, kind: "video_audio", id: video.id});
+      if (video.poster_storage_path) sources.push({bucket: VIDEO_BUCKET, path: video.poster_storage_path, kind: "video_poster", id: video.id});
+    }
+    for (const source of sources) {
+      if (!source.path || !isUuid(source.id)) throw new HttpError("Forbidden source asset", 403);
+      const {data: allowed, error: sourceError} = await serviceClient.rpc("publication_source_asset_allowed", {
+        input_project: bookProjectId, input_bucket: source.bucket, input_path: source.path,
+        input_kind: source.kind, input_source: source.id
+      });
+      if (sourceError || allowed !== true) throw new HttpError("Forbidden source asset", 403);
+      if (familyManaged && await requireFamilyAssetAccess(serviceClient, source.bucket, source.path, user.id, bookProjectId) !== true) {
+        throw new HttpError("Forbidden family source asset", 403);
+      }
     }
 
     const publicId = existingPublication?.public_id || randomHex(24);
@@ -227,11 +278,25 @@ serve(async (req) => {
         })
         .select("id, public_id, book_project_id, status, access_mode")
         .single();
-      if (publicationError) throw publicationError;
-      publication = createdPublication;
+      if (publicationError) {
+        if (publicationError.code !== '23505') throw publicationError;
+        // Concurrent requests may both see no publication. Reuse the unique
+        // work-owned row; never create a second URL or remove another attempt's assets.
+        const retry = await serviceClient.from('voice_publications')
+          .select('id, public_id, book_project_id, status, access_mode')
+          .eq('work_manifest_id',work.id).single();
+        if(retry.error || !retry.data || retry.data.book_project_id!==bookProjectId)throw publicationError;
+        publication=retry.data;
+      } else publication = createdPublication;
     }
 
     const revisionId = candidate?.id || work.id;
+    const authorizedSources = new Set(sources.map(source=>`${source.bucket}\0${source.path}`));
+    const copyIntegrity: Array<{bucket: string; path: string; sha256: string; bytes: number}> = [];
+    const copyAuthorized = async (bucket: string, source: string, destination: string) => {
+      if(!authorizedSources.has(`${bucket}\0${source}`))throw new HttpError('Source was not authorized',403);
+      copyIntegrity.push(await copyImmutablePublicationAsset(serviceClient,bucket,source,destination));
+    };
     const fixedCover = Object.fromEntries([
       "title","subtitle","footer_text","cover_style","cloth_color","print_color",
       "cover_photo_path","cover_photo_transform","premium_cover_photo_path","premium_cover_photo_transform"
@@ -239,7 +304,7 @@ serve(async (req) => {
     for(const field of ["cover_photo_path", "premium_cover_photo_path"]) {
       if(!fixedCover[field])continue;
       const path=`published/${publication.id}/cover/${revisionId}/${field}${safeExtension(fixedCover[field],".jpg")}`;
-      await copyOnce(serviceClient,PHOTO_BUCKET,fixedCover[field],path);
+      await copyAuthorized(PHOTO_BUCKET,fixedCover[field],path);
       fixedCover[field]=path;
     }
 
@@ -258,8 +323,7 @@ serve(async (req) => {
         const part = numericPart(media.meta_json?.part, index + 1);
         const extension = safeExtension(media.storage_path);
         const destinationPath = `published/${publication.id}/revisions/${revisionId}/${String(itemOrder).padStart(3, "0")}/${media.id}${extension}`;
-        await requireFamilyAssetAccess(serviceClient, AUDIO_BUCKET, media.storage_path, user.id, bookProjectId);
-        await copyOnce(serviceClient, AUDIO_BUCKET, media.storage_path, destinationPath);
+        await copyAuthorized(AUDIO_BUCKET, media.storage_path, destinationPath);
 
         copiedAssets.push({
           videoId: media.meta_json?.video_id || null,
@@ -274,8 +338,7 @@ serve(async (req) => {
         const media = sourcePhotos[index];
         const extension = safeExtension(media.storage_path, ".jpg");
         const destinationPath = `published/${publication.id}/revisions/${revisionId}/${String(itemOrder).padStart(3, "0")}/${media.id}${extension}`;
-        await requireFamilyAssetAccess(serviceClient, PHOTO_BUCKET, media.storage_path, user.id, bookProjectId);
-        await copyOnce(serviceClient, PHOTO_BUCKET, media.storage_path, destinationPath);
+        await copyAuthorized(PHOTO_BUCKET, media.storage_path, destinationPath);
 
         copiedPhotos.push({
           storagePath: destinationPath,
@@ -312,21 +375,18 @@ serve(async (req) => {
     for (const videoStory of videoRows || []) {
       const destinationRoot = `published/${publication.id}/videos/${revisionId}/${String(videoStory.slot_order).padStart(2, "0")}`;
       const videoDestination = `${destinationRoot}/video${safeExtension(videoStory.video_storage_path)}`;
-      await requireFamilyAssetAccess(serviceClient, VIDEO_BUCKET, videoStory.video_storage_path, user.id, bookProjectId);
-      await copyOnce(serviceClient, VIDEO_BUCKET, videoStory.video_storage_path, videoDestination);
+      await copyAuthorized(VIDEO_BUCKET, videoStory.video_storage_path, videoDestination);
 
       let audioDestination = null;
       if (videoStory.audio_storage_path) {
         audioDestination = `${destinationRoot}/audio${safeExtension(videoStory.audio_storage_path)}`;
-        await requireFamilyAssetAccess(serviceClient, VIDEO_BUCKET, videoStory.audio_storage_path, user.id, bookProjectId);
-        await copyOnce(serviceClient, VIDEO_BUCKET, videoStory.audio_storage_path, audioDestination);
+        await copyAuthorized(VIDEO_BUCKET, videoStory.audio_storage_path, audioDestination);
       }
 
       let posterDestination = null;
       if (videoStory.poster_storage_path) {
         posterDestination = `${destinationRoot}/poster${safeExtension(videoStory.poster_storage_path, ".jpg")}`;
-        await requireFamilyAssetAccess(serviceClient, VIDEO_BUCKET, videoStory.poster_storage_path, user.id, bookProjectId);
-        await copyOnce(serviceClient, VIDEO_BUCKET, videoStory.poster_storage_path, posterDestination);
+        await copyAuthorized(VIDEO_BUCKET, videoStory.poster_storage_path, posterDestination);
       }
 
       copiedVideos.push({
@@ -350,7 +410,7 @@ serve(async (req) => {
     const snapshotMetadata={
       cover:fixedCover,footerText:String(cover?.footer_text||'').trim(),
       sourceAnswerCount:publishableAnswers.length,sourceVideoCount:copiedVideos.length,
-      sourceProjectTitle:String(project.title||'').trim(),revisionId,updatedAt:publishedAt,
+      sourceProjectTitle:String(project.title||'').trim(),revisionId,updatedAt:publishedAt,copyIntegrity,
       ...(candidate?{completionCandidateId:candidate.id,qrInBook:candidate.qr_in_book}:{})
     };
     const { error: replaceError } = candidate?await serviceClient.rpc('write_book_completion_publication',{
@@ -373,14 +433,16 @@ serve(async (req) => {
     return jsonResponse({
       success: true,
       publicationId: publication.id,
-      publicId,
-      publicUrl: `${APP_URL}/?voice=${encodeURIComponent(publicId)}`,
+      publicId: publication.public_id,
+      publicUrl: `${APP_URL}/?voice=${encodeURIComponent(publication.public_id)}`,
       accessMode: publication.access_mode || "link",
       updated: action === "update",
       publishedAt,
       itemCount: itemRows.length,
       videoCount: copiedVideos.length
     });
+    // No error cleanup: a failed response may follow a committed DB transaction,
+    // or a parallel attempt may already reference these immutable copies.
   } catch (error) {
     console.error("publish-voice-edition", error);
     const status = error instanceof HttpError ? error.status : 500;
@@ -393,8 +455,8 @@ async function requireProjectAccess(
   client: ReturnType<typeof createClient>,
   projectId: string,
   userId: string
-) {
-  if (await requireFamilyProjectAccess(client, projectId, userId)) return;
+): Promise<boolean> {
+  if (await requireFamilyProjectAccess(client, projectId, userId)) return true;
   const { data: project, error: projectError } = await client
     .from("book_projects")
     .select("owner_user_id")
@@ -402,7 +464,7 @@ async function requireProjectAccess(
     .maybeSingle();
   if (projectError) throw projectError;
   if (!project) throw new HttpError("Forbidden", 403);
-  if (project.owner_user_id === userId) return;
+  if (project.owner_user_id === userId) return false;
 
   const { data: admin } = await client
     .from("admin_users")
@@ -410,7 +472,7 @@ async function requireProjectAccess(
     .eq("user_id", userId)
     .eq("is_active", true)
     .maybeSingle();
-  if (admin) return;
+  if (admin) return false;
 
   const { data: supporter, error: supporterError } = await client
     .from("project_supporters")
@@ -422,6 +484,7 @@ async function requireProjectAccess(
     .maybeSingle();
   if (supporterError) throw supporterError;
   if (!supporter) throw new HttpError("Forbidden", 403);
+  return false;
 }
 
 function groupAndSortMedia(mediaRows: any[], chronological = false) {
@@ -488,15 +551,4 @@ function jsonResponse(payload: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" }
   });
-}
-
-// Publication-owned paths are immutable to clients. A retry reuses completed copies.
-async function copyOnce(client: ReturnType<typeof createClient>, bucket: string, source: string, destination: string) {
-  const parent = destination.slice(0, destination.lastIndexOf("/"));
-  const name = destination.slice(destination.lastIndexOf("/") + 1);
-  const { data, error } = await client.storage.from(bucket).list(parent, { search: name });
-  if (error) throw error;
-  if (data?.some((object: any) => object.name === name && Number(object.metadata?.size) > 0)) return;
-  const { error: copyError } = await client.storage.from(bucket).copy(source, destination);
-  if (copyError) throw copyError;
 }

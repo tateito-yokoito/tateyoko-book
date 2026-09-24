@@ -173,7 +173,7 @@ export default function VoiceLibraryPage({ supabaseClient, reviewContext = null 
         <aside className="voice-library-next">
           <p>物語を聴いた先で、また残しておきたい声が見つかったときに。</p>
           <a href="/?app=1">新しい語りを残す</a>
-          <span>ご家族への共有や増刷は、各作品の管理画面から行えます。</span>
+          <span>作品ごとの「閲覧方法」から、リンク共有や暗証番号を設定できます。</span>
         </aside>
       )}
     </main>

@@ -4,7 +4,11 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 const ref='zpswxefgfabzvxdbtyvq';
-const publicId='cd4e34988e1873a78125771ca2c54a9167f3459e98650a29';
+const currentCheckout=process.argv.includes('--current-checkout');
+const checkout=currentCheckout?JSON.parse(fs.readFileSync('output/web-book-e2e/source-guard-stripe-checkout.json','utf8')):null;
+if(checkout)assert.equal(checkout.ref,ref);
+const publicId=checkout?.publicId||'cd4e34988e1873a78125771ca2c54a9167f3459e98650a29';
+assert.match(publicId,/^[0-9a-f]{48}$/);
 const raw=execFileSync(process.env.QA_SUPABASE_CLI,['projects','api-keys','--project-ref',ref,'--output','json'],{encoding:'utf8',stdio:['ignore','pipe','pipe']});
 const keys=JSON.parse(raw.slice(raw.indexOf('['),raw.lastIndexOf(']')+1));
 const anon=keys.find(key=>key.name==='anon'&&key.type==='legacy')?.api_key;
@@ -13,7 +17,7 @@ const endpoint=`https://${ref}.supabase.co/functions/v1/public-voice`;
 const hash=b=>createHash('sha256').update(b).digest('hex');
 for(const [kind,index,source] of [
  ['audio',0,'public/site/hp-renewal/sample-voice.wav'],
- ['audio',1,'public/site/trial-demo-voice.wav'],
+ ...(!currentCheckout?[['audio',1,'public/site/trial-demo-voice.wav']]:[]),
  ['photo',0,'public/site/hero-book.jpg'],
 ]){
  const response=await fetch(endpoint,{method:'POST',headers:{apikey:anon,'Content-Type':'application/json'},body:JSON.stringify({publicId,action:'asset',kind,itemOrder:1,assetIndex:index})});
@@ -33,7 +37,9 @@ try{
  await page.getByLabel('再生プレイヤー').waitFor({timeout:15000});
  const seek=page.getByLabel('再生プレイヤー').getByRole('slider',{name:'語り全体の再生位置'});
  await seek.waitFor({timeout:15000});
- await page.waitForTimeout(1700);
+ // Remote signed media may still be buffering; do not mistake network latency
+ // for a playback failure after an arbitrary 1.7-second delay.
+ await page.waitForFunction(()=>document.querySelector('audio')?.currentTime>0.1,{},{timeout:20000}).catch(()=>{});
  let time=await page.locator('audio').evaluate(el=>el.currentTime);
  if(time===0){
   const retry=page.getByLabel('再生プレイヤー').getByRole('button',{name:'音声を再生'});
@@ -50,5 +56,5 @@ try{
  await page.getByLabel('再生プレイヤー').getByRole('button',{name:'音声を再生'}).waitFor();
  await page.getByLabel('再生プレイヤー').getByRole('button',{name:'次の語りを再生'}).count();
  await page.screenshot({path:'output/web-book-e2e/real-media-mini-player.png'});
- console.log(JSON.stringify({testOnly:true,publicSignedAudioParts:2,publicSignedPhoto:1,mobileChromiumPlayback:true,mobileChromiumSeek:true,fixedMiniPlayer:true,iphoneSafariVerified:false}));
+ console.log(JSON.stringify({testOnly:true,publicSignedAudioParts:currentCheckout?1:2,publicSignedPhoto:1,mobileChromiumPlayback:true,mobileChromiumSeek:true,fixedMiniPlayer:true,iphoneSafariVerified:false}));
 }finally{await browser.close();}
