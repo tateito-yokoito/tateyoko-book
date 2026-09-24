@@ -2,6 +2,8 @@
 
 2026-09-24追記：cleanupの整合性問題は修正・障害注入TESTを終え、CONDITIONAL GOへ更新。結果は `web-book-copy-integrity-20260924.md`。以下は別途公開承認を受けて使う未実行の手順。本番は変更していない。以前のNO-GO監査は `web-book-production-source-audit-20260924.md` に履歴として残す。
 
+最終リリース判定は `web-book-final-release-plan-20260924.md` を優先する。現行rolloutは全体booleanで先行Account限定にできず、統合Front artifactも未固定のため、限定公開の実行判定は現在NO-GO。以下の全体ON手順は、限定gateの追加・再TEST後に置き換えること。
+
 ## 現在の本番と反映範囲
 
 - Supabase: `wquxjeqkumossjxehdop`。migration履歴115件、最新 `202609220002_book_milestones`。
@@ -94,7 +96,7 @@ Frontは完成フラグOFF版とON版を同じcommitから用意する。まずO
 3. 最後にDB `book_completion_rollout.enabled=true`。候補作成を開始可能にする。
 4. 非課金smokeとエラーログ確認。実ユーザーの初回完成を監視対象とする。実課金TESTはこの手順へ含めない。
 
-現行BOOK完成rolloutは全体booleanでありAccount別allowlistではない。Familyのallowlistで本人起点の完成まで限定できるとは表現しない。今回は既存の少数顧客に対する開放とし、個別Account限定を必須とする場合は別の公開制御が必要。Family/Cの開放は含めない。
+現行BOOK完成rolloutは全体booleanでありAccount別allowlistではない。Familyのallowlistで本人起点の完成まで限定できるとは表現しない。先行Account限定の要件があるため、上記1～3の全体ON手順は現状実行しない。限定gateを実装して再検証した後、`web-book-final-release-plan-20260924.md` に従って更新する。Family/Cの開放は含めない。
 
 **開放後のgate closeと復帰:**
 
@@ -107,6 +109,6 @@ Frontは完成フラグOFF版とON版を同じcommitから用意する。まずO
 
 ## 残すQA・後続事項
 
-iPhone Safari実機・実動画E2Eは未確認。Safari未確認だけを公開停止理由にはしない。Storage障害注入は現時点で未実施だが、今回見つかったcleanupの完成整合性問題については、修正と最小検証を公開条件とする。
+iPhone Safari実機・実動画E2Eは未確認。Safari未確認だけを公開停止理由にはしない。Storageコピー途中失敗、DB確定後の応答喪失・例外、並行実行、再試行、コピー先不一致の障害注入は `web-book-copy-integrity-20260924.md` のとおりTESTでPASS。孤児StorageのGCは未実装。
 
 Premium追加・完成後増刷・QR実入稿は後続。QR実入稿接続は未実装。閲覧UIに追加の仕様変更は行わない。
