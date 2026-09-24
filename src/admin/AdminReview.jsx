@@ -1583,7 +1583,7 @@ function DetailPanel({
               </div>
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5">
+            <section className="hidden rounded-2xl border border-slate-200 bg-white p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="flex items-center gap-2 text-sm font-medium"><BookOpen size={16} className="text-slate-400" />Web冊子・音声プレイヤー</h3>
