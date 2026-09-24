@@ -12465,12 +12465,16 @@ function Scene_ConnectionComplete({ connection, onOpen, onConnectionsHome }) {
   );
 }
 
-function Scene_ConnectionsHome({
+export function Scene_ConnectionsHome({
   userName,
+  ownedProjects = [],
   receivedProjects = [],
   supportedProjects = [],
+  readOnly = false,
+  onOpenOwnedProject,
   onOpenReceivedProject,
   onOpenSupportedProject,
+  onOpenBookshelf,
   onStartOwnStory
 }) {
   return (
@@ -12481,6 +12485,11 @@ function Scene_ConnectionsHome({
       </div>
 
       <div className="space-y-7">
+        {ownedProjects.length > 0 && <section className="space-y-3">
+          <p className="text-white/38 text-xs tracking-[0.18em] px-1">自分の物語</p>
+          {ownedProjects.map(project => <HomeMenuButton key={`owned-${project.id}`} icon={BookOpen}
+            label={`${project.subject_name || userName}の物語`} onClick={() => onOpenOwnedProject?.(project)} />)}
+        </section>}
         {receivedProjects.length > 0 && (
           <section className="space-y-3">
             <p className="text-white/38 text-xs tracking-[0.18em] px-1">受け取っている物語</p>
@@ -12509,12 +12518,14 @@ function Scene_ConnectionsHome({
           </section>
         )}
 
-        <section className="pt-7 border-t border-white/[0.08] text-center space-y-4">
+        {onOpenBookshelf && <HomeMenuButton icon={BookOpen} label="本棚" onClick={onOpenBookshelf} />}
+
+        {!readOnly && <section className="pt-7 border-t border-white/[0.08] text-center space-y-4">
           <p className="text-white/38 text-xs leading-loose">ご自身の物語も、いつでも始められます。</p>
           <button type="button" onClick={onStartOwnStory} className="w-full py-3 text-white/50 text-sm underline underline-offset-4">
             自分の物語を始める
           </button>
-        </section>
+        </section>}
       </div>
     </div>
   );
@@ -14148,8 +14159,10 @@ function Scene_QuestionLibrary({ foundation, questionSet = [], onAdded, onBack }
   );
 }
 
-function Scene_SupportProjectHome({
+export function Scene_SupportProjectHome({
   project,
+  readOnly = false,
+  isOwner = false,
   onOpenQuestions,
   onOpenStories,
   onOpenBookBuilder,
@@ -14174,7 +14187,7 @@ function Scene_SupportProjectHome({
       <div className="flex-1 flex flex-col justify-center">
         <div className="text-center mb-12 space-y-3">
           <p className="text-white/38 text-xs tracking-[0.18em]">
-            {isFacilitator ? "進行役として開いています" : "物語づくりをお手伝い中"}
+            {isOwner ? "自分の物語" : isFacilitator ? "進行役として開いています" : "物語づくりをお手伝い中"}
           </p>
 
           <p className="text-white/86 text-[1.08rem] text-narrative">
@@ -14183,7 +14196,7 @@ function Scene_SupportProjectHome({
         </div>
 
         <div className="space-y-4">
-          {project?.can_operate_recording && (
+          {!readOnly && project?.can_operate_recording && (
             <HomeMenuButton
               icon={Mic}
               label={isFacilitator ? "届いた問いから語る" : "問いの録音を手伝う"}
@@ -14199,7 +14212,7 @@ function Scene_SupportProjectHome({
             />
           )}
 
-          {project?.can_build_book && (
+          {!readOnly && project?.can_build_book && (
             <HomeMenuButton
               icon={BookOpen}
               label="本に仕上げる"
@@ -14207,7 +14220,7 @@ function Scene_SupportProjectHome({
             />
           )}
 
-          {onOpenDelivery && (
+          {!readOnly && onOpenDelivery && (
             <HomeMenuButton
               icon={Bell}
               label="問いの受け取り方"

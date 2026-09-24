@@ -27,6 +27,8 @@ import {
   X
 } from "lucide-react";
 import { Scene_BookBuilder, Scene_SupportedStoryPages } from "../App.jsx";
+import CustomerExperienceReadOnly from "./CustomerExperienceReadOnly.jsx";
+import AdminWebBookPreview from "./AdminWebBookPreview.jsx";
 import { AccountImpactSummary, AccountProjectFacts, AccountRetirementDialog, summarizeAccountImpact } from "./AccountImpact.jsx";
 import "./admin-accounts.css";
 
@@ -1295,6 +1297,7 @@ function AccountDetailPanel({
   detail,
   loading,
   onClose,
+  onOpenCustomerExperience,
   onOpenProject,
   onMoveToTrash,
   onRestore,
@@ -1322,6 +1325,9 @@ function AccountDetailPanel({
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
               <h3 className="text-xl font-medium">{account.display_name || "名称未登録"}</h3>
               <p className="mt-1 text-sm text-slate-500">{account.email || "メール未登録"}</p>
+              <button type="button" onClick={() => onOpenCustomerExperience(account.id)} className="mt-5 rounded-xl border border-slate-200 px-4 py-3 text-sm">
+                顧客体験を見る（閲覧専用）
+              </button>
               <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
                 <div><dt className="text-xs text-slate-400">登録日</dt><dd className="mt-1">{formatDate(account.created_at)}</dd></div>
                 <div><dt className="text-xs text-slate-400">最終ログイン</dt><dd className="mt-1">{formatDate(account.last_sign_in_at)}</dd></div>
@@ -1493,7 +1499,8 @@ function DetailPanel({
   hiddenEntry,
   trashLoading,
   onOpenStoryPreview,
-  onOpenBookPreview,
+  onOpenCustomerExperience,
+  onOpenWebPreview,
   previewLoading,
   voicePublicationBusy,
   voicePublicationError,
@@ -1560,22 +1567,17 @@ function DetailPanel({
                 </div>
               </dl>
               <div className="mt-6 grid gap-3 border-t border-slate-100 pt-5 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={onOpenStoryPreview}
-                  disabled={previewLoading}
-                  className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
-                >
-                  <span className="flex items-center gap-2"><Files size={16} />語りを見る</span>
-                  <ChevronRight size={16} className="text-slate-300" />
+                <button type="button" onClick={onOpenCustomerExperience}
+                  className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50">
+                  <span className="flex items-center gap-2"><Files size={16} />顧客体験を見る</span><ChevronRight size={16} className="text-slate-300" />
                 </button>
                 <button
                   type="button"
-                  onClick={onOpenBookPreview}
-                  disabled={previewLoading}
+                  onClick={onOpenWebPreview}
+                  disabled={Boolean(detail.voice_publication?.published_at)}
                   className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
                 >
-                  <span className="flex items-center gap-2"><BookOpen size={16} />本に仕上げる</span>
+                  <span className="flex items-center gap-2"><BookOpen size={16} />Webブック Live Preview</span>
                   <ChevronRight size={16} className="text-slate-300" />
                 </button>
               </div>
@@ -1838,6 +1840,8 @@ export default function AdminReview({ supabaseClient }) {
   const [retirementConfirmation, setRetirementConfirmation] = useState(null);
   const retirementBusyRef = useRef(false);
   const [previewMode, setPreviewMode] = useState(null);
+  const [customerExperienceTarget, setCustomerExperienceTarget] = useState(null);
+  const [webPreview, setWebPreview] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
@@ -2988,7 +2992,8 @@ export default function AdminReview({ supabaseClient }) {
           onMoveToTrash={(project) => moveToTrash("book_project", project)}
           onRestore={restoreFromTrash}
           onOpenStoryPreview={() => openPreview("stories")}
-          onOpenBookPreview={() => openPreview("book")}
+          onOpenCustomerExperience={() => setCustomerExperienceTarget(detail?.project?.owner_user_id || detail?.purchase?.purchaser_user_id)}
+          onOpenWebPreview={() => setWebPreview(true)}
           voicePublicationBusy={voicePublicationBusy}
           voicePublicationError={voicePublicationError}
           onPublishVoiceEdition={publishVoiceEdition}
@@ -3006,6 +3011,7 @@ export default function AdminReview({ supabaseClient }) {
         <AccountDetailPanel
           detail={accountDetail}
           loading={accountDetailLoading}
+          onOpenCustomerExperience={setCustomerExperienceTarget}
           onOpenProject={(projectId) => {
             if (trashEntries.some(item => item.entity_type === "book_project" && item.entity_id === projectId) && !organizationModeActive) {
               setTrashActionError("非表示の物語の詳細を見るには、整理モードを有効にしてください。");
@@ -3103,6 +3109,8 @@ export default function AdminReview({ supabaseClient }) {
           </div>
         )
       ), document.body)}
+      {webPreview && detailId && createPortal(<div className="fixed inset-0 z-[100] overflow-auto"><AdminWebBookPreview client={supabaseClient} projectId={detailId} onClose={() => setWebPreview(false)} /></div>, document.body)}
+      {customerExperienceTarget && createPortal(<CustomerExperienceReadOnly client={supabaseClient} targetAccountId={customerExperienceTarget} onClose={() => setCustomerExperienceTarget(null)} />, document.body)}
     </div>
   );
 }
