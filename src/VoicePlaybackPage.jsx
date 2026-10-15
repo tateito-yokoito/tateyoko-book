@@ -323,6 +323,12 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
   }
 
   function openVideo(videoIndex) {
+    window.clearTimeout(transitionTimerRef.current);
+    transitionTimerRef.current=null;
+    autoplayRef.current=false;
+    audioRef.current?.pause();
+    setIsPlaying(false);
+    setCurrentVideoUrl("");
     setCurrentVideoIndex(clamp(videoIndex, 0, Math.max(videos.length - 1, 0)));
     setScreen("video");
   }

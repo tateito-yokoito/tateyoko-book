@@ -1,0 +1,40 @@
+.approved-home{width:100%;max-width:480px;margin:0 auto;height:100%;overflow-y:auto;background:#101c2c;color:#f1eee6;font-family:'Yu Mincho','Hiragino Mincho ProN',serif;font-size:17px;line-height:1.8}
+.approved-home *{box-sizing:border-box}.approved-home button,.approved-home a{font:inherit;color:inherit;cursor:pointer}.approved-home button:focus-visible,.approved-home a:focus-visible{outline:2px solid #ebd4a7;outline-offset:3px}.approved-home h1,.approved-home h2{font-weight:400}
+.approved-home .ah-sky{height:260px;position:relative;background:linear-gradient(#8baec1,#c6cfd0 48%,#101c2c);overflow:hidden}.approved-home .ah-sky img{width:100%;height:100%;object-fit:cover;object-position:50% 65%}.approved-home .ah-sky:after{content:'';position:absolute;inset:0;background:linear-gradient(transparent 45%,#101c2c)}
+.approved-home .ah-content{padding:0 23px 28px}.approved-home .ah-journey{background:#172537;border:1px solid #344154;border-radius:12px;padding:20px 18px 14px;margin-bottom:16px}.approved-home .ah-theme{display:flex;align-items:baseline;gap:12px;margin-bottom:18px}.approved-home .ah-theme>span{font-size:13px;color:#b2bdcb;white-space:nowrap}.approved-home .ah-theme h1{margin:0;font-size:22px;overflow-wrap:anywhere}.approved-home .ah-primary{display:flex;align-items:center;justify-content:center;gap:15px;width:100%;min-height:54px;border:0;border-radius:8px;background:#e7e3d9;color:#16273a;padding:12px}
+.approved-home .ah-own-entry{padding:16px 18px}.approved-home .ah-own-entry h1{font-size:15px;line-height:1.4;margin:0 0 11px;color:#c4cbd2}.approved-home .ah-own-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.approved-home .ah-own-actions button{min-height:54px;padding:7px 3px;border:0;border-radius:8px;background:#e7e3d9;color:#16273a;font-size:15px;line-height:1.35;text-align:center;overflow-wrap:anywhere}
+.approved-home .ah-group{margin-top:30px}.approved-home h2{font-size:15px;color:#b2bdcb;margin:0 0 12px}.approved-home .ah-rows{display:grid;gap:5px}.approved-home .ah-row{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:15px 14px;border:1px solid #344154;border-radius:8px;background:#142133;text-align:left;text-decoration:none}.approved-home .ah-row>svg{flex-shrink:0;color:#a7b5c7}.approved-home .ah-label{flex:1;min-width:0;overflow-wrap:anywhere}.approved-home .ah-count{color:#b9c3d0;font:13px sans-serif;white-space:nowrap}.approved-home .ah-row:disabled{opacity:.45;cursor:default}
+.approved-home .ah-footer{margin-top:28px;border-top:1px solid #344154;padding-top:10px;text-align:right}.approved-home .ah-footer button{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;padding:8px;background:transparent;border:0;color:#b2bdcb}.approved-home .ah-footer svg{width:30px;height:30px;flex-shrink:0}.approved-home .ah-dev{background:none;border:0;display:block;padding:12px;margin:auto;color:#b2bdcb}
+@media(max-width:359px){.approved-home .ah-content{padding-left:18px;padding-right:18px}.approved-home .ah-theme{gap:9px}.approved-home .ah-theme h1{font-size:20px}}
+/* Only the home scene opts out of the shared app frame. Other scenes keep it. */
+.approved-home .ah-theme>span,.approved-home .ah-count{font-size:15px}
+.approved-home .ah-theme>.ah-trial-progress{font-size:12px;color:#b2bdcb}
+.app-container:has(> .approved-home){padding:0;max-width:none}
+.app-container>.approved-home{max-width:none}
+.app-container>.approved-home .ah-content{max-width:480px;width:100%;margin:0 auto;padding-bottom:calc(28px + env(safe-area-inset-bottom))}
+@media(min-width:700px){.ah-sky img{object-position:var(--sky-pc-position)!important}}
+
+/* The customer and admin preview share this component and its typography. */
+.approved-home{font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-size:16px;line-height:1.7}
+.approved-home .ah-theme h1{font-family:'Noto Serif JP','Hiragino Mincho ProN',serif}
+.approved-home .ah-own-entry h1,.approved-home h2{font-family:inherit;font-size:16px;font-weight:500}
+.approved-home .ah-theme>span,.approved-home .ah-count,.approved-home .ah-theme>.ah-trial-progress{font-size:15px}
+.approved-home .ah-primary,.approved-home .ah-row,.approved-home .ah-own-actions button,.approved-home .ah-footer button{font-weight:500;letter-spacing:0}
+
+/* The same customer home is also rendered in the admin's read-only viewer. */
+@media(min-width:1024px){
+  .approved-home .ah-sky{width:calc(100% - 64px);max-width:1200px;height:330px;margin:32px auto 0;border-radius:24px}
+  .app-container>.approved-home .ah-content{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:24px 30px;width:calc(100% - 80px);max-width:1050px;margin:-48px auto 0;padding:0 0 72px;position:relative}
+  .approved-home .ah-content>.ah-journey{margin-bottom:0}
+  .approved-home .ah-content>.ah-group{margin-top:0}
+  .approved-home .ah-content>.ah-rows{align-self:start}
+  .approved-home .ah-content>.ah-footer{grid-column:1/-1;margin-top:0}
+  .approved-home .ah-theme h1{font-size:26px}
+  .approved-home .ah-journey{padding:26px}
+  .approved-home .ah-row{min-height:64px;padding:16px 18px}
+  .approved-home .ah-group h2{margin-bottom:14px}
+}
+@media(min-width:1024px) and (max-width:1200px){
+  .approved-home .ah-sky{width:calc(100% - 40px)}
+  .app-container>.approved-home .ah-content{width:calc(100% - 64px)}
+}

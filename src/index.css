@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500&family=Noto+Sans+JP:wght@300;400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500&family=Noto+Sans+JP:wght@400;500;600&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -22,6 +22,10 @@ body {
 }
 
 .app-container {
+  --font-ui: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+  --font-display: 'Noto Serif JP', 'Hiragino Mincho ProN', serif;
+  font-family: var(--font-ui);
+  font-size: 1rem;
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
@@ -33,6 +37,13 @@ body {
   padding-bottom: calc(env(safe-area-inset-bottom) + 6rem);
   padding-left: 24px;
   padding-right: 24px;
+}
+
+.app-container button,
+.app-container input,
+.app-container select,
+.app-container textarea {
+  font-family: var(--font-ui);
 }
 
 .flow-scene-shell {
@@ -168,6 +179,7 @@ body {
       pointer-events: none;
     }
     .text-narrative {
+      font-family: 'Noto Serif JP', 'Hiragino Mincho ProN', serif;
       line-height: 2.4;
       letter-spacing: 0.08em;
     }
@@ -219,19 +231,19 @@ body {
       opacity: 0.7;
     }
     .ui-label {
-      font-size: 0.875rem;
-      line-height: 1.8;
-      color: rgba(255, 255, 255, 0.48);
+      font-size: 0.9375rem;
+      line-height: 1.7;
+      color: rgba(255, 255, 255, 0.74);
     }
     .ui-help {
-      font-size: 0.9rem;
-      line-height: 2;
-      color: rgba(255, 255, 255, 0.48);
+      font-size: 0.9375rem;
+      line-height: 1.8;
+      color: rgba(255, 255, 255, 0.74);
     }
     .ui-small {
-      font-size: 0.875rem;
-      line-height: 1.9;
-      color: rgba(255, 255, 255, 0.4);
+      font-size: 0.9375rem;
+      line-height: 1.8;
+      color: rgba(255, 255, 255, 0.72);
     }
   
 .time-input {
@@ -312,4 +324,208 @@ input.quiet-input:-webkit-autofill:active {
 
 .quiet-recording-progress {
   transition: background 1.6s ease-out;
+}
+
+/* The setup steps are task screens, not narrow reading pages, on desktop. */
+@media (min-width: 900px) {
+  .app-container.app-container--desktop-setup {
+    max-width: 1080px;
+    padding: 3.5rem clamp(2rem, 5vw, 4rem) 4rem;
+  }
+
+  .onboarding-preferences,
+  .notification-setup,
+  .sharing-setup {
+    width: 100%;
+    padding: 0;
+  }
+
+  .onboarding-preferences__inner {
+    max-width: 840px;
+    min-height: min(760px, calc(100dvh - 7.5rem));
+    justify-content: center;
+  }
+
+  .onboarding-preferences__inner > div:first-child {
+    flex: 0 0 auto;
+  }
+
+  .onboarding-preferences__inner .text-center {
+    margin-bottom: 2rem;
+  }
+
+  .onboarding-preferences__inner .text-center p:first-child,
+  .sharing-setup__inner > div:first-child p:first-child,
+  .notification-setup__intro p:first-child {
+    font-family: var(--font-ui);
+    font-size: clamp(1.5rem, 2vw, 1.9rem);
+    font-weight: 500;
+    line-height: 1.55;
+    letter-spacing: 0.015em;
+  }
+
+  .onboarding-preferences__inner .text-center p:not(:first-child),
+  .sharing-setup__inner > div:first-child p:not(:first-child) {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 1.05rem;
+  }
+
+  .onboarding-preferences__card {
+    padding: 1.75rem;
+  }
+
+  .onboarding-preferences__choices {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+  }
+
+  .onboarding-preferences__choices .onboarding-choice {
+    min-height: 4.25rem;
+    padding: 0.85rem 1.25rem;
+    border-radius: 1rem;
+    font-size: 1.05rem;
+    text-align: left;
+  }
+
+  .onboarding-preferences__choices .onboarding-choice:not([aria-pressed="true"]) {
+    color: rgba(255, 255, 255, 0.77);
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+
+  .onboarding-preferences__choices .onboarding-choice[aria-pressed="true"] {
+    background: rgba(254, 243, 199, 0.16);
+    border-color: rgba(254, 243, 199, 0.76);
+    color: #fff;
+  }
+
+  .onboarding-preferences__actions {
+    width: min(100%, 380px);
+    align-self: center;
+    padding-top: 2rem;
+  }
+
+  .onboarding-preferences__actions button,
+  .sharing-setup__submit,
+  .notification-setup__submit {
+    min-height: 3.75rem;
+    font-size: 1.05rem;
+  }
+
+  .sharing-setup__inner {
+    max-width: 900px;
+  }
+
+  .sharing-setup {
+    min-height: min(760px, calc(100dvh - 7.5rem));
+  }
+
+  .sharing-setup__options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .sharing-setup__options > * + * {
+    margin-top: 0;
+  }
+
+  .sharing-setup__option {
+    min-height: 7rem;
+    padding: 1.25rem;
+    border-color: rgba(255, 255, 255, 0.16);
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .sharing-setup__option > span {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .sharing-setup__option > span > span:first-child {
+    font-size: 1.05rem;
+    line-height: 1.6;
+  }
+
+  .sharing-setup__option > span > span:last-child:not(:first-child) {
+    color: rgba(254, 243, 199, 0.85);
+    font-size: 0.9rem;
+  }
+
+  .sharing-setup__submit {
+    display: block;
+    max-width: 380px;
+    margin-inline: auto;
+  }
+
+  .notification-setup__content {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    grid-template-areas:
+      "intro intro"
+      "schedule channels"
+      "schedule-note channels"
+      "status status";
+    gap: 0 2rem;
+    align-content: start;
+  }
+
+  .notification-setup__intro { grid-area: intro; margin-bottom: 2rem; }
+  .notification-setup__schedule { grid-area: schedule; }
+  .notification-setup__schedule-note { grid-area: schedule-note; align-self: start; }
+  .notification-setup__channels { grid-area: channels; margin-top: 0; padding-top: 0; border-top: 0; }
+  .notification-setup__status { grid-area: status; min-height: 0; margin-top: 1.5rem; }
+
+  .notification-setup__intro p:not(:first-child),
+  .notification-setup__schedule-note,
+  .notification-setup__status p {
+    color: rgba(255, 255, 255, 0.68);
+  }
+
+  .notification-setup__schedule .glass-card {
+    min-height: 5.5rem;
+    padding: 1.1rem 1.25rem;
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .notification-setup__schedule-title,
+  .notification-setup__channels > p:first-child {
+    margin-bottom: 0.75rem;
+    font-family: var(--font-ui);
+    color: rgba(255, 255, 255, 0.88);
+  }
+
+  .notification-setup__schedule-title {
+    margin-bottom: 0;
+  }
+
+  .notification-setup__channels .rounded-2xl {
+    min-height: 5.5rem;
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .notification-setup__channels .text-white\/34,
+  .notification-setup__channels .text-white\/30 {
+    color: rgba(255, 255, 255, 0.65);
+  }
+
+  .notification-setup__submit {
+    width: min(100%, 380px);
+    align-self: center;
+    margin-top: 1.5rem;
+  }
+
+  .onboarding-choice:hover,
+  .sharing-setup__option:hover {
+    border-color: rgba(255, 255, 255, 0.62);
+  }
+
+  .onboarding-choice:focus-visible,
+  .sharing-setup__option:focus-visible,
+  .notification-setup button:focus-visible,
+  .notification-setup select:focus-visible {
+    outline: 2px solid #fef3c7;
+    outline-offset: 3px;
+  }
 }

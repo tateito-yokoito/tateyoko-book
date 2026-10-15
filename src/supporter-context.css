@@ -1,0 +1,12 @@
+.family-supporter-frame{--supporter-context-height:calc(38px + env(safe-area-inset-top));min-height:100dvh;padding-top:var(--supporter-context-height);background:#101c2c;box-sizing:border-box}
+.family-supporter-frame--embedded{min-height:100%;padding-top:0}
+.family-supporter-frame>.fixed.inset-0{top:var(--supporter-context-height)}
+.family-supporter-frame>.family-test{min-height:calc(100dvh - var(--supporter-context-height))}
+.family-supporter-context{position:fixed;top:0;right:0;left:0;z-index:10000;box-sizing:border-box;height:var(--supporter-context-height);padding-top:env(safe-area-inset-top);background:#101c2c;border-bottom:1px solid #ffffff14;color:#f2efe9}
+.family-supporter-frame--embedded .family-supporter-context{position:sticky;top:0;height:38px;padding-top:0}
+.family-supporter-context-inner{box-sizing:border-box;display:flex;align-items:center;gap:8px;width:min(100%,600px);height:38px;margin:0 auto;padding:0 12px;min-width:0;font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-size:16px;line-height:1.2}
+.family-supporter-context-return{display:inline-flex;align-items:center;justify-content:center;gap:3px;flex:none;min-width:72px;height:36px;padding:0 7px 0 0;border:0;border-right:1px solid #ffffff40;background:transparent;color:#f2dfb5;font:600 13px/1.2 'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;white-space:nowrap;cursor:pointer}
+.family-supporter-context-return:disabled{opacity:.5;cursor:default}
+.family-supporter-context-return:focus-visible{outline:2px solid #ebd4a7;outline-offset:1px}
+.family-supporter-context-badge{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:2px 9px;border-radius:999px;background:#d9c9a5;color:#172336;white-space:nowrap;font-weight:600}
+.family-supporter-context-name{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f2efe9}

@@ -1,0 +1,153 @@
+.reading-question .memory-cue{margin-top:12px;color:#b9c6d5;text-align:left;font-size:1rem;line-height:1.8}
+.reading-question .memory-cue summary{min-height:48px;padding:10px 4px;cursor:pointer;list-style:revert;font-size:1rem}
+.reading-question .memory-cue summary:focus-visible{outline:2px solid #e5d5b5;outline-offset:3px}
+.reading-question .memory-cue p{font-size:1.125rem;line-height:1.85;padding:8px 16px 16px;margin:0;border-left:2px solid #70664f;text-wrap:pretty;overflow-wrap:anywhere}
+.recording-status-row .recording-live-dot{animation:none;box-shadow:none}
+.recording-status-row .recording-state-label{font-size:1rem;letter-spacing:.06em;color:#cbd5e1}
+
+/* Keep the story headings in Mincho; prioritize reading clarity for the prompt. */
+.reading-question .recording-question-card{background:rgba(20,34,55,.94);border:1px solid rgba(186,199,213,.32);box-shadow:0 8px 28px rgba(7,17,36,.27);text-align:center}
+.reading-question .recording-question-card p{font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-weight:600;line-height:1.7;letter-spacing:.005em;color:#fff}
+.reading-question .recording-question-hint{margin-top:16px;padding:16px 18px;border:1px solid rgba(186,199,213,.3);border-radius:14px;background:rgba(20,34,55,.94);text-align:left;font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;color:#f4f6f8}
+.reading-question .recording-question-hint-label{margin:0 0 10px;font-size:1rem;font-weight:600;line-height:1.5;color:#f4dba3}
+.reading-question .recording-question-hint p:not(.recording-question-hint-label){margin:0 0 9px;font-size:1rem;line-height:1.8;letter-spacing:0;overflow-wrap:anywhere}
+.reading-question .recording-question-hint p:last-child{margin-bottom:0}
+
+/* Question and recording share the same calm composition. The photograph never
+   changes when only the controls change. */
+.story-sky-persistent.is-active .story-sky-backdrop::after,
+.story-sky-surface:has(.question-flow-content) .story-sky-backdrop::after{
+  background:rgba(10,21,36,.85);
+}
+.story-sky-content.question-flow-content>header.question-flow-header{
+  margin-bottom:56px;
+}
+.story-sky-content .reading-question>.recording-question-card{
+  padding:26px 20px;
+  border:1px solid rgba(133,148,167,.3);
+  border-radius:17px;
+  background:#192638;
+  text-align:center;
+  box-shadow:none;
+}
+.story-sky-content .reading-question>.recording-question-card p{
+  font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;
+  font-size:1.375rem;
+  font-weight:500;
+  line-height:1.8;
+  color:#fff;
+  text-align:center;
+}
+.story-sky-content .reading-question .recording-question-hint{
+  margin:24px 7px 0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:#d0d8df;
+}
+.story-sky-content .recording-question-hint-label{display:none}
+.story-sky-content .reading-question .recording-question-hint p:not(.recording-question-hint-label){
+  margin:0 0 12px;
+  font-size:1rem;
+  line-height:1.9;
+  color:#d0d8df;
+  overflow-wrap:normal;
+  text-wrap:pretty;
+}
+.story-sky-content.question-flow-content .recording-control-dock--start{
+  min-height:66px;
+  margin-top:25px;
+  padding:0;
+}
+.recording-start-bar{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  width:100%;
+  min-height:66px;
+  border:0;
+  border-radius:14px;
+  background:#e9e5dc;
+  color:#142337;
+  font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;
+  font-size:1.125rem;
+  font-weight:500;
+}
+.recording-start-bar:focus-visible,.recording-action-button:focus-visible{
+  outline:2px solid #e9e5dc;
+  outline-offset:3px;
+}
+.bookend-choice-area{display:grid;gap:12px;margin-top:40px;font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif}
+.bookend-video-meaning{margin:0 0 3px;color:#e4eaf1;text-align:center;font-size:1rem;line-height:1.8}
+.bookend-video-limit{margin:-4px 0 2px;color:#c5d0dd;text-align:center;font-size:.875rem;line-height:1.7}
+.bookend-voice-button{display:flex;align-items:center;justify-content:center;gap:12px;min-height:60px;width:100%;border:1px solid rgba(185,198,213,.48);border-radius:14px;background:rgba(20,34,55,.88);color:#f4f6f8;font-size:1.0625rem}
+.bookend-skip-button{min-height:48px;border:0;background:transparent;color:#d0d8df;font-size:1rem;text-decoration:underline;text-underline-offset:4px}
+.bookend-later-note{margin:0;color:#c5d0dd;text-align:center;font-size:.875rem;line-height:1.7}
+.bookend-choice-area button:disabled{opacity:.45}
+.bookend-choice-area button:focus-visible{outline:2px solid #e9e5dc;outline-offset:3px}
+.recording-action-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:12px;
+  width:100%;
+}
+.recording-action-button{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  width:100%;
+  min-height:66px;
+  padding:8px;
+  border:1px solid #91a2b1;
+  border-radius:14px;
+  background:#26364aeb;
+  color:#f8f6f0;
+  font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;
+  font-size:.95rem;
+  font-weight:500;
+  white-space:nowrap;
+}
+.recording-action-button svg{flex-shrink:0}
+.recording-action-button--stop{
+  border-color:#9ba7b3a8;
+  background:#1726389c;
+  font-size:.875rem;
+}
+@media(max-width:359px){
+  .story-sky-content .reading-question>.recording-question-card p{font-size:1.3125rem}
+  .recording-action-button{gap:5px;font-size:.875rem}
+  .recording-action-button--stop{font-size:.8125rem}
+}
+
+/* Desktop question and recording share one focused reading column. */
+@media(min-width:1024px){
+  .story-sky-surface .story-sky-content.question-flow-content{
+    max-width:760px;
+    padding:64px 30px 72px;
+  }
+  .story-sky-content.question-flow-content>header.question-flow-header{
+    margin-bottom:48px;
+  }
+  .story-sky-content.question-flow-content .reading-question>.recording-question-card{
+    padding:34px 36px;
+  }
+  .story-sky-content.question-flow-content .reading-question>.recording-question-card p{
+    font-size:1.6875rem;
+    line-height:1.75;
+  }
+  .story-sky-content.question-flow-content .reading-question .recording-question-hint{
+    margin:22px 8px 0;
+  }
+  .story-sky-content.question-flow-content .reading-question .recording-question-hint p:not(.recording-question-hint-label){
+    font-size:1.0625rem;
+    line-height:1.75;
+  }
+  .story-sky-surface .story-sky-content.question-flow-content .recording-control-dock,
+  .story-sky-surface .story-sky-content.question-flow-content .recording-control-dock--start{
+    min-height:0;
+    margin-top:32px;
+  }
+}

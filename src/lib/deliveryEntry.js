@@ -18,6 +18,15 @@ export async function resolveDeliveryEntry({ token, session, resolveToken }) {
 export function withoutDeliveryToken(href) {
   const url = new URL(href);
   url.searchParams.delete("token");
+  url.searchParams.delete("journey_link");
   url.searchParams.set("entry", "login");
   return url.toString();
+}
+
+export function findNextDeliveryQuestionIndex(questionSet, currentIndex) {
+  if (!questionSet?.length) return -1;
+  const open = question => question && !["answered", "skipped"].includes(question.status);
+  if (open(questionSet[currentIndex])) return currentIndex;
+  const later = questionSet.findIndex((question, index) => index > currentIndex && open(question));
+  return later >= 0 ? later : questionSet.findIndex(open);
 }

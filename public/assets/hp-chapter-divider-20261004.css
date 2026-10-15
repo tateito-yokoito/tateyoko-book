@@ -1,0 +1,28 @@
+/* A quiet chapter pause between the emotional memory and the practical comparison. */
+.hp-v4-questions {
+  padding-bottom: 0;
+}
+
+.hp-v4-ways {
+  padding-top: 56px;
+}
+
+.hp-v4-ways::before {
+  content: "";
+  display: block;
+  width: 1px;
+  height: 48px;
+  margin: 0 auto 55px;
+  background: var(--line);
+}
+
+@media (max-width: 620px) {
+  .hp-v4-ways {
+    padding-top: 28px;
+  }
+
+  .hp-v4-ways::before {
+    height: 32px;
+    margin-bottom: 32px;
+  }
+}

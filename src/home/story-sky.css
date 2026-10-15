@@ -1,0 +1,29 @@
+/* Static home sky, shared by question and recorder. No animated/rotating layers. */
+.app-container:has(> .story-sky-surface){padding:0;max-width:none}
+.story-sky-surface{--sky-dim:.48;position:relative;isolation:isolate;width:100%;height:100%;min-height:0;overflow:hidden;background:#101d2d;color:#f7f4ef}
+.story-sky-surface[data-story-sky="day"]{--sky-dim:.55}
+.story-sky-surface[data-story-sky="twilight"]{--sky-dim:.30}
+.story-sky-backdrop{position:absolute;inset:0;z-index:-1;pointer-events:none;background:#101d2d}
+.story-sky-backdrop img{width:100%;height:100%;object-fit:cover;object-position:44% center}
+@media(min-width:700px){.story-sky-backdrop img{object-position:var(--sky-pc-position)!important}}
+.story-sky-backdrop:after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 90% 36% at 50% 43%,#101d2d60,transparent 100%),linear-gradient(180deg,#101d2d32,#101d2d10 55%,#101d2d99),rgba(16,29,45,var(--sky-dim))}
+.story-sky-persistent{display:none;position:fixed;top:0;left:0;width:100%;height:100vh;height:100lvh;z-index:0;pointer-events:none;overflow:hidden;background:#101d2d}
+.story-sky-persistent.is-active{display:block}
+.story-sky-persistent .story-sky-backdrop{z-index:auto}
+.app-container:has(>.story-sky-persistent.is-active)>.story-sky-surface{position:relative;z-index:1;background:transparent}
+.app-container:has(>.story-sky-persistent.is-active)>.story-sky-surface>.story-sky-backdrop{display:none}
+.story-sky-surface .story-sky-content{width:100%;max-width:540px;margin:0 auto;height:100%;overflow-y:auto;padding:calc(32px + env(safe-area-inset-top)) 28px calc(32px + env(safe-area-inset-bottom));animation:none}
+.story-sky-surface .story-sky-content.question-flow-content{animation:none}
+.story-sky-content>header{margin-bottom:28px;padding-top:8px;flex-shrink:0}
+.story-sky-content>header p,.story-sky-content>header h1{color:#e0e7ef;font-size:1rem;line-height:1.7;white-space:normal}
+.story-sky-content .reading-question{flex-shrink:0}
+.story-sky-content .reading-question>.glass-card{padding:0;border:0;border-radius:0;box-shadow:none;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;text-align:left}
+.story-sky-content .reading-question>.glass-card p{font-size:1.5rem;line-height:1.95;font-weight:400;color:#f7f4ef;letter-spacing:.025em}
+.story-sky-content .memory-cue{margin-top:24px;color:#e0e7ef}
+.story-sky-content .recording-control-dock{flex-shrink:0;margin-top:40px}
+.story-sky-content .recording-state-label{color:#e0e7ef}
+.story-sky-content .recording-icon-button{background:#203043e8;border-color:#8593a3;color:#f7f4ef}
+.story-sky-content button.underline{color:#e0e7ef}
+.story-sky-content.question-flow-content .recording-control-dock{min-height:150px;margin-top:28px;justify-content:center}
+.story-sky-content.question-flow-content .recording-countdown-slot{min-height:150px;margin-top:28px;display:flex;align-items:center;justify-content:center}
+@media(max-width:359px){.story-sky-surface .story-sky-content{padding-left:24px;padding-right:24px}.story-sky-content .reading-question>.glass-card p{font-size:1.375rem}}

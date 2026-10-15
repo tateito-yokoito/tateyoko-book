@@ -1,0 +1,21 @@
+.journey-guide{display:flex;flex-direction:column;gap:22px;min-height:590px;padding:40px 0 20px;text-align:left;color:#f8fafc;font-family:'Noto Sans JP',sans-serif}
+.journey-guide h2{font:400 22px/1.9 'Noto Serif JP',serif;margin:0 0 24px;overflow-wrap:anywhere}
+.journey-guide p{margin:0;font-size:15px;line-height:1.9;color:#c1cad7}
+.journey-guide .journey-guide-label{font-size:13px;color:#b9c7cc}
+.journey-guide-section{border-top:1px solid #ffffff30;padding-top:24px}
+.journey-guide h3{font-size:17px;font-weight:600;margin:0 0 12px}
+.journey-guide-section>img{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:cover;border-radius:5px;margin:16px 0 18px}
+.journey-guide button{display:block;width:100%;border-radius:28px;background:#ffffff19;color:#f1f5f9;min-height:52px;padding:14px 18px;font-size:16px;margin-top:auto}
+.journey-guide button:focus-visible{outline:2px solid #e2e8f0;outline-offset:4px}
+.journey-guide-shelf{width:100%;aspect-ratio:1312/900;overflow:hidden;border-radius:5px;margin:4px 0}
+.journey-guide-shelf img{display:block;width:100%;height:auto;transform:translateY(-17%)}
+.journey-guide-centered{text-align:center;justify-content:center}
+.journey-guide-centered button{margin-top:12px}
+.journey-guide .journey-guide-secondary{background:transparent;color:#b5bfce}
+@media(max-width:420px){.journey-guide h2{font-size:20px}}
+.journey-guide-page{background:#0f172a;color:#f8fafc;min-height:100dvh;max-width:600px;margin:auto;padding:24px;overflow-y:auto}
+.journey-guide-page>header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.journey-guide-page>header>button{width:44px;height:44px;display:grid;place-items:center;border:1px solid #ffffff35;border-radius:50%}
+.journey-guide-page>p[role=status]{font-size:13px;line-height:1.7;color:#cbd5e1;margin-top:16px}
+.journey-bookend-live{position:relative;min-height:620px;height:100%;display:flex;flex-direction:column}
+.journey-home-button{align-self:flex-end;min-width:44px;min-height:44px;border:1px solid #ffffff35;border-radius:50%;color:#f8fafc;font-size:26px;margin-bottom:12px}
