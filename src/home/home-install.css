@@ -1,0 +1,29 @@
+.family-test .family-install{max-width:420px;margin:auto;padding:12px 0}
+.family-install .install-intro,.family-install .install-after,.family-install .install-app{display:flex;align-items:center;gap:16px}
+.family-install .install-intro h2{font-family:'Yu Mincho',serif;font-weight:400;font-size:1.4rem;line-height:1.65;margin:0}
+.family-install .install-logo{display:block;width:64px;height:64px;flex-shrink:0;border-radius:14px;margin:0}
+.family-install .install-logo-small{width:48px;height:48px;border-radius:11px}
+.family-install p{font-size:1rem;line-height:1.8}
+.family-install .install-help{margin:12px 0;font-size:.9rem}
+.family-install .install-help summary{cursor:pointer;display:flex;align-items:center;gap:8px;min-height:44px;line-height:1.6}
+.family-install .install-help summary svg{flex-shrink:0}
+.family-install .install-help[open]>summary svg{transform:rotate(90deg)}
+.family-install .install-help summary:focus-visible{outline:3px solid #d8bb86;outline-offset:3px}
+.family-install .install-steps{list-style:none;padding:0;margin:18px 0}
+.family-install .install-step{margin:0;padding:20px 0 4px;border-top:1px solid #405067}
+.family-install .install-step h3{display:flex;align-items:center;gap:12px;font-weight:500;font-size:1.06rem;line-height:1.65;margin:0 0 14px}
+.family-install .install-number{display:grid;place-items:center;width:28px;height:28px;border:1px solid #a9b6c8;border-radius:50%;flex-shrink:0;font-size:.9rem}
+.family-install .install-diagram{background:#e9edf2;color:#182435;border-radius:15px;padding:14px;font-size:1rem;line-height:1.55}
+.family-install .install-diagram svg{width:24px;height:24px;flex-shrink:0}
+.family-install .install-share{display:flex;align-items:center;justify-content:center;gap:14px;min-height:86px}
+.family-install .install-target{display:inline-flex;align-items:center;gap:8px;border:2px solid #ba5b34;border-radius:12px;padding:8px 12px;background:#fffaf3;color:#172336}
+.family-install .install-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.family-install .install-menu-muted{font-size:.9rem;color:#566273;padding:8px 4px}
+.family-install .install-app{margin:16px 0}
+.family-install .install-confirm{display:flex;justify-content:flex-end}
+.family-install .install-toggle-label{font-size:.9rem}
+.family-install .install-switch{display:flex;align-items:center;justify-content:flex-end;width:43px;height:26px;border-radius:20px;background:#257747;padding:3px;flex-shrink:0}
+.family-install .install-switch:after{content:'';width:20px;height:20px;border-radius:50%;background:white}
+.family-install .install-note{font-size:.875rem;color:#b7c1ce;line-height:1.7;margin:12px 0}
+.family-install .install-after{margin:24px 0 16px}
+.family-install .install-after p{margin:0}

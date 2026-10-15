@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Camera, ChevronLeft, ChevronRight, Pause, Play, RotateCw, Square, Trash2, Video, X } from "lucide-react";
 import { Upload } from "tus-js-client";
+import { VIDEO_DELIVERY, videoDraft, compressVideo, validateVideoDelivery, deliverVideoDraft } from './lib/videoDelivery.js';
 
 const MAX_VIDEO_SECONDS = 5 * 60;
 const VIDEO_BUCKET = "videos";
@@ -147,7 +148,7 @@ async function makePosterFromVideoUrl(url) {
   }
 }
 
-async function resumableUpload({ supabaseClient, file, path, onProgress }) {
+export async function resumableUpload({ supabaseClient, file, path, onProgress }) {
   const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
   if (sessionError || !session?.access_token) throw new Error("ログイン情報を確認できませんでした");
 
@@ -160,7 +161,6 @@ async function resumableUpload({ supabaseClient, file, path, onProgress }) {
     const upload = new Upload(file, {
       endpoint: `${storageUrl}/storage/v1/upload/resumable`,
       headers: {
-        authorization: `Bearer ${session.access_token}`,
         apikey: anonKey,
         "x-upsert": "false"
       },
@@ -178,6 +178,14 @@ async function resumableUpload({ supabaseClient, file, path, onProgress }) {
       chunkSize: CHUNK_SIZE,
       retryDelays: [0, 1000, 3000, 5000, 10000],
       removeFingerprintOnSuccess: true,
+      fingerprint: () => Promise.resolve(`tateyoko:${VIDEO_BUCKET}:${path}:${file.size}:${file.type}`),
+      onBeforeRequest: async request => {
+        const {data:{session:current}}=await supabaseClient.auth.getSession();
+        if(!current)throw new Error('再ログインして保存を再開してください。');
+        // Set this exactly once per request. XHR appends repeated header
+        // values (even with identical casing), producing an invalid JWT.
+        request.setHeader('authorization',`Bearer ${current.access_token}`);
+      },
       onError: reject,
       onProgress: (uploaded, total) => onProgress?.(total > 0 ? uploaded / total : 0),
       onSuccess: () => resolve(path)
@@ -201,7 +209,9 @@ export default function VideoStoryFlow({
   stories = [],
   supabaseClient,
   onReload,
-  onClose
+  onClose,
+  initialPrompt = null,
+  onSaved
 }) {
   const [phase, setPhase] = useState("overview");
   const [selectedPrompt, setSelectedPrompt] = useState(null);
@@ -247,6 +257,7 @@ export default function VideoStoryFlow({
   const posterCaptureTimerRef = useRef(null);
   const posterBackfillAttemptedRef = useRef(new Set());
   const onReloadRef = useRef(onReload);
+  const uploadDraftRef = useRef(null);
 
   const projectId = foundation?.project?.id || "";
   const recommendedPrompt = useMemo(
@@ -308,16 +319,26 @@ export default function VideoStoryFlow({
 
   useEffect(() => {
     if (!open) return undefined;
-    setPhase("overview");
-    setSelectedPrompt(null);
+    uploadDraftRef.current=null;
+    setPhase(initialPrompt ? "prepare" : "overview");
+    setSelectedPrompt(initialPrompt);
     setExistingStory(null);
     setExistingVideoUrl("");
     setExistingAspectRatio(null);
     setErrorMessage("");
-    return () => resetCapture();
+    let active=true;
+    videoDraft('get',user?.id,projectId).then(draft=>{
+      if(!active||!draft)return;
+      uploadDraftRef.current=draft;
+      setVideoBlob(draft.rawVideo);setAudioBlob(draft.rawAudio||null);
+      setSelectedPrompt(draft.prompt);setElapsed(draft.seconds);
+      setReviewUrl(URL.createObjectURL(draft.rawVideo));setPhase('review');
+      setErrorMessage('前回の動画がこの端末に残っています。保存を再開できます。');
+    }).catch(()=>{});
+    return () => {active=false;resetCapture();};
     // The capture cleanup is intentionally tied to opening/closing the flow.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, user?.id, projectId]);
 
   useEffect(() => {
     if (!open || stories.length === 0) {
@@ -384,9 +405,19 @@ export default function VideoStoryFlow({
     setCameraStatus("opening");
     setErrorMessage("");
 
-    navigator.mediaDevices?.getUserMedia({
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setCameraStatus("error");
+      setErrorMessage(!window.isSecureContext
+        ? "録画には安全な接続（HTTPS）が必要です。案内されたURLから開き直してください。"
+        : "このブラウザは録画に対応していません。対応するSafariまたはChromeで開いてください。");
+      return undefined;
+    }
+
+    navigator.mediaDevices.getUserMedia({
       video: {
-        facingMode: { ideal: cameraFacing }
+        facingMode: { ideal: cameraFacing },
+        width: {ideal:VIDEO_DELIVERY.width},height:{ideal:VIDEO_DELIVERY.height},
+        frameRate:{ideal:VIDEO_DELIVERY.frameRate,max:VIDEO_DELIVERY.frameRate}
       },
       audio: {
         echoCancellation: true,
@@ -463,8 +494,8 @@ export default function VideoStoryFlow({
         "video/webm"
       ]);
       const videoOptions = {
-        videoBitsPerSecond: 800_000,
-        audioBitsPerSecond: 64_000,
+        videoBitsPerSecond: VIDEO_DELIVERY.videoBitsPerSecond,
+        audioBitsPerSecond: VIDEO_DELIVERY.audioBitsPerSecond,
         ...(videoMime ? { mimeType: videoMime } : {})
       };
       const videoRecorder = new MediaRecorder(stream, videoOptions);
@@ -576,127 +607,68 @@ export default function VideoStoryFlow({
   };
 
   const retake = () => {
+    if(uploadDraftRef.current){setErrorMessage('保存中の動画があります。先に保存を再開し、不要な場合は保存後に削除してください。');return;}
     resetCapture();
     setPhase("camera");
   };
 
   const saveVideo = async () => {
     if (!videoBlob || !selectedPrompt || !projectId || !user?.id || savingVideo) return;
-    setSavingVideo(true);
-    // Capture while the review element is still mounted. Previously this ran
-    // after the large video upload, by which point the review screen (and ref)
-    // had already been removed, leaving saved videos without a poster image.
-    const preparedPosterBlob = posterBlobRef.current
-      || await makePosterFromVideoUrl(reviewUrl).catch(() => null)
-      || await makePoster(reviewVideoRef.current).catch(() => null);
-    setPhase("uploading");
-    setUploadProgress(0);
-    setUploadMessage("ビデオを保存しています");
-    setErrorMessage("");
-
-    const storyId = crypto.randomUUID();
-    const usedSlots = new Set(stories.map((story) => Number(story.slot_order)));
-    const slotOrder = usedSlots.has(1) ? 2 : 1;
-    const rootPath = `${user.id}/${projectId}/${storyId}`;
-    const videoPath = `${rootPath}/video.${extensionFor(videoBlob.type)}`;
-    const audioPath = audioBlob
-      ? `${rootPath}/audio.${extensionFor(audioBlob.type)}`
-      : null;
-    const videoContentType = baseMimeType(videoBlob.type, "video/webm");
-    const audioContentType = audioBlob ? baseMimeType(audioBlob.type, "audio/webm") : null;
-    let posterPath = null;
-    const uploadedPaths = [];
-
+    setSavingVideo(true);setErrorMessage("");setPhase("uploading");setUploadProgress(0);
     try {
-      await resumableUpload({
-        supabaseClient,
-        file: new File([videoBlob], `video.${extensionFor(videoBlob.type)}`, { type: videoContentType }),
-        path: videoPath,
-        onProgress: (value) => setUploadProgress(value * 0.82)
-      });
-      uploadedPaths.push(videoPath);
-
-      const supportingUploads = [];
-      if (audioBlob && audioPath) {
-        supportingUploads.push(
-          supabaseClient.storage.from(VIDEO_BUCKET).upload(audioPath, audioBlob, {
-            contentType: audioContentType,
-            upsert: false
-          }).then(({ error }) => {
-            if (error) throw error;
-            uploadedPaths.push(audioPath);
-          })
-        );
+      let draft=uploadDraftRef.current;
+      if(!draft) {
+        const poster=posterBlobRef.current || await makePosterFromVideoUrl(reviewUrl).catch(()=>null);
+        draft={rawVideo:videoBlob,rawAudio:audioBlob,poster,prompt:selectedPrompt,seconds:elapsed,
+          id:crypto.randomUUID(),facing:cameraFacing,brightness:brightnessPercent,dimensions:captureDimensions};
+        // Persist BEFORE compression/network. Quota failures leave the review and blob intact.
+        await videoDraft('put',user.id,projectId,draft);uploadDraftRef.current=draft;
       }
-      if (preparedPosterBlob) {
-        posterPath = `${rootPath}/poster.jpg`;
-        supportingUploads.push(
-          supabaseClient.storage.from(VIDEO_BUCKET).upload(posterPath, preparedPosterBlob, {
-            contentType: "image/jpeg",
-            upsert: false
-          }).then(({ error }) => {
-            if (error) throw error;
-            uploadedPaths.push(posterPath);
-          })
-        );
+      if(!draft.files) {
+        setUploadMessage('動画の容量を整えています。画面を開いたままお待ちください。');
+        const delivered=await compressVideo(draft.rawVideo,value=>setUploadProgress(value*.1));
+        validateVideoDelivery(delivered,draft.seconds);
+        const {data:reserved,error:slotsError}=await supabaseClient.from('video_stories').select('slot_order').eq('book_project_id',projectId);
+        if(slotsError)throw slotsError;
+        const used=new Set((reserved||[]).map(s=>Number(s.slot_order)));
+        const slot=[1,2].find(n=>!used.has(n));if(!slot)throw Error('このブックにはすでに動画が2本あります。');
+        const root=`${user.id}/${projectId}/${draft.id}`;
+        const path=`${root}/video.${extensionFor(delivered.type)}`;
+        const audioPath=draft.rawAudio?`${root}/audio.${extensionFor(draft.rawAudio.type)}`:null;
+        const posterPath=draft.poster?`${root}/poster.jpg`:null;
+        draft.files=[{path,blob:delivered},
+          ...(draft.rawAudio?[{path:audioPath,blob:draft.rawAudio}]:[]),
+          ...(draft.poster?[{path:posterPath,blob:draft.poster}]:[])];
+        draft.row={id:draft.id,book_project_id:projectId,
+          subject_person_id:foundation?.person?.id||foundation?.project?.subject_person_id,
+          created_by_user_id:user.id,slot_order:slot,prompt_kind:draft.prompt.kind,
+          prompt_text:draft.prompt.text,title:draft.prompt.label||'',
+          source_answer_id:draft.prompt.sourceAnswerId||null,video_storage_path:path,audio_storage_path:audioPath,
+          poster_storage_path:posterPath,duration_seconds:draft.seconds,file_size_bytes:delivered.size,
+          mime_type:baseMimeType(delivered.type,'video/webm'),
+          metadata:{bookend_kind:draft.prompt.bookendKind||null,
+            recorded_facing_mode:draft.facing,brightness_percent:draft.brightness,
+            capture_width:draft.dimensions?.width,capture_height:draft.dimensions?.height,max_duration_seconds:300}};
+        await videoDraft('put',user.id,projectId,draft);
       }
-      await Promise.all(supportingUploads);
-      setUploadProgress(0.9);
-      setUploadMessage("文字起こしを準備しています");
-
-      const initialTitle = ["current_self", "memory", "message"].includes(selectedPrompt.kind)
-        ? selectedPrompt.label
-        : "";
-      const { error: insertError } = await supabaseClient
-        .from("video_stories")
-        .insert({
-          id: storyId,
-          book_project_id: projectId,
-          subject_person_id: foundation?.person?.id || foundation?.project?.subject_person_id || null,
-          created_by_user_id: user.id,
-          slot_order: slotOrder,
-          prompt_kind: selectedPrompt.kind,
-          prompt_text: selectedPrompt.text,
-          title: initialTitle,
-          source_answer_id: selectedPrompt.sourceAnswerId || null,
-          video_storage_path: videoPath,
-          audio_storage_path: audioPath,
-          poster_storage_path: posterPath,
-          duration_seconds: Math.min(MAX_VIDEO_SECONDS, elapsed),
-          mime_type: videoContentType,
-          file_size_bytes: videoBlob.size,
-          status: "processing",
-          metadata: {
-            recorded_facing_mode: cameraFacing,
-            max_duration_seconds: MAX_VIDEO_SECONDS,
-            brightness_percent: normalizeBrightnessPercent(brightnessPercent),
-            capture_width: captureDimensions?.width || null,
-            capture_height: captureDimensions?.height || null,
-            capture_aspect_ratio: captureAspectRatio || null,
-            recorded_mime_type: videoBlob.type || videoContentType
-          }
-        });
-      if (insertError) throw insertError;
-
-      setUploadProgress(0.95);
-      const { error: transcriptionError } = await supabaseClient.functions.invoke("transcribe-video-story", {
-        body: { videoStoryId: storyId }
-      });
-      if (transcriptionError) console.warn("video transcription will need retry", transcriptionError);
-
-      setUploadProgress(1);
-      setUploadMessage("保存しました");
-      await onReload?.();
-      resetCapture();
-      setPhase("overview");
-    } catch (error) {
-      console.error("video story save error", error);
-      if (uploadedPaths.length > 0) {
-        await supabaseClient.storage.from(VIDEO_BUCKET).remove(uploadedPaths).catch(() => {});
-      }
-      setErrorMessage("ビデオを保存できませんでした。通信を確認して、もう一度お試しください。");
+      setUploadMessage('ビデオを保存しています。通信が途切れても再開できます。');
+      const storyId=await deliverVideoDraft(supabaseClient,draft,
+        file=>resumableUpload({supabaseClient,
+          file:new File([file.blob],file.path.split('/').pop(),{type:baseMimeType(file.blob.type,'application/octet-stream')}),
+          path:file.path,onProgress:value=>setUploadProgress(.1+value*.8)}),
+        current=>videoDraft('put',user.id,projectId,current));
+      const {error:transcriptionError}=await supabaseClient.functions.invoke('transcribe-video-story',{body:{videoStoryId:storyId}});
+      // The complete video remains playable even if optional transcription fails.
+      if(transcriptionError)console.warn('Video saved; transcription retry required');
+      await videoDraft('delete',user.id,projectId);uploadDraftRef.current=null;
+      setUploadProgress(1);setUploadMessage('保存しました');await onReload?.();resetCapture();setPhase('overview');
+      if (onSaved) Promise.resolve(onSaved(storyId)).catch(error => console.error('Video saved, but next screen could not open', error));
+    } catch(error) {
+      console.warn('Video save incomplete',error?.message);
+      setErrorMessage(error?.message||'保存を完了できませんでした。この端末の動画は残っています。通信を確認して保存を再開してください。');
+      setPhase('review');
+    } finally {
       setSavingVideo(false);
-      setPhase("review");
     }
   };
 
@@ -748,6 +720,7 @@ export default function VideoStoryFlow({
           <button
             type="button"
             onClick={() => {
+              if (initialPrompt && phase !== "uploading") { resetCapture(); return onClose?.(); }
               if (["overview", "uploading"].includes(phase)) return phase === "overview" ? onClose?.() : undefined;
               resetCapture();
               setPhase("overview");
@@ -755,7 +728,7 @@ export default function VideoStoryFlow({
             }}
             disabled={phase === "uploading"}
             className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] disabled:opacity-30"
-            aria-label={phase === "overview" ? "閉じる" : "戻る"}
+            aria-label={phase === "overview" || initialPrompt ? "閉じる" : "戻る"}
           >
             {phase === "overview" ? <X size={21} /> : <ChevronLeft size={22} />}
           </button>

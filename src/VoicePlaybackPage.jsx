@@ -323,6 +323,12 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
   }
 
   function openVideo(videoIndex) {
+    window.clearTimeout(transitionTimerRef.current);
+    transitionTimerRef.current=null;
+    autoplayRef.current=false;
+    audioRef.current?.pause();
+    setIsPlaying(false);
+    setCurrentVideoUrl("");
     setCurrentVideoIndex(clamp(videoIndex, 0, Math.max(videos.length - 1, 0)));
     setScreen("video");
   }
@@ -470,7 +476,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
               {group.entries.map(({ item, index }) => (
                 <button type="button" className="voice-index-item" key={`${item.order}-${index}`} onClick={() => openStory(index)}>
                   <span className="voice-number">{playedItems.has(index) ? "✓" : voiceNumber(index)}</span>
-                  <span><strong>{item.question || "残された声"}</strong>{item.audio.length > 1 && <span className="voice-parts-badge">語り足しあり・{item.audio.length}つの声</span>}{item.transcript && <small>{item.transcript.slice(0, 70)}{item.transcript.length > 70 ? "…" : ""}</small>}</span>
+                  <span><strong>{item.question || "残された声"}</strong>{item.audio.length === 0 && <span className="voice-parts-badge">文章と写真</span>}{item.audio.length > 1 && <span className="voice-parts-badge">語り足しあり・{item.audio.length}つの声</span>}{item.transcript && <small>{item.transcript.slice(0, 70)}{item.transcript.length > 70 ? "…" : ""}</small>}</span>
                   <b aria-hidden="true">›</b>
                 </button>
               ))}
@@ -528,7 +534,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
         </section>
       )}
 
-      {screen === "player" && currentItem && currentAsset && (
+      {screen === "player" && currentItem && (
         <section className="voice-player">
           <p className="voice-kicker">{voiceNumber(currentItemIndex)}</p>
           {currentItem.chapterTitle && <p className="voice-player-theme">{currentItem.chapterTitle}</p>}
@@ -538,7 +544,7 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
               {currentPhotoUrls.map((photo, index) => <figure key={`${photo.url}-${index}`}><img src={photo.url} alt={photo.caption || "この語りに添えられた写真"} />{photo.caption && <figcaption>{photo.caption}</figcaption>}</figure>)}
             </div>
           )}
-          <div className="voice-audio-console">
+          {currentAsset ? <div className="voice-audio-console">
             {currentItem.audio.length > 1 && (
               <div className="voice-parts" aria-label="この問いに残された声">
                 <p>この問いには、{currentItem.audio.length}つの声が残されています</p>
@@ -577,9 +583,9 @@ export default function VoicePlaybackPage({ supabaseClient, publicId }) {
                 </div>
               </>
             )}
-          </div>
+          </div> : <p className="voice-text-only-note">この語りには音声がありません。文章と写真でお読みください。</p>}
           {currentItem.transcript && <article className="voice-transcript"><p className="voice-kicker">WORDS</p><p>{currentItem.transcript}</p></article>}
-          <div className="voice-player-nav"><button type="button" onClick={() => setScreen("contents")}>声の一覧へ</button>{currentItemIndex < items.length - 1 && <button type="button" onClick={() => openStory(currentItemIndex + 1)}>次の声へ</button>}</div>
+          <div className="voice-player-nav"><button type="button" onClick={() => setScreen("contents")}>声の一覧へ</button>{currentItemIndex < items.length - 1 && <button type="button" onClick={() => openStory(currentItemIndex + 1)}>次の語りへ</button>}</div>
         </section>
       )}
 

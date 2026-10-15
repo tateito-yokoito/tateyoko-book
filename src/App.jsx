@@ -1,23 +1,90 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { paidConversationIndex, paidOnboardingApplies, paidOnboardingCheckpoint, resolvePaidOnboardingScene } from './lib/paidOnboarding.js';
+import { getActiveOnboardingRitualScene, onboardingSetupScenes, resolveOnboardingRitualEntryScene } from './lib/onboardingRitualResume.js';
+import { clearOnboardingNotificationDraft, clearOnboardingPreferenceDraft, clearOnboardingSharingDraft, draftTimestamp, readOnboardingNotificationDraft, readOnboardingPreferenceDraft, readOnboardingSharingDraft, writeOnboardingNotificationDraft, writeOnboardingPreferenceDraft, writeOnboardingSharingDraft } from './lib/onboardingPreferenceDraft.js';
+import ApprovedHome from './home/ApprovedHome.jsx';
+import SupporterContextFrame from './SupporterContextFrame.jsx';
+import StorySkySurface, { PersistentStorySkyBackdrop } from './home/StorySkySurface.jsx';
+import { configureSkyClient } from './home/liveSkies.js';
+import './reading-flow.css';
+import './quiet-recording.css';
 import { createPortal } from "react-dom";
 import { Bell, BookOpen, Check, ChevronLeft, ChevronRight, Files, Home, Image as ImageIcon, Lock, Mail, Mic, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings, Smartphone, Square, UserCircle, UserCog, Users, Video } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import { logActivity } from "./lib/activityLog.js";
-import { resolveDeliveryEntry, withoutDeliveryToken } from "./lib/deliveryEntry.js";
+import { createSupportJourney } from './lib/supportJourney.js';
+import { loadBookWork } from "./lib/bookWork.js";
+import { assertPublicTestEnvironment, TEST_SUPABASE_URL } from "./lib/publicTestSafety.js";
+import { findNextDeliveryQuestionIndex, resolveDeliveryEntry, withoutDeliveryToken } from "./lib/deliveryEntry.js";
 import { createRecordingClock, mergeRecordingDuration, RECORDING_LIMIT_SECONDS, RECORDING_WARNING_SECONDS, RECORDING_LIMIT_NOTICE } from "./lib/recordingTime.js";
 import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
+import BookendInvitation from "./BookendInvitation.jsx";
+import { BOOKEND_PROMPTS, bookendKindForQuestion, bookendKindForVideo } from "./lib/bookends.js";
+import ExperienceContractSettings from "./ExperienceContractSettings.jsx";
+import TrialCompletionConnected from "./TrialCompletionConnected.jsx";
+import TrialGiftPurchaseReview from "./TrialGiftPurchaseReview.jsx";
+import ChildhoodTrialIntro from './ChildhoodTrialIntro.jsx';
+import { isChildhoodTrial } from './lib/childhoodTrial.js';
+import {loadPublishedQuestionCopy,withPublishedQuestionCopy} from './lib/questionCopy.js';
+import { isFreeTrialExpired, freeTrialRetentionDays, freeTrialExpiryLabel } from './lib/freeTrialRetention.js';
+import { ownProjectHasStarted, ownStoryEntryUrl } from './lib/ownStoryEntry.js';
+import { questionForStory, buildStorySections, isTrialStoryQuestion } from './lib/storyPages.js';
+import { experienceRollout } from "./lib/experienceRollout.js";
+import { needsMainExperienceIntroduction, requiresMainExperienceStart } from "./lib/mainExperienceEntry.js";
+import { STORY_THEMES } from "./lib/storyThemes.js";
+import { themeExtraOptions } from "./lib/themeExtras.js";
+import ThemeMorePicker from "./ThemeMorePicker.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
 import { ThemeMemoryRequestComposer, ThemeMemoryRequestManager } from "./ThemeMemoryRequestFlow.jsx";
+import { SupporterIdentityFields, SupporterFamilyCandidates, SupporterRelationshipsSettings } from './SupporterIdentity.jsx';
+import { SupporterSmsComposer } from './SupporterSms.jsx';
+import MicAccessGuide from './MicAccessGuide.jsx';
+import { callSupporterSms } from './lib/supporterSms.js';
+import { supporterIdentityFromProfile, supporterIdentityError, supporterIdentityParams, relationshipLabel } from './lib/supporterIdentity.js';
 import "./family-invitation.css";
 
+assertPublicTestEnvironment(import.meta.env);
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://wquxjeqkumossjxehdop.supabase.co";
 
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
 export const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+configureSkyClient(supabaseClient);
+const applicationSupabaseClient = supabaseClient;
 
 const FREE_TRIAL_QUESTION_COUNT = 3;
+const FREE_TRIAL_RETENTION_ENABLED = import.meta.env.VITE_FREE_TRIAL_RETENTION_ENABLED === "true";
+const EXPERIENCE_ROLLOUT = experienceRollout(import.meta.env);
+const EXPERIENCE_V2_ENABLED = EXPERIENCE_ROLLOUT.contracts;
+const TRIAL_CONVERSION_ENABLED = EXPERIENCE_ROLLOUT.conversion;
+const ALLOW_FAMILY_NOTIFICATIONS = !EXPERIENCE_V2_ENABLED || EXPERIENCE_ROLLOUT.notifications;
+const recordingStorageRoot = (userId, projectId, answerId) => EXPERIENCE_V2_ENABLED
+  ? `${userId}/${projectId}/${answerId}` : `${userId}/${answerId}`;
+
+async function resolveMainExperienceEntryScene(project, question, requestedScene) {
+  if (!project?.id || project.onboarding_status !== "completed" ||
+      !requiresMainExperienceStart(question) ||
+      !["theme_resume", "daily_mic_check", 1].includes(requestedScene)) return requestedScene;
+  const { data: access, error } = await supabaseClient.rpc("get_experience_access", {
+    input_project_id: project.id
+  });
+  if (error) throw error;
+  return needsMainExperienceIntroduction(project, question, requestedScene, access)
+    ? "hajimari_complete" : requestedScene;
+}
+
+async function confirmExperienceBoundary(projectId, boundary) {
+  const { data: access, error } = await supabaseClient.rpc("get_experience_access", { input_project_id: projectId });
+  if (error) throw error;
+  if (!access?.policy_version || access.policy_version === "legacy") return;
+  if (boundary === "main" && access.main_started_at) return;
+  if (boundary === "paid" && access.production_started_at) return;
+  const { error: startError } = await supabaseClient.rpc(boundary === "main" ? "start_main_experience" : "start_paid_starting_chapter", {
+    input_project_id: projectId, input_subject_intent_confirmed: true
+  });
+  if (startError) throw startError;
+}
 const FAMILY_INVITE_DISCOUNT_PERCENT = 30;
 const FAMILY_INVITE_PLAN_PRICE = 34860;
 
@@ -31,116 +98,7 @@ const STORY_RELATIONSHIP_LABELS = {
   other: "その他"
 };
 
-const STORY_THEMES = [
-  {
-    code: "ty_theme_childhood",
-    label: "幼い頃のこと",
-    order: 1,
-    summary: "幼少期から中学生くらいまでを振り返ります。",
-    opening: "",
-    hint: "昔のアルバムを開いたり、住んでいた家や通学路、よく遊んだ場所を思い浮かべたりしてみるのもよいかもしれません。",
-    completion: "幼い頃の景色が、あなたの物語に残りました。",
-    image: "/site/theme-childhood-triptych.jpg",
-    imageAlt: "誕生、友達との遊び、家族の食卓をつないだ幼い頃の情景",
-    visual: "childhood"
-  },
-  {
-    code: "ty_theme_youth",
-    label: "学生時代",
-    order: 2,
-    summary: "学びや出会い、夢中になったことをたどります。",
-    opening: "あの頃にしかなかった時間へ、戻ってみましょう。",
-    hint: "卒業アルバムや当時よく聴いた音楽、通っていた道が、記憶の入口になるかもしれません。",
-    completion: "若い日の時間が、ひとつの章になりました。",
-    image: "/site/theme-student-triptych.jpg",
-    imageAlt: "友人、部活動と淡い恋、卒業と恩師をつないだ学生時代の情景",
-    visual: "youth"
-  },
-  {
-    code: "ty_theme_likes",
-    label: "好きなこと",
-    order: 3,
-    summary: "心が動いたものや、夢中になった時間を振り返ります。",
-    opening: "好きだったもののそばには、その頃の自分がいます。",
-    hint: "今も手元にあるものや、何度も聴いた曲、好きだった味を一つ思い浮かべてみてください。",
-    completion: "あなたを彩ってきたものが、物語に加わりました。",
-    image: "/site/theme-likes-triptych.jpg",
-    imageAlt: "読書と音楽、自然の写真、仲間とのものづくりをつないだ好きなことの情景",
-    visual: "likes"
-  },
-  {
-    code: "ty_theme_living",
-    label: "暮らし",
-    order: 4,
-    summary: "住まいや食卓、旅など、日々の風景をたどります。",
-    opening: "何気ない暮らしの中にも、残しておきたい景色があります。",
-    hint: "長く使っている道具や、思い出の料理、窓から見えていた景色を手がかりにしてみましょう。",
-    completion: "日々の風景が、物語の中に灯りました。",
-    image: "/site/theme-living-triptych.jpg",
-    imageAlt: "住まいの朝、ペットとの日常、列車の旅をつないだ暮らしの情景",
-    visual: "living"
-  },
-  {
-    code: "ty_theme_work",
-    label: "仕事・役割",
-    order: 5,
-    summary: "担ってきた仕事や役割、その中で得たものを振り返ります。",
-    opening: "積み重ねてきた時間に、あらためて目を向けます。",
-    hint: "初めて働いた場所、使っていた道具、忘れられない人の顔から思い出してみるのもよさそうです。",
-    completion: "歩みを支えた仕事と役割が、ひとつの章になりました。",
-    image: "/site/theme-work-role-triptych.jpg",
-    imageAlt: "家族のための食事づくり、職場での協働、地域での共同作業をつないだ仕事と役割の情景",
-    visual: "work"
-  },
-  {
-    code: "ty_theme_connections",
-    label: "人とのつながり",
-    order: 6,
-    summary: "人生で出会い、支え合ってきた人たちをたどります。",
-    opening: "人を思い出すとき、その頃の自分も見えてきます。",
-    hint: "年賀状や古い連絡先、集合写真に写る人を眺めてみると、忘れていた出来事が浮かぶかもしれません。",
-    completion: "大切なつながりが、物語の中に結ばれました。",
-    image: "/site/theme-connections-triptych.jpg",
-    imageAlt: "恩師と学生、職場の仲間、旧友との再会をつないだ人とのつながりの情景",
-    visual: "connections"
-  },
-  {
-    code: "ty_theme_family",
-    label: "家族の記憶",
-    order: 7,
-    summary: "家族と過ごした時間や、受け取ったものを振り返ります。",
-    opening: "家族の記憶には、言葉になっていない気持ちがあります。",
-    hint: "家族の口癖や食卓の風景、季節ごとの習慣を一つ思い出してみてください。",
-    completion: "家族と過ごした時間が、物語に受け継がれました。",
-    image: "/site/theme-family-memory-triptych.jpg",
-    imageAlt: "雨の日に世話をする両親、祖父母と楽しむ線香花火、三世代で祝う傘寿をつないだ家族の情景",
-    visual: "family"
-  },
-  {
-    code: "ty_theme_turning_points",
-    label: "人生の転機",
-    order: 8,
-    summary: "決断や変化、乗り越えてきた出来事をたどります。",
-    opening: "振り返ると、道が大きく動いた瞬間があります。",
-    hint: "住む場所が変わった日、新しい役割を引き受けた時、誰かの言葉に背中を押された場面を思い返してみましょう。",
-    completion: "人生を動かした出来事が、ひとつの章になりました。",
-    image: "/site/theme-turning-points.jpg",
-    imageAlt: "朝の光が差す町の分岐路を、一人の人物が歩いていく情景",
-    visual: "turning-points"
-  },
-  {
-    code: "ty_theme_now_future",
-    label: "今とこれから",
-    order: 9,
-    summary: "今大切にしていることと、これからへ残したい言葉を見つめます。",
-    opening: "これまでをたどった今だからこそ、見えるものがあります。",
-    hint: "今の一日で心がほどける時間や、これから会いたい人、未来へ手渡したい言葉を考えてみてください。",
-    completion: "これまでとこれからが、あなたの物語として結ばれました。",
-    image: "/site/theme-now-future.jpg",
-    imageAlt: "大きな木の向こうに、爽やかな青空と町並み、人々の歩く姿が広がる情景",
-    visual: "now-future"
-  }
-];
+// Shared with the trial continuation experience; theme browsing never starts the main journey.
 
 const STORY_QUESTION_CANDIDATES = {
   ty_theme_childhood: [
@@ -262,6 +220,10 @@ function getFamilyInviteTokenFromUrl() {
   return params.get("family_invite") || null;
 }
 
+function getGiftThreeTokenFromUrl() {
+  return new URLSearchParams(window.location.search).get('gift_three') || null;
+}
+
 function getCheckoutReturnFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return {
@@ -318,6 +280,24 @@ function hasCompletedFreeTrial(questionSet) {
   );
 }
 
+async function getGiftThreeEntryScene(project, questionSet) {
+  if (!getGiftThreeTokenFromUrl() || getEntryModeFromUrl() !== 'trial') return null;
+  if (hasFullProjectAccess(project)) return 'gift_three_existing';
+  if (hasCompletedFreeTrial(questionSet)) return 'trial_complete';
+
+  // A recorded answer can survive even if the legacy question-status update
+  // failed. Never route a gift recipient into the paid onboarding on refresh.
+  const questionIds = getFreeTrialQuestions(questionSet).map(question => question.user_question_id).filter(Boolean);
+  if (project?.id && questionIds.length === FREE_TRIAL_QUESTION_COUNT) {
+    const { data, error } = await supabaseClient.from('answers').select('user_question_id')
+      .eq('book_project_id', project.id).in('user_question_id', questionIds);
+    if (!error && questionIds.every(id => data?.some(answer => answer.user_question_id === id))) {
+      return 'trial_complete';
+    }
+  }
+  return 0;
+}
+
 function getFreeTrialResumeQuestionIndex(questionSet) {
   const trialQuestions = getFreeTrialQuestions(questionSet);
   const nextUnansweredQuestion = trialQuestions.find(
@@ -336,9 +316,19 @@ function getFreeTrialResumeQuestionIndex(questionSet) {
   return nextIndex >= 0 ? nextIndex : 0;
 }
 
+async function loadFreeTrialRetention(projectId) {
+  if (!FREE_TRIAL_RETENTION_ENABLED || !projectId) return null;
+  const { data, error } = await supabaseClient.rpc('get_free_trial_retention', {
+    input_project_id: projectId
+  });
+  if (error) throw error;
+  return data;
+}
+
 function getAuthenticatedQuestionIndex(questionSet, project, profile) {
+  const conversationIndex = paidConversationIndex(project, questionSet);
+  if (conversationIndex >= 0) return conversationIndex;
   if (
-    getEntryModeFromUrl() === "trial" &&
     hasRestrictedProjectAccess(project) &&
     !hasCompletedFreeTrial(questionSet)
   ) {
@@ -391,7 +381,7 @@ function getCommercialEntryScene({ project, questionSet, defaultScene }) {
   }
 
   if (hasCompletedFreeTrial(questionSet)) {
-    return defaultScene;
+    return TRIAL_CONVERSION_ENABLED ? "trial_complete" : defaultScene;
   }
 
   // The free taste should open quickly, without the full 10–15 minute
@@ -457,6 +447,9 @@ function getAuthReturnUrlFromCurrentLocation() {
 
   const familyInvite = params.get("family_invite");
   if (familyInvite) url.searchParams.set("family_invite", familyInvite);
+
+  const giftThree = params.get("gift_three");
+  if (giftThree) url.searchParams.set("gift_three", giftThree);
 
   const checkoutStatus = params.get("checkout");
   if (checkoutStatus) url.searchParams.set("checkout", checkoutStatus);
@@ -632,7 +625,7 @@ async function loadReceivedFamilyInvitation(projectId) {
 }
 
 async function resolveDeliveryToken(token) {
-  const { data, error } = await supabaseClient.rpc("resolve_delivery_token", {
+  const { data, error } = await supabaseClient.rpc("resolve_delivery_entry", {
     input_token: token
   });
 
@@ -646,6 +639,7 @@ async function resolveDeliveryToken(token) {
 
 async function transcribeAudioOnServer({
   answerId,
+  userQuestionId,
   audioPaths,
   fallbackTranscript,
   bookProjectId,
@@ -655,6 +649,7 @@ async function transcribeAudioOnServer({
   const { data, error } = await supabaseClient.functions.invoke("transcribe-audio", {
     body: {
       answerId,
+      userQuestionId,
       audioPaths,
       fallbackTranscript,
       bookProjectId,
@@ -678,6 +673,7 @@ async function transcribeAudioOnServer({
 
 async function polishTranscriptOnServer({
   answerId,
+  userQuestionId,
   transcriptRaw,
   questionText,
   bookProjectId,
@@ -686,6 +682,7 @@ async function polishTranscriptOnServer({
   const { data, error } = await supabaseClient.functions.invoke("polish-transcript", {
     body: {
       answerId,
+      userQuestionId,
       transcriptRaw,
       questionText,
       bookProjectId,
@@ -833,6 +830,7 @@ async function verifyTokenAuthOnServer({ token, pin }) {
 }
 
 function isDevMode() {
+  if (import.meta.env.PROD || import.meta.env.VITE_PUBLIC_TEST_MODE === 'true') return false;
   const params = new URLSearchParams(window.location.search);
   return params.get("dev") === "1";
 }
@@ -1814,12 +1812,22 @@ if (!questionSet) {
     };
   });
 
+  // Unassigned legacy rows use a partial unique index; PostgREST cannot infer
+  // it from onConflict(user_id,question_id). Reuse their stable IDs instead.
+  let questionInserts = inserts;
+  if (!projectId) {
+    const {data: legacyRows, error: legacyError} = await supabaseClient
+      .from("user_questions").select("id,question_id").eq("user_id", userId).is("book_project_id", null);
+    if (legacyError) throw legacyError;
+    const legacyIds = new Map((legacyRows || []).map(row => [row.question_id, row.id]));
+    questionInserts = inserts.map(row => ({...row, id:legacyIds.get(row.question_id) || crypto.randomUUID()}));
+  }
   const { error: insertError } = await supabaseClient
     .from("user_questions")
-    .upsert(inserts, {
+    .upsert(questionInserts, {
       onConflict: projectId
         ? "book_project_id,question_id"
-        : "user_id,question_id"
+        : "id"
     });
 
     if (insertError) {
@@ -1865,7 +1873,7 @@ if (!questionSet) {
   }
 }
 
-function normalizeUserQuestions(rows) {
+export function normalizeUserQuestions(rows) {
   return (rows || []).map(row => {
     const chapterTitle =
       row.chapter_title_snapshot ||
@@ -1915,6 +1923,8 @@ function normalizeUserQuestions(rows) {
       onboarding_group: meta.onboarding_group || null,
       onboarding_order: meta.onboarding_order ?? null,
       question_role: meta.question_role || null,
+      bookend_kind: meta.bookend_kind || null,
+      theme_extra_id: meta.theme_extra_id || null,
       theme_code: meta.theme_code || null,
       theme_label: meta.theme_label || null,
       theme_order: meta.theme_order ?? null,
@@ -1998,7 +2008,8 @@ async function loadUserQuestionSet(userId, foundationData = null) {
 
   if (uqError) throw uqError;
 
-  return normalizeUserQuestions(userQuestions || []);
+  await loadPublishedQuestionCopy(supabaseClient).catch(error=>console.warn('question copy unavailable',error));
+  return normalizeUserQuestions(userQuestions || []).map(withPublishedQuestionCopy);
 }
 
 function getProjectQuestionIndex(questionSet, project, profile) {
@@ -2029,13 +2040,19 @@ function getInitialSceneForProject({
   notificationPref,
   sharingPreference
 }) {
+  const activeRitualScene = getActiveOnboardingRitualScene(project);
+  if (activeRitualScene) return activeRitualScene;
+
   if (
     project?.onboarding_status === "completed" &&
     Number(project?.theme_experience_state?.pending_transition_order) > 0
   ) {
-    return project?.theme_experience_state?.pending_transition_phase === "intro"
-      ? "theme_intro"
-      : "theme_complete";
+    const phase = project?.theme_experience_state?.pending_transition_phase;
+    if (phase === "bookend_voice") return 1;
+    if (phase === "bookend_intro" || phase === "bookend_outro" || phase === "bookend_video") {
+      return `bookend_${project.theme_experience_state.bookend_kind || (Number(project.theme_experience_state.pending_transition_order) === 9 ? "outro" : "intro")}`;
+    }
+    return phase === "extra" ? 1 : phase === "intro" ? "theme_intro" : "theme_complete";
   }
 
   if (
@@ -2069,7 +2086,7 @@ function getInitialSceneForProject({
     }
 
     if (ritualStep === "motivation") {
-      return "starting_motivation_prompt";
+      return "hajimari_complete";
     }
 
     if (ritualStep === "chapter_complete") {
@@ -2096,10 +2113,6 @@ function getInitialSceneForProject({
 
     if (!sharingPreference?.initial_setup_completed_at) {
       return "sharing_setup";
-    }
-
-    if (!project?.starting_motivation_completed_at) {
-      return "starting_motivation_prompt";
     }
 
     return "hajimari_complete";
@@ -2153,6 +2166,7 @@ function getThemeResumeEntryScene({
   }
 
   if (defaultScene === "theme_intro") {
+    if (project?.theme_experience_state?.pending_transition_phase === "intro") return defaultScene;
     return "theme_resume";
   }
 
@@ -2174,6 +2188,7 @@ async function ensureLifeOutlineReviewPhase({
 }) {
   const project = foundationData?.project;
   const currentQuestion = questionSet?.[currentIndex] || null;
+  if (paidOnboardingApplies(project, questionSet)) return foundationData;
 
   /*
    * まとめ画面の導入前に「人生の輪郭」を終えた利用者は、
@@ -2225,31 +2240,10 @@ function getInitialQuestionIndex(questionSet, profile) {
   return currentIndex;
 }
 
-function getResumeQuestionIndexFromToken(questionSet, tokenData) {
-  const tokenSeq = Number(tokenData?.sequence_order || 0);
-
-  if (!tokenSeq || !questionSet || questionSet.length === 0) {
-    return 0;
-  }
-
-  const nextUnansweredIndex = questionSet.findIndex(q =>
-    Number(q.sequence_order) >= tokenSeq &&
-    !isCompletedStoryQuestion(q)
-  );
-
-  if (nextUnansweredIndex >= 0) {
-    return nextUnansweredIndex;
-  }
-
-  const anyUnansweredIndex = questionSet.findIndex(q =>
-    !isCompletedStoryQuestion(q)
-  );
-
-  if (anyUnansweredIndex >= 0) {
-    return anyUnansweredIndex;
-  }
-
-  return Math.max(questionSet.length - 1, 0);
+function getCurrentDeliveryQuestionIndex(questionSet, project, profile) {
+  if (!questionSet?.length) return -1;
+  const currentIndex = getAuthenticatedQuestionIndex(questionSet, project, profile);
+  return findNextDeliveryQuestionIndex(questionSet, currentIndex);
 }
 
 async function markUserQuestionAnswered(userQuestionId) {
@@ -2408,12 +2402,13 @@ async function upsertStorySharingPreference({
   return data;
 }
 
-async function loadSupportedStoryProjects() {
+async function loadSupportedStoryProjects({ required = false } = {}) {
   const { data, error } = await supabaseClient.rpc(
     "list_supported_story_projects"
   );
 
   if (error) {
+    if (required) throw error;
     console.warn("supported story projects load error", error);
     return [];
   }
@@ -2421,12 +2416,13 @@ async function loadSupportedStoryProjects() {
   return data || [];
 }
 
-async function loadPendingSupporterInvites() {
+async function loadPendingSupporterInvites({ required = false } = {}) {
   const { data, error } = await supabaseClient.rpc(
     "list_pending_supporter_invites"
   );
 
   if (error) {
+    if (required) throw error;
     console.warn("pending supporter invites load error", error);
     return [];
   }
@@ -2434,7 +2430,7 @@ async function loadPendingSupporterInvites() {
   return data || [];
 }
 
-async function respondToSupporterInvite(inviteId, accept) {
+async function respondToSupporterInvite(inviteId, accept, identity) {
   if (!inviteId) {
     throw new Error("招待の情報が見つかりません");
   }
@@ -2445,8 +2441,8 @@ async function respondToSupporterInvite(inviteId, accept) {
   // 再照合することで、保存済みなのに失敗表示になる状態を避ける。
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const { data, error } = await supabaseClient.rpc(
-      "respond_to_supporter_invite_resilient",
-      {
+      accept ? "accept_supporter_invite_with_identity" : "respond_to_supporter_invite_resilient",
+      accept ? { input_invite_id: inviteId, ...supporterIdentityParams(identity) } : {
         input_invite_id: inviteId,
         input_accept: accept
       }
@@ -2467,13 +2463,80 @@ async function respondToSupporterInvite(inviteId, accept) {
   throw lastError;
 }
 
-async function loadReceivedStoryProjects() {
+async function loadReceivedStoryProjects({ required = false } = {}) {
   const { data, error } = await supabaseClient.rpc("list_received_story_projects");
   if (error) {
+    if (required) throw error;
     console.warn("received story projects load error", error);
     return [];
   }
   return data || [];
+}
+
+// An account can support another person's story without starting its own.
+// Look for saved work or an active entitlement, never an auto-created project
+// or a browser-local flag, before deciding whether to open the own-story home.
+async function hasStartedOwnStory(userId) {
+  const { data: selfLink, error: selfLinkError } = await supabaseClient
+    .from("user_person_links")
+    .select("person_id")
+    .eq("user_id", userId)
+    .eq("role", "self")
+    .limit(1)
+    .maybeSingle();
+  if (selfLinkError) throw selfLinkError;
+  if (!selfLink?.person_id) return false;
+
+  const { data: projects, error: projectsError } = await supabaseClient
+    .from("book_projects")
+    .select("id, access_status, onboarding_completed_at")
+    .eq("owner_user_id", userId)
+    .eq("subject_person_id", selfLink.person_id)
+    .eq("project_type", "koebook")
+    .eq("status", "active");
+  if (projectsError) throw projectsError;
+
+  for (const project of projects || []) {
+    if (ownProjectHasStarted(project)) return true;
+    const { data: savedAnswer, error: answerError } = await supabaseClient
+      .from("answers")
+      .select("id")
+      .eq("book_project_id", project.id)
+      .limit(1)
+      .maybeSingle();
+    if (answerError) throw answerError;
+    if (ownProjectHasStarted(project, Boolean(savedAnswer))) return true;
+  }
+  return false;
+}
+
+async function loadUnstartedConnections(userId) {
+  // The explicit free-trial/purchase entrances and invite/checkout callbacks
+  // must continue into their existing flows.
+  if (
+    ["trial", "purchase"].includes(getEntryModeFromUrl()) ||
+    getDeliveryTokenFromUrl() ||
+    getGiftClaimTokenFromUrl() ||
+    getFamilyInviteTokenFromUrl() ||
+    getCheckoutReturnFromUrl().status ||
+    new URLSearchParams(window.location.search).has("support_project")
+  ) return null;
+
+  const [supported, received, pendingSupporter, pendingRelationship] = await Promise.all([
+    loadSupportedStoryProjects({ required: true }),
+    loadReceivedStoryProjects({ required: true }),
+    loadPendingSupporterInvites({ required: true }),
+    loadPendingStoryRelationshipInvites({ required: true })
+  ]);
+  if (!supported.length && !received.length && !pendingSupporter.length && !pendingRelationship.length) {
+    return null;
+  }
+  if (await hasStartedOwnStory(userId)) return null;
+  return { supported, received, pendingSupporter, pendingRelationship };
+}
+
+function openOwnStoryEntry(entry) {
+  window.location.assign(ownStoryEntryUrl(window.location, entry));
 }
 
 async function loadReceivedStoryData(project) {
@@ -2514,9 +2577,10 @@ async function loadOwnedStoryRelationships(bookProjectId) {
   return data || [];
 }
 
-async function loadPendingStoryRelationshipInvites() {
+async function loadPendingStoryRelationshipInvites({ required = false } = {}) {
   const { data, error } = await supabaseClient.rpc("list_pending_story_relationship_invites");
   if (error) {
+    if (required) throw error;
     console.warn("pending story relationship invites load error", error);
     return [];
   }
@@ -2531,7 +2595,7 @@ async function respondToStoryRelationshipInvite(inviteId, accept) {
   if (error) throw error;
 }
 
-function derivePhotoStoryTitle(text) {
+export function derivePhotoStoryTitle(text) {
   const normalized = String(text || "")
     .replace(/[\r\n]+/g, " ")
     .replace(/^(えー|えっと|あの|まあ)[、,\s]*/g, "")
@@ -2640,6 +2704,13 @@ async function loadSupporterBookData(supportedProject) {
     questionSet,
     mediaByAnswerId: groupedMedia
   };
+}
+
+function hasSupporterContinuation(questionSet) {
+  return (questionSet || []).some(question =>
+    (question?.flow_type === "story" || question?.onboarding_group === "first_story") &&
+    !question?.answer_id && !isCompletedStoryQuestion(question)
+  );
 }
 
 function getNextDeliveryText(notificationPref) {
@@ -3031,6 +3102,22 @@ function App() {
   const [notificationPref, setNotificationPref] = useState(null);
   const [progress, setProgress] = useState({ currentIndex: 0, total: 0 });
   const [foundation, setFoundation] = useState(null);
+  const journeyRef = useRef(null);
+  if (!journeyRef.current) journeyRef.current = createSupportJourney(supabaseClient, {
+    enabled: import.meta.env.VITE_SUPPORT_JOURNEY_ENABLED === 'true',
+    token: getDeliveryTokenFromUrl(),
+    linkId: new URLSearchParams(location.search).get('journey_link')
+  });
+  const emitJourney = (event, options = {}) => journeyRef.current.emit(event, {
+    projectId: foundation?.project?.id || null,
+    questionId: questionsDB[progress.currentIndex]?.user_question_id || null,
+    ...options
+  });
+  useEffect(() => {
+    if (isInitializing || !user?.id) return;
+    emitJourney('auth_success', {once:true});
+    if (scene === 1) emitJourney('question_view', {once:true});
+  }, [isInitializing, user?.id, scene, foundation?.project?.id, progress.currentIndex]);
   const [sharingPreference, setSharingPreference] = useState(null);
   const [supportedProjects, setSupportedProjects] = useState([]);
   const [receivedProjects, setReceivedProjects] = useState([]);
@@ -3050,6 +3137,10 @@ function App() {
   const [lifeOutlineReturnScene, setLifeOutlineReturnScene] = useState(null);
   const [notificationSetupReturnScene, setNotificationSetupReturnScene] = useState(null);
   const [completedThemeOrder, setCompletedThemeOrder] = useState(null);
+  const [selectedThemeExtraIds, setSelectedThemeExtraIds] = useState([]);
+  const [bookendBusy, setBookendBusy] = useState(false);
+  const [bookendVideoKind, setBookendVideoKind] = useState(null);
+  const [bookendVideoStories, setBookendVideoStories] = useState([]);
   const [themeMemoryReturnScene, setThemeMemoryReturnScene] = useState("theme_complete");
   const [savedNotice, setSavedNotice] = useState("");
   const [pendingBetaSurvey, setPendingBetaSurvey] = useState(null);
@@ -3060,6 +3151,65 @@ function App() {
   const [deliveryLinkIssue, setDeliveryLinkIssue] = useState("invalid");
   const [purchaseStatus, setPurchaseStatus] = useState("idle");
   const [purchaseError, setPurchaseError] = useState("");
+  const [trialRetention, setTrialRetention] = useState(null);
+  const [trialRestarting, setTrialRestarting] = useState(false);
+  const [trialRestartError, setTrialRestartError] = useState("");
+  useLayoutEffect(() => {
+    if (isInitializing || supportContext || receivedContext) return;
+    const activeRitualScene = getActiveOnboardingRitualScene(foundation?.project);
+    const resolved = activeRitualScene
+      ? resolveOnboardingRitualEntryScene(scene, foundation?.project)
+      : resolvePaidOnboardingScene(scene, foundation?.project, questionsDB, { notificationPref, sharingPreference });
+    if (resolved !== scene) setScene(resolved);
+    const index = paidConversationIndex(foundation?.project, questionsDB);
+    if (!activeRitualScene && index >= 0 && questionsDB[progress.currentIndex]?.onboarding_group !== 'starting_conversation') {
+      setProgress(previous => ({ ...previous, currentIndex: index }));
+    }
+  }, [isInitializing, scene, foundation?.project, questionsDB, notificationPref, sharingPreference,
+    supportContext, receivedContext, progress.currentIndex]);
+
+  const enterUnstartedConnections = (currentUser, connections) => {
+    setUser(currentUser);
+    setSupportedProjects(connections.supported);
+    setReceivedProjects(connections.received);
+    setPendingSupporterInvites(connections.pendingSupporter);
+    setPendingStoryRelationshipInvites(connections.pendingRelationship);
+    setPostSupporterInviteScene("connections_home");
+
+    const inviteReference = getSupporterInviteReferenceFromUrl();
+    const targetedInviteId = inviteReference && inviteReference !== "1"
+      ? inviteReference : null;
+    if (targetedInviteId && !connections.pendingSupporter.some(
+      invite => invite.invite_id === targetedInviteId
+    )) {
+      setScene("supporter_invite_account_mismatch");
+    } else if (connections.pendingRelationship.length) {
+      setScene("story_relationship_invite_received");
+    } else if (connections.pendingSupporter.length) {
+      setHasAcceptedSupporterInvite(false);
+      setScene("supporter_invite_received");
+    } else {
+      setScene("connections_home");
+    }
+  };
+
+  useEffect(() => {
+    if (!FREE_TRIAL_RETENTION_ENABLED || trialRetention?.status !== 'active' || !trialRetention.expires_at) return undefined;
+    const expiryTime = new Date(trialRetention.expires_at).getTime();
+    const expireOnScreen = () => {
+      setTrialRetention(previous => previous?.status === 'active' ? { ...previous, status: 'expired' } : previous);
+      setScene(current => current === 'trial_complete' || [0, 1, 3].includes(current)
+        ? 'trial_expired' : current);
+    };
+    let timer;
+    const schedule = () => {
+      const remaining = expiryTime - Date.now();
+      if (remaining <= 0) expireOnScreen();
+      else timer = window.setTimeout(schedule, Math.min(remaining, 2_147_483_647));
+    };
+    schedule();
+    return () => window.clearTimeout(timer);
+  }, [trialRetention?.status, trialRetention?.expires_at]);
   const [purchaseFor, setPurchaseFor] = useState(() => getPurchaseForFromUrl());
   const [purchaseResult, setPurchaseResult] = useState(null);
   const [bookBuilderOrderCompletedAt, setBookBuilderOrderCompletedAt] = useState(null);
@@ -3143,6 +3293,7 @@ function App() {
         const { data: { session } } = await supabaseClient.auth.getSession();
 
   const initialDeliveryToken = getDeliveryTokenFromUrl();
+  if (initialDeliveryToken) journeyRef.current.emit('link_access', {once:true});
   const deliveryEntry = await resolveDeliveryEntry({ token: initialDeliveryToken, session, resolveToken: resolveDeliveryToken });
   if (deliveryEntry.kind === "invalid" || deliveryEntry.kind === "unavailable") {
     setDeliveryLinkIssue(deliveryEntry.kind);
@@ -3150,6 +3301,7 @@ function App() {
     return;
   }
   if (deliveryEntry.kind === "authenticate") {
+    journeyRef.current.emit('auth_view', {once:true});
     setAccessMode("session");
     setDeliveryToken(initialDeliveryToken);
     setDeliveryTokenData(deliveryEntry.tokenData);
@@ -3183,6 +3335,45 @@ if (!session) {
 
         const profile = await ensureProfileExists(session.user);
 
+        // A supporter opens the invited story, not their own onboarding.
+        const supportEntryId = new URLSearchParams(location.search).get('support_project');
+        if (supportEntryId) {
+          const projects = await loadSupportedStoryProjects();
+          const project = projects.find(p => p.book_project_id === supportEntryId);
+          if (!project) throw Error('Supporter access unavailable');
+          const [bookData, preference] = await Promise.all([
+            loadSupporterBookData(project), loadNotificationPreference(session.user.id, project.book_project_id)
+          ]);
+          setUser({...session.user,...profile,name:profile.display_name || 'あなた'});
+          setSupportedProjects(projects);
+          setSupportContext({project,...bookData});
+          setSupportNotificationPref(preference || null);
+          setScene('support_project_home');
+          return;
+        }
+
+        if (initialDeliveryToken && deliveryEntry.tokenData?.book_project_id) {
+          const projects = await loadSupportedStoryProjects({ required: true });
+          const deliveredProject = projects.find(project => (
+            project.book_project_id === deliveryEntry.tokenData.book_project_id
+          ));
+          if (deliveredProject) {
+            const [bookData, preference] = await Promise.all([
+              loadSupporterBookData(deliveredProject),
+              loadNotificationPreference(session.user.id, deliveredProject.book_project_id)
+            ]);
+            setUser({ ...session.user, ...profile, name: profile.display_name || "あなた" });
+            setSupportedProjects(projects);
+            setSupportContext({ project: deliveredProject, ...bookData });
+            setSupportNotificationPref(preference || null);
+            setDeliveryToken(initialDeliveryToken);
+            setDeliveryTokenData(deliveryEntry.tokenData);
+            setScene(hasSupporterContinuation(bookData.questionSet)
+              ? "support_recording_assist" : "support_project_home");
+            return;
+          }
+        }
+
         let notificationData = await loadNotificationPreference(session.user.id);
 
         setNotificationPref(notificationData || null);
@@ -3193,6 +3384,12 @@ if (!session) {
           email: session.user.email || profile?.email || "",
           name: profile?.display_name || profile?.name || "あなた"
         };
+
+const unstartedConnections = await loadUnstartedConnections(session.user.id);
+if (unstartedConnections) {
+  enterUnstartedConnections(currentUser, unstartedConnections);
+  return;
+}
 
 const foundationData = await ensureUserFoundation(
   session.user.id,
@@ -3242,6 +3439,12 @@ let activeFoundationData = await ensureLifeOutlineReviewPhase({
   currentIndex
 });
 
+const loadedTrialRetention = hasRestrictedProjectAccess(activeFoundationData?.project)
+  && !isFamilyGiftTrialMode(activeFoundationData?.project)
+  ? await loadFreeTrialRetention(activeFoundationData?.project?.id)
+  : null;
+setTrialRetention(loadedTrialRetention);
+
 setFoundation(activeFoundationData);
 setCompletedThemeOrder(
   Number(activeFoundationData?.project?.theme_experience_state?.pending_transition_order) || null
@@ -3278,6 +3481,8 @@ nextScene = getThemeResumeEntryScene({
   currentIndex
 });
 
+nextScene = await getGiftThreeEntryScene(activeFoundationData?.project, questionSet) ?? nextScene;
+
 if (getCheckoutReturnFromUrl().status === "cancelled" && getCheckoutReturnFromUrl().familyInvitationId) {
   nextScene = "home";
 }
@@ -3305,17 +3510,24 @@ if (deliveryToken) {
     const tokenData = deliveryEntry.tokenData;
     resolvedDeliveryTokenData = tokenData;
 
-    if (tokenData?.sequence_order) {
+    if (tokenData?.user_id) {
       setAccessMode("session");
       setDeliveryToken(deliveryToken);
       setDeliveryTokenData(tokenData);
 
-      currentIndex = getResumeQuestionIndexFromToken(questionSet, tokenData);
-      nextScene = getThemeResumeContext(questionSet, currentIndex)
-        ? "theme_resume"
-        : hasRecentMicCheck()
-          ? 1
-          : "daily_mic_check";
+      const continuationIndex = getCurrentDeliveryQuestionIndex(
+        questionSet, activeFoundationData?.project, profile
+      );
+      if (continuationIndex >= 0) {
+        currentIndex = continuationIndex;
+        nextScene = getThemeResumeContext(questionSet, currentIndex)
+          ? "theme_resume"
+          : hasRecentMicCheck()
+            ? 1
+            : "daily_mic_check";
+      } else {
+        nextScene = "home";
+      }
     }
   } catch (tokenError) {
     console.error("delivery token handling error", tokenError);
@@ -3371,7 +3583,8 @@ if (
     ]);
     setSupportContext({ project: deliveredProject, ...bookData });
     setSupportNotificationPref(projectNotificationData || null);
-    nextScene = "support_recording_assist";
+    nextScene = hasSupporterContinuation(bookData.questionSet)
+      ? "support_recording_assist" : "support_project_home";
   } else {
     setDeliveryLinkIssue("project_unavailable");
     nextScene = "token_invalid";
@@ -3395,17 +3608,13 @@ await logActivity(supabaseClient, {
     : { entry: getEntryModeFromUrl() || "direct" }
 });
 
-let sceneAfterInvite = nextScene;
-
-const ownStoryStartedKey = `tateyoko:own-story-started:${session.user.id}`;
-if (
-  !deliveryToken &&
-  !initialFamilyInviteToken &&
-  (supportedStoryProjects.length > 0 || receivedStoryProjects.length > 0) &&
-  nextScene !== "home" &&
-  localStorage.getItem(ownStoryStartedKey) !== "1"
-) {
-  sceneAfterInvite = "connections_home";
+nextScene = await resolveMainExperienceEntryScene(
+  activeFoundationData?.project, questionSet[currentIndex], nextScene
+);
+let sceneAfterInvite = resolveOnboardingRitualEntryScene(nextScene, activeFoundationData?.project);
+if (isFreeTrialExpired(loadedTrialRetention)
+  && getCheckoutReturnFromUrl().status !== "success") {
+  sceneAfterInvite = "trial_expired";
 }
 
 if (
@@ -3454,7 +3663,7 @@ if (orderedPendingInvites.length > 0 && !deliveryToken && !initialFamilyInviteTo
 
       } catch (e) {
         console.error("init error", e);
-        setScene(-1);
+        setScene(new URLSearchParams(location.search).has('support_project') ? 'support_entry_error' : -1);
       } finally {
         setIsInitializing(false);
       }
@@ -3463,7 +3672,7 @@ if (orderedPendingInvites.length > 0 && !deliveryToken && !initialFamilyInviteTo
     initApp();
   }, []);
 
- const resetVoiceData = () => {
+const resetVoiceData = () => {
   setVoiceData({
     duration: 0,
     transcript: "",
@@ -3502,6 +3711,47 @@ if (orderedPendingInvites.length > 0 && !deliveryToken && !initialFamilyInviteTo
   });
 };
 
+const finishThemeExtraQuestion = async (currentQuestion, nextIndex) => {
+  if (currentQuestion?.question_role !== "theme_extra") return false;
+  const nextQuestion = questionsDB[nextIndex];
+  resetVoiceData();
+  setProgress(previous => ({ ...previous, currentIndex: Math.min(nextIndex, questionsDB.length - 1) }));
+  if (nextQuestion?.question_role === "theme_extra" &&
+      Number(nextQuestion.theme_order) === Number(currentQuestion.theme_order)) {
+    setScene(1);
+  } else if (Number(currentQuestion.theme_order) < STORY_THEMES.length) {
+    await advanceAfterTheme(Number(currentQuestion.theme_order));
+  } else {
+    await advanceAfterTheme(STORY_THEMES.length);
+  }
+  return true;
+};
+
+const startSelectedThemeExtras = async selected => {
+  if (!foundation?.project?.id || !completedThemeOrder || !selected?.length) return;
+  const theme = STORY_THEMES.find(item => item.order === completedThemeOrder);
+  if (!theme) return;
+  const { data: questionIds, error } = await supabaseClient.rpc("select_theme_extra_questions", {
+    input_book_project_id: foundation.project.id,
+    input_theme_code: theme.code,
+    input_selected: selected.map(option => ({ id: option.id, text: option.text }))
+  });
+  if (error) throw error;
+  const [refreshedQuestions, refreshedProject] = await Promise.all([
+    loadUserQuestionSet(user.id, foundation),
+    supabaseClient.from("book_projects").select("*").eq("id", foundation.project.id).single()
+  ]);
+  if (refreshedProject.error) throw refreshedProject.error;
+  const firstIndex = refreshedQuestions.findIndex(question => question.user_question_id === questionIds?.[0]);
+  if (firstIndex < 0) throw new Error("追加した問いを読み込めませんでした");
+  setFoundation(previous => ({ ...previous, project: refreshedProject.data }));
+  setQuestionsDB(refreshedQuestions);
+  setProgress({ currentIndex: firstIndex, total: refreshedQuestions.length });
+  setSelectedThemeExtraIds([]);
+  resetVoiceData();
+  setScene(1);
+};
+
 const goToNextQuestion = async () => {
   const currentQ = questionsDB[progress.currentIndex];
   const currentSeq = currentQ?.sequence_order || 1;
@@ -3520,6 +3770,8 @@ const goToNextQuestion = async () => {
   }
 
   resetVoiceData();
+
+  if (await finishThemeExtraQuestion(currentQ, nextIndex)) return;
 
   if (nextIndex >= questionsDB.length) {
     setProgress(p => ({
@@ -3553,12 +3805,21 @@ const handleSkipQuestion = async () => {
 
   try {
     const currentQ = questionsDB[progress.currentIndex];
+    if (bookendKindForQuestion(currentQ)) {
+      await markUserQuestionSkipped(currentQ.user_question_id);
+      await finishBookend();
+      return;
+    }
     await markUserQuestionSkipped(currentQ?.user_question_id);
     setQuestionsDB(current => current.map(question =>
       question.user_question_id === currentQ?.user_question_id
         ? { ...question, status: "skipped" }
         : question
     ));
+    if (currentQ?.onboarding_group === "starting_motivation" && foundation?.project?.id && foundation.project.onboarding_status !== "completed") {
+      await skipOnboardingMotivation();
+      return;
+    }
     await goToNextQuestion();
   } catch (e) {
     console.error("skip question error", e);
@@ -3605,6 +3866,12 @@ const handleDevLogout = async () => {
 
 const openSupportedProject = async (supportedProject) => {
   if (!supportedProject?.book_project_id) return;
+  if(import.meta.env.VITE_FAMILY_CONNECTION_TEST === 'true') {
+    const {data,error}=await supabaseClient.rpc('family_list_workspaces');
+    if(!error && data?.some(p=>p.project_id===supportedProject.book_project_id)) {
+      window.location.assign(`/?app=1&family=1&family_project=${encodeURIComponent(supportedProject.book_project_id)}`);return;
+    }
+  }
 
   try {
     setIsInitializing(true);
@@ -3771,10 +4038,15 @@ const refreshSupportedProject = async () => {
   }));
 };
 
-const handleSupporterInviteResponse = async (invite, accept) => {
+const handleSupporterInviteResponse = async (invite, accept, identity) => {
   if (!invite?.invite_id) return;
 
-  await respondToSupporterInvite(invite.invite_id, accept);
+  await respondToSupporterInvite(invite.invite_id, accept, identity);
+  if (accept && identity) {
+    // Updating the account name must never rename the story subject.
+    setUser(previous => ({ ...previous, family_name: identity.familyName.trim(), given_name: identity.givenName.trim(),
+      display_name: `${identity.familyName.trim()} ${identity.givenName.trim()}`, name: `${identity.familyName.trim()} ${identity.givenName.trim()}` }));
+  }
 
   const remainingInvites = pendingSupporterInvites.filter(
     item => item.invite_id !== invite.invite_id
@@ -3880,6 +4152,29 @@ const continueAfterTokenAuth = async () => {
       name: profile?.display_name || profile?.name || "あなた"
     };
 
+    if (tokenData.book_project_id) {
+      const projects = await loadSupportedStoryProjects({ required: true });
+      const deliveredProject = projects.find(project => (
+        project.book_project_id === tokenData.book_project_id
+      ));
+      if (deliveredProject) {
+        const [bookData, preference] = await Promise.all([
+          loadSupporterBookData(deliveredProject),
+          loadNotificationPreference(session.user.id, deliveredProject.book_project_id)
+        ]);
+        setAccessMode("session");
+        setDeliveryToken(token);
+        setDeliveryTokenData(tokenData);
+        setUser(currentUser);
+        setSupportedProjects(projects);
+        setSupportContext({ project: deliveredProject, ...bookData });
+        setSupportNotificationPref(preference || null);
+        setScene(hasSupporterContinuation(bookData.questionSet)
+          ? "support_recording_assist" : "support_project_home");
+        return;
+      }
+    }
+
     const foundationData = await ensureUserFoundation(session.user.id, currentUser);
     setFoundation(foundationData);
 
@@ -3893,7 +4188,9 @@ const continueAfterTokenAuth = async () => {
       tokenData?.book_project_id || foundationData?.project?.id || null
     );
 
-    const resumeIndex = getResumeQuestionIndexFromToken(questionSet, tokenData);
+    const resumeIndex = getCurrentDeliveryQuestionIndex(
+      questionSet, foundationData?.project, profile
+    );
 
     setAccessMode("session");
     setDeliveryToken(token);
@@ -3902,7 +4199,7 @@ const continueAfterTokenAuth = async () => {
     setNotificationPref(notificationData || null);
     setQuestionsDB(questionSet);
     setProgress({
-      currentIndex: resumeIndex,
+      currentIndex: Math.max(resumeIndex, 0),
       total: questionSet.length
     });
 
@@ -3921,17 +4218,21 @@ const continueAfterTokenAuth = async () => {
       const bookData = await loadSupporterBookData(deliveredProject);
       setSupportContext({ project: deliveredProject, ...bookData });
       setSupportNotificationPref(notificationData || null);
-      setScene("support_recording_assist");
+      setScene(hasSupporterContinuation(bookData.questionSet)
+        ? "support_recording_assist" : "support_project_home");
       return;
     }
 
-    setScene(
-      getThemeResumeContext(questionSet, resumeIndex)
+    const requestedScene = resumeIndex < 0
+      ? "home"
+      : getThemeResumeContext(questionSet, resumeIndex)
         ? "theme_resume"
         : hasRecentMicCheck()
           ? 1
-          : "daily_mic_check"
-    );
+          : "daily_mic_check";
+    setScene(await resolveMainExperienceEntryScene(
+      foundationData?.project, questionSet[resumeIndex], requestedScene
+    ));
   } catch (e) {
     console.error("continue after token auth error", e);
     alert(e instanceof Error ? e.message : "物語の続きを開けませんでした。");
@@ -4158,9 +4459,11 @@ const startEditRecording = (
 
 
 const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
+  let failureStage = "upload";
   setVoiceData(prev => ({
     ...prev,
     transcriptionStatus: "processing",
+    transcriptionFailureStage: null,
     transcriptionError: ""
   }));
 
@@ -4188,6 +4491,15 @@ if (!sourceVoiceData.targetAnswerId) {
     .maybeSingle();
 
   if (existingAnswer) targetAnswerId = existingAnswer.id;
+}
+
+if (foundation?.project?.id && currentQ?.user_question_id) {
+  const { error: permitError } = await supabaseClient.rpc('reserve_recording_audio_upload', {
+    input_project_id: foundation.project.id,
+    input_question_id: currentQ.user_question_id,
+    input_answer_id: targetAnswerId
+  });
+  if (permitError) throw permitError;
 }
 
 let paths = [];
@@ -4227,13 +4539,19 @@ for (let i = 0; i < audioSegments.length; i++) {
           : "webm";
 
       const segmentNo = String(uploadStartIndex + i + 1).padStart(2, "0");
-      const path = `${user.id}/${targetAnswerId}/part-${segmentNo}.${ext}`;
+      // A trial restart may queue the previous object for later Storage GC.
+      // Never reuse that object's path for a new recording.
+      const isRetainedTrialAudio = FREE_TRIAL_RETENTION_ENABLED && currentQ?.onboarding_group === "trial_experience";
+      const uniquePart = isRetainedTrialAudio
+        ? `part-${segmentNo}-${crypto.randomUUID()}`
+        : `part-${segmentNo}`;
+      const path = `${recordingStorageRoot(user.id, foundation.project.id, targetAnswerId)}/${uniquePart}.${ext}`;
 
       const { error: uploadError } = await supabaseClient.storage
         .from("audio")
         .upload(path, blob, {
           contentType,
-          upsert: true
+          upsert: !isRetainedTrialAudio
         });
 
       if (uploadError) {
@@ -4249,6 +4567,8 @@ const combinedStoragePaths =
     ? [...existingAudioPaths, ...paths]
     : paths;
 
+failureStage = "transcription";
+
 setVoiceData(prev => ({
   ...prev,
   answerId: targetAnswerId,
@@ -4258,6 +4578,7 @@ setVoiceData(prev => ({
 
     const aiResult = await transcribeAudioOnServer({
       answerId: targetAnswerId,
+      userQuestionId: currentQ?.user_question_id,
       audioPaths: paths,
       fallbackTranscript: sourceVoiceData.transcript,
       bookProjectId: foundation?.project?.id || currentQ?.book_project_id || null,
@@ -4318,6 +4639,7 @@ setScene(3.5);
 try {
   const polishResult = await polishTranscriptOnServer({
     answerId: targetAnswerId,
+    userQuestionId: currentQ?.user_question_id,
     transcriptRaw,
     questionText: currentQ?.content || "",
     bookProjectId: foundation?.project?.id || currentQ?.book_project_id || null
@@ -4383,10 +4705,23 @@ try {
   } catch (error) {
     console.error(error);
 
+    // Operational telemetry contains only a stage label, never the recording
+    // or transcript. Failure to write telemetry must not block the retry UI.
+    void logActivity(supabaseClient, {
+      actorUserId: user?.id,
+      action: failureStage === "upload" ? "voice_upload_failed" : "voice_transcription_failed",
+      source: "app",
+      outcome: "failure",
+      metadata: { stage: failureStage === "upload" ? "upload" : "transcription" },
+    });
+
   setVoiceData(prev => ({
     ...prev,
     transcriptionStatus: "error",
-    transcriptionError: "文字起こしに失敗しました。音声は保存されている可能性があります。",
+    transcriptionFailureStage: failureStage,
+    transcriptionError: failureStage === "upload"
+      ? "音声をサーバーに保存できませんでした。"
+      : "文字起こしに失敗しました。",
     editedText:
       prev.editedText ||
       prev.transcriptReadable ||
@@ -4915,7 +5250,7 @@ const handleLifeOutlineAddRecording = async (txt, dur, _url, blob, details = {})
           : "webm";
 
       storagePath =
-        `${user.id}/introductions/${introduction.id}/` +
+        `${EXPERIENCE_V2_ENABLED ? `${user.id}/${foundation.project.id}` : user.id}/introductions/${introduction.id}/` +
         `addition-${String(additions.length + 1).padStart(2, "0")}-${additionId}.${ext}`;
 
       const { error: uploadError } = await supabaseClient.storage
@@ -5083,11 +5418,130 @@ const savePendingThemeTransition = async (themeOrder, phase = "complete") => {
   setFoundation(previous => ({ ...previous, project: updatedProject }));
 };
 
+const updateBookendState = async patch => {
+  if (!foundation?.project?.id) throw new Error("語りの保存先を確認できませんでした。");
+  const nextState = { ...(foundation.project.theme_experience_state || {}), ...patch };
+  const { data, error } = await supabaseClient.from("book_projects")
+    .update({ theme_experience_state: nextState })
+    .eq("id", foundation.project.id).select().single();
+  if (error) throw error;
+  setFoundation(previous => ({ ...previous, project: data }));
+  return data;
+};
+
+const beginBookend = async (kind, returnScene) => {
+  const order = kind === "intro" ? 1 : STORY_THEMES.length;
+  setBookendBusy(true);
+  try {
+    await updateBookendState({
+      pending_transition_order: order,
+      pending_transition_phase: `bookend_${kind}`,
+      bookend_kind: kind,
+      bookend_return_scene: returnScene,
+      bookend_resume_sequence: questionsDB[progress.currentIndex]?.sequence_order || null
+    });
+    setCompletedThemeOrder(order);
+    setScene(`bookend_${kind}`);
+  } finally { setBookendBusy(false); }
+};
+
+const finishBookend = async () => {
+  const state = foundation?.project?.theme_experience_state || {};
+  const kind = state.bookend_kind;
+  if (!BOOKEND_PROMPTS[kind]) return;
+  const returnScene = state.bookend_return_scene === "theme_intro" ? "theme_intro" : "story_pages";
+  setBookendBusy(true);
+  try {
+    const nextState = {
+      pending_transition_order: returnScene === "theme_intro" ? 1 : null,
+      pending_transition_phase: returnScene === "theme_intro" ? "intro" : null,
+      bookend_kind: null,
+      bookend_return_scene: null,
+      bookend_resume_sequence: null,
+      [`bookend_${kind}_shown`]: true
+    };
+    await updateBookendState(nextState);
+    const refreshed = await loadUserQuestionSet(user.id, foundation);
+    setQuestionsDB(refreshed);
+    const resumeIndex = refreshed.findIndex(question => Number(question.sequence_order) === Number(state.bookend_resume_sequence));
+    if (resumeIndex >= 0) {
+      setProgress({ currentIndex: resumeIndex, total: refreshed.length });
+      await supabaseClient.from("profiles").update({ current_sequence: refreshed[resumeIndex].sequence_order }).eq("id", user.id);
+    }
+    setBookendVideoKind(null);
+    resetVoiceData();
+    setScene(returnScene);
+  } finally { setBookendBusy(false); }
+};
+
+const advanceAfterTheme = async order => {
+  const kind = order === 1 ? "intro" : order === STORY_THEMES.length ? "outro" : null;
+  if (kind && !foundation?.project?.theme_experience_state?.[`bookend_${kind}_shown`]) {
+    await beginBookend(kind, kind === "intro" ? "theme_intro" : "story_pages");
+    return;
+  }
+  if (order < STORY_THEMES.length) {
+    await savePendingThemeTransition(order, "intro");
+    setScene("theme_intro");
+  } else {
+    await savePendingThemeTransition(null);
+    setScene("story_pages");
+  }
+};
+
+const startBookendVoice = async kind => {
+  setBookendBusy(true);
+  try {
+    const { data: questionId, error } = await supabaseClient.rpc("ensure_bookend_voice_question", {
+      input_book_project_id: foundation.project.id, input_kind: kind
+    });
+    if (error) throw error;
+    const refreshed = await loadUserQuestionSet(user.id, foundation);
+    const index = refreshed.findIndex(question => question.user_question_id === questionId);
+    if (index < 0) throw new Error("問いを読み込めませんでした。");
+    await updateBookendState({ pending_transition_phase: "bookend_voice" });
+    const { error: progressError } = await supabaseClient.from("profiles")
+      .update({ current_sequence: refreshed[index].sequence_order }).eq("id", user.id);
+    if (progressError) throw progressError;
+    setQuestionsDB(refreshed);
+    setProgress({ currentIndex: index, total: refreshed.length });
+    resetVoiceData();
+    setScene(1);
+  } catch (error) {
+    console.error("bookend voice start error", error);
+    alert("声で語る画面を開けませんでした。もう一度お試しください。");
+  } finally { setBookendBusy(false); }
+};
+
+const startBookendVideo = async kind => {
+  setBookendBusy(true);
+  try {
+    const { data, error } = await supabaseClient.from("video_stories")
+      .select("*").eq("book_project_id", foundation.project.id).order("slot_order");
+    if (error) throw error;
+    if ((data || []).length >= 2) {
+      alert("ビデオは2本までです。声で残すか、『これまでの語り』でビデオを整理してください。");
+      return;
+    }
+    setBookendVideoStories(data || []);
+    await updateBookendState({ pending_transition_phase: "bookend_video" });
+    setBookendVideoKind(kind);
+  } catch (error) {
+    console.error("bookend video start error", error);
+    alert("ビデオで語る画面を開けませんでした。");
+  } finally { setBookendBusy(false); }
+};
+
 const openFirstThemeIntroduction = async () => {
   try {
     setIsInitializing(true);
+    await confirmExperienceBoundary(foundation.project.id, "paid");
+    await confirmExperienceBoundary(foundation.project.id, "main");
     await updateOnboardingRitualStep("theme_intro");
-    setScene("theme_intro");
+    const {data:status,error}=await supabaseClient.rpc("journey_status",{p:foundation.project.id});
+    if(error)throw error;
+    if(status.intro_shown)setScene("theme_intro");
+    else await beginBookend("intro","theme_intro");
   } catch (error) {
     console.error("first theme introduction error", error);
     alert("最初のテーマを開けませんでした。");
@@ -5101,8 +5555,7 @@ const openNextThemeIntroduction = async () => {
 
   try {
     setIsInitializing(true);
-    await savePendingThemeTransition(completedThemeOrder, "intro");
-    setScene("theme_intro");
+    await advanceAfterTheme(completedThemeOrder);
   } catch (error) {
     console.error("next theme introduction error", error);
     alert("次のテーマを開けませんでした。");
@@ -5200,6 +5653,25 @@ const completeLifeOutlineReview = async () => {
   }
 };
 
+const saveOnboardingPreferencesDraft = async draft => {
+  if (!foundation?.project?.id) throw new Error("Project is unavailable");
+  const { data: updatedProject, error } = await supabaseClient
+    .from("book_projects")
+    .update({
+      onboarding_preferences: {
+        ...(foundation.project.onboarding_preferences || {}),
+        ...draft,
+        version: 1
+      }
+    })
+    .eq("id", foundation.project.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  setFoundation(previous => ({ ...previous, project: updatedProject }));
+};
+
 const saveOnboardingPreferences = async preferences => {
   if (!foundation?.project?.id) return;
 
@@ -5210,9 +5682,12 @@ const saveOnboardingPreferences = async preferences => {
       .from("book_projects")
       .update({
         onboarding_preferences: {
+          ...(foundation.project.onboarding_preferences || {}),
           expectations: preferences?.expectations || [],
           preferred_themes: preferences?.preferredThemes || [],
           people: preferences?.people || [],
+          draft_step: null,
+          draft_updated_at: null,
           version: 1
         },
         onboarding_preferences_completed_at: new Date().toISOString(),
@@ -5228,60 +5703,18 @@ const saveOnboardingPreferences = async preferences => {
       ...prev,
       project: updatedProject
     }));
+    clearOnboardingPreferenceDraft(updatedProject.id);
     setScene("notification_setup");
+    return true;
   } catch (error) {
     console.error("onboarding preferences save error", error);
     alert("選んだ内容を保存できませんでした。");
+    return false;
   } finally {
     setIsInitializing(false);
   }
 };
 
-const startOnboardingMotivation = async () => {
-  const motivationIndex = questionsDB.findIndex(
-    question => question?.onboarding_group === "starting_motivation"
-  );
-
-  if (motivationIndex < 0) {
-    setScene("hajimari_complete");
-    return;
-  }
-
-  const motivationQuestion = questionsDB[motivationIndex];
-
-  try {
-    if (foundation?.project?.id) {
-      const { data: updatedProject, error } = await supabaseClient
-        .from("book_projects")
-        .update({
-          onboarding_status: "life_outline_completed",
-          current_onboarding_user_question_id:
-            motivationQuestion?.user_question_id || null,
-          onboarding_ritual_step: "motivation"
-        })
-        .eq("id", foundation.project.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setFoundation(prev => ({
-        ...prev,
-        project: updatedProject
-      }));
-    }
-
-    setProgress(prev => ({
-      ...prev,
-      currentIndex: motivationIndex
-    }));
-    resetVoiceData();
-    setScene(1);
-  } catch (error) {
-    console.error("starting motivation start error", error);
-    alert("録音画面を開けませんでした。");
-  }
-};
 
 const skipOnboardingMotivation = async () => {
   if (!foundation?.project?.id) {
@@ -5411,6 +5844,20 @@ const resumeThemeQuestion = async () => {
     return;
   }
 
+  try {
+    const entryScene = await resolveMainExperienceEntryScene(
+      foundation?.project, questionsDB[resumeContext.questionIndex], "theme_resume"
+    );
+    if (entryScene === "hajimari_complete") {
+      setScene(entryScene);
+      return;
+    }
+  } catch (error) {
+    console.error("main experience entry error", error);
+    alert("本編の開始状態を確認できませんでした。もう一度お試しください。");
+    return;
+  }
+
   setProgress(previous => ({
     ...previous,
     currentIndex: resumeContext.questionIndex
@@ -5495,7 +5942,7 @@ useEffect(() => {
       // case the project already contains the authoritative paid state and
       // there is no need to depend on a second Stripe lookup.
       if (
-        checkoutReturn.purchaseFor === "self" &&
+        !EXPERIENCE_V2_ENABLED && checkoutReturn.purchaseFor === "self" &&
         checkoutReturn.context !== "book_builder" &&
         hasFullProjectAccess(foundation.project)
       ) {
@@ -5515,11 +5962,18 @@ useEffect(() => {
       if (!data.paid) {
         throw new Error("お支払いの完了をまだ確認できませんでした");
       }
+      if (data.accessStopped) {
+        setPurchaseError("この購入は返金手続き中、または返金済みです。契約・データ管理で確認してください。");
+        setScene("experience_contract_settings");
+        return;
+      }
 
       if (["gift", "family_trial_package"].includes(data.orderType) && checkoutReturn.familyInvitationId) {
-        await supabaseClient.functions.invoke("send-family-story-invite", {
-          body: { invitationId: checkoutReturn.familyInvitationId }
-        });
+        if (ALLOW_FAMILY_NOTIFICATIONS) {
+          await supabaseClient.functions.invoke("send-family-story-invite", {
+            body: { invitationId: checkoutReturn.familyInvitationId }
+          });
+        }
         setSentFamilyInvitations(await loadSentFamilyInvitations());
         setPurchaseResult({ order: data.order, gift: data.gift, familyInvitationId: checkoutReturn.familyInvitationId });
         setPurchaseStatus("paid");
@@ -5545,7 +5999,7 @@ useEffect(() => {
       // A successful webhook is the source of truth. If the optional return
       // page sync failed or timed out, read the project once more before
       // showing an error so a completed purchase never looks unpaid.
-      if (checkoutReturn.purchaseFor === "self") {
+      if (!EXPERIENCE_V2_ENABLED && checkoutReturn.purchaseFor === "self") {
         const { data: refreshedProject, error: refreshError } =
           await supabaseClient
             .from("book_projects")
@@ -5605,6 +6059,8 @@ const startPurchase = async ({
   returnContext = "purchase",
   gift = {},
   familyInvitationId = null,
+  expectedAmount = null,
+  expectedPolicyVersion = null,
   checkoutWindow = null
 } = {}) => {
   if (orderType === "self" && !foundation?.project?.id) {
@@ -5631,6 +6087,8 @@ const startPurchase = async ({
           shippingAddress,
           returnContext,
           gift,
+          expectedAmount,
+          expectedPolicyVersion,
           familyInvitationId
         }
       }
@@ -5649,9 +6107,11 @@ const startPurchase = async ({
     if (data.completed || data.alreadyPurchased) {
       closeCheckoutWindow(checkoutWindow);
       if (familyInvitationId && orderType !== "self") {
+        if (ALLOW_FAMILY_NOTIFICATIONS) {
         await supabaseClient.functions.invoke("send-family-story-invite", {
           body: { invitationId: familyInvitationId }
         });
+        }
         setSentFamilyInvitations(await loadSentFamilyInvitations());
         setPurchaseResult({ order: { id: data.orderId }, familyInvitationId });
         setPurchaseStatus("paid");
@@ -5709,11 +6169,57 @@ const reopenCheckout = () => {
   return true;
 };
 
+const restartFreeTrial = async ({ confirmReplace = true } = {}) => {
+  if (!FREE_TRIAL_RETENTION_ENABLED || !foundation?.project?.id || trialRestarting) return false;
+  if (confirmReplace && !window.confirm('最初からやり直すと、現在の無料体験の内容は置き換わります。よろしいですか？')) return false;
+  setTrialRestarting(true);
+  setTrialRestartError('');
+  try {
+    const { error } = await supabaseClient.rpc('restart_free_trial', {
+      input_project_id: foundation.project.id
+    });
+    if (error) throw error;
+    const refreshed = await loadUserQuestionSet(user.id, foundation);
+    setQuestionsDB(refreshed);
+    setProgress({ currentIndex: getFreeTrialResumeQuestionIndex(refreshed), total: refreshed.length });
+    setTrialRetention({ status: 'not_started', retention_days: freeTrialRetentionDays(trialRetention) });
+    resetVoiceData();
+    replaceCommercialEntryUrl('trial');
+    setScene(0);
+    return true;
+  } catch (error) {
+    console.error('free trial restart error', error);
+    setTrialRestartError('無料体験を開始できませんでした。時間をおいて、もう一度お試しください。');
+    return false;
+  } finally {
+    setTrialRestarting(false);
+  }
+};
+
 const handleSaveAnswer = async (tag = null) => {
+  emitJourney('save_start');
   setIsInitializing(true);
 
   try {
     const currentQ = questionsDB[progress.currentIndex];
+
+    // A delivery link or an old open tab may bypass the introduction screen.
+    // Never turn a save attempt into the main-start event that ends a gift guarantee.
+    if (requiresMainExperienceStart(currentQ) && foundation?.project?.id) {
+      const { data: access, error: accessError } = await supabaseClient.rpc("get_experience_access", {
+        input_project_id: foundation.project.id
+      });
+      if (accessError) throw accessError;
+      if (access?.policy_version && access.policy_version !== "legacy" && !access.main_started_at) {
+        setScene(access.production_started_at ? "hajimari_complete" : "onboarding_overview");
+        return;
+      }
+    }
+
+    if (FREE_TRIAL_RETENTION_ENABLED && currentQ?.onboarding_group === 'trial_experience'
+      && !(voiceData.storagePaths?.length || voiceData.storagePath)) {
+      throw new Error('無料体験の音声を確認できませんでした。もう一度お試しください。');
+    }
 
     const currentSeq = voiceData.targetSequenceOrder || currentQ?.sequence_order;
 
@@ -5789,6 +6295,7 @@ const handleSaveAnswer = async (tag = null) => {
 const storagePaths = voiceData.storagePaths && voiceData.storagePaths.length > 0
   ? voiceData.storagePaths
   : (voiceData.storagePath ? [voiceData.storagePath] : []);
+let oldTrialAudioPaths = [];
 
 if (editMode === "replace") {
   const { data: oldAudioRows, error: oldAudioSelectError } = await supabaseClient
@@ -5807,6 +6314,9 @@ if (editMode === "replace") {
     .filter(Boolean)
     .filter(path => !storagePaths.includes(path));
 
+  if (FREE_TRIAL_RETENTION_ENABLED && currentQ?.onboarding_group === "trial_experience") {
+    oldTrialAudioPaths = oldAudioPaths;
+  } else {
   if (oldAudioPaths.length > 0) {
     const { error: oldAudioStorageError } = await supabaseClient.storage
       .from("audio")
@@ -5826,6 +6336,7 @@ if (editMode === "replace") {
 
   if (deleteAudioRowsError) {
     console.warn("old audio media rows delete error", deleteAudioRowsError);
+  }
   }
 }
 
@@ -5865,6 +6376,23 @@ if (mediaStoragePaths.length > 0) {
 
   if (assetError) {
     console.error("media asset save error", assetError);
+    if (currentQ?.onboarding_group === "trial_experience") {
+      throw new Error("無料体験の音声を保存できませんでした。もう一度お試しください。");
+    }
+  }
+}
+
+if (oldTrialAudioPaths.length > 0) {
+  const { error: oldTrialRowsError } = await supabaseClient
+    .from('media_assets').delete()
+    .eq('answer_id', finalAnswerId).eq('user_id', user.id).eq('asset_type', 'audio')
+    .in('storage_path', oldTrialAudioPaths);
+  if (oldTrialRowsError) {
+    console.warn('old trial audio rows retained', oldTrialRowsError);
+  } else {
+    const { error: oldTrialStorageError } = await supabaseClient.storage
+      .from('audio').remove(oldTrialAudioPaths);
+    if (oldTrialStorageError) console.warn('old trial audio retained in Storage', oldTrialStorageError);
   }
 }
 
@@ -5887,7 +6415,7 @@ if (mediaStoragePaths.length > 0) {
               : "jpg";
 
           const photoNo = String(i + 1).padStart(2, "0");
-          const photoPath = `${user.id}/${finalAnswerId}/photo-${photoNo}.${ext}`;
+          const photoPath = `${recordingStorageRoot(user.id, foundation.project.id, finalAnswerId)}/photo-${photoNo}.${ext}`;
 
           const { error: photoUploadError } = await supabaseClient.storage
             .from("photos")
@@ -5932,7 +6460,12 @@ if (mediaStoragePaths.length > 0) {
         }
       }
 
+      if (FREE_TRIAL_RETENTION_ENABLED && currentQ?.onboarding_group === "trial_experience") {
+        setTrialRetention(await loadFreeTrialRetention(foundation?.project?.id));
+      }
+
       await markUserQuestionAnswered(currentQ?.user_question_id);
+      emitJourney('save_complete');
       setQuestionsDB(current => current.map(question =>
         question.user_question_id === currentQ?.user_question_id
           ? {
@@ -6054,6 +6587,11 @@ if (mediaStoragePaths.length > 0) {
         return;
       }
 
+      if (bookendKindForQuestion(currentQ)) {
+        await finishBookend();
+        return;
+      }
+
       const nextIndex = progress.currentIndex + 1;
       const nextSeq = questionsDB[nextIndex]?.sequence_order || (currentSeq + 1);
 
@@ -6066,6 +6604,8 @@ if (mediaStoragePaths.length > 0) {
         ...p,
         currentIndex: Math.min(nextIndex, questionsDB.length - 1)
       }));
+
+      if (await finishThemeExtraQuestion(currentQ, nextIndex)) return;
 
 localStorage.setItem("koe_last_visit", Date.now().toString());
 
@@ -6103,7 +6643,9 @@ const reachedFreeTrialLimit =
   isLastFreeTrialQuestion(questionsDB, currentQ);
 
 if (reachedFreeTrialLimit) {
-  if (foundation?.project?.onboarding_preferences?.family_invitation_id) {
+  // v1.2: a completed trial is not a request to purchase. The new page records
+  // an explicit recipient decision instead; keep legacy behaviour outside local preview.
+  if (!TRIAL_CONVERSION_ENABLED && ALLOW_FAMILY_NOTIFICATIONS && !import.meta.env.DEV && foundation?.project?.onboarding_preferences?.family_invitation_id) {
     try {
       await supabaseClient.functions.invoke("notify-family-story-inviter", {
         body: { projectId: foundation.project.id }
@@ -6189,13 +6731,23 @@ setScene(1);
 
     } catch (error) {
       console.error(error);
-      alert("保存に失敗しました。");
+      void logActivity(supabaseClient, {
+        actorUserId: user?.id,
+        action: "answer_save_failed",
+        source: "app",
+        outcome: "failure",
+      });
+      alert(error?.code === "42501"
+        ? "本編の開始状態を確認できませんでした。録音はこの画面に残っています。"
+        : "保存に失敗しました。");
+      emitJourney('save_failed');
       setScene(3.5);
     } finally {
       setIsInitializing(false);
     }
   };
 
+  if (scene === 'support_entry_error') return <main className="p-8 text-white space-y-6"><p>お手伝いする物語を開けませんでした。</p><button onClick={()=>location.reload()}>もう一度開く</button></main>;
   if (isInitializing) {
     return (
       <div className="bg-[#0f172a] h-screen w-screen flex items-center justify-center">
@@ -6222,9 +6774,15 @@ setScene(1);
       : null;
   const showGlobalHome =
     Boolean(user?.id) &&
+    !String(scene).startsWith("support_") &&
+    !onboardingSetupScenes.has(scene) &&
     foundation?.project?.onboarding_status === "completed" &&
     scene !== "home" &&
+    scene !== 0 &&
+    scene !== 1 &&
+    scene !== 3 &&
     scene !== "theme_complete" &&
+    scene !== "theme_more" &&
     scene !== "theme_intro" &&
     scene !== "theme_resume" &&
     scene !== "theme_memory_request" &&
@@ -6255,11 +6813,17 @@ setScene(1);
 
     resetVoiceData();
     setSupportContext(null);
+    setDeliveryToken(null);
+    setDeliveryTokenData(null);
+    if (getDeliveryTokenFromUrl()) {
+      window.history.replaceState(window.history.state, "", withoutDeliveryToken(window.location.href));
+    }
     setScene("home");
   };
 
   return (
-    <div className={`app-container ${scene === "family_invite_received" ? "app-container--family-invitation" : ""}`}>
+    <div className={`app-container ${scene === "family_invite_received" ? "app-container--family-invitation" : ""} ${TRIAL_CONVERSION_ENABLED && scene === "trial_complete" ? "app-container--trial-conversion" : ""} ${["onboarding_preferences", "notification_setup", "sharing_setup"].includes(scene) ? "app-container--desktop-setup" : ""}`}>
+      <PersistentStorySkyBackdrop active={scene === 1 || scene === 3} />
       {showGlobalHome && (
         <button
           type="button"
@@ -6285,6 +6849,12 @@ setScene(1);
             setIsInitializing(true);
             try {
               setUser(u);
+
+const unstartedConnections = await loadUnstartedConnections(u.id);
+if (unstartedConnections) {
+  enterUnstartedConnections(u, unstartedConnections);
+  return;
+}
 
 const foundationData = await ensureUserFoundation(u.id, u);
 
@@ -6338,6 +6908,12 @@ const activeFoundationData = await ensureLifeOutlineReviewPhase({
   currentIndex
 });
 
+const loadedTrialRetention = hasRestrictedProjectAccess(activeFoundationData?.project)
+  && !isFamilyGiftTrialMode(activeFoundationData?.project)
+  ? await loadFreeTrialRetention(activeFoundationData?.project?.id)
+  : null;
+setTrialRetention(loadedTrialRetention);
+
 setFoundation(activeFoundationData);
 setCompletedThemeOrder(
   Number(activeFoundationData?.project?.theme_experience_state?.pending_transition_order) || null
@@ -6366,6 +6942,8 @@ nextScene = getThemeResumeEntryScene({
   questionSet,
   currentIndex
 });
+
+nextScene = await getGiftThreeEntryScene(activeFoundationData?.project, questionSet) ?? nextScene;
 
 if (getCheckoutReturnFromUrl().status === "cancelled" && getCheckoutReturnFromUrl().familyInvitationId) {
   nextScene = "home";
@@ -6412,7 +6990,11 @@ setPendingStoryRelationshipInvites(pendingRelationshipInvites);
 setSentFamilyInvitations(sentFamilyStories);
 setReceivedFamilyInvitation(receivedFamilyStory);
 
-let sceneAfterInvite = nextScene;
+let sceneAfterInvite = resolveOnboardingRitualEntryScene(nextScene, activeFoundationData?.project);
+if (isFreeTrialExpired(loadedTrialRetention)
+  && getCheckoutReturnFromUrl().status !== "success") {
+  sceneAfterInvite = "trial_expired";
+}
 
             if (isBetaMode() && !loginFamilyInviteToken && u?.__isNewProfile && u?.id) {
               const betaIntroSeenKey = getBetaIntroSeenKey(u.id);
@@ -6474,19 +7056,89 @@ let sceneAfterInvite = nextScene;
             setPurchaseStatus("idle");
             setPurchaseError("");
             replaceCommercialEntryUrl("trial");
-            setScene(hasCompletedFreeTrial(questionsDB) ? "trial_complete" : 0);
+            setScene(isFreeTrialExpired(trialRetention)
+              ? "trial_expired"
+              : hasCompletedFreeTrial(questionsDB) ? "trial_complete" : 0);
           }}
         />
       )}
 
-      {scene === "trial_complete" && (
+      {scene === "trial_expired" && (
+        <section className="mx-auto flex min-h-[70vh] w-full max-w-lg flex-col justify-center px-7 py-12 text-white">
+          <p className="mb-5 text-sm tracking-[0.18em] text-white/50">無料体験</p>
+          <h1 className="text-3xl leading-relaxed">前回の語りの保存期間が終わりました。</h1>
+          <p className="mt-6 text-base leading-loose text-white/70">
+            もう一度、3つの問いから話してみませんか。新しく語った内容は、最後に語った日から{freeTrialRetentionDays(trialRetention)}日間保存されます。
+          </p>
+          {trialRestartError && <p role="alert" className="mt-5 text-sm text-rose-200">{trialRestartError}</p>}
+          <button type="button" disabled={trialRestarting}
+            className="mt-9 min-h-14 rounded-full bg-[#e8e4d8] px-6 text-[#152336] disabled:opacity-50"
+            onClick={() => restartFreeTrial({ confirmReplace: false })}>もう一度、3問を話す</button>
+          <button type="button" className="mt-5 min-h-12 text-sm text-white/65 underline underline-offset-4"
+            onClick={() => setScene('purchase_start')}>本編から始める</button>
+        </section>
+      )}
+
+      {scene === 'gift_three_existing' && (
+        <section className="mx-auto flex min-h-[70vh] w-full max-w-lg flex-col justify-center px-7 py-12 text-white">
+          <h1 className="text-3xl leading-relaxed">このアカウントでは、すでに作品を制作しています。</h1>
+          <p className="mt-6 text-base leading-loose text-white/70">三つの問いを受け取る方ご自身のアカウントで始めてください。このアカウントの語りが贈り主へ共有されることはありません。</p>
+          <button type="button" className="mt-9 min-h-14 rounded-full bg-[#e8e4d8] px-6 text-[#152336]"
+            onClick={async () => { await supabaseClient.auth.signOut({ scope: 'local' }); location.assign(`/gift-three-questions.html?gift_three=${encodeURIComponent(getGiftThreeTokenFromUrl())}`); }}>
+            別のアカウントで始める
+          </button>
+          <button type="button" className="mt-5 min-h-12 text-sm text-white/65 underline underline-offset-4"
+            onClick={() => location.assign('/?app=1')}>自分のホームへ戻る</button>
+        </section>
+      )}
+
+      {scene === "trial_complete" && getEntryModeFromUrl() === 'trial' && new URLSearchParams(location.search).has('gift_three') && (
+        <TrialCompletionConnected
+          client={supabaseClient}
+          project={foundation?.project}
+          person={foundation?.person}
+          questions={getFreeTrialQuestions(questionsDB)}
+          purchaseFor={purchaseFor}
+          paid={hasFullProjectAccess(foundation?.project)}
+          giftThreeToken={new URLSearchParams(location.search).get('gift_three')}
+          retentionDays={freeTrialRetentionDays(trialRetention)}
+        />
+      )}
+
+      {scene === "trial_complete" && (getEntryModeFromUrl() !== 'trial' || !new URLSearchParams(location.search).has('gift_three')) && (
+        <>
+        {trialRetention?.expires_at && trialRetention.status !== 'handed_off' && (
+          <p className="mx-auto w-full max-w-lg px-6 pt-5 text-center text-[0.9375rem] leading-[1.7] text-white/78">
+            語った内容は{freeTrialExpiryLabel(trialRetention)}まで保存されています。
+          </p>
+        )}
+        {FREE_TRIAL_RETENTION_ENABLED && trialRetention?.status === 'active' && (
+          <button type="button" className="mx-auto block min-h-11 px-6 text-[0.9375rem] text-white/78 underline underline-offset-4"
+            disabled={trialRestarting} onClick={() => restartFreeTrial()}>
+            最初から3問を話し直す
+          </button>
+        )}
+        {trialRestartError && <p role="alert" className="mx-auto max-w-lg px-6 text-center text-sm text-rose-200">{trialRestartError}</p>}
         <Scene_TrialComplete
+          key={`${user?.id}:${foundation?.project?.id}:${foundation?.project?.subject_person_id}`}
+          client={supabaseClient}
+          project={foundation?.project}
+          person={foundation?.person}
+          questions={getFreeTrialQuestions(questionsDB)}
+          purchaseFor={purchaseFor}
+          paid={hasFullProjectAccess(foundation?.project)}
+          onInvite={() => setScene("trial_parent_invite")}
+          onContracts={() => setScene("experience_contract_settings")}
           status={purchaseStatus}
           error={purchaseError}
           familyInvitation={receivedFamilyInvitation}
-          onPurchase={async () => {
-            if (receivedFamilyInvitation?.offer_type === "full_gift") {
+          onPurchase={async options => {
+            if (options?.orderType) {
+              return startPurchase({ ...options, checkoutWindow: null });
+            }
+            if (options?.resumePaid || receivedFamilyInvitation?.offer_type === "full_gift" || hasFullProjectAccess(foundation?.project)) {
               try {
+                await confirmExperienceBoundary(foundation.project.id, "paid");
                 const nextPreferences = {
                   ...(foundation?.project?.onboarding_preferences || {}),
                   family_start_mode: "full",
@@ -6504,10 +7156,13 @@ let sceneAfterInvite = nextScene;
                 url.searchParams.delete("entry");
                 url.searchParams.set("app", "1");
                 window.history.replaceState({}, "", url.toString());
-                setScene("home");
+                setScene(paidOnboardingCheckpoint(updatedProject, questionsDB, { notificationPref, sharingPreference }) ?? getInitialSceneForProject({
+                  project: updatedProject, notificationPref, sharingPreference
+                }));
               } catch (continueError) {
                 console.error("family gift trial continue error", continueError);
                 setPurchaseError("続きを開けませんでした。少し時間をおいて、もう一度お試しください。");
+                if (TRIAL_CONVERSION_ENABLED) throw new Error("続きを開けませんでした。開始を取り消した場合は、このまま戻れます。");
               }
               return;
             }
@@ -6518,6 +7173,7 @@ let sceneAfterInvite = nextScene;
           }}
           onFinish={() => window.location.assign("/")}
         />
+        </>
       )}
 
       {scene === "purchase_success" && (
@@ -6525,6 +7181,8 @@ let sceneAfterInvite = nextScene;
           hasTrial={hasCompletedFreeTrial(questionsDB)}
           onContinue={() => {
             setPurchaseStatus("idle");
+            const checkpoint = paidOnboardingCheckpoint(foundation?.project, questionsDB, { notificationPref, sharingPreference });
+            if (checkpoint !== null) { setScene(checkpoint); return; }
             if (hasCompletedFreeTrial(questionsDB)) {
               setScene(getInitialSceneForProject({
                 project: foundation?.project,
@@ -6682,7 +7340,10 @@ let sceneAfterInvite = nextScene;
 
       {scene === "onboarding_overview" && (
         <Scene_OnboardingOverview
-          onNext={() => setScene("onboarding_pace")}
+          onNext={async () => {
+            try { await confirmExperienceBoundary(foundation.project.id, "paid"); setScene("onboarding_pace"); }
+            catch (error) { alert(error.message || "開始できませんでした。"); }
+          }}
         />
       )}
 
@@ -6700,6 +7361,7 @@ let sceneAfterInvite = nextScene;
                 .from("book_projects")
                 .update({
                   onboarding_overview_completed_at: new Date().toISOString(),
+                  onboarding_status: "in_progress",
                   onboarding_ritual_step: "starting_conversation",
                   current_onboarding_user_question_id:
                     firstConversationQuestion?.user_question_id || null
@@ -6738,7 +7400,11 @@ let sceneAfterInvite = nextScene;
 
       {scene === "onboarding_preferences" && (
         <Scene_OnboardingPreferences
+          key={foundation?.project?.id}
+          projectId={foundation?.project?.id}
           initialValue={foundation?.project?.onboarding_preferences}
+          completedAt={foundation?.project?.onboarding_preferences_completed_at}
+          onDraftChange={saveOnboardingPreferencesDraft}
           onComplete={saveOnboardingPreferences}
         />
       )}
@@ -6749,12 +7415,6 @@ let sceneAfterInvite = nextScene;
         />
       )}
 
-      {scene === "starting_motivation_prompt" && (
-        <Scene_StartingMotivationPrompt
-          onRecord={startOnboardingMotivation}
-          onSkip={skipOnboardingMotivation}
-        />
-      )}
 
       {scene === "theme_guide" && (
         <Scene_ThemeGuide
@@ -6787,6 +7447,7 @@ let sceneAfterInvite = nextScene;
           theme={themeResumeContext.theme}
           questionNumber={themeResumeContext.questionNumber}
           onResume={resumeThemeQuestion}
+          onHome={returnToHome}
         />
       )}
 
@@ -6824,7 +7485,10 @@ let sceneAfterInvite = nextScene;
 
       {scene === "sharing_setup" && (
         <Scene_SharingSetup
-          initialScope={sharingPreference?.live_scope || "family"}
+          key={foundation?.project?.id}
+          projectId={foundation?.project?.id}
+          initialScope={foundation?.project?.onboarding_preferences?.sharing_scope_draft || sharingPreference?.live_scope || "family"}
+          onScopeChange={scope => saveOnboardingPreferencesDraft({ sharing_scope_draft: scope })}
           onComplete={async (liveScope) => {
             try {
               setIsInitializing(true);
@@ -6838,13 +7502,18 @@ let sceneAfterInvite = nextScene;
               });
 
               setSharingPreference(savedPreference);
+              clearOnboardingSharingDraft(foundation?.project?.id);
               if (foundation?.project?.onboarding_status !== "completed") {
+                await updateOnboardingRitualStep("support");
+              } else if (getActiveOnboardingRitualScene(foundation?.project)) {
                 await updateOnboardingRitualStep("support");
               }
               setScene("supporter_invite_initial");
+              return true;
             } catch (error) {
               console.error("initial sharing setup error", error);
               alert("共有範囲を保存できませんでした。");
+              return false;
             } finally {
               setIsInitializing(false);
             }
@@ -6874,9 +7543,11 @@ let sceneAfterInvite = nextScene;
 
               setSharingPreference(completedPreference);
               if (foundation?.project?.onboarding_status !== "completed") {
-                await updateOnboardingRitualStep("motivation");
-                setScene("starting_motivation_prompt");
+                await skipOnboardingMotivation();
               } else {
+                if (getActiveOnboardingRitualScene(foundation?.project)) {
+                  await updateOnboardingRitualStep("completed");
+                }
                 setScene(1);
               }
             } catch (error) {
@@ -6891,10 +7562,12 @@ let sceneAfterInvite = nextScene;
 
       {scene === "supporter_invite_received" && pendingSupporterInvites[0] && (
         <Scene_SupporterInviteReceived
+          key={pendingSupporterInvites[0]?.invite_id}
+          user={user}
           invite={pendingSupporterInvites[0]}
           remainingCount={pendingSupporterInvites.length}
-          onAccept={() =>
-            handleSupporterInviteResponse(pendingSupporterInvites[0], true)
+          onAccept={identity =>
+            handleSupporterInviteResponse(pendingSupporterInvites[0], true, identity)
           }
           onDecline={() =>
             handleSupporterInviteResponse(pendingSupporterInvites[0], false)
@@ -6922,6 +7595,7 @@ let sceneAfterInvite = nextScene;
   <Scene_NotificationSetup
     user={user}
     bookProjectId={foundation?.project?.id || null}
+    keepOnboardingDraft={foundation?.project?.onboarding_ritual_step === "notification"}
     initialPreference={notificationPref}
     onPreferenceSaved={setNotificationPref}
     onBack={notificationSetupReturnScene ? () => {
@@ -6972,7 +7646,8 @@ let sceneAfterInvite = nextScene;
         }
 
         if (
-          refreshedFoundationData?.project?.onboarding_status !== "completed"
+          refreshedFoundationData?.project?.onboarding_status !== "completed" ||
+          getActiveOnboardingRitualScene(refreshedFoundationData?.project)
         ) {
           const { data: ritualProject, error: ritualError } = await supabaseClient
             .from("book_projects")
@@ -7103,6 +7778,11 @@ let sceneAfterInvite = nextScene;
          receivedProjects={receivedProjects}
          sentFamilyInvitations={sentFamilyInvitations}
          onStartTalking={() => {
+           const activeRitualScene = getActiveOnboardingRitualScene(foundation?.project);
+           if (activeRitualScene) {
+             setScene(activeRitualScene);
+             return;
+           }
            if (
              foundation?.project?.life_outline_completed_at &&
              !sharingPreference?.initial_setup_completed_at
@@ -7165,6 +7845,7 @@ let sceneAfterInvite = nextScene;
 
       {scene === "family_story_invite_flow" && (
         <FamilyStoryInviteFlow
+          allowNotifications={ALLOW_FAMILY_NOTIFICATIONS}
           supabaseClient={supabaseClient}
           inviterName={user?.display_name || user?.name || user?.preferred_name || "ご家族"}
           onBack={() => setScene("home")}
@@ -7188,8 +7869,26 @@ let sceneAfterInvite = nextScene;
         />
       )}
 
-      {scene === "family_story_payment_review" && familyPaymentInvitation && (
+      {scene === "trial_parent_invite" && (
         <FamilyStoryInviteFlow
+          conversionProjectId={TRIAL_CONVERSION_ENABLED ? foundation?.project?.id : null}
+          allowNotifications={ALLOW_FAMILY_NOTIFICATIONS}
+          supabaseClient={supabaseClient}
+          initialOfferType="trial_gift"
+          inviterName={user?.display_name || user?.name || "ご家族"}
+          onBack={() => setScene("trial_complete")}
+          onComplete={() => setScene("trial_complete")}
+        />
+      )}
+
+      {scene === "family_story_payment_review" && familyPaymentInvitation && (
+        TRIAL_CONVERSION_ENABLED && familyPaymentInvitation.pricing_policy_version === '2.0' ?
+        <TrialGiftPurchaseReview key={familyPaymentInvitation.id} client={supabaseClient}
+          projectId={foundation?.project?.id} invitation={familyPaymentInvitation}
+          onBack={() => {setFamilyPaymentInvitation(null);setScene('home');}}
+          onPurchase={options => startPurchase({...options,checkoutWindow:null})} /> :
+        <FamilyStoryInviteFlow
+          allowNotifications={ALLOW_FAMILY_NOTIFICATIONS}
           key={`payment-${familyPaymentInvitation.id}`}
           supabaseClient={supabaseClient}
           inviterName={user?.display_name || user?.name || user?.preferred_name || "ご家族"}
@@ -7216,7 +7915,7 @@ let sceneAfterInvite = nextScene;
 
       {scene === "family_story_mode" && (
         <Scene_FamilyStoryMode
-          onChooseFacilitator={() => setScene("family_story_facilitator_setup")}
+          onChooseFacilitator={() => import.meta.env.VITE_FAMILY_CONNECTION_TEST === 'true' ? window.location.assign('/?app=1&family=1&create=1') : setScene("family_story_facilitator_setup")}
           onBack={() => setScene("home")}
         />
       )}
@@ -7254,18 +7953,24 @@ let sceneAfterInvite = nextScene;
       )}
 
       {scene === "connections_home" && (
-        <Scene_ConnectionsHome
-          userName={user?.name || "あなた"}
+        <Scene_Home
+          questionSet={[]}
           receivedProjects={receivedProjects}
           supportedProjects={supportedProjects}
           onOpenReceivedProject={openReceivedProject}
           onOpenSupportedProject={openSupportedProject}
-          onStartOwnStory={() => {
-            if (user?.id) {
-              localStorage.setItem(`tateyoko:own-story-started:${user.id}`, "1");
-            }
-            setScene(postSupporterInviteScene || "beta_intro");
+          ownStoryEntry={{
+            onTryFree: () => openOwnStoryEntry("trial"),
+            onStart: () => openOwnStoryEntry("purchase")
           }}
+        />
+      )}
+
+      {scene === "own_story_entry" && (
+        <Scene_OwnStoryEntry
+          onBack={() => setScene("connections_home")}
+          onTryFree={() => openOwnStoryEntry("trial")}
+          onPurchase={() => openOwnStoryEntry("purchase")}
         />
       )}
 
@@ -7302,8 +8007,13 @@ let sceneAfterInvite = nextScene;
           onOpenPrivacy={() => setScene("sharing_privacy")}
           onOpenSupporters={() => setScene("supporter_management")}
           onOpenProfile={() => setScene("profile_settings")}
+          onOpenContract={EXPERIENCE_V2_ENABLED ? () => setScene("experience_contract_settings") : null}
           onBack={() => setScene("home")}
         />
+      )}
+
+      {scene === "experience_contract_settings" && EXPERIENCE_V2_ENABLED && (
+        <ExperienceContractSettings client={supabaseClient} onBack={() => setScene("settings")} />
       )}
 
       {scene === "sharing_privacy" && (
@@ -7357,9 +8067,8 @@ let sceneAfterInvite = nextScene;
           user={user}
           onSaved={(updatedUser) => {
             setUser(updatedUser);
-            setScene("settings");
           }}
-          onBack={() => setScene("settings")}
+          onBack={() => setScene(supportContext ? "support_project_home" : "settings")}
         />
       )}
 
@@ -7392,17 +8101,13 @@ let sceneAfterInvite = nextScene;
       {scene === "support_project_home" && supportContext && (
         <Scene_SupportProjectHome
           project={supportContext.project}
+          questionSet={supportContext.questionSet}
           onOpenQuestions={() => setScene("support_recording_assist")}
           onOpenStories={() => setScene("support_story_pages")}
           onOpenBookBuilder={() => setScene("support_book_builder")}
-          onOpenDelivery={
-            supportContext.project.support_mode === "child_led"
-              ? openSupportDeliverySettings
-              : null
-          }
           onBack={() => {
             setSupportContext(null);
-            setScene("home");
+            setScene(foundation?.project ? "home" : "connections_home");
           }}
         />
       )}
@@ -7500,7 +8205,18 @@ let sceneAfterInvite = nextScene;
         />
       )}
       {scene === 0 && (
-        <Scene0_Door
+        isChildhoodTrial(getFreeTrialQuestions(questionsDB)) && hasRestrictedProjectAccess(foundation?.project) ? <ChildhoodTrialIntro
+          resuming={getFreeTrialQuestions(questionsDB).some(question => question.status === 'answered')}
+          retentionDays={freeTrialRetentionDays(trialRetention)}
+          retentionEnabled={FREE_TRIAL_RETENTION_ENABLED && trialRetention?.enabled === true}
+          onRestart={() => restartFreeTrial()}
+          restartError={trialRestartError}
+          onStart={() => {
+            if (hasRecentMicCheck()) setScene(1);
+            else setScene("daily_mic_check");
+          }}
+        /> : <Scene0_Door
+          onHome={foundation?.project?.onboarding_status === "completed" ? returnToHome : null}
           onNext={() => {
             if (hasRecentMicCheck()) {
               setScene(1);
@@ -7513,8 +8229,8 @@ let sceneAfterInvite = nextScene;
 
       {scene === "daily_mic_check" && (
         <Scene_DailyMicCheck
-          onComplete={() => {
-            markMicCheckDone();
+          onComplete={({ verified }) => {
+            if (verified) markMicCheckDone();
             setScene(1);
           }}
         />
@@ -7526,6 +8242,7 @@ let sceneAfterInvite = nextScene;
           storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
           question={currentQ}
           userName={user?.name || "あなた"}
+          onBack={() => setScene(!isFormalOnboardingQuestion(currentQ) && !bookendKindForQuestion(currentQ) && resolvedThemeResumeContext ? "theme_resume" : 0)}
           onNext={() => {
             resetVoiceData();
             setScene(3);
@@ -7545,6 +8262,8 @@ let sceneAfterInvite = nextScene;
   storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
   userName={user?.name || "あなた"}
   autoStart
+  onBack={() => setScene(1)}
+  onJourneyEvent={emitJourney}
 onComplete={handleRecordComplete}
 />
       )}
@@ -7686,12 +8405,40 @@ onRetry={() => {
         <Scene_ThemeComplete
           completedTheme={STORY_THEMES.find(theme => theme.order === completedThemeOrder) || null}
           hasNextTheme={Boolean(STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1))}
+          hasExtraQuestions={themeExtraOptions(STORY_THEMES.find(theme => theme.order === completedThemeOrder)?.code, questionsDB).length > 0}
+          onMore={() => {
+            setSelectedThemeExtraIds([]);
+            setScene("theme_more");
+          }}
           onRequestFamilyMemory={completedThemeOrder === 1 ? () => {
             setThemeMemoryReturnScene("theme_complete");
             setScene("theme_memory_request");
           } : null}
           onContinue={openNextThemeIntroduction}
-          onFinish={() => leaveThemeTransition("story_pages")}
+          onFinish={() => advanceAfterTheme(STORY_THEMES.length)}
+        />
+      )}
+      {(scene === "bookend_intro" || scene === "bookend_outro") && (
+        <BookendInvitation
+          kind={scene === "bookend_intro" ? "intro" : "outro"}
+          busy={bookendBusy}
+          onVoice={() => startBookendVoice(scene === "bookend_intro" ? "intro" : "outro")}
+          onVideo={() => startBookendVideo(scene === "bookend_intro" ? "intro" : "outro")}
+          onSkip={() => finishBookend().catch(error => {
+            console.error("bookend skip error", error);
+            alert("次の画面へ進めませんでした。");
+          })}
+        />
+      )}
+      {scene === "theme_more" && (
+        <ThemeMorePicker
+          theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder) || null}
+          options={themeExtraOptions(STORY_THEMES.find(theme => theme.order === completedThemeOrder)?.code, questionsDB)}
+          selectedIds={selectedThemeExtraIds}
+          onSelectionChange={setSelectedThemeExtraIds}
+          onStart={startSelectedThemeExtras}
+          onNextTheme={completedThemeOrder < STORY_THEMES.length ? openNextThemeIntroduction : () => advanceAfterTheme(STORY_THEMES.length)}
+          onBack={() => setScene("theme_complete")}
         />
       )}
       {scene === "theme_memory_request" && (
@@ -7757,10 +8504,31 @@ onRetry={() => {
     setScene(themeResumeContext ? "theme_resume" : 1);
   }}
   onEditRecord={startEditRecording}
+  onOpenBookend={kind => beginBookend(kind, "story_pages")}
   onBack={() => setScene("home")}
 />
 
       )}
+      <VideoStoryFlow
+        open={Boolean(bookendVideoKind)}
+        user={user}
+        foundation={foundation}
+        questionSet={questionsDB}
+        stories={bookendVideoStories}
+        supabaseClient={supabaseClient}
+        initialPrompt={bookendVideoKind ? {
+          kind: "custom",
+          label: BOOKEND_PROMPTS[bookendVideoKind].label,
+          text: BOOKEND_PROMPTS[bookendVideoKind].text,
+          bookendKind: bookendVideoKind
+        } : null}
+        onSaved={() => finishBookend()}
+        onClose={() => {
+          setBookendVideoKind(null);
+          updateBookendState({ pending_transition_phase: `bookend_${foundation?.project?.theme_experience_state?.bookend_kind || "intro"}` })
+            .catch(error => console.error("bookend video close error", error));
+        }}
+      />
     </div>
   );
 }
@@ -7953,7 +8721,7 @@ function Scene_TokenInvalid({ onBack, issue = "invalid", onRetry }) {
         </p>
 
         <p className="text-white/62 text-[0.96rem] leading-loose">
-          {issue === "unavailable" ? <>通信またはサーバーで一時的な問題が発生しています。<br />少し時間をおいて、もう一度お試しください。</> : issue === "project_unavailable" ? <>このアカウントでは、問いの対象の物語を確認できませんでした。<br />ログインして、利用する物語をご確認ください。</> : <>期限切れ、または無効なリンクの可能性があります。<br />ログインして、物語の続きを開いてください。</>}
+          {issue === "unavailable" ? <>通信またはサーバーで一時的な問題が発生しています。<br />少し時間をおいて、もう一度お試しください。</> : issue === "project_unavailable" ? <>このアカウントでは、問いの対象の物語を確認できませんでした。<br />ログインして、物語の続きを開いてください。</> : <>このリンクを確認できませんでした。<br />ログインして、物語の続きを開いてください。</>}
         </p>
       </div>
 
@@ -8732,7 +9500,7 @@ function Scene_PurchaseStart({
           PURCHASE
         </p>
         <h1 className="text-narrative text-[1.55rem] leading-[1.8] text-white/92">
-          縦糸横糸ブックのお申し込み
+          縦糸横糸のお申し込み
         </h1>
 
         <div className="mt-8 grid grid-cols-2 rounded-full border border-white/10 bg-white/[0.025] p-1">
@@ -8757,7 +9525,7 @@ function Scene_PurchaseStart({
         <div className="mt-7 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-5 py-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[0.96rem] text-white/84">縦糸横糸ブック　一冊</p>
+              <p className="text-[0.96rem] text-white/84">縦糸横糸（ブック＋Webブック）</p>
               <p className="mt-1 text-xs leading-relaxed text-white/32">
                 税込・国内送料込み
               </p>
@@ -8863,10 +9631,11 @@ function Scene_PurchaseStart({
           </div>
         )}
 
-        {!hasFamilyInvitePrice && <div className="mt-6 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-5 py-5">
-          <label className="text-xs tracking-[0.08em] text-white/38">割引コード</label>
-          <div className="mt-3 flex gap-2">
+        {!hasFamilyInvitePrice && <details className="mt-6 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-5 py-4">
+          <summary className="cursor-pointer text-sm text-white/70">割引コードをお持ちの方</summary>
+          <div className="mt-4 flex gap-2">
             <input
+              aria-label="割引コード"
               value={discountCode}
               onChange={event => setDiscountCode(event.target.value.toUpperCase())}
               placeholder="コードを入力"
@@ -8886,7 +9655,7 @@ function Scene_PurchaseStart({
               {quote.campaign_name}を適用しました。
             </p>
           )}
-        </div>}
+        </details>}
 
         <div className="mt-6 space-y-3 border-y border-white/10 py-6 text-sm">
           <div className="flex justify-between text-white/42">
@@ -8914,9 +9683,10 @@ function Scene_PurchaseStart({
         </div>
 
         {orderType === "gift" && (
-          <div className="mt-6 rounded-2xl border border-amber-100/10 bg-amber-100/[0.035] px-5 py-4 text-xs leading-[1.9] text-amber-50/48">
-            パッケージのお届け完了から40日間、贈られた方が4つ目の問いへ進む前であれば、
-            本体代金の返金をご相談いただけます。発送後のパッケージ代は返金対象外です。
+          <div className="mt-6 rounded-2xl border border-amber-100/20 bg-amber-100/[0.055] px-5 py-4 text-sm leading-[1.8] text-amber-50/85">
+            <p className="font-medium">贈り主への本体代金 全額返金保証</p>
+            <p className="mt-2">決済確定から45日以内、かつ受取人が「本編をはじめる」を選ぶ前まで申請できます。受取人が本編へ進むと保証は終了します。</p>
+            <p className="mt-2 text-[0.82rem] text-amber-50/72">同一語り手につき1回。発送済みギフトパッケージ代は対象外です。</p>
           </div>
         )}
 
@@ -8977,7 +9747,9 @@ function Scene_PurchaseStart({
   );
 }
 
-function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFinish }) {
+function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFinish, ...connection }) {
+  if (TRIAL_CONVERSION_ENABLED) return <TrialCompletionConnected {...connection} familyInvitation={familyInvitation}
+    onPurchase={onPurchase} onPaidContinue={() => onPurchase({resumePaid:true})} onFinish={onFinish} />;
   const isWorking = status === "starting" || status === "checking";
   const isPaidFamilyGift = familyInvitation?.offer_type === "full_gift";
   const waitsForGiftSender = familyInvitation?.offer_type === "trial_gift"
@@ -9015,7 +9787,7 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
           </div>
         ) : (
           <div className="my-8 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-6 py-5">
-            <p className="text-xs tracking-[0.16em] text-white/34">縦糸横糸ブック　一冊</p>
+            <p className="text-xs tracking-[0.16em] text-white/34">縦糸横糸（ブック＋Webブック）</p>
             {hasFamilyPrice ? (
               <>
                 <p className="mt-3 text-[0.9rem] tracking-[0.06em] text-amber-50/72">家族招待 特別価格</p>
@@ -9060,14 +9832,14 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
 function Scene_PurchaseSuccess({ hasTrial, onContinue }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
-      <p className="text-[0.72rem] tracking-[0.3em] text-amber-100/42">
+      <p className="text-[0.9375rem] tracking-[0.08em] text-amber-100/78">
         お手続きが完了しました
       </p>
       <h1 className="text-narrative mt-7 text-[1.55rem] leading-[1.9] text-white/92">
         あなたの物語づくりが、<br />
         ここから始まります
       </h1>
-      <p className="mt-7 text-[0.92rem] leading-[2] text-white/50">
+      <p className="mt-7 text-base leading-[1.8] text-white/78">
         {hasTrial
           ? "お試しで残した声も、そのまま続きにつながっています。"
           : "問いに答えながら、声と文章を少しずつ重ねていきます。"}
@@ -9075,7 +9847,7 @@ function Scene_PurchaseSuccess({ hasTrial, onContinue }) {
       <button
         type="button"
         onClick={onContinue}
-        className="btn-quiet mt-12 w-full max-w-[300px] rounded-full bg-white py-4 text-slate-900"
+        className="btn-quiet mt-12 w-full max-w-[300px] rounded-full bg-white py-4 text-base font-medium text-slate-900"
       >
         続きをはじめる
       </button>
@@ -9288,7 +10060,7 @@ function Scene_FamilyInvitationReceived({ preview, onContinue }) {
             )}
           </div>
           <figure className="family-invite-hero-visual">
-            <img src="/site/hero-book.jpg" alt="深緑の布張りで仕上げた縦糸横糸ブック" />
+            <img src="/site/hero-book-logo-corrected.png" alt="深緑の布張りで仕上げた縦糸横糸ブック" />
             <figcaption>声と写真が、一冊の物語になります。</figcaption>
           </figure>
         </section>
@@ -9434,12 +10206,12 @@ function Scene_BetaIntro({ onNext }) {
   );
 }
 
-function Scene_OnboardingOverview({ onNext }) {
+export function Scene_OnboardingOverview({ onNext }) {
   return (
     <div className="flow-scene-shell fade-enter">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center">
         <div className="text-center">
-          <p className="text-[0.7rem] tracking-[0.28em] text-amber-100/42">はじまりの章</p>
+          <p className="text-[0.9375rem] tracking-[0.08em] text-amber-100/78">はじまりの章</p>
           <h1 className="mt-6 text-[1.35rem] leading-[1.9] text-white/92 text-narrative">
             物語の扉を、<br />ひらくところから
           </h1>
@@ -9448,11 +10220,11 @@ function Scene_OnboardingOverview({ onNext }) {
         <ThemeMemoryVisual theme={STORY_THEMES[0]} />
 
         <div className="space-y-5 text-center">
-          <p className="text-[0.98rem] leading-[2] text-white/64 text-narrative">
+          <p className="text-base leading-[1.85] text-white/84">
             聞いておきたかったこと。<br />
             いつか話そうと思っていたこと。
           </p>
-          <p className="text-sm leading-[2.05] text-white/46">
+          <p className="text-base leading-[1.8] text-white/78">
             大切な記憶ほど、日々の会話だけでは残しきれません。縦糸横糸は、スマートフォンに届く問いに声で語りながら、思い出や考えを言葉にし、Webと一冊の本へまとめていくために生まれました。
           </p>
         </div>
@@ -9460,13 +10232,13 @@ function Scene_OnboardingOverview({ onNext }) {
         <div className="mt-8 grid grid-cols-3 gap-2 text-center">
           {["声で語る", "言葉に整う", "物語になる"].map((label, index) => (
             <div key={label} className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-2 py-4">
-              <p className="text-[0.65rem] text-white/28">0{index + 1}</p>
-              <p className="mt-2 text-xs text-white/62">{label}</p>
+              <p className="text-[0.9375rem] text-white/72">0{index + 1}</p>
+              <p className="mt-2 text-[0.9375rem] leading-[1.5] text-white/84">{label}</p>
             </div>
           ))}
         </div>
 
-        <button type="button" onClick={onNext} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">
+        <button type="button" onClick={onNext} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-base font-medium text-white">
           サービスの進め方を見る
         </button>
       </div>
@@ -9475,7 +10247,7 @@ function Scene_OnboardingOverview({ onNext }) {
 }
 
 
-function Scene_OnboardingPace({ onNext }) {
+export function Scene_OnboardingPace({ onNext }) {
   return (
     <div className="flow-scene-shell flex flex-col fade-enter">
       <div className="flex-1 flex flex-col justify-center">
@@ -9531,7 +10303,7 @@ function OnboardingChoice({ label, selected, onClick }) {
       type="button"
       onClick={onClick}
       aria-pressed={selected}
-      className={`rounded-full border px-4 py-2.5 text-sm leading-relaxed transition-colors ${
+      className={`onboarding-choice rounded-full border px-4 py-2.5 text-sm leading-relaxed transition-colors ${
         selected
           ? "border-amber-100/38 bg-amber-100/10 text-amber-50/90"
           : "border-white/10 bg-white/[0.025] text-white/55"
@@ -9553,23 +10325,81 @@ function toggleOnboardingChoice(current, value, exclusiveValue) {
     : [...withoutExclusive, value];
 }
 
-function Scene_OnboardingPreferences({ initialValue, onComplete }) {
-  const [step, setStep] = useState(1);
-  const [expectations, setExpectations] = useState(
-    Array.isArray(initialValue?.expectations) ? initialValue.expectations : []
+function Scene_OnboardingPreferences({ projectId, initialValue, completedAt, onDraftChange, onComplete }) {
+  const [draft, setDraft] = useState(() =>
+    readOnboardingPreferenceDraft(projectId, initialValue, completedAt)
   );
-  const [preferredThemes, setPreferredThemes] = useState(
-    Array.isArray(initialValue?.preferred_themes) ? initialValue.preferred_themes : []
-  );
-  const [people, setPeople] = useState(
-    Array.isArray(initialValue?.people) ? initialValue.people : []
-  );
+  const [saveState, setSaveState] = useState("idle");
+  const saveQueueRef = useRef(Promise.resolve());
+  const step = draft.draft_step;
 
-  useEffect(() => scheduleScrollReset(), [step]);
+  const persistDraft = next => {
+    writeOnboardingPreferenceDraft(projectId, next);
+    setSaveState("saving");
+    const request = saveQueueRef.current.catch(() => undefined).then(() => onDraftChange(next));
+    saveQueueRef.current = request;
+    request.then(() => setSaveState("saved")).catch(error => {
+      console.error("onboarding preferences draft save error", error);
+      setSaveState("error");
+    });
+    return request;
+  };
+
+  const updateDraft = patch => {
+    const next = { ...draft, ...patch, draft_updated_at: new Date().toISOString() };
+    setDraft(next);
+    persistDraft(next).catch(() => undefined);
+  };
+
+  useEffect(() => {
+    scheduleScrollReset();
+  }, [step]);
+
+  useEffect(() => {
+    if (draftTimestamp(draft.draft_updated_at) > draftTimestamp(initialValue?.draft_updated_at)) {
+      persistDraft(draft).catch(() => undefined);
+    }
+  }, []);
+
+  const advance = async () => {
+    if (saveState === "saving") return;
+    try {
+      await saveQueueRef.current.catch(() => undefined);
+      if (step < 3) {
+        const next = { ...draft, draft_step: step + 1, draft_updated_at: new Date().toISOString() };
+        await persistDraft(next);
+        setDraft(next);
+        return;
+      }
+      setSaveState("saving");
+      const completed = await onComplete?.({
+        expectations: draft.expectations,
+        preferredThemes: draft.preferred_themes,
+        people: draft.people
+      });
+      if (!completed) setSaveState("error");
+    } catch (error) {
+      console.error("onboarding preferences advance error", error);
+      setSaveState("error");
+    }
+  };
+
+  const goBack = async () => {
+    if (step <= 1 || saveState === "saving") return;
+    try {
+      await saveQueueRef.current.catch(() => undefined);
+      const next = { ...draft, draft_step: step - 1, draft_updated_at: new Date().toISOString() };
+      await persistDraft(next);
+      setDraft(next);
+    } catch (error) {
+      console.error("onboarding preferences back error", error);
+      setSaveState("error");
+    }
+  };
 
   return (
-    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
-      <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
+    <div className="onboarding-preferences h-full overflow-y-auto fade-enter px-4 py-8">
+      <div className="onboarding-preferences__inner mx-auto flex min-h-full w-full max-w-[520px] flex-col">
         <div className="flex-1 py-6">
           {step === 1 && (
             <>
@@ -9582,16 +10412,16 @@ function Scene_OnboardingPreferences({ initialValue, onComplete }) {
                 </p>
               </div>
 
-              <div className="glass-card p-5">
-                <div className="flex flex-wrap justify-center gap-2.5">
+              <div className="onboarding-preferences__card glass-card p-5">
+                <div className="onboarding-preferences__choices flex flex-wrap justify-center gap-2.5">
                   {ONBOARDING_EXPECTATION_OPTIONS.map(option => (
                     <OnboardingChoice
                       key={option}
                       label={option}
-                      selected={expectations.includes(option)}
-                      onClick={() => setExpectations(current =>
-                        toggleOnboardingChoice(current, option, "まだよく分からない")
-                      )}
+                      selected={draft.expectations.includes(option)}
+                      onClick={() => updateDraft({ expectations:
+                        toggleOnboardingChoice(draft.expectations, option, "まだよく分からない")
+                      })}
                     />
                   ))}
                 </div>
@@ -9610,15 +10440,15 @@ function Scene_OnboardingPreferences({ initialValue, onComplete }) {
                 </p>
               </div>
 
-              <div className="flex flex-wrap justify-center gap-2.5">
+              <div className="onboarding-preferences__choices flex flex-wrap justify-center gap-2.5">
                 {[...STORY_THEMES.map(theme => theme.label), "まだ決めていない"].map(option => (
                   <OnboardingChoice
                     key={option}
                     label={option}
-                    selected={preferredThemes.includes(option)}
-                    onClick={() => setPreferredThemes(current =>
-                      toggleOnboardingChoice(current, option, "まだ決めていない")
-                    )}
+                    selected={draft.preferred_themes.includes(option)}
+                    onClick={() => updateDraft({ preferred_themes:
+                      toggleOnboardingChoice(draft.preferred_themes, option, "まだ決めていない")
+                    })}
                   />
                 ))}
               </div>
@@ -9636,16 +10466,16 @@ function Scene_OnboardingPreferences({ initialValue, onComplete }) {
                 </p>
               </div>
 
-              <div className="glass-card p-5">
-                <div className="flex flex-wrap justify-center gap-2.5">
+              <div className="onboarding-preferences__card glass-card p-5">
+                <div className="onboarding-preferences__choices flex flex-wrap justify-center gap-2.5">
                   {ONBOARDING_PEOPLE_OPTIONS.map(option => (
                     <OnboardingChoice
                       key={option}
                       label={option}
-                      selected={people.includes(option)}
-                      onClick={() => setPeople(current =>
-                        toggleOnboardingChoice(current, option, "今回は選ばない")
-                      )}
+                      selected={draft.people.includes(option)}
+                      onClick={() => updateDraft({ people:
+                        toggleOnboardingChoice(draft.people, option, "今回は選ばない")
+                      })}
                     />
                   ))}
                 </div>
@@ -9659,11 +10489,12 @@ function Scene_OnboardingPreferences({ initialValue, onComplete }) {
           )}
         </div>
 
-        <div className="flex gap-3 pt-5">
+        <div className="onboarding-preferences__actions flex gap-3 pt-5">
           {step > 1 && (
             <button
               type="button"
-              onClick={() => setStep(current => Math.max(1, current - 1))}
+              onClick={goBack}
+              disabled={saveState === "saving"}
               className="btn-quiet w-1/3 rounded-full border border-white/10 py-4 text-white/55"
             >
               戻る
@@ -9671,66 +10502,23 @@ function Scene_OnboardingPreferences({ initialValue, onComplete }) {
           )}
           <button
             type="button"
-            onClick={() => {
-              if (step < 3) {
-                setStep(current => current + 1);
-                return;
-              }
-              onComplete?.({ expectations, preferredThemes, people });
-            }}
+            onClick={advance}
+            disabled={saveState === "saving"}
             className="btn-quiet flex-1 rounded-full bg-white/10 py-4 text-white"
           >
             {step < 3 ? "次へ" : "この内容で進む"}
           </button>
         </div>
+        {saveState === "error" && (
+          <p role="alert" className="mt-3 text-center text-xs text-rose-200">
+            保存できませんでした。もう一度お試しください。
+          </p>
+        )}
       </div>
     </div>
   );
 }
 
-function Scene_StartingMotivationPrompt({ onRecord, onSkip }) {
-  return (
-    <div className="h-full overflow-y-auto fade-enter px-4 py-8">
-      <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
-        <div className="flex flex-1 items-center py-8">
-          <div className="w-full text-center">
-            <p className="text-white/90 text-[1.16rem] text-narrative">
-              門出の声を、残しておきますか
-            </p>
-
-            <div className="glass-card mt-8 px-6 py-8">
-              <p className="text-[1.05rem] leading-[2.15] text-white/78 text-narrative">
-                物語を始めようと思ったきっかけや、<br className="hidden sm:block" />
-                この扉をひらく今のお気持ちを、聞かせてください。
-              </p>
-            </div>
-
-            <p className="mt-6 text-xs leading-loose text-white/34">
-              今は残さず、そのまま次へ進むこともできます。
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-3 pt-5">
-          <button
-            type="button"
-            onClick={onRecord}
-            className="btn-quiet w-full rounded-full bg-white/10 py-4 text-white"
-          >
-            声で残す
-          </button>
-          <button
-            type="button"
-            onClick={onSkip}
-            className="btn-quiet w-full py-3 text-sm text-white/42"
-          >
-            今は残さない
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function Scene_StartingConversationComplete({ onContinue }) {
   return (
@@ -9869,12 +10657,12 @@ function ThemeDeliveryChoices({ theme, notificationLabel, onChangeDelivery, onWa
         <p className="mt-1 text-[0.66rem] text-white/30">2つから選べます</p>
       </div>
 
-      <div className="mt-3 overflow-hidden rounded-2xl border border-white/12 bg-white/[0.02] divide-y divide-white/[0.08]">
-        <div className="bg-white/[0.035]">
+      <div className="theme-choice-cards">
+        <div className="theme-choice-card">
           <button type="button" onClick={onWait} className="btn-quiet flex w-full items-center gap-3 px-4 pb-2 pt-4 text-left">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/25 text-[0.64rem] text-white/54">1</span>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm text-white/86">次の問いを待つ</span>
+              <span className="block text-sm text-white/86">ここで終えて、次の問いを待つ</span>
               <span className="mt-1 block text-[0.68rem] leading-relaxed text-white/42">次の配信予定　{scheduleLabel}</span>
             </span>
             <ChevronRight size={15} className="shrink-0 text-white/28" />
@@ -9884,7 +10672,7 @@ function ThemeDeliveryChoices({ theme, notificationLabel, onChangeDelivery, onWa
           </button>
         </div>
 
-        <button type="button" onClick={onContinue} className="btn-quiet flex w-full items-center gap-3 px-4 py-4 text-left">
+        <button type="button" onClick={onContinue} className="theme-choice-card btn-quiet flex w-full items-center gap-3 px-4 py-4 text-left">
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/20 text-[0.64rem] text-white/42">2</span>
           <span className="min-w-0 flex-1 text-sm text-white/68">このまま「{theme?.label || "次のテーマ"}」へ進む</span>
           <ChevronRight size={15} className="shrink-0 text-white/24" />
@@ -9923,7 +10711,7 @@ function ThemePreview({
   const isResume = typeof onResume === "function";
 
   return (
-    <>
+    <div className="theme-preview">
       <div className="text-center">
         <div className="flex items-baseline justify-center gap-2 whitespace-nowrap">
           <p className="text-[0.58rem] tracking-[0.1em] text-amber-100/42 min-[360px]:text-[0.64rem]">{eyebrow}</p>
@@ -9953,11 +10741,11 @@ function ThemePreview({
           onContinue={onContinue}
         />
       )}
-    </>
+    </div>
   );
 }
 
-function Scene_HajimariComplete({ onContinue }) {
+export function Scene_HajimariComplete({ onContinue }) {
   return (
     <div className="flow-scene-shell fade-enter">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
@@ -9981,14 +10769,14 @@ function Scene_HajimariComplete({ onContinue }) {
           ここからは<br />9つのテーマごとに進めていきます。
         </p>
         <button type="button" onClick={onContinue} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">
-          最初のテーマを見る
+          {EXPERIENCE_V2_ENABLED ? "本編をはじめる" : "最初のテーマを見る"}
         </button>
       </div>
     </div>
   );
 }
 
-function Scene_ThemeComplete({ completedTheme, hasNextTheme, onRequestFamilyMemory, onContinue, onFinish }) {
+export function Scene_ThemeComplete({ completedTheme, hasNextTheme, hasExtraQuestions, onMore, onRequestFamilyMemory, onContinue, onFinish }) {
   if (!completedTheme) return null;
   return (
     <div className="flow-scene-shell fade-enter">
@@ -10020,24 +10808,30 @@ function Scene_ThemeComplete({ completedTheme, hasNextTheme, onRequestFamilyMemo
 
         {hasNextTheme ? (
           <button type="button" onClick={onContinue} className="btn-quiet w-full rounded-full bg-white/10 py-4 text-white">
-            次のテーマを見る
+            このテーマを終える
           </button>
         ) : (
           <div>
             <p className="text-[1.35rem] leading-[1.9] text-white/92 text-narrative">九つのテーマを、<br />すべてたどりました</p>
             <p className="mt-6 text-sm leading-[2] text-white/48">重ねてきた声が、あなたの物語の輪郭になりました。</p>
-            <button type="button" onClick={onFinish} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">物語を見る</button>
+            <button type="button" onClick={onFinish} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">このテーマを終える</button>
           </div>
+        )}
+        {hasExtraQuestions && onMore && (
+          <button type="button" onClick={onMore} className="mt-5 w-full py-3 text-sm text-white/58 underline underline-offset-4">
+            <span className="block">もう少し語る</span>
+            <span className="block text-xs mt-1">（このテーマの他の質問を追加）</span>
+          </button>
         )}
       </div>
     </div>
   );
 }
 
-function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onChangeDelivery, onWait, onContinue }) {
+export function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onChangeDelivery, onWait, onContinue }) {
   if (!theme) return null;
   return (
-    <div className="flow-scene-shell fade-enter">
+    <div className="flow-scene-shell fade-enter theme-screen">
       <div className="mx-auto w-full max-w-[520px]">
         <ThemePreview
           theme={theme}
@@ -10052,11 +10846,12 @@ function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onCh
   );
 }
 
-function Scene_ThemeResume({ theme, questionNumber, onResume }) {
+function Scene_ThemeResume({ theme, questionNumber, onResume, onHome }) {
   if (!theme) return null;
   return (
-    <div className="flow-scene-shell fade-enter">
+    <div className="flow-scene-shell fade-enter theme-screen">
       <div className="mx-auto w-full max-w-[520px]">
+        {onHome && <button type="button" onClick={onHome} className="mb-5 min-h-[44px] text-white/62 text-[1rem]">← ホームへ</button>}
         <ThemePreview
           theme={theme}
           eyebrow="テーマ"
@@ -10121,8 +10916,9 @@ function Scene_ThemeGuide({ onContinue }) {
   );
 }
 
-function Scene_LifeOutlineSummary({
+export function Scene_LifeOutlineSummary({
   data,
+  renderAudio,
   status,
   error,
   recordingNotice = "",
@@ -10228,6 +11024,7 @@ function Scene_LifeOutlineSummary({
   );
 
   const renderAudioButton = (item, label = "録音") => {
+    if (renderAudio) return renderAudio(item);
     const audioId = item.id || item.storagePath;
     const isPlaying = playingAudioId === audioId;
 
@@ -10796,9 +11593,25 @@ function Scene_StoryThemeSetup({ user, onComplete }) {
   );
 }
 
-function Scene_SharingSetup({ initialScope = "family", onComplete }) {
-  const [selectedScope, setSelectedScope] = useState(initialScope);
+function Scene_SharingSetup({ projectId, initialScope = "family", onScopeChange, onComplete }) {
+  const [selectedScope, setSelectedScope] = useState(() =>
+    readOnboardingSharingDraft(projectId, initialScope)
+  );
   const [loading, setLoading] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const saveQueueRef = useRef(Promise.resolve());
+
+  const chooseScope = scope => {
+    setSelectedScope(scope);
+    writeOnboardingSharingDraft(projectId, scope);
+    setSaveError(false);
+    const request = saveQueueRef.current.catch(() => undefined).then(() => onScopeChange?.(scope));
+    saveQueueRef.current = request;
+    request.catch(error => {
+      console.error("onboarding sharing draft save error", error);
+      setSaveError(true);
+    });
+  };
 
   const options = [
     {
@@ -10819,15 +11632,17 @@ function Scene_SharingSetup({ initialScope = "family", onComplete }) {
   const proceed = async () => {
     try {
       setLoading(true);
-      await onComplete(selectedScope);
+      await saveQueueRef.current.catch(() => undefined);
+      const completed = await onComplete(selectedScope);
+      if (!completed) setSaveError(true);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
-      <div className="w-full max-w-[340px] space-y-9">
+    <div className="sharing-setup h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
+      <div className="sharing-setup__inner w-full max-w-[340px] space-y-9">
         <div className="space-y-5 text-narrative">
           <p className="text-[1.1rem] text-white/90 leading-loose">
             この物語を、<br />どなたと残していきますか？
@@ -10838,7 +11653,7 @@ function Scene_SharingSetup({ initialScope = "family", onComplete }) {
           </p>
         </div>
 
-        <div className="space-y-3">
+        <div className="sharing-setup__options space-y-3">
           {options.map(option => {
             const selected = selectedScope === option.value;
 
@@ -10846,8 +11661,9 @@ function Scene_SharingSetup({ initialScope = "family", onComplete }) {
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setSelectedScope(option.value)}
-                className={`w-full rounded-2xl border px-5 py-4 text-left transition ${
+                onClick={() => chooseScope(option.value)}
+                aria-pressed={selected}
+                className={`sharing-setup__option w-full rounded-2xl border px-5 py-4 text-left transition ${
                   selected
                     ? "border-white/42 bg-white/[0.12] text-white"
                     : "border-white/10 bg-white/[0.035] text-white/62"
@@ -10870,10 +11686,11 @@ function Scene_SharingSetup({ initialScope = "family", onComplete }) {
           type="button"
           onClick={proceed}
           disabled={loading}
-          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-sm text-white"
+          className="sharing-setup__submit btn-quiet bg-white/10 w-full py-4 rounded-full text-sm text-white"
         >
           {loading ? "保存中..." : "この内容で進む"}
         </button>
+        {saveError && <p role="alert" className="text-xs text-rose-200">保存できませんでした。もう一度お試しください。</p>}
       </div>
     </div>
   );
@@ -10883,44 +11700,18 @@ async function createAndSendSupporterInvite({
   user,
   foundation,
   inviteeEmail,
+  candidateId = null,
   sharingFlags
 }) {
-  const { data: pendingInvites, error: existingInviteError } =
-    await supabaseClient
-      .from("project_invites")
-      .select("id, invitee_email, email_delivery_status")
-      .eq("book_project_id", foundation?.project?.id || null)
-      .eq("inviter_user_id", user.id)
-      .eq("role", "supporter")
-      .eq("status", "pending");
-
-  if (existingInviteError) throw existingInviteError;
-
-  const existingInvite = (pendingInvites || []).find(
-    item =>
-      String(item.invitee_email || "").trim().toLowerCase() === inviteeEmail
-  );
-
-  let invite = existingInvite;
-
-  if (!invite) {
-    const { data: createdInvite, error: inviteInsertError } =
-      await supabaseClient
-        .from("project_invites")
-        .insert({
-          book_project_id: foundation?.project?.id || null,
-          inviter_user_id: user.id,
-          invitee_email: inviteeEmail,
-          role: "supporter",
-          status: "pending",
-          auto_share_on_accept: true
-        })
-        .select("id, email_delivery_status")
-        .single();
-
-    if (inviteInsertError) throw inviteInsertError;
-    invite = createdInvite;
+  // TEST must not create invitations or change sharing before a blocked email.
+  if (SUPABASE_URL === TEST_SUPABASE_URL) {
+    throw new Error("TESTでは追加の招待を送信しません。");
   }
+  const { data: prepared, error: prepareError } = await supabaseClient.rpc('prepare_supporter_invite', {
+    input_book_project_id: foundation?.project?.id, input_email: inviteeEmail, input_candidate_id: candidateId
+  });
+  if (prepareError) throw prepareError;
+  const invite = Array.isArray(prepared) ? prepared[0] : prepared;
 
   let updatedPreference = null;
 
@@ -10949,7 +11740,7 @@ async function createAndSendSupporterInvite({
   };
 }
 
-function Scene_SupporterInvite({
+export function Scene_SupporterInvite({
   user,
   foundation,
   sharingPreference,
@@ -10961,6 +11752,8 @@ function Scene_SupporterInvite({
   const normalizedInitialEmail =
     typeof initialEmail === "string" ? initialEmail : "";
   const [supporterEmail, setSupporterEmail] = useState(normalizedInitialEmail);
+  const [inviteChannel, setInviteChannel] = useState('email');
+  const [candidateId, setCandidateId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [confirmPrivateChange, setConfirmPrivateChange] = useState(false);
   const sharingFlags = getStorySharingFlags(sharingPreference);
@@ -10969,6 +11762,7 @@ function Scene_SupporterInvite({
 
   useEffect(() => {
     setSupporterEmail(normalizedInitialEmail);
+    setCandidateId(null);
   }, [normalizedInitialEmail]);
 
   const saveInvite = async () => {
@@ -10976,6 +11770,11 @@ function Scene_SupporterInvite({
 
     if (!inviteeEmail) {
       onComplete();
+      return;
+    }
+
+    if (SUPABASE_URL === TEST_SUPABASE_URL) {
+      alert(`TESTでは追加の招待を送信しません。「${isInitialSetup ? "今は設定しない" : "今はひとりで始める"}」から進めてください。`);
       return;
     }
 
@@ -11003,6 +11802,7 @@ function Scene_SupporterInvite({
         user,
         foundation,
         inviteeEmail,
+        candidateId,
         sharingFlags
       });
 
@@ -11053,18 +11853,27 @@ function Scene_SupporterInvite({
           </div>
         )}
 
+        <div className="flex gap-4 justify-center" aria-label="依頼の送り方">
+          <button type="button" aria-pressed={inviteChannel==='email'} onClick={()=>setInviteChannel('email')} className="text-white/75 text-sm underline">メール</button>
+          <button type="button" aria-pressed={inviteChannel==='sms'} onClick={()=>setInviteChannel('sms')} className="text-white/75 text-sm underline">SMS</button>
+        </div>
+        {inviteChannel === 'sms' ? <SupporterSmsComposer client={supabaseClient} projectId={foundation?.project?.id} selectedSharingEnabled={sharingFlags.selectedEnabled} onSent={onComplete} /> : <>
+        <SupporterFamilyCandidates client={supabaseClient} projectId={foundation?.project?.id} disabled={loading} onSelect={item => {
+          setCandidateId(item.candidate_id); setSupporterEmail(item.invitee_email); setConfirmPrivateChange(false);
+        }} />
         <div>
           <p className="ui-label mb-2">手伝ってもらう方のメールアドレス</p>
           <input
             type="email"
             className="quiet-input"
             value={supporterEmail}
-            onChange={e => setSupporterEmail(e.target.value)}
+            onChange={e => { setSupporterEmail(e.target.value); setCandidateId(null); setConfirmPrivateChange(false); }}
           />
         </div>
+        </>}
 
         <div className="space-y-4">
-          <button
+          {inviteChannel === 'email' && <button
             onClick={saveInvite}
             disabled={loading}
             className="btn-quiet bg-white/10 w-full py-4 rounded-full text-sm text-white"
@@ -11074,7 +11883,7 @@ function Scene_SupporterInvite({
               : confirmPrivateChange
                 ? "内容を確認して依頼する"
                 : "手伝ってもらう方を招待する"}
-          </button>
+          </button>}
 
           <button
             onClick={onComplete}
@@ -11131,16 +11940,18 @@ function Scene_SupporterInviteAccountMismatch({
   );
 }
 
-function Scene_SupporterInviteReceived({
+export function Scene_SupporterInviteReceived({
   invite,
+  user,
   remainingCount = 1,
   onAccept,
   onDecline
 }) {
   const [loadingAction, setLoadingAction] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [identity, setIdentity] = useState(() => supporterIdentityFromProfile(user));
   const subjectName = withHonorific(invite?.subject_name || "ご家族");
-  const inviterName = withHonorific(invite?.inviter_name || "");
+  const inviterName = invite?.inviter_name ? withHonorific(invite.inviter_name) : "";
   const isSelfRequest =
     !inviterName ||
     inviterName.replace(/さん$/, "") === subjectName.replace(/さん$/, "");
@@ -11151,7 +11962,9 @@ function Scene_SupporterInviteReceived({
       setErrorMessage("");
 
       if (action === "accept") {
-        await onAccept();
+        const validation = supporterIdentityError(identity);
+        if (validation) { setErrorMessage(validation); return; }
+        await onAccept(identity);
       } else {
         await onDecline();
       }
@@ -11164,7 +11977,7 @@ function Scene_SupporterInviteReceived({
   };
 
   return (
-    <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center">
+    <div className="h-full overflow-y-auto flex flex-col items-center fade-enter px-4 py-8 text-center">
       <div className="w-full max-w-[340px] space-y-9">
         <div className="space-y-5 text-narrative">
           <p className="text-white/40 text-xs tracking-[0.18em]">
@@ -11172,8 +11985,7 @@ function Scene_SupporterInviteReceived({
           </p>
 
           <p className="text-[1.1rem] text-white/90 leading-loose">
-            {subjectName}の物語づくりを、<br />
-            お手伝いしませんか。
+            {subjectName}のお手伝い
           </p>
 
           {!isSelfRequest && (
@@ -11182,21 +11994,10 @@ function Scene_SupporterInviteReceived({
             </p>
           )}
 
-          <p className="text-white/58 text-sm leading-loose">
-            録音の操作や写真の追加、文章や<br />
-            本の形を整える作業をお手伝いできます。
-          </p>
         </div>
 
-        <div className="glass-card p-5 text-left space-y-3">
-          <p className="text-white/76 text-sm leading-loose">
-            共有範囲や将来の手渡し方は、物語のご本人だけが変更できます。
-          </p>
-
-          <p className="text-white/42 text-xs leading-loose">
-            「ずっと自分だけ」にした語りは、お手伝いする方にも表示されません。
-          </p>
-        </div>
+        <SupporterIdentityFields value={identity} onChange={setIdentity} subjectName={subjectName} disabled={Boolean(loadingAction)} />
+        <p className="text-white/75 text-base text-left leading-relaxed">お名前は相手に表示されます。共有された語りだけを見られます。</p>
 
         {errorMessage && (
           <p className="text-rose-200/80 text-sm leading-relaxed">
@@ -11208,7 +12009,7 @@ function Scene_SupporterInviteReceived({
           <button
             type="button"
             onClick={() => respond("accept")}
-            disabled={Boolean(loadingAction)}
+            disabled={Boolean(loadingAction) || Boolean(supporterIdentityError(identity))}
             className="btn-quiet bg-white/10 w-full py-4 rounded-full text-sm text-white"
           >
             {loadingAction === "accept"
@@ -12180,7 +12981,7 @@ function CoverSuggestionPicker({
   );
 }
 
-function Scene_PhotoStoryStart({ onStart, onBack }) {
+export function Scene_PhotoStoryStart({ onStart, onBack }) {
   const [photo, setPhoto] = useState(null);
   const [photoCorrectionOpen, setPhotoCorrectionOpen] = useState(false);
   const choosePhoto = file => {
@@ -12292,56 +13093,45 @@ function Scene_ConnectionComplete({ connection, onOpen, onConnectionsHome }) {
   );
 }
 
-function Scene_ConnectionsHome({
-  userName,
-  receivedProjects = [],
-  supportedProjects = [],
-  onOpenReceivedProject,
-  onOpenSupportedProject,
-  onStartOwnStory
-}) {
+export function Scene_OwnStoryEntry({ onBack, onTryFree, onPurchase }) {
   return (
     <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
-      <div className="text-center mb-10">
-        <p className="text-white/35 text-xs tracking-[0.22em] mb-3">縦糸横糸ブック</p>
-        <p className="text-white/82 text-[1.05rem] text-narrative">{withHonorific(userName)}</p>
+      <div className="relative flex items-center justify-center h-10 mb-10 shrink-0">
+        <button type="button" onClick={onBack}
+          className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"
+          aria-label="お手伝いしている物語へ戻る">
+          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
+        </button>
+        <p className="text-white/88 text-[1.02rem] text-narrative">自分の物語を始める</p>
       </div>
 
-      <div className="space-y-7">
-        {receivedProjects.length > 0 && (
-          <section className="space-y-3">
-            <p className="text-white/38 text-xs tracking-[0.18em] px-1">受け取っている物語</p>
-            {receivedProjects.map(project => (
-              <HomeMenuButton
-                key={`received-${project.book_project_id}`}
-                icon={Files}
-                label={`${project.subject_name || "ご家族"}の物語`}
-                onClick={() => onOpenReceivedProject?.(project)}
-              />
-            ))}
-          </section>
-        )}
+      <div className="space-y-5">
+        <p className="text-center text-white/48 text-sm leading-loose mb-7">
+          自分の物語は未開始です。<br />始め方を選んでください。
+        </p>
 
-        {supportedProjects.length > 0 && (
-          <section className="space-y-3">
-            <p className="text-white/38 text-xs tracking-[0.18em] px-1">お手伝いしている物語</p>
-            {supportedProjects.map(project => (
-              <HomeMenuButton
-                key={`supported-${project.supporter_id}`}
-                icon={Users}
-                label={`${project.subject_name || "ご家族"}の物語`}
-                onClick={() => onOpenSupportedProject?.(project)}
-              />
-            ))}
-          </section>
-        )}
+        <button type="button" onClick={onTryFree} className="glass-card w-full p-6 text-left">
+          <p className="text-white/40 text-xs tracking-[0.18em] mb-3">まず試したい</p>
+          <p className="text-white/90 text-lg text-narrative">無料で3問、話してみる</p>
+          <p className="mt-3 text-white/48 text-sm leading-loose">約10分・カード登録不要</p>
+          <p className="mt-2 text-white/38 text-xs leading-loose">
+            語った内容は最後に語った日から10日間保存され、本編を始めると引き継げます。
+          </p>
+          <span className="mt-5 flex items-center justify-between text-white/82 text-sm">
+            無料で体験する <ChevronRight size={18} className="text-white/40" />
+          </span>
+        </button>
 
-        <section className="pt-7 border-t border-white/[0.08] text-center space-y-4">
-          <p className="text-white/38 text-xs leading-loose">ご自身の物語も、いつでも始められます。</p>
-          <button type="button" onClick={onStartOwnStory} className="w-full py-3 text-white/50 text-sm underline underline-offset-4">
-            自分の物語を始める
-          </button>
-        </section>
+        <button type="button" onClick={onPurchase} className="glass-card w-full p-6 text-left">
+          <p className="text-white/40 text-xs tracking-[0.18em] mb-3">本編から始めたい</p>
+          <p className="text-white/90 text-lg text-narrative">人生を辿りはじめる</p>
+          <p className="mt-3 text-white/48 text-sm leading-loose">
+            9つのテーマを辿り、BOOKとWebブックへ。
+          </p>
+          <span className="mt-5 flex items-center justify-between text-white/82 text-sm">
+            縦糸横糸を始める <ChevronRight size={18} className="text-white/40" />
+          </span>
+        </button>
       </div>
     </div>
   );
@@ -12596,7 +13386,12 @@ function Scene_FamilyStoryDeliveryChoice({
   );
 }
 
-function Scene_Home({
+export function Scene_Home(props) {
+  return <ApprovedHome {...props} themeProgress={getStoryThemeProgress(props.questionSet || [], props.currentIndex || 0)}
+    invitationCards={props.sentFamilyInvitations?.length > 0 && <section className="ah-group"><h2>招待した家族の物語</h2><div className="ah-rows">{props.sentFamilyInvitations.map(invitation => <FamilyInvitationHomeCard key={invitation.invitation_id} invitation={invitation} onContinue={() => props.onContinueFamilyTrial?.(invitation)} onDecline={() => props.onDeclineFamilyTrial?.(invitation)} />)}</div></section>} />;
+}
+
+function LegacyScene_Home({
   userName,
   questionSet = [],
   currentIndex = 0,
@@ -12878,8 +13673,8 @@ function FamilyInvitationHomeCard({ invitation, onContinue, onDecline }) {
       </div>
       {canChooseContinuation && (
         <div className="mt-5 grid grid-cols-[1fr_auto] gap-3 border-t border-white/[0.07] pt-4">
-          <button type="button" onClick={onContinue} className="rounded-full bg-white px-4 py-3 text-sm text-slate-900">続きを贈る（34,860円）</button>
-          <button type="button" onClick={onDecline} className="px-3 py-3 text-xs text-white/38 underline underline-offset-4">今回はここまで</button>
+          <button type="button" onClick={onContinue} className="rounded-full bg-white px-4 py-3 text-sm text-slate-900">{TRIAL_CONVERSION_ENABLED ? '購入して続きを贈る' : '続きを贈る（34,860円）'}</button>
+          <button type="button" onClick={onDecline} className="px-3 py-3 text-xs text-white/38 underline underline-offset-4">{TRIAL_CONVERSION_ENABLED ? '本人が購入する方法へ' : '今回はここまで'}</button>
         </div>
       )}
       {canResumePayment && (
@@ -12921,13 +13716,14 @@ function SettingsMenuButton({ icon: Icon, label, detail, onClick }) {
   );
 }
 
-function Scene_SettingsHome({
+export function Scene_SettingsHome({
   notificationPref,
   sharingPreference,
   onOpenDelivery,
   onOpenPrivacy,
   onOpenSupporters,
   onOpenProfile,
+  onOpenContract,
   onBack
 }) {
   const sharingFlags = getStorySharingFlags(sharingPreference);
@@ -12954,6 +13750,7 @@ function Scene_SettingsHome({
       </div>
 
       <div className="space-y-4">
+        {onOpenContract && <SettingsMenuButton icon={Files} label="契約・データ管理" detail="購入情報・記録の保存" onClick={onOpenContract} />}
         <SettingsMenuButton
           icon={Bell}
           label="問いの届け方"
@@ -12983,13 +13780,16 @@ function Scene_SettingsHome({
   );
 }
 
-function Scene_SharingPrivacySettings({
+export function Scene_SharingPrivacySettings({
   foundation,
   initialPreference,
   onSavePreference,
   onOpenPrivateStories,
-  onBack
+  onBack,
+  adminPreview = null,
+  adminPreviewClient = null
 }) {
+  const supabaseClient = adminPreviewClient || applicationSupabaseClient;
   const initialFlags = getStorySharingFlags(initialPreference, "family");
   const [familyEnabled, setFamilyEnabled] = useState(initialFlags.familyEnabled);
   const [selectedEnabled, setSelectedEnabled] = useState(initialFlags.selectedEnabled);
@@ -13016,14 +13816,22 @@ function Scene_SharingPrivacySettings({
   ]);
 
   const loadPeople = async () => {
+    if (adminPreview) {
+      setRelationships(adminPreview.relationships || []);
+      setSupporters((adminPreview.supporters || []).filter(item => ["active", "pending"].includes(item.relationship_status)));
+      setLoadingPeople(false);
+      return;
+    }
     try {
       setLoadingPeople(true);
-      const [relationshipRows, supporterResult] = await Promise.all([
+      const [relationshipRows, supporterResult, smsSupporterResult] = await Promise.all([
         loadOwnedStoryRelationships(foundation?.project?.id),
-        supabaseClient.rpc("list_owned_project_supporters", { input_book_project_id: foundation?.project?.id })
+        supabaseClient.rpc("list_owned_project_supporters", { input_book_project_id: foundation?.project?.id }),
+        supabaseClient.rpc("list_owned_supporter_sms_invites", { input_book_project_id: foundation?.project?.id })
       ]);
+      if (supporterResult.error || smsSupporterResult.error) throw supporterResult.error || smsSupporterResult.error;
       setRelationships(relationshipRows);
-      setSupporters((supporterResult.data || []).filter(item => ["active", "pending"].includes(item.relationship_status)));
+      setSupporters([...(supporterResult.data || []), ...(smsSupporterResult.data || [])].filter(item => ["active", "pending"].includes(item.relationship_status)));
     } catch (error) {
       console.error("story relationships load error", error);
     } finally {
@@ -13252,11 +14060,12 @@ function Scene_SharingPrivacySettings({
           const relationshipPeople = relationships.filter(item => item.invite_type === section.type);
           const supporterPeople = section.type === "selected"
             ? supporters
-                .filter(supporter => !relationshipPeople.some(item => String(item.invitee_email).toLowerCase() === String(supporter.invitee_email).toLowerCase()))
+                .filter(supporter => !supporter.invitee_email || !relationshipPeople.some(item => String(item.invitee_email).toLowerCase() === String(supporter.invitee_email).toLowerCase()))
                 .map(supporter => ({
                   relationship_id: `supporter-${supporter.invite_id}`,
                   invite_type: "selected",
                   invitee_email: supporter.invitee_email,
+                  invitee_phone: supporter.invitee_phone,
                   display_name: supporter.display_name || supporter.invitee_email,
                   relationship_status: supporter.relationship_status === "active" ? "accepted" : "pending",
                   is_supporter: true,
@@ -13288,7 +14097,7 @@ function Scene_SharingPrivacySettings({
                             : ""}
                           {item.relationship_status === "accepted" ? (section.enabled ? "共有中" : "一時停止") : item.relationship_status === "paused" ? "個別に一時停止" : "依頼中"}{item.is_supporter ? "・サポーター" : ""}
                         </p>
-                        <p className="text-white/24 text-[0.68rem] mt-1 truncate">{item.invitee_email}</p>
+                        <p className="text-white/24 text-[0.68rem] mt-1 truncate">{item.invitee_phone || item.invitee_email}</p>
                       </div>
                       <div className="flex flex-col items-end gap-2 shrink-0">
                         {!item.supporter_only && item.relationship_status === "pending" && <button type="button" onClick={() => resendRelationship(item)} className="text-white/42 text-xs underline underline-offset-4">再送</button>}
@@ -13343,48 +14152,77 @@ function Scene_SharingPrivacySettings({
   );
 }
 
-function Scene_PrivateStorySettings({ user, questionSet = [], onBack }) {
+export function Scene_PrivateStorySettings({ user, questionSet = [], onBack, storyAccess = null, productionContext = false }) {
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
   const [expandedStoryIds, setExpandedStoryIds] = useState(() => new Set());
+  const privacySaveLock = useRef(false);
+  const privacyViewEpoch = useRef(0);
 
   useEffect(() => {
+    let live = true;
+    privacyViewEpoch.current++;
     const load = async () => {
       try {
+        setLoading(true);
+        setStories([]);
+        setExpandedStoryIds(new Set());
+        if (storyAccess) {
+          const rows = await storyAccess.list();
+          if (live) setStories(rows);
+          return;
+        }
         const { data, error } = await supabaseClient
           .from("answers")
           .select("id, sequence_order, transcript_edited, transcript_readable, transcript_clean, access_override, created_at")
           .eq("user_id", user.id)
           .order("sequence_order", { ascending: true });
         if (error) throw error;
-        setStories(data || []);
+        if (live) setStories(data || []);
       } catch (error) {
-        console.error("private story settings load error", error);
-        alert("語りの公開設定を読み込めませんでした。");
+        if (live) {
+          setStories([]);
+          if (!storyAccess) console.error("private story settings load error", error);
+          alert("語りの公開設定を読み込めませんでした。");
+        }
       } finally {
-        setLoading(false);
+        if (live) setLoading(false);
       }
     };
     load();
-  }, [user?.id]);
+    return () => { live = false; privacyViewEpoch.current++; };
+  }, [user?.id, storyAccess]);
 
   const togglePrivate = async story => {
+    if (privacySaveLock.current) return;
+    privacySaveLock.current = true;
+    const epoch = privacyViewEpoch.current;
     const nextValue = story.access_override === "private_forever" ? "inherit" : "private_forever";
     try {
       setSavingId(story.id);
+      if (storyAccess) {
+        // Read the server result back instead of assuming sharing succeeded.
+        const rows = await storyAccess.setPrivate(story.id, nextValue === "private_forever");
+        if (privacyViewEpoch.current === epoch) setStories(rows);
+        return;
+      }
       const { error } = await supabaseClient
         .from("answers")
         .update({ access_override: nextValue })
         .eq("id", story.id)
         .eq("user_id", user.id);
       if (error) throw error;
+      if (privacyViewEpoch.current !== epoch) return;
       setStories(prev => prev.map(item => item.id === story.id ? { ...item, access_override: nextValue } : item));
     } catch (error) {
-      console.error("private story setting save error", error);
+      if (privacyViewEpoch.current !== epoch) return;
+      if (storyAccess) setStories([]);
+      else console.error("private story setting save error", error);
       alert("非公開設定を保存できませんでした。");
     } finally {
-      setSavingId(null);
+      if (privacyViewEpoch.current === epoch) setSavingId(null);
+      privacySaveLock.current = false;
     }
   };
 
@@ -13409,13 +14247,14 @@ function Scene_PrivateStorySettings({ user, questionSet = [], onBack }) {
         <button type="button" onClick={onBack} className="absolute left-0 w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center">
           <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
         </button>
-        <p className="text-white/88 text-[1rem] text-narrative">語りごとの非公開設定</p>
+        <p className="text-white/88 text-[1rem] text-narrative">{productionContext ? '家族への共有設定' : '語りごとの非公開設定'}</p>
       </div>
       <div className="shrink-0 glass-card px-5 py-4 mb-4 flex items-center justify-between">
         <p className="text-white/58 text-sm">非公開中</p>
         <p className="text-white/86 text-lg text-narrative">{privateCount}件</p>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pb-8">
+        {productionContext && <p className="text-white/65 text-sm">制作サポーターにはすべての語りが表示されます。ここでは、それ以外の共有先へ見せない語りを選びます。</p>}
         {loading && <p className="text-center text-white/38 text-sm py-10">読み込んでいます...</p>}
         {!loading && visibleStories.length === 0 && <p className="text-center text-white/42 text-sm py-10">設定できる語りはまだありません。</p>}
         {visibleStories.map(story => {
@@ -13443,7 +14282,7 @@ function Scene_PrivateStorySettings({ user, questionSet = [], onBack }) {
                 disabled={savingId === story.id}
                 className="w-full flex items-center justify-between rounded-xl border border-white/[0.08] px-4 py-3"
               >
-                <span className="text-white/58 text-sm">この語りは自分だけ</span>
+                <span className="text-white/58 text-sm">{productionContext ? 'この語りを家族に共有しない' : 'この語りは自分だけ'}</span>
                 <span className={`relative w-11 h-6 rounded-full transition ${isPrivate ? "bg-amber-100/45" : "bg-white/10"}`}>
                   <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition ${isPrivate ? "left-6" : "left-1"}`} />
                 </span>
@@ -13456,18 +14295,23 @@ function Scene_PrivateStorySettings({ user, questionSet = [], onBack }) {
   );
 }
 
-function Scene_SupporterManagement({
+export function Scene_SupporterManagement({
   user,
   foundation,
   sharingPreference,
   onSharingPreferenceChange,
-  onBack
+  onBack,
+  adminPreviewClient = null
 }) {
+  const supabaseClient = adminPreviewClient || applicationSupabaseClient;
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [selectedFamilyCandidateId, setSelectedFamilyCandidateId] = useState(null);
+  const [inviteChannel, setInviteChannel] = useState('email');
+  const [smsInitialPhone, setSmsInitialPhone] = useState('');
   const [sendingInvite, setSendingInvite] = useState(false);
   const [confirmPrivateChange, setConfirmPrivateChange] = useState(false);
   const sharingFlags = getStorySharingFlags(sharingPreference);
@@ -13481,7 +14325,12 @@ function Scene_SupporterManagement({
         input_book_project_id: foundation?.project?.id
       });
       if (error) throw error;
-      setItems(data || []);
+      if (adminPreviewClient) { setItems(data || []); return; }
+      const { data: identities, error: identityError } = await supabaseClient.rpc('list_owned_supporter_identities', { input_book_project_id: foundation?.project?.id });
+      if (identityError) throw identityError;
+      const { data: smsInvites, error: smsError } = await supabaseClient.rpc('list_owned_supporter_sms_invites', { input_book_project_id: foundation?.project?.id });
+      if (smsError) throw smsError;
+      setItems([...(data || []).map(item => ({ ...item, ...(identities || []).find(identity => identity.supporter_id === item.supporter_id) })), ...(smsInvites || [])]);
     } catch (error) {
       console.error("supporter management load error", error);
       alert("お手伝いする方を読み込めませんでした。");
@@ -13495,7 +14344,9 @@ function Scene_SupporterManagement({
   }, [foundation?.project?.id]);
 
   const openInviteForm = (email = "") => {
+    setInviteChannel('email'); setSmsInitialPhone('');
     setInviteEmail(typeof email === "string" ? email : "");
+    setSelectedFamilyCandidateId(null);
     setConfirmPrivateChange(false);
     setShowInviteForm(true);
   };
@@ -13503,6 +14354,7 @@ function Scene_SupporterManagement({
   const closeInviteForm = () => {
     setShowInviteForm(false);
     setInviteEmail("");
+    setSelectedFamilyCandidateId(null);
     setConfirmPrivateChange(false);
   };
 
@@ -13535,6 +14387,7 @@ function Scene_SupporterManagement({
         user,
         foundation,
         inviteeEmail,
+        candidateId: selectedFamilyCandidateId,
         sharingFlags
       });
 
@@ -13565,6 +14418,10 @@ function Scene_SupporterManagement({
   const resendInvite = async item => {
     try {
       setBusyId(item.invite_id);
+      if (item.invitee_phone) {
+        await callSupporterSms(supabaseClient, { action:'send', projectId:foundation?.project?.id, phone:item.invitee_phone });
+        await loadItems(); alert('SMSで依頼を再送しました。'); return;
+      }
       const { data, error } = await supabaseClient.functions.invoke("send-supporter-invite", {
         body: { inviteId: item.invite_id }
       });
@@ -13640,7 +14497,10 @@ function Scene_SupporterManagement({
             <div className="flex items-start justify-between gap-4 mb-3">
               <div className="min-w-0">
                 <p className="text-white/80 text-sm truncate">{item.display_name || item.invitee_email}</p>
-                <p className="text-white/32 text-xs truncate mt-1">{item.invitee_email}</p>
+                <p className="text-white/32 text-xs truncate mt-1">{item.invitee_phone || item.invitee_email}</p>
+                {item.relationship_status === 'active' && <p className="text-white/45 text-xs mt-1">{relationshipLabel(item.relationship, item.relationship_other)}</p>}
+                {item.invitee_phone && ['sending','unknown'].includes(item.delivery_status) && <p className="text-amber-100/70 text-xs mt-2">送信結果を確認中です。重ねて送らず、サポートへご連絡ください。</p>}
+                {item.invitee_phone && item.delivery_status === 'failed' && <p className="text-amber-100/70 text-xs mt-2">SMSを送信できませんでした。</p>}
               </div>
               <span className={`shrink-0 rounded-full px-3 py-1 text-[0.68rem] ${item.relationship_status === "active" ? "bg-emerald-100/10 text-emerald-100/65" : "bg-white/[0.06] text-white/42"}`}>
                 {statusLabel[item.relationship_status] || item.relationship_status}
@@ -13648,7 +14508,7 @@ function Scene_SupporterManagement({
             </div>
             {item.relationship_status === "pending" && (
               <div className="flex gap-4 pt-3 border-t border-white/[0.07]">
-                <button type="button" disabled={busyId === item.invite_id} onClick={() => resendInvite(item)} className="text-white/55 text-xs underline underline-offset-4">メールを再送</button>
+                <button type="button" disabled={busyId === item.invite_id || ['sending','unknown'].includes(item.delivery_status)} onClick={() => resendInvite(item)} className="text-white/55 text-xs underline underline-offset-4">{item.invitee_phone ? 'SMSを再送' : 'メールを再送'}</button>
                 <button type="button" disabled={busyId === item.invite_id} onClick={() => cancelInvite(item)} className="text-white/35 text-xs underline underline-offset-4">依頼を取り消す</button>
               </div>
             )}
@@ -13656,7 +14516,7 @@ function Scene_SupporterManagement({
               <button type="button" disabled={busyId === item.supporter_id} onClick={() => endSupport(item)} className="mt-3 pt-3 w-full text-left border-t border-white/[0.07] text-white/38 text-xs underline underline-offset-4">お手伝いを終了する</button>
             )}
             {item.relationship_status === "ended" && (
-              <button type="button" onClick={() => openInviteForm(item.invitee_email)} className="mt-3 pt-3 w-full text-left border-t border-white/[0.07] text-white/52 text-xs underline underline-offset-4">もう一度依頼する</button>
+              <button type="button" onClick={() => { openInviteForm(item.invitee_email); if(item.invitee_phone){setInviteChannel('sms');setSmsInitialPhone(item.invitee_phone);} }} className="mt-3 pt-3 w-full text-left border-t border-white/[0.07] text-white/52 text-xs underline underline-offset-4">もう一度依頼する</button>
             )}
           </div>
         ))}
@@ -13688,6 +14548,14 @@ function Scene_SupporterManagement({
             </div>
           )}
 
+          <div className="flex gap-5" aria-label="依頼の送り方">
+            <button type="button" aria-pressed={inviteChannel==='email'} onClick={()=>setInviteChannel('email')} className="text-white/75 text-sm underline">メール</button>
+            <button type="button" aria-pressed={inviteChannel==='sms'} onClick={()=>setInviteChannel('sms')} className="text-white/75 text-sm underline">SMS</button>
+          </div>
+          {inviteChannel === 'sms' ? <SupporterSmsComposer client={supabaseClient} projectId={foundation?.project?.id} initialPhone={smsInitialPhone} selectedSharingEnabled={sharingFlags.selectedEnabled} onSent={async()=>{await loadItems();closeInviteForm();}} /> : <>
+          {!adminPreviewClient && <SupporterFamilyCandidates client={supabaseClient} projectId={foundation?.project?.id} disabled={sendingInvite} onSelect={item => {
+            setSelectedFamilyCandidateId(item.candidate_id); setInviteEmail(item.invitee_email); setConfirmPrivateChange(false);
+          }} />}
           <div>
             <p className="ui-label mb-2">メールアドレス</p>
             <input
@@ -13697,6 +14565,7 @@ function Scene_SupporterManagement({
               value={inviteEmail}
               onChange={event => {
                 setInviteEmail(event.target.value);
+                setSelectedFamilyCandidateId(null);
                 setConfirmPrivateChange(false);
               }}
               onKeyDown={event => {
@@ -13718,6 +14587,7 @@ function Scene_SupporterManagement({
                 ? "内容を確認して依頼する"
                 : "依頼を送る"}
           </button>
+          </>}
         </section>
       ) : (
         <button type="button" onClick={() => openInviteForm()} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white text-sm">
@@ -13728,7 +14598,8 @@ function Scene_SupporterManagement({
   );
 }
 
-function Scene_ProfileSettings({ user, onSaved, onBack }) {
+export function Scene_ProfileSettings({ user, onSaved, onBack, adminPreviewClient = null }) {
+  const supabaseClient = adminPreviewClient || applicationSupabaseClient;
   const [familyName, setFamilyName] = useState(user?.family_name || "");
   const [givenName, setGivenName] = useState(user?.given_name || "");
   const [editing, setEditing] = useState(false);
@@ -13736,7 +14607,7 @@ function Scene_ProfileSettings({ user, onSaved, onBack }) {
   const structuredNameRegistered = Boolean(user?.family_name?.trim() && user?.given_name?.trim());
   const registeredName = structuredNameRegistered
     ? `${user.family_name.trim()} ${user.given_name.trim()}`
-    : String(user?.display_name || user?.name || "").trim() || "未登録";
+    : (String(user?.display_name || user?.name || "").trim().replace(/^あなた$/, '') || "未登録");
 
   useEffect(() => {
     if (editing) return;
@@ -13801,7 +14672,7 @@ function Scene_ProfileSettings({ user, onSaved, onBack }) {
                 <div><p className="text-white/28 text-xs mb-2">姓</p><input type="text" value={familyName} onChange={event => setFamilyName(event.target.value)} className="quiet-input" autoComplete="family-name" /></div>
                 <div><p className="text-white/28 text-xs mb-2">名</p><input type="text" value={givenName} onChange={event => setGivenName(event.target.value)} className="quiet-input" autoComplete="given-name" /></div>
               </div>
-              <p className="text-white/28 text-xs leading-loose">ここで変わるのは利用アカウントの氏名だけです。物語の主体名や過去の注文者名は変わりません。</p>
+              <p className="text-white/28 text-xs leading-loose">お手伝い先にも表示されるアカウントの氏名です。物語の主体名や過去の注文者名は変わりません。</p>
               <div className="grid grid-cols-2 gap-3">
                 <button type="button" onClick={cancelEdit} disabled={saving} className="btn-quiet border border-white/10 w-full py-3 rounded-full text-white/55 text-sm disabled:opacity-35">キャンセル</button>
                 <button type="button" onClick={save} disabled={saving || !familyName.trim() || !givenName.trim()} className="btn-quiet bg-white/10 w-full py-3 rounded-full text-white text-sm disabled:opacity-35">
@@ -13820,12 +14691,14 @@ function Scene_ProfileSettings({ user, onSaved, onBack }) {
           <p className="ui-label mb-2">メールアドレス</p>
           <div className="quiet-input text-white/42">{user?.email || ""}</div>
         </div>
+        <SupporterRelationshipsSettings client={supabaseClient} />
       </div>
     </div>
   );
 }
 
-function Scene_QuestionLibrary({ foundation, questionSet = [], onAdded, onBack }) {
+export function Scene_QuestionLibrary({ foundation, questionSet = [], onAdded, onBack, adminPreviewClient = null }) {
+  const supabaseClient = adminPreviewClient || applicationSupabaseClient;
   const [mode, setMode] = useState("library");
   const [questionText, setQuestionText] = useState("");
   const [chapter, setChapter] = useState("追加した問い");
@@ -13833,6 +14706,7 @@ function Scene_QuestionLibrary({ foundation, questionSet = [], onAdded, onBack }
   const [saving, setSaving] = useState(false);
   const [libraryQuestions, setLibraryQuestions] = useState(questionSet);
   const loadLibraryQuestions = async () => {
+    if (adminPreviewClient) return;
     if (!foundation?.project?.id) return;
     const { data, error } = await supabaseClient.from("user_questions").select(`
       id, book_project_id, participant_id, sequence_order, chapter,
@@ -13943,81 +14817,35 @@ function Scene_QuestionLibrary({ foundation, questionSet = [], onAdded, onBack }
   );
 }
 
-function Scene_SupportProjectHome({
+export function Scene_SupportProjectHome({
   project,
+  questionSet = [],
+  readOnly = false,
   onOpenQuestions,
   onOpenStories,
   onOpenBookBuilder,
-  onOpenDelivery,
+  onReadOnlyAction,
   onBack
 }) {
-  const isFacilitator = project?.support_role === "facilitator";
-
-  return (
-    <div className="h-full flex flex-col fade-enter px-4 py-8">
-      <div className="shrink-0">
-        <button
-          type="button"
-          onClick={onBack}
-          className="w-10 h-10 rounded-full border border-white/10 bg-white/[0.04] flex items-center justify-center"
-          aria-label="自分のホームへ戻る"
-        >
-          <ChevronLeft size={20} className="text-white/55" strokeWidth={1.8} />
-        </button>
-      </div>
-
-      <div className="flex-1 flex flex-col justify-center">
-        <div className="text-center mb-12 space-y-3">
-          <p className="text-white/38 text-xs tracking-[0.18em]">
-            {isFacilitator ? "進行役として開いています" : "物語づくりをお手伝い中"}
-          </p>
-
-          <p className="text-white/86 text-[1.08rem] text-narrative">
-            {withHonorific(project?.subject_name || "ご家族")}の物語
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          {project?.can_operate_recording && (
-            <HomeMenuButton
-              icon={Mic}
-              label={isFacilitator ? "届いた問いから語る" : "問いの録音を手伝う"}
-              onClick={onOpenQuestions}
-            />
-          )}
-
-          {(project?.can_edit_book_text || project?.can_build_book) && (
-            <HomeMenuButton
-              icon={Files}
-              label="語りを見る"
-              onClick={onOpenStories}
-            />
-          )}
-
-          {project?.can_build_book && (
-            <HomeMenuButton
-              icon={BookOpen}
-              label="本に仕上げる"
-              onClick={onOpenBookBuilder}
-            />
-          )}
-
-          {onOpenDelivery && (
-            <HomeMenuButton
-              icon={Bell}
-              label="問いの受け取り方"
-              detail={
-                project.notification_recipient === "facilitator"
-                  ? "あなたのスマートフォンに届けます"
-                  : "配信せず、好きな時に開きます"
-              }
-              onClick={onOpenDelivery}
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  const firstPending = questionSet.findIndex(question => !["answered", "skipped"].includes(question.status));
+  const supportedActions = {
+    record: Boolean(project?.can_operate_recording),
+    photo: false,
+    questionList: false,
+    stories: Boolean(project?.can_edit_book_text || project?.can_build_book),
+    book: Boolean(project?.can_build_book),
+  };
+  return <SupporterContextFrame name={project?.subject_name} onReturn={onBack} embedded={readOnly}>
+    <Scene_Home
+      userName={project?.subject_name || "ご家族"}
+      questionSet={questionSet}
+      currentIndex={firstPending < 0 ? Math.max(questionSet.length - 1, 0) : firstPending}
+      supportedActions={supportedActions}
+      onStartTalking={readOnly ? onReadOnlyAction : onOpenQuestions}
+      onOpenStoryPages={onOpenStories}
+      onOpenBookBuilder={readOnly ? onReadOnlyAction : onOpenBookBuilder}
+    />
+  </SupporterContextFrame>;
 }
 
 export function Scene_SupportedStoryPages({
@@ -14171,9 +14999,16 @@ export function Scene_SupportRecordingAssist({
         : contentType.includes("aac")
           ? "aac"
           : "webm";
-      const storagePath = `${user.id}/${answerId}/part-01.${ext}`;
+      const projectId = project.book_project_id || project.id;
+      const storagePath = `${recordingStorageRoot(user.id, projectId, answerId)}/part-01.${ext}`;
 
       if (!draft.storagePaths.length) {
+        const { error: permitError } = await supabaseClient.rpc('reserve_recording_audio_upload', {
+          input_project_id: projectId,
+          input_question_id: nextQuestion.user_question_id,
+          input_answer_id: answerId
+        });
+        if (permitError) throw permitError;
         const { error: uploadError } = await supabaseClient.storage
         .from("audio")
         .upload(storagePath, audioBlob, {
@@ -14189,6 +15024,7 @@ export function Scene_SupportRecordingAssist({
       try {
         const transcription = await transcribeAudioOnServer({
         answerId,
+        userQuestionId: nextQuestion?.user_question_id,
         audioPaths: [storagePath],
         fallbackTranscript: transcript || "",
         bookProjectId: project.book_project_id,
@@ -14210,6 +15046,7 @@ export function Scene_SupportRecordingAssist({
         if (!transcriptRaw) throw new Error("No transcript to polish");
         const polished = await polishTranscriptOnServer({
           answerId,
+          userQuestionId: nextQuestion?.user_question_id,
           transcriptRaw,
           questionText: nextQuestion?.content || "",
           bookProjectId: project.book_project_id
@@ -14446,6 +15283,7 @@ export function Scene_SupportRecordingAssist({
 }
 
 export function Scene_BookBuilder({
+  productionContext = false,
   user,
   bookProjectId = null,
   project = null,
@@ -14460,8 +15298,10 @@ export function Scene_BookBuilder({
   checkoutWasCancelled = false,
   onPurchase = null,
   onReopenCheckout = null,
-  onBack
+  onBack,
+  adminPreviewClient = null
 }) {
+  const supabaseClient = adminPreviewClient || applicationSupabaseClient;
   const steps = readOnly || !onPurchase
     ? ["表紙", "収録", "紙面"]
     : ["表紙", "収録内容", "紙面確認", "オプション", "注文"];
@@ -14517,6 +15357,26 @@ export function Scene_BookBuilder({
   const [bookMediaByAnswerId, setBookMediaByAnswerId] = useState({});
   const [storiesLoading, setStoriesLoading] = useState(false);
   const [includedStoryIds, setIncludedStoryIds] = useState([]);
+  const [bookWork, setBookWork] = useState(null);
+  const [workSaving, setWorkSaving] = useState(false);
+  const [workError, setWorkError] = useState("");
+  const workSaveLock = useRef(false);
+  const saveSelection = async ids => {
+    const {data,error}=await supabaseClient.rpc("save_book_selection",{
+      input_project_id:bookProjectId,input_answer_ids:ids,input_expected_revision:bookWork?.revision ?? 0
+    });
+    if(error)throw error;
+    setBookWork(data);setIncludedStoryIds(data.answer_ids);return data;
+  };
+  const toggleWorkStory = async answer => {
+    if(readOnly || bookWork?.confirmed_at || workSaveLock.current)return;
+    workSaveLock.current=true;setWorkSaving(true);setWorkError("");
+    try {
+      await saveSelection(includedStoryIds.includes(answer.id)
+        ? includedStoryIds.filter(id=>id!==answer.id):[...includedStoryIds,answer.id]);
+    }catch(error){setWorkError(error.message || "収録選択を保存できませんでした。再読み込みしてください。");}
+    finally {workSaveLock.current=false;setWorkSaving(false);}
+  };
 
   useEffect(() => {
     if (!orderCompletedAt) return;
@@ -14595,6 +15455,12 @@ export function Scene_BookBuilder({
       updated_at: new Date().toISOString()
     };
 
+    if(bookWork?.snapshot?.cover) {
+      // Reprints/shipping may change; the completed cover may not.
+      for(const key of ["title","subtitle","footer_text","cover_style","cloth_color","print_color","cover_photo_path","cover_photo_transform"]) {
+        payload[key]=bookWork.snapshot.cover[key];
+      }
+    }
     const { error } = await supabaseClient
       .from("book_cover_settings")
       .upsert(payload, { onConflict: "book_project_id" });
@@ -14640,7 +15506,7 @@ export function Scene_BookBuilder({
       }
 
       try {
-        const { data, error } = await supabaseClient
+        const { data: liveCover, error } = await supabaseClient
           .from("book_cover_settings")
           .select("title, subtitle, footer_text, cover_style, cloth_color, print_color, cover_photo_path, cover_photo_transform, suggestions, standard_extra_copy_count, premium_copy_count, include_gift_package, premium_title, premium_subtitle, premium_footer_text, premium_cover_style, premium_cloth_color, premium_print_color, premium_cover_photo_mode, premium_cover_photo_path, premium_cover_photo_transform, shipping_address")
           .eq("book_project_id", bookProjectId)
@@ -14648,6 +15514,10 @@ export function Scene_BookBuilder({
         if (error) throw error;
         if (cancelled) return;
 
+        const {data:coverWork,error:coverWorkError}=await supabaseClient.rpc("get_book_work",{input_project_id:bookProjectId});
+        if(coverWorkError)throw coverWorkError;
+        const fixedCover=coverWork?.publication?.snapshot_metadata?.cover || coverWork?.snapshot?.cover;
+        const data=fixedCover ? {...liveCover,...fixedCover} : liveCover;
         if (data) {
           setBookTitle(data.title || "わたしの物語");
           setBookSubtitle(data.subtitle || "");
@@ -14804,6 +15674,7 @@ export function Scene_BookBuilder({
   };
 
   const getQuestionForAnswer = (answer) => {
+    if(bookWork?.snapshot) return bookWork.snapshot.questions.find(q=>q.id===answer.user_question_id)||null;
     return (questionSet || []).find(q =>
       Number(q.sequence_order) === Number(answer.sequence_order)
     ) || null;
@@ -14828,100 +15699,29 @@ export function Scene_BookBuilder({
 
     return answer.transcript_readable || answer.transcript_clean || answer.transcript_raw || "";
   };
-
   useEffect(() => {
-    const loadBookStories = async () => {
-      if (initialBookStories) {
-        setBookStories(initialBookStories);
-        setIncludedStoryIds(initialBookStories.map(row => row.id));
-        setBookMediaByAnswerId(initialBookMediaByAnswerId || {});
-        setStoriesLoading(false);
-        return;
+    let cancelled=false;
+    setBookWork(null);setBookStories([]);setIncludedStoryIds([]);setBookMediaByAnswerId({});
+    const load=async()=>{
+      if(!bookProjectId && initialBookStories) {
+        setBookStories(initialBookStories);setIncludedStoryIds(initialBookStories.map(row=>row.id));
+        setBookMediaByAnswerId(initialBookMediaByAnswerId||{});return;
       }
-
-      if (!user?.id) return;
-
+      if(!user?.id||!bookProjectId)return;
+      setStoriesLoading(true);setWorkError("");
       try {
-        setStoriesLoading(true);
-
-        const { data: answerRows, error: answerError } = await supabaseClient
-          .from("answers")
-          .select(`
-            id,
-            book_project_id,
-            sequence_order,
-            transcript_raw,
-            transcript_clean,
-            transcript_readable,
-            transcript_essay,
-            transcript_edited,
-            selected_style,
-            ai_mirror,
-            snippet,
-            meta_json,
-            created_at
-          `)
-          .eq("user_id", user.id)
-          .order("sequence_order", { ascending: true });
-
-        if (answerError) throw answerError;
-
-        const rows = answerRows || [];
-        setBookStories(rows);
-        setIncludedStoryIds(rows.map(row => row.id));
-
-        const answerIds = rows.map(row => row.id);
-
-        if (answerIds.length === 0) {
-          setBookMediaByAnswerId({});
-          return;
+        const {work,answers,mediaByAnswerId}=await loadBookWork(supabaseClient,bookProjectId);
+        if(cancelled)return;
+        setBookWork(work);setBookStories(answers);setIncludedStoryIds(work.answer_ids);setBookMediaByAnswerId(mediaByAnswerId);
+        if(work.snapshot?.cover) {
+          setBookTitle(work.snapshot.cover.title||"");setBookSubtitle(work.snapshot.cover.subtitle||"");
+          setBookFooterText(work.snapshot.cover.footer_text||"");
         }
-
-        const { data: mediaRows, error: mediaError } = await supabaseClient
-          .from("media_assets")
-          .select("id, answer_id, asset_type, storage_path, meta_json, created_at")
-          .in("answer_id", answerIds)
-          .order("created_at", { ascending: true });
-
-        if (mediaError) throw mediaError;
-
-        const grouped = {};
-
-        for (const media of mediaRows || []) {
-          if (!grouped[media.answer_id]) grouped[media.answer_id] = [];
-
-          let url = null;
-
-          if (media.asset_type === "photo") {
-            const { data: signed } = await supabaseClient.storage
-              .from("photos")
-              .createSignedUrl(media.storage_path, 60 * 60);
-
-            url = signed?.signedUrl || null;
-          }
-
-          if (media.asset_type === "audio") {
-            const { data: signed } = await supabaseClient.storage
-              .from("audio")
-              .createSignedUrl(media.storage_path, 60 * 60);
-
-            url = signed?.signedUrl || null;          
-          }
-
-          grouped[media.answer_id].push({ ...media, url });
-        }
-
-        setBookMediaByAnswerId(grouped);
-      } catch (e) {
-        console.error("book stories load error", e);
-        alert("語りの読み込みに失敗しました。");
-      } finally {
-        setStoriesLoading(false);
-      }
+      }catch(error){if(!cancelled)setWorkError(error.message||"作品を読み込めませんでした。");}
+      finally{if(!cancelled)setStoriesLoading(false);}
     };
-
-    loadBookStories();
-  }, [user?.id, initialBookStories, initialBookMediaByAnswerId]);
+    load();return()=>{cancelled=true;};
+  },[user?.id,bookProjectId,initialBookStories,initialBookMediaByAnswerId]);
 
   const handleCoverPhotoSelect = async draft => {
     if (!draft?.url) return;
@@ -15034,13 +15834,28 @@ export function Scene_BookBuilder({
   ].every(value => String(value || "").trim());
 
   const submitBookOrder = async () => {
-    if (!shippingAddressComplete || !orderQuote || !onPurchase) return;
+    if (!shippingAddressComplete || !orderQuote || !onPurchase || workSaving || workError || !bookWork) return;
+    if(!bookWork.confirmed_at && !window.confirm("選択した語りを、この紙ブックとWebブックの共通の収録内容として確定します。確定後は作品の内容を変更できません。ご本人が紙面を確認済みですか？"))return;
+    setWorkSaving(true);
     setShowCheckoutCancelled(false);
     const noPaymentRequired = Number(orderQuote.amount_total || 0) === 0;
     const checkoutWindow = noPaymentRequired ? null : prepareCheckoutWindow();
     try {
       setCoverSettingsSaveError("");
       await persistCoverSettings();
+      if(!bookWork.confirmed_at) {
+        const selection=await saveSelection(includedStoryIds);
+        const {data:confirmed,error}=await supabaseClient.rpc("confirm_book_work",{
+          input_project_id:bookProjectId,input_expected_revision:selection.revision,input_subject_confirmed:true
+        });
+        if(error)throw error;
+        setBookWork(confirmed);
+      }
+      const {data:publication,error:publishError}=await supabaseClient.functions.invoke("publish-voice-edition",{
+        // Fix the work without implicitly enabling anonymous QR access.
+        body:{action:"prepare",bookProjectId}
+      });
+      if(publishError || !publication?.success)throw publishError || Error(publication?.error||"Webブックを固定できませんでした");
       const started = await onPurchase({
         orderType: "self",
         discountCode: orderDiscountCode,
@@ -15059,13 +15874,15 @@ export function Scene_BookBuilder({
     } catch (error) {
       closeCheckoutWindow(checkoutWindow);
       console.error("book order settings save error", error);
-      setCoverSettingsSaveError("注文内容を保存できませんでした。もう一度お試しください。");
+      setCoverSettingsSaveError(error.message || "注文内容を保存できませんでした。もう一度お試しください。");
+    } finally {
+      setWorkSaving(false);
     }
   };
 
   const includedStories = [...bookStories]
     .filter(answer => includedStoryIds.includes(answer.id))
-    .sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0));
+    .sort((a, b) => includedStoryIds.indexOf(a.id) - includedStoryIds.indexOf(b.id));
 
   // 横組みの冊子では、右ページを奇数、左ページを偶数にします。
   // 扉を1ページ目とし、最初の見開きは左2・右3から始めます。
@@ -15199,7 +16016,7 @@ export function Scene_BookBuilder({
               />
             </div>
 
-            {!readOnly && <div className="glass-card p-5">
+            {!readOnly && !bookWork?.confirmed_at && <div className="glass-card p-5">
               <p className="text-white/82 text-[1.05rem] text-narrative mb-5">
                 基本パッケージ「スタンダード冊子」の表紙仕様
               </p>
@@ -15409,13 +16226,8 @@ export function Scene_BookBuilder({
                         <button
                           type="button"
                           aria-pressed={included}
-                          onClick={() => {
-                            setIncludedStoryIds(prev =>
-                              prev.includes(answer.id)
-                                ? prev.filter(id => id !== answer.id)
-                                : [...prev, answer.id]
-                            );
-                          }}
+                          disabled={workSaving || Boolean(bookWork?.confirmed_at) || (!productionContext && answer.access_override === "private_forever")}
+                          onClick={() => toggleWorkStory(answer)}
                           className={`relative w-14 h-8 rounded-full transition ${
                             included
                               ? "bg-emerald-700/85"
@@ -15548,7 +16360,7 @@ export function Scene_BookBuilder({
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-[0.82rem] text-white/76">縦糸横糸ブック-スタンダード冊子の増刷</p>
-                    <p className="mt-1 text-[0.62rem] text-white/32">2冊 10,000円・3冊目から1冊 4,000円</p>
+                    <p className="mt-1 text-[0.62rem] text-white/32">増刷1〜2冊目は1冊5,000円、3冊目以降は1冊4,000円（税込）</p>
                   </div>
                   <select
                     value={standardExtraCopyCount}
@@ -15556,7 +16368,7 @@ export function Scene_BookBuilder({
                     className="rounded-xl border border-white/12 bg-[#111b30] px-3 py-2 text-[0.76rem] text-white/72"
                     aria-label="スタンダード冊子の増刷冊数"
                   >
-                    {[0, ...Array.from({ length: 29 }, (_, index) => index + 2)].map(count => (
+                    {Array.from({ length: 31 }, (_, index) => index).map(count => (
                       <option key={count} value={count} disabled={count < Number(orderQuote?.standard_extra_copy_count_already_purchased || 0)}>
                         {count === 0 ? "増刷なし" : `${count}冊増刷`}
                       </option>
@@ -15836,7 +16648,7 @@ export function Scene_BookBuilder({
                     <button
                       type="button"
                       onClick={purchaseStatus === "checkout_opened" ? onReopenCheckout : submitBookOrder}
-                      disabled={!shippingAddressComplete || purchaseStatus === "starting" || purchaseStatus === "checking"}
+                      disabled={!shippingAddressComplete || workSaving || Boolean(workError) || !bookWork || purchaseStatus === "starting" || purchaseStatus === "checking"}
                       className="btn-quiet mt-5 w-full rounded-full bg-white/10 py-4 text-white/88 disabled:opacity-40"
                     >
                       {purchaseStatus === "checkout_opened"
@@ -15856,6 +16668,7 @@ export function Scene_BookBuilder({
           )
         )}
 
+        {workError && <p role="alert" className="text-rose-200">{workError}</p>}
         <div className="pt-5 border-t border-white/10 flex gap-3">
           <button
             type="button"
@@ -15885,9 +16698,15 @@ export function Scene_BookBuilder({
   );
 }
 
-function Scene0_Door({ onNext }) {
+function Scene0_Door({ onNext, onHome }) {
   return (
-    <div className="h-full flex flex-col items-center justify-center text-center fade-enter px-4">
+    <div className="scene-door flex-1 flex flex-col fade-enter px-4">
+      {onHome && <div className="w-full pt-3">
+        <button type="button" onClick={onHome} className="min-h-[44px] text-white/62 text-[1rem]">
+          ← ホームへ
+        </button>
+      </div>}
+      <div className="flex-1 flex flex-col items-center justify-center text-center">
       <div className="space-y-6 mb-16 text-narrative">
         <p className="text-[1.1rem] text-white/90">
           この時間は、少し落ち着いて<br/>過ごせるときに開いてみてください
@@ -15900,52 +16719,96 @@ function Scene0_Door({ onNext }) {
       >
         この時間を始める
       </button>
+      </div>
     </div>
   );
 }
 
 function RecordingQuestionPrompt({ question }) {
-  const hasGuidance = !!(
-    question.prompt_hint ||
-    question.reassurance_text
-  );
+  const isDailyLifeQuestion = /最近は[、,]?\s*どんなふうに.*一日を過ごす/.test(question.content || "");
+  const guidance = (bookendKindForQuestion(question)
+    ? ["短くても大丈夫です。"]
+    : isDailyLifeQuestion
+    ? ["いつもの一日から、よくしていることを一つ。", "特別な出来事でなくても大丈夫です。"]
+    : [question.prompt_hint, question.reassurance_text])
+    .filter(Boolean)
+    .filter((text, index, all) => all.indexOf(text) === index);
 
   return (
-    <div className="space-y-3">
-      <div className="glass-card px-5 py-6 text-center">
+    <div className="space-y-3 reading-question">
+      <div className="glass-card recording-question-card px-5 py-6 text-center">
         <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
           {question.content}
         </p>
       </div>
 
-      {hasGuidance && (
-        <aside className="recording-guidance text-left" aria-label="ヒント">
-          <p className="mb-2 text-[0.66rem] tracking-[0.16em] text-white/34">
-            💡ヒント
-          </p>
-
-          {question.prompt_hint && (
-            <p className="text-white/55 text-sm leading-loose">
-              {question.prompt_hint}
-            </p>
-          )}
-
-          {question.reassurance_text && (
-            <p className={`${question.prompt_hint ? "mt-1" : ""} text-white/40 text-xs leading-loose`}>
-              {question.reassurance_text}
-            </p>
-          )}
+      {guidance.length > 0 && (
+        <aside className="recording-question-hint" aria-label="ヒント">
+          <p className="recording-question-hint-label">💡 ヒント</p>
+          {guidance.map((text) => <p key={text}>{text}</p>)}
         </aside>
       )}
     </div>
   );
 }
 
-function Scene1_MyPage({
+function RecordingQuestionHeader({ question, userName, storyProgress, sectionLabel, isFormalOnboarding, onBack }) {
+  return (
+    <header className="question-flow-header mb-5 pt-2 text-left">
+      <div className="question-flow-back-slot">
+        {onBack && <button type="button" onClick={onBack} className="min-h-[44px] text-white/68 text-[1rem]" aria-label="前の画面へ戻る">
+          ← 戻る
+        </button>}
+      </div>
+      <h1 className="sr-only">
+        {withHonorific(userName)}の物語
+      </h1>
+      <div className={isFormalOnboarding ? "flex items-center justify-between gap-4" : "space-y-2"}>
+        <p className={`text-white/60 text-[1rem] tracking-widest ${isFormalOnboarding ? "truncate" : ""}`}>
+          {sectionLabel}
+        </p>
+        {!isFormalOnboarding && (
+          <div className="w-full h-[2px] bg-white/10 rounded-full">
+            <div className="h-full bg-white/40" style={{width: `${((storyProgress.currentIndex + 1) / Math.max(storyProgress.total, 1)) * 100}%`}} />
+          </div>
+        )}
+        {isFormalOnboarding && question.progress_label && (
+          <p className="shrink-0 text-white/55 text-[1rem] tracking-widest">
+            {String(question.progress_label).replace(/\s*\/\s*/g, "/")}
+          </p>
+        )}
+      </div>
+    </header>
+  );
+}
+
+function RecordingStartButton({ onClick }) {
+  return (
+    <button type="button" onClick={onClick} className="recording-start-bar" aria-label="録音を始める">
+      <Mic size={22} strokeWidth={1.7} aria-hidden="true" />
+      <span>録音を始める</span>
+    </button>
+  );
+}
+
+function recordingSectionLabel(question) {
+  if (!isFormalOnboardingQuestion(question)) {
+    return question.chapter_label || question.chapter || question.chapter_description;
+  }
+  if (question.onboarding_group === "trial_experience") return "体験の一頁";
+  if (question.onboarding_group === "starting_motivation") return "門出の声";
+  if (question.onboarding_group === "starting_conversation") return "はじめの会話";
+  if (question.onboarding_group === "voice_intro") return "物語の入口";
+  return "人生の輪郭";
+}
+
+export function Scene1_MyPage({
   progress,
   storyProgress = progress,
   question,
   userName,
+  skyOverride,
+  onBack,
   onNext,
   onSkip,
   onEndToday
@@ -15953,70 +16816,24 @@ function Scene1_MyPage({
   const isFormalOnboarding = isFormalOnboardingQuestion(question);
   const isOnboardingQuestion = isFormalOnboarding;
 
-  const sectionLabel = isFormalOnboarding
-    ? question.onboarding_group === "trial_experience"
-      ? "体験の一頁"
-      : question.onboarding_group === "starting_motivation"
-      ? "門出の声"
-      : question.onboarding_group === "starting_conversation"
-      ? "はじめの会話"
-      : question.onboarding_group === "voice_intro"
-        ? "物語の入口"
-        : "人生の輪郭"
-    : question.chapter_label || question.chapter || question.chapter_description;
+  const sectionLabel = recordingSectionLabel(question);
 
   return (
-    <div className="h-full flex flex-col fade-enter overflow-y-auto pb-4">
-      <header className="mb-5 pt-2">
-        <h1 className="text-white/70 text-sm tracking-widest mb-4">
-          {withHonorific(userName)}の物語
-        </h1>
-
-        <div className={isFormalOnboarding ? "flex items-center justify-between gap-4" : "space-y-2"}>
-          <p className={`text-white/60 text-sm tracking-widest ${isFormalOnboarding ? "truncate" : ""}`}>
-            {sectionLabel}
-          </p>
-
-          {!isOnboardingQuestion && (
-            <>
-              <div className="w-full h-[2px] bg-white/10 rounded-full">
-                <div
-                  className="h-full bg-white/40"
-                  style={{
-                    width: `${((storyProgress.currentIndex + 1) / Math.max(storyProgress.total, 1)) * 100}%`
-                  }}
-                />
-              </div>
-            </>
-          )}
-
-          {isFormalOnboarding && question.progress_label && (
-            <p className="shrink-0 text-white/55 text-sm tracking-widest">
-              {String(question.progress_label).replace(/\s*\/\s*/g, "/")}
-            </p>
-          )}
-        </div>
-      </header>
+    <StorySkySurface className="question-flow-content h-full flex flex-col overflow-y-auto pb-4" skyOverride={skyOverride}>
+      <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={onBack} />
 
       <RecordingQuestionPrompt question={question} />
 
       <div className="recording-control-dock recording-control-dock--start mt-5">
-        <button
-          type="button"
-          onClick={onNext}
-          className="recording-icon-button recording-icon-button--start"
-          aria-label="録音を始める"
-        >
-          <Mic size={30} strokeWidth={1.55} aria-hidden="true" />
-        </button>
+        <RecordingStartButton onClick={onNext} />
       </div>
 
       {!isTokenMode() && (
         <div className="mt-5 flex items-center justify-center gap-3 pb-2">
-          {!isOnboardingQuestion && (
+          {(!isOnboardingQuestion || question?.onboarding_group === "starting_motivation") && (
             <button
               onClick={onSkip}
-              className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-sm underline underline-offset-4"
+              className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-[1rem] underline underline-offset-4"
             >
               スキップ
             </button>
@@ -16024,13 +16841,13 @@ function Scene1_MyPage({
 
           <button
             onClick={onEndToday}
-            className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-sm underline underline-offset-4"
+            className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-[1rem] underline underline-offset-4"
           >
             今日はここまで
           </button>
         </div>
       )}
-    </div>
+    </StorySkySurface>
   );
 }
 
@@ -16095,19 +16912,21 @@ function QuietRecordingCircle({ seconds = 0, isPaused = false }) {
   );
 }
 
-function Scene_DailyMicCheck({ onComplete }) {
+export function Scene_DailyMicCheck({ onComplete }) {
   const [voiceLevel, setVoiceLevel] = useState(0);
-  const [showHelp, setShowHelp] = useState(false);
-  const [micStatus, setMicStatus] = useState("checking");
+  const [micStatus, setMicStatus] = useState("idle");
 
   const streamRef = useRef(null);
   const audioContextRef = useRef(null);
   const waveTimerRef = useRef(null);
+  const requestIdRef = useRef(0);
+  const mountedRef = useRef(false);
 
   useEffect(() => {
-    startCheck();
-
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
+      requestIdRef.current += 1;
       stopCheck();
     };
   }, []);
@@ -16130,15 +16949,20 @@ function Scene_DailyMicCheck({ onComplete }) {
   };
 
   const startCheck = async () => {
-    setShowHelp(false);
+    const requestId = ++requestIdRef.current;
     setVoiceLevel(0);
     setMicStatus("checking");
     stopCheck();
  
     try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone API unavailable');
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true
       });
+      if (!mountedRef.current || requestId !== requestIdRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
 
       streamRef.current = stream;
       setMicStatus("ready");
@@ -16147,13 +16971,13 @@ function Scene_DailyMicCheck({ onComplete }) {
       if (!AudioContext) return;
 
       const ctx = new AudioContext();
+      audioContextRef.current = ctx;
+      ctx.resume().catch(() => {});
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
 
       analyser.fftSize = 256;
       source.connect(analyser);
-
-      audioContextRef.current = ctx;
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
@@ -16173,87 +16997,47 @@ function Scene_DailyMicCheck({ onComplete }) {
       }, 120);
     } catch (e) {
       console.error(e);
-      setMicStatus("error");
-      setShowHelp(true);
+      if (mountedRef.current && requestId === requestIdRef.current) {
+        stopCheck();
+        setMicStatus("error");
+      }
     }
   };
 
-  const proceed = () => {
+  const proceed = (verified) => {
+    requestIdRef.current += 1;
     stopCheck();
-    onComplete();
+    onComplete({ verified });
   };
 
-  return (
-    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
-      <div className="space-y-6 mb-10 text-narrative">
-        <p className="text-white/90 text-[1.08rem]">
-          声の届き方を確認します
-        </p>
+  if (micStatus === 'error') {
+    return <MicAccessGuide onRetry={startCheck} onContinue={() => proceed(false)} />;
+  }
 
-        <p className="text-white/60 text-[0.98rem] leading-loose">
-          ひとこと、声を出してみてください。<br />
-          波形が動けば準備できています。
-        </p>
-      </div>
-
-      <div className="glass-card py-8 px-5 w-full max-w-[320px] mb-8">
-      <p className="text-white/45 text-sm leading-loose mb-6">
-        {micStatus === "checking"
-          ? "マイクを確認しています。"
-          : micStatus === "ready"
-            ? "声を出すと、波形が少し動きます。"
-            : "マイクを確認できませんでした。"}
-      </p>
-
-        <VoiceWave level={voiceLevel} />
-      </div>
-
-      {showHelp && (
-        <div className="glass-card p-5 w-full max-w-[320px] mb-8">
-          <p className="text-white/75 text-sm leading-loose mb-3">
-            {micStatus === "error"
-              ? "マイクを確認できませんでした。"
-              : "波形が動かない場合"}
-          </p>
-
-          <p className="text-white/48 text-sm leading-loose">
-            {micStatus === "error"
-              ? "ブラウザのマイク許可を確認して、もう一度試してください。"
-              : "少し大きめの声で話してみてください。端末のマイク部分を手でふさいでいないかも確認してください。"}
-          </p>
-
-          <button
-            type="button"
-            onClick={startCheck}
-            className="mt-5 btn-quiet bg-white/10 w-full py-3 rounded-full text-white"
-          >
-            もう一度試す
-          </button>
-        </div>
-      )}
-
-      {!showHelp && (
-        <button
-          type="button"
-          onClick={() => setShowHelp(true)}
-          className="mb-8 text-white/40 text-sm underline underline-offset-4 leading-loose"
-        >
-          波形が動かない場合は、こちらをクリック
-        </button>
-      )}
-
-      <button
-        type="button"
-        onClick={proceed}
-        disabled={micStatus === "checking"}
-        className={`btn-quiet bg-white/10 w-full max-w-[280px] py-4 rounded-full text-white ${
-          micStatus === "checking" ? "opacity-40" : ""
-        }`}
-      >
-        {micStatus === "checking" ? "確認中..." : "問いに進む"}
+  return <div className="daily-mic-check fade-enter">
+    <p className="daily-mic-kicker">録音の準備</p>
+    {micStatus === 'ready' ? <>
+      <h1>マイクを<br />確認できました</h1>
+      <div className="daily-mic-wave"><VoiceWave level={voiceLevel} /></div>
+      <p className="daily-mic-copy">ひとこと話すと、波形が動きます。</p>
+      <button type="button" className="daily-mic-primary" onClick={() => proceed(true)}>問いに進む</button>
+      <button type="button" className="daily-mic-secondary" onClick={startCheck}>もう一度確認する</button>
+    </> : <>
+      <h1>声が届くか<br />確かめます</h1>
+      <div className="daily-mic-symbol" aria-hidden="true"><Mic /></div>
+      <p className="daily-mic-copy">次に小さな確認が出たら<br /><strong>「許可」</strong>を押してください。</p>
+      <p className="daily-mic-note">ここでは録音・保存されません</p>
+      <button type="button" className="daily-mic-primary" onClick={startCheck} disabled={micStatus === 'checking'}>
+        {micStatus === 'checking' ? 'マイクを確認しています…' : 'マイクを使う'}
       </button>
-    </div>
-  );
+      <button type="button" className="daily-mic-secondary" onClick={() => proceed(false)}>問いだけ先に見る</button>
+      <button type="button" className="daily-mic-quiet" onClick={() => {
+        requestIdRef.current += 1;
+        stopCheck();
+        setMicStatus('error');
+      }}>「許可」が出ないとき</button>
+    </>}
+  </div>;
 }
 
 export function Scene_Recording({
@@ -16262,6 +17046,8 @@ export function Scene_Recording({
   storyProgress = progress,
   userName,
   autoStart = false,
+  onBack,
+  onJourneyEvent = () => {},
   onComplete
 }) {
   const [step, setStep] = useState(autoStart ? "checking_mic" : 0);
@@ -16295,16 +17081,8 @@ export function Scene_Recording({
   const interimRef = useRef("");
 
   const isFormalOnboarding = isFormalOnboardingQuestion(question);
-  const isOnboardingQuestion = isFormalOnboarding;
 
-  const sectionLabel = isFormalOnboarding
-    ? question.onboarding_group === "starting_conversation" ||
-      question.onboarding_group === "starting_motivation"
-      ? "はじめの会話"
-      : question.onboarding_group === "voice_intro"
-        ? "物語の入口"
-        : "人生の輪郭"
-    : question.chapter_label || question.chapter || question.chapter_description;
+  const sectionLabel = recordingSectionLabel(question);
 
   const isIOSLikeBrowser = () => {
     const ua = navigator.userAgent || "";
@@ -16566,6 +17344,7 @@ const start = async () => {
   } catch (e) {
     console.error(e);
     setStep("mic_error");
+    onJourneyEvent(e?.name === 'NotAllowedError' ? 'mic_denied' : 'mic_unavailable');
   }
 };
 
@@ -16645,6 +17424,7 @@ const startActualRecording = async (preparedStream = null) => {
       };
 
       mediaRef.current.onerror = e => {
+        onJourneyEvent('recording_failed');
         console.error("[recording-debug] MediaRecorder error", {
           runId: debugRunIdRef.current,
           error: e
@@ -16726,6 +17506,7 @@ mediaRef.current.onstop = () => {
           interimRef.current
         ].filter(Boolean).join(" "));
 
+        onJourneyEvent('recording_end');
         onComplete(
           finalTranscript,
           timeRef.current,
@@ -16746,6 +17527,7 @@ mediaRef.current.onstop = () => {
       };
 
 mediaRef.current.start(1000);
+onJourneyEvent('recording_start');
 clockRef.current.start();
 
 console.log("[recording-debug] MediaRecorder started with timeslice", {
@@ -16800,6 +17582,7 @@ console.log("[recording-debug] recorder-only: wave monitor not used while record
       console.error(e);
       stopWaveMonitor();
       alert("マイクが使えません: " + e.message);
+      onJourneyEvent(e?.name === 'NotAllowedError' ? 'mic_denied' : 'recording_failed');
       setStep(0);
     }
   };
@@ -16918,73 +17701,20 @@ const stop = (reason = "manual") => {
   else setTimeout(finishRecording, 1200);
 };
 
-const isRecordingActive = step === 1;
-
 return (
-<div className="h-full flex flex-col text-center pt-2 pb-4 overflow-y-auto">
-  <header className={`${isRecordingActive ? "mb-3" : "mb-5"} text-left`}>
-    {isRecordingActive ? (
-      <div className="flex items-center justify-between gap-4 pl-1 pr-14">
-        <p className="text-white/50 text-xs tracking-widest truncate">
-          {sectionLabel}
-        </p>
-        <p className="text-white/35 text-xs tracking-widest shrink-0">
-          {question.progress_label
-            ? String(question.progress_label).replace(/\s*\/\s*/g, "/")
-            : !isOnboardingQuestion
-              ? `${storyProgress.currentIndex + 1}/${storyProgress.total}`
-              : ""}
-        </p>
-      </div>
-    ) : (
-      <>
-        <h1 className="text-white/70 text-sm tracking-widest mb-5">
-          {withHonorific(userName)}の物語
-        </h1>
-
-        <div className={isFormalOnboarding ? "flex items-center justify-between gap-4" : "space-y-2"}>
-          <p className={`text-white/60 text-sm tracking-widest ${isFormalOnboarding ? "truncate" : ""}`}>
-            {sectionLabel}
-          </p>
-
-          {!isOnboardingQuestion && (
-            <div className="w-full h-[2px] bg-white/10 rounded-full">
-              <div
-                className="h-full bg-white/40"
-                style={{
-                  width: `${((storyProgress.currentIndex + 1) / Math.max(storyProgress.total, 1)) * 100}%`
-                }}
-              />
-            </div>
-          )}
-
-          {isFormalOnboarding && question.progress_label && (
-            <p className="shrink-0 text-white/55 text-sm tracking-widest">
-              {String(question.progress_label).replace(/\s*\/\s*/g, "/")}
-            </p>
-          )}
-        </div>
-      </>
-    )}
-  </header>
+<StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4">
+  <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={step === "checking_mic" || step === "mic_error" ? onBack : null} />
 
   <RecordingQuestionPrompt question={question} />
 
 {step === 0 && (
   <div className="recording-control-dock recording-control-dock--start mt-5">
-    <button
-      type="button"
-      onClick={start}
-      className="recording-icon-button recording-icon-button--start"
-      aria-label="録音を始める"
-    >
-      <Mic size={30} strokeWidth={1.55} aria-hidden="true" />
-    </button>
+    <RecordingStartButton onClick={start} />
   </div>
 )}
 
       {step === "checking_mic" && (
-        <div className="py-6 text-center fade-enter">
+        <div className="recording-countdown-slot text-center">
           <p className="text-white/70 text-[1.05rem] text-narrative">
             マイクを確認しています
           </p>
@@ -16992,28 +17722,11 @@ return (
       )}
 
       {step === "mic_error" && (
-        <div className="pt-5 text-center fade-enter">
-          <div className="glass-card p-6 mb-8">
-            <p className="text-white/85 text-[1.05rem] text-narrative mb-4">
-              マイクが使えませんでした
-            </p>
-
-            <p className="text-white/55 text-sm leading-loose">
-              ブラウザの設定で、マイクの使用を許可してください。
-            </p>
-          </div>
-
-          <button
-            onClick={start}
-            className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
-          >
-            もう一度試す
-          </button>
-        </div>
+        <MicAccessGuide onRetry={start} onContinue={onBack} continueLabel="問いに戻る" />
       )}
 
       {step === "countdown" && (
-        <div className="py-6 text-center fade-enter">
+        <div className="recording-countdown-slot text-center">
           <p className="text-white/82 text-[4.2rem] leading-none font-light">
             {countdown}
           </p>
@@ -17023,38 +17736,38 @@ return (
 {step === 1 && (
   <div className="recording-control-dock mt-4">
           {time >= RECORDING_WARNING_SECONDS && (
-            <p role="status" className="mb-4 text-amber-100/85 text-sm leading-relaxed">
-              あと1分で、いったん録音を区切ります。続きも残せます。
+            <p role="status" className="mb-4 text-amber-100/85 text-[1rem] leading-relaxed">
+              まもなく録音を区切ります。続きも語れます。
             </p>
           )}
           <div className="recording-status-row" aria-live="polite">
             <span className={`recording-live-dot ${isPaused ? "is-paused" : ""}`} aria-hidden="true" />
-            <span className="text-white/50 text-[0.78rem] tracking-[0.18em] tabular-nums">
-              {Math.floor(time / 60)}:{String(time % 60).padStart(2, "0")}
-            </span>
+            <span className="recording-state-label">{isPaused ? "一時停止中" : "録音中"}</span>
           </div>
 
-          <div className="flex items-center justify-center gap-7">
+          <div className="recording-action-row">
           <button
             type="button"
             onClick={isPaused ? resumeRecording : pauseRecording}
-            className="recording-icon-button recording-icon-button--pause"
+            className="recording-action-button recording-action-button--pause"
             aria-label={isPaused ? "録音を再開" : "録音を一時停止"}
           >
             {isPaused ? (
-              <Play size={25} strokeWidth={1.5} fill="currentColor" aria-hidden="true" />
+              <Play size={21} strokeWidth={1.5} fill="currentColor" aria-hidden="true" />
             ) : (
-              <Pause size={25} strokeWidth={1.5} fill="currentColor" aria-hidden="true" />
+              <Pause size={21} strokeWidth={1.5} fill="currentColor" aria-hidden="true" />
             )}
+            <span>{isPaused ? "再開" : "一時停止"}</span>
           </button>
 
 <button
   type="button"
   onClick={stop}
-  className="recording-icon-button recording-icon-button--stop"
-  aria-label="録音を終了"
+  className="recording-action-button recording-action-button--stop"
+  aria-label="録音を終える"
 >
-  <Square size={17} strokeWidth={1.45} fill="currentColor" aria-hidden="true" />
+  <Square size={20} strokeWidth={1.45} aria-hidden="true" />
+  <span>録音を終える</span>
 </button>
           </div>
   </div>
@@ -17062,12 +17775,12 @@ return (
 
 {step === 2 && (
   <div className="py-6">
-    <p className="text-white/38 text-sm tracking-widest">
+    <p className="text-white/38 text-[1rem] tracking-widest">
       声を、言葉にしています...
     </p>
   </div>
 )}
-    </div>
+    </StorySkySurface>
   );
 }
 
@@ -17110,9 +17823,11 @@ export function Scene3_5_VoiceCheck({
     "";
 
   const hasTranscriptionError = data.transcriptionStatus === "error";
+  const hasUploadError = hasTranscriptionError && data.transcriptionFailureStage === "upload";
+  const hasPolishError = data.polishStatus === "error";
   const isProcessing = data.transcriptionStatus === "processing";
   const isPolishing = data.polishStatus === "processing";
-  const canUseStyles = !isProcessing && !isPolishing && !!displayText;
+  const canUseStyles = !hasTranscriptionError && !hasPolishError && !isProcessing && !isPolishing && !!displayText;
 
   const toggleAudioPreview = async () => {
     const audio = audioPreviewRef.current;
@@ -17186,15 +17901,17 @@ return (
     </div>
 
       <div className="flex-1 overflow-y-auto pb-6">
-        {data.recordingStopReason === "limit" && <p role="status" className="mb-5 text-white/70 text-sm leading-loose text-center">{RECORDING_LIMIT_NOTICE}</p>}
+        {data.recordingStopReason === "limit" && <p role="status" className="mb-5 text-white/70 text-[1rem] leading-loose text-center">{RECORDING_LIMIT_NOTICE}</p>}
         {hasTranscriptionError && (
           <div className="glass-card p-5 mb-6">
-            <p className="text-white/75 text-sm leading-loose mb-3">
-              文字起こしに時間がかかっています。
+            <p className="text-white/75 text-[1rem] leading-loose mb-3">
+              {data.transcriptionFailureStage === "upload" ? "音声を保存できませんでした。" : "文字起こしを完了できませんでした。"}
             </p>
 
-            <p className="text-white/48 text-sm leading-loose mb-5">
-              音声は保存されています。通信が安定してから、もう一度試せます。
+            <p className="text-white/48 text-[1rem] leading-loose mb-5">
+              {data.transcriptionFailureStage === "upload"
+                ? "音声のサーバー保存は完了していません。この画面を閉じずに、もう一度お試しください。"
+                : "音声のアップロードは完了しています。文字起こしをもう一度試せます。"}
             </p>
 
             <button
@@ -17202,9 +17919,15 @@ return (
               onClick={onRetryTranscription}
               className="btn-quiet bg-white/10 w-full py-3 rounded-full text-white"
             >
-              文字起こしをもう一度試す
+              {data.transcriptionFailureStage === "upload" ? "音声の保存をもう一度試す" : "文字起こしをもう一度試す"}
             </button>
           </div>
+        )}
+
+        {hasPolishError && !hasTranscriptionError && (
+          <p role="status" className="mb-5 text-white/65 text-[1rem] leading-loose">
+            文章を整えられませんでした。文字起こしの本文は保存できます。
+          </p>
         )}
 
         <div className="glass-card p-5 mb-6">
@@ -17225,7 +17948,7 @@ return (
             type="button"
             disabled={!canUseStyles || isEditingTranscript}
             onClick={() => onSelectStyle("clean")}
-            className={`flex-1 py-2 rounded-full text-xs border ${
+            className={`flex-1 py-2 rounded-full text-[1rem] border ${
               data.selectedStyle === "clean"
                 ? "bg-white/15 border-white/25 text-white"
                 : "border-white/10 text-white/45"
@@ -17238,7 +17961,7 @@ return (
             type="button"
             disabled={!canUseStyles || isEditingTranscript}
             onClick={() => onSelectStyle("readable")}
-            className={`flex-1 py-2 rounded-full text-xs border ${
+            className={`flex-1 py-2 rounded-full text-[1rem] border ${
               data.selectedStyle === "readable"
                 ? "bg-white/15 border-white/25 text-white"
                 : "border-white/10 text-white/45"
@@ -17251,7 +17974,7 @@ return (
             type="button"
             disabled={!canUseStyles || isEditingTranscript}
             onClick={() => onSelectStyle("essay")}
-            className={`flex-1 py-2 rounded-full text-xs border ${
+            className={`flex-1 py-2 rounded-full text-[1rem] border ${
               data.selectedStyle === "essay"
                ? "bg-white/15 border-white/25 text-white"
                 : "border-white/10 text-white/45"
@@ -17263,7 +17986,7 @@ return (
         )}
 
         {(isProcessing || isPolishing) && (
-          <div className={`${displayText ? "mb-4" : ""} flex items-center gap-3 text-white/45 text-sm leading-loose`}>
+          <div className={`${displayText ? "mb-4" : ""} flex items-center gap-3 text-white/45 text-[1rem] leading-loose`}>
             <div className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/70 animate-spin shrink-0"></div>
             <p>{isProcessing ? "文字起こし中です" : "文章を整えています"}</p>
           </div>
@@ -17293,7 +18016,7 @@ return (
         title={isAudioPlaying ? "停止" : "録音を再生"}
       >
         <span
-          className={`text-xs ${
+          className={`text-[1rem] ${
             isAudioPlaying ? "text-amber-200/80" : "text-white/65"
           }`}
           aria-hidden="true"
@@ -17331,7 +18054,7 @@ return (
                   <button
                     type="button"
                     onClick={cancelTranscriptEdit}
-                    className="flex-1 py-3 rounded-full border border-white/10 text-white/45 text-sm"
+                    className="flex-1 py-3 rounded-full border border-white/10 text-white/45 text-[1rem]"
                   >
                     キャンセル
                   </button>
@@ -17339,7 +18062,7 @@ return (
                   <button
                     type="button"
                     onClick={applyTranscriptEdit}
-                    className="flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm"
+                    className="flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-[1rem]"
                   >
                     反映する
                   </button>
@@ -17348,7 +18071,7 @@ return (
             )}
           </>
         ) : !isProcessing ? (
-          <p className="text-white/45 text-sm leading-loose">
+          <p className="text-white/45 text-[1rem] leading-loose">
             文字起こしを取得できませんでした。
           </p>
         ) : null}
@@ -17357,11 +18080,11 @@ return (
 
         {hasReachedAddMoreLimit && !data.editRecordingMode && (
           <div className="glass-card p-5 mb-6">
-            <p className="text-white/70 text-sm leading-loose mb-3">
+            <p className="text-white/70 text-[1rem] leading-loose mb-3">
               語り足しの上限に達しました
             </p>
 
-            <p className="text-white/48 text-sm leading-loose">
+            <p className="text-white/48 text-[1rem] leading-loose">
               ここからは本文の編集で整えられます。
             </p>
           </div>
@@ -17384,7 +18107,7 @@ return (
        {showSubtleAddMore && (
          <button
            onClick={onAddMore}
-           className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
+           className="w-full py-3 text-white/45 text-[1rem] underline underline-offset-4"
          >
            少し話し足す
          </button>
@@ -17392,9 +18115,9 @@ return (
 
         <button
           onClick={onProceed}
-          disabled={isProcessing || isPolishing || !displayText}
+          disabled={hasUploadError || isProcessing || isPolishing || !displayText}
           className={`btn-quiet w-full py-4 rounded-full text-white ${
-            isProcessing || isPolishing || !displayText ? "opacity-40" : ""
+            hasUploadError || isProcessing || isPolishing || !displayText ? "opacity-40" : ""
           }`}
         >
           {isLifeOutline
@@ -17407,7 +18130,7 @@ return (
         <button
           onClick={onRetry}
           disabled={isProcessing || isPolishing}
-          className={`w-full py-3 text-white/45 text-sm underline underline-offset-4 ${
+          className={`w-full py-3 text-white/45 text-[1rem] underline underline-offset-4 ${
             isProcessing || isPolishing ? "opacity-40" : ""
           }`}
         >
@@ -17518,7 +18241,7 @@ function BookPageAddedVisual() {
   );
 }
 
-function Scene6_Completion({ onTalkMore, onHome, onEndToday }) {
+export function Scene6_Completion({ onTalkMore, onHome, onEndToday }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter text-center">
       <p className="text-white/90 text-[1.05rem] mb-2">
@@ -17590,7 +18313,7 @@ function Scene_TokenCompletion({ onLogin }) {
   );
 }
 
-function Scene_EndToday({
+export function Scene_EndToday({
   notificationPref,
   hasSavedAnswer,
   onOpenStoryPages,
@@ -17599,41 +18322,40 @@ function Scene_EndToday({
   const nextDeliveryText = getNextDeliveryText(notificationPref);
 
   return (
-    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
-      <div className="space-y-7 mb-12 text-narrative">
-        <p className="text-white/90 text-[1.08rem]">
-          今日はここまでにしましょう
-        </p>
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 py-8">
+      <div className="mb-10 w-full max-w-[360px]">
+        <h1 className="text-center text-[1.25rem] font-medium leading-relaxed text-white/95">
+          <span className="inline-block">今日はここまでに</span><span className="inline-block">しましょう</span>
+        </h1>
 
-        <p className="text-white/65 text-[0.98rem] leading-loose">
-          {hasSavedAnswer ? (
-            <>
-              今日の語りは、<br />
-              ちゃんと残っています。
-            </>
-          ) : (
-            <>
-              今の問いは、そのまま残っています。<br />
-              答えたり、飛ばしたことにはなりません。
-            </>
-          )}
-        </p>
+        <div className="mt-8 space-y-5 text-left text-base leading-[1.8] tracking-normal">
+          <p className="text-white/90">
+            {hasSavedAnswer ? (
+              "今日の語りは保存されています。"
+            ) : (
+              <>
+                <span className="block">今の問いは残っています。</span>
+                <span className="block"><span className="inline-block">回答もスキップも</span><span className="inline-block">していません。</span></span>
+              </>
+            )}
+          </p>
 
-        <p className="text-white/55 text-[0.95rem] leading-loose">
-          {hasSavedAnswer
-            ? nextDeliveryText
-            : "次に開いたとき、同じ問いから再開できます。"}
-        </p>
+          <p className="text-white/85">
+            {hasSavedAnswer
+              ? nextDeliveryText
+              : <><span className="inline-block">次回は同じ問いから</span><span className="inline-block">再開できます。</span></>}
+          </p>
 
-        <p className="text-white/45 text-[0.92rem] leading-loose">
-          この画面は、そのまま閉じて大丈夫です。
-        </p>
+          <p className="text-white/80">
+            <span className="inline-block">この画面は閉じて</span><span className="inline-block">大丈夫です。</span>
+          </p>
+        </div>
       </div>
 
       <div className="flex flex-col gap-4 w-full max-w-[280px]">
         <button
           onClick={onOpenStoryPages}
-          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+          className="btn-quiet bg-white/10 w-full py-4 rounded-full text-base text-white"
         >
           これまでの語りを見る
         </button>
@@ -17641,7 +18363,7 @@ function Scene_EndToday({
         {!hasSavedAnswer && (
           <button
             onClick={onResume}
-            className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
+            className="w-full py-3 text-base text-white/80 underline underline-offset-4"
           >
             問いに戻る
           </button>
@@ -18039,16 +18761,18 @@ handles.map(handle => (
 }
 
 
-function PhotoCorrectionFlow({
+export function PhotoCorrectionFlow({
   open,
   title = "写真を添える",
   initialFile = null,
   onClose,
-  onComplete
+  onComplete,
+  awaitCompletion = false
 }) {
   const libraryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const initializedFileRef = useRef(null);
+  const confirmationLock = useRef(false);
   const [scanPreview, setScanPreview] = useState(null);
 
   const isDesktopBrowser =
@@ -18330,10 +19054,28 @@ function PhotoCorrectionFlow({
     });
   };
 
-  const confirmPhoto = () => {
-    if (!scanPreview?.file) return;
+  const confirmPhoto = async () => {
+    if (!scanPreview?.file || confirmationLock.current) return;
 
     const file = scanPreview.file;
+    if (awaitCompletion) {
+      confirmationLock.current = true;
+      setScanPreview(prev => prev ? {...prev, processing: true} : prev);
+      try {
+        await onComplete?.(file);
+      } catch {
+        // Keep the corrected photo and retry the same pending upload.
+        setScanPreview(prev => prev ? {...prev, processing: false} : prev);
+        alert("写真を保存できませんでした。接続を確認して、もう一度お試しください。");
+        confirmationLock.current = false;
+        return;
+      }
+      releasePreviewUrls(scanPreview);
+      setScanPreview(null);
+      confirmationLock.current = false;
+      onClose?.();
+      return;
+    }
     releasePreviewUrls(scanPreview);
     setScanPreview(null);
     onClose?.();
@@ -18578,15 +19320,26 @@ function PhotoCorrectionFlow({
 }
 
 
-function Scene_StoryPages({
+export function Scene_StoryPages({
   user,
   foundation,
-  questionSet = [],
+  questionSet: suppliedQuestionSet = [],
   onOpenLifeOutline,
   onTalkMore,
   onEditRecord,
-  onBack
+  onOpenBookend,
+  onBack,
+  storyAccess = null,
+  adminPreview = null,
+  renderRecordInfo,
+  renderAudio,
+  adminPreviewClient = null
 }) {
+  const supabaseClient = adminPreviewClient || applicationSupabaseClient;
+  const [accessQuestions, setAccessQuestions] = useState([]);
+  const questionSet = storyAccess ? accessQuestions : suppliedQuestionSet;
+  const storyEpoch = useRef(0);
+  const storyWriteLock = useRef(false);
 
   const getStoryBody = (answer) => {
     const selectedStyle = answer?.selected_style || "";
@@ -18625,20 +19378,7 @@ function Scene_StoryPages({
   };
 
   const getQuestionForAnswer = (answer) => {
-    return (questionSet || []).find(q =>
-      Number(q.sequence_order) === Number(answer.sequence_order)
-    ) || null;
-  };
-
-  const getChapterTitleForAnswer = (answer) => {
-    const question = getQuestionForAnswer(answer);
-
-    return (
-      question?.chapter_label ||
-      question?.chapter_description ||
-      question?.chapter ||
-      "その他"
-    );
+    return questionForStory(answer, questionSet);
   };
 
   const getQuestionTextForAnswer = (answer) => {
@@ -18646,58 +19386,7 @@ function Scene_StoryPages({
     return question?.content || "";
   };
 
-  const isVisibleInStoryPages = (question) => (
-    question?.onboarding_group === "trial_experience"
-      ? question?.status === "answered"
-      : question?.include_in_story_list !== false ||
-        question?.onboarding_group === "starting_conversation"
-  );
-
-  const buildChapterSections = (answerRows) => {
-    const sections = [];
-
-    const storyQuestions = (questionSet || []).filter(
-      isVisibleInStoryPages
-    );
-
-    for (const question of storyQuestions) {
-      const chapterTitle =
-        question.chapter_label ||
-        question.chapter_description ||
-        question.chapter ||
-        "その他";
-
-      if (!sections.find(s => s.chapterTitle === chapterTitle)) {
-        sections.push({
-          chapterTitle,
-          answers: []
-        });
-      }
-    }
-
-    for (const answer of answerRows || []) {
-      const question = getQuestionForAnswer(answer);
-
-      if (!isVisibleInStoryPages(question)) {
-        continue;
-      }
-
-      const chapterTitle = getChapterTitleForAnswer(answer);
-      let section = sections.find(s => s.chapterTitle === chapterTitle);
-
-      if (!section) {
-        section = {
-          chapterTitle,
-          answers: []
-        };
-        sections.push(section);
-      }
-
-      section.answers.push(answer);
-    }
-
-    return sections;
-  };
+  const buildChapterSections = answerRows => buildStorySections(questionSet, answerRows);
 
   const [answers, setAnswers] = useState([]);
   const [mediaByAnswerId, setMediaByAnswerId] = useState({});
@@ -18736,6 +19425,15 @@ function Scene_StoryPages({
 
 const loadAnswers = async (options = {}) => {
   const { showLoading = true } = options;
+  const epoch = ++storyEpoch.current;
+    if (adminPreview) {
+      setAnswers(adminPreview.storyRows || []);
+      setMediaByAnswerId(adminPreview.mediaByAnswerId || {});
+      setVideoStories(adminPreview.videoStories || []);
+      setApprovedThemeMemories(adminPreview.approvedThemeMemories || []);
+      setHasLifeOutline(Boolean(adminPreview.lifeOutline));
+      setLoading(false); return;
+    }
     if (!user?.id) {
       setAnswers([]);
       setMediaByAnswerId({});
@@ -18747,11 +19445,27 @@ const loadAnswers = async (options = {}) => {
     try {
      if (showLoading) setLoading(true);
 
-      const { data, error } = await supabaseClient
+      if (storyAccess) {
+        // A refresh may fail after access was revoked. Do not keep old contents.
+        if (showLoading) { setAnswers([]); setMediaByAnswerId({}); }
+        const loaded = await storyAccess.list();
+        if (storyEpoch.current !== epoch) return;
+        setAccessQuestions(loaded.questionSet);
+        setAnswers(loaded.answers);
+        setMediaByAnswerId(loaded.mediaByAnswerId);
+        setVideoStories(loaded.videoStories || []);
+        setApprovedThemeMemories(loaded.approvedThemeMemories || []);
+        setHasLifeOutline(Boolean(loaded.hasLifeOutline));
+        return;
+      }
+
+      const answerQuery = supabaseClient
         .from("answers")
         .select(`
           id,
           book_project_id,
+          user_question_id,
+          meta_json,
           sequence_order,
           transcript_raw,
           transcript_clean,
@@ -18765,6 +19479,11 @@ const loadAnswers = async (options = {}) => {
         `)
         .eq("user_id", user.id)
         .order("sequence_order", { ascending: true });
+
+      if (foundation?.project?.id) {
+        answerQuery.or(`book_project_id.eq.${foundation.project.id},book_project_id.is.null`);
+      }
+      const { data, error } = await answerQuery;
 
       if (error) throw error;
 
@@ -18864,16 +19583,23 @@ const loadAnswers = async (options = {}) => {
         setMediaByAnswerId({});
       }
     } catch (e) {
+      if (storyAccess) {
+        if (storyEpoch.current !== epoch) return;
+        setAnswers([]); setMediaByAnswerId({}); setAccessQuestions([]);
+        setVideoStories([]); setApprovedThemeMemories([]); setHasLifeOutline(false);
+        closeAnswerEditor();
+      }
       console.error("story pages load error", e);
       alert("これまでの語りの読み込みに失敗しました。");
     } finally {
-      if (showLoading) setLoading(false);
+      if (showLoading && (!storyAccess || storyEpoch.current === epoch)) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadAnswers();
-  }, [user?.id]);
+    return () => { storyEpoch.current++; };
+  }, [user?.id, storyAccess, adminPreview]);
 
 
 const pickAnswerTextByStyle = (answer, style) => {
@@ -18914,9 +19640,18 @@ const changeEditStyle = (style) => {
 
 const saveAnswerEdit = async () => {
   if (!editingAnswer?.id || !user?.id) return;
+  if (storyWriteLock.current) return;
+  storyWriteLock.current = true;
 
   try {
     setSavingEdit(true);
+
+    if (storyAccess) {
+      await storyAccess.saveEdit(editingAnswer, editSelectedStyle, editDraftText);
+      await loadAnswers({ showLoading: false });
+      closeAnswerEditor();
+      return;
+    }
 
     const { error } = await supabaseClient
       .from("answers")
@@ -18935,6 +19670,7 @@ const saveAnswerEdit = async () => {
     console.error("answer edit save error", e);
     alert("本文の保存に失敗しました。");
   } finally {
+    storyWriteLock.current = false;
     setSavingEdit(false);
   }
 };
@@ -18945,13 +19681,13 @@ const getAudioPathsForAnswer = (answerId) => {
     .map(item => item.storage_path);
 };
 
-const startEditRecordFromModal = (mode) => {
+const startEditRecordFromModal = async (mode) => {
   if (!editingAnswer || !onEditRecord) return;
 
   const answer = editingAnswer;
   const audioPaths = getAudioPathsForAnswer(answer.id);
 
-  const started = onEditRecord(answer, mode, audioPaths);
+  const started = await onEditRecord(answer, mode, audioPaths);
 
   if (started === false) return;
 
@@ -18966,6 +19702,12 @@ const startEditRecordFromModal = (mode) => {
 
     try {
       setDeletingPhotoPath(photo.storage_path);
+
+      if (storyAccess) {
+        await storyAccess.removePhoto(photo);
+        await loadAnswers({ showLoading: false });
+        return;
+      }
 
       const { error: storageError } = await supabaseClient.storage
         .from("photos")
@@ -19046,6 +19788,12 @@ const replaceStoryPhoto = async (file, target) => {
   try {
     setReplacingPhotoPath(photo.storage_path);
 
+    if (storyAccess) {
+      await storyAccess.addPhoto(file, target.answerId, photo.id);
+      await loadAnswers({ showLoading: false });
+      return;
+    }
+
     const { error: uploadError } = await supabaseClient.storage
       .from("photos")
       .upload(nextPath, file, {
@@ -19085,6 +19833,7 @@ const replaceStoryPhoto = async (file, target) => {
     await loadAnswers({ showLoading: false });
   } catch (e) {
     console.error("story photo replace error", e);
+    if (storyAccess) throw e;
     alert(e.message || "写真の差し替えに失敗しました。");
   } finally {
     setReplacingPhotoPath(null);
@@ -19100,6 +19849,12 @@ const handleStoryPhotoSelect = async (file, answerId) => {
 
     try {
       setUploadingPhotoAnswerId(answerId);
+
+      if (storyAccess) {
+        await storyAccess.addPhoto(file, answerId);
+        await loadAnswers({ showLoading: false });
+        return;
+      }
 
       const targetAnswer = answers.find(a => a.id === answerId);
       const existingMedia = mediaByAnswerId[answerId] || [];
@@ -19119,7 +19874,7 @@ const handleStoryPhotoSelect = async (file, answerId) => {
               : "jpg";
 
         const photoNo = String(existingPhotoCount + i + 1).padStart(2, "0");
-        const photoPath = `${user.id}/${answerId}/photo-${photoNo}.${ext}`;
+        const photoPath = `${recordingStorageRoot(user.id, foundation.project.id, answerId)}/photo-${photoNo}.${ext}`;
 
         const { error: uploadError } = await supabaseClient.storage
           .from("photos")
@@ -19164,6 +19919,7 @@ const handleStoryPhotoSelect = async (file, answerId) => {
       await loadAnswers({ showLoading: false });
     } catch (e) {
       console.error(e);
+      if (storyAccess) throw e;
       alert(e.message || "写真の追加に失敗しました。");
     } finally {
       setUploadingPhotoAnswerId(null);
@@ -19189,6 +19945,21 @@ useEffect(() => {
 }, [answers, questionSet, selectedChapterIndex]);
 
   const chapterSections = buildChapterSections(answers);
+  const bookendMedia = kind => ({
+    voice: chapterSections.find(section => section.bookendKind === kind)?.answers?.length || 0,
+    video: videoStories.find(story => bookendKindForVideo(story) === kind) || null
+  });
+  const extraBookendTab = kind => {
+    if (!onOpenBookend || chapterSections.some(section => section.bookendKind === kind)) return null;
+    const saved = bookendMedia(kind);
+    const shown = foundation?.project?.theme_experience_state?.[`bookend_${kind}_shown`];
+    return shown || saved.video ? { kind, savedVideo: Boolean(saved.video) } : null;
+  };
+  const storyTabs = [
+    extraBookendTab("intro"),
+    ...chapterSections.map((section, sectionIndex) => ({ section, sectionIndex })),
+    extraBookendTab("outro")
+  ].filter(Boolean);
   const safeChapterIndex = Math.min(
     selectedChapterIndex,
     Math.max(chapterSections.length - 1, 0)
@@ -19204,7 +19975,7 @@ useEffect(() => {
   const visibleThemeMemories = selectedChapterIsChildhood ? approvedThemeMemories : [];
 
 return (
-  <div className="h-full flex flex-col fade-enter px-4 pt-0 pb-4 -mt-8 overflow-hidden">
+  <div data-story-pages-scroll className="h-full min-h-0 flex flex-col [&>*]:shrink-0 fade-enter px-4 pt-0 pb-4 overflow-y-auto">
     <VideoStoryFlow
       open={videoFlowOpen}
       user={user}
@@ -19218,20 +19989,32 @@ return (
     />
     <PhotoCorrectionFlow
       open={!!photoActionAnswerId}
+      awaitCompletion={Boolean(storyAccess)}
       onClose={() => setPhotoActionAnswerId(null)}
-      onComplete={(file) => {
+      onComplete={async (file) => {
         const answerId = photoActionAnswerId;
+        if (storyAccess) {
+          await handleStoryPhotoSelect(file, answerId);
+          setPhotoActionAnswerId(null);
+          return;
+        }
         setPhotoActionAnswerId(null);
         handleStoryPhotoSelect(file, answerId);
       }}
     />
     <PhotoCorrectionFlow
       open={!!editingPhoto}
+      awaitCompletion={Boolean(storyAccess)}
       title="写真を切り抜き・補正"
       initialFile={editingPhoto?.sourceFile || null}
       onClose={() => setEditingPhoto(null)}
-      onComplete={(file) => {
+      onComplete={async (file) => {
         const target = editingPhoto;
+        if (storyAccess) {
+          await replaceStoryPhoto(file, target);
+          setEditingPhoto(null);
+          return;
+        }
         setEditingPhoto(null);
         replaceStoryPhoto(file, target);
       }}
@@ -19241,7 +20024,7 @@ return (
   <div className="fixed left-4 right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-40 rounded-2xl border border-white/10 bg-slate-950/92 px-5 py-4 shadow-2xl flex items-center gap-3">
     <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white/75 animate-spin shrink-0" />
 
-    <p className="text-white/70 text-sm tracking-widest">
+    <p className="text-white/70 text-[1rem] tracking-widest">
       {preparingPhotoPath
         ? "写真を読み込んでいます..."
         : replacingPhotoPath
@@ -19268,7 +20051,7 @@ return (
           key={style.key}
           type="button"
           onClick={() => changeEditStyle(style.key)}
-          className={`flex-1 py-2 rounded-full text-xs border ${
+          className={`flex-1 py-2 rounded-full text-[1rem] border ${
             editSelectedStyle === style.key
               ? "bg-white/15 border-white/25 text-white"
               : "border-white/10 text-white/45"
@@ -19292,7 +20075,7 @@ return (
         type="button"
         onClick={() => startEditRecordFromModal("replace")}
         disabled={savingEdit}
-        className="py-3 rounded-full border border-white/10 text-white/45 text-sm"
+        className="py-3 rounded-full border border-white/10 text-white/45 text-[1rem]"
       >
         語り直す
       </button>
@@ -19301,7 +20084,7 @@ return (
         type="button"
         onClick={() => startEditRecordFromModal("append")}
         disabled={savingEdit || getAudioPathsForAnswer(editingAnswer.id).length >= MAX_AUDIO_PARTS_PER_QUESTION}
-        className={`py-3 rounded-full border border-white/10 text-sm ${
+        className={`py-3 rounded-full border border-white/10 text-[1rem] ${
           getAudioPathsForAnswer(editingAnswer.id).length >= MAX_AUDIO_PARTS_PER_QUESTION
             ? "text-white/20 opacity-50"
             : "text-white/45"
@@ -19312,7 +20095,7 @@ return (
     </div>
 
     {getAudioPathsForAnswer(editingAnswer.id).length >= MAX_AUDIO_PARTS_PER_QUESTION && (
-      <p className="mt-2 text-center text-white/28 text-xs leading-loose">
+      <p className="mt-2 text-center text-white/28 text-[1rem] leading-loose">
         語り足しの上限に達しました<br />
         ここからは本文の編集で整えられます。
       </p>
@@ -19323,7 +20106,7 @@ return (
         type="button"
         onClick={closeAnswerEditor}
         disabled={savingEdit}
-        className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-sm"
+        className="flex-1 py-3 rounded-full border border-white/10 text-white/55 text-[1rem]"
       >
         戻る
       </button>
@@ -19332,7 +20115,7 @@ return (
         type="button"
         onClick={saveAnswerEdit}
         disabled={savingEdit}
-        className={`flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-sm ${
+        className={`flex-1 btn-quiet bg-white/10 py-3 rounded-full text-white text-[1rem] ${
           savingEdit ? "opacity-40" : ""
         }`}
       >
@@ -19359,80 +20142,55 @@ return (
   </p>
 </div>
 
-<button
-  type="button"
-  onClick={() => setVideoFlowOpen(true)}
-  className="glass-card mb-3 flex min-h-[64px] items-center justify-between px-5 text-left"
->
-  <div className="flex items-center gap-3">
-    <Video size={20} className="text-white/52" strokeWidth={1.7} />
-    <div>
-      <p className="text-white/80 text-[0.95rem] text-narrative">ビデオで残す</p>
-      <p className="mt-1 text-white/30 text-[0.68rem]">任意</p>
-    </div>
-  </div>
-  <div className="flex items-center gap-3">
-    <span className="text-white/34 text-sm">{videoStories.length}/2</span>
-    <ChevronRight size={18} className="text-white/28" strokeWidth={1.7} />
-  </div>
-</button>
-
-{hasLifeOutline && onOpenLifeOutline && (
-  <button
-    type="button"
-    onClick={onOpenLifeOutline}
-    className="glass-card mb-3 px-5 py-4 flex items-center justify-between text-left"
-  >
-    <div>
-      <p className="text-white/35 text-[0.68rem] tracking-[0.18em] mb-1">
-        人生の輪郭
-      </p>
-      <p className="text-white/78 text-[0.95rem] text-narrative">
-        私の歩み
-      </p>
-    </div>
-
-    <ChevronRight
-      size={18}
-      className="text-white/30"
-      strokeWidth={1.7}
-    />
-  </button>
-)}
-
-{chapterSections.length > 0 && (
+{storyTabs.length > 0 && (
   <div className="mb-3">
     <div className="flex gap-2 overflow-x-auto pb-1">
-      {chapterSections.map((section, index) => {
+      {storyTabs.map(tab => {
+        if (tab.kind) {
+          return (
+            <button
+              key={`bookend:${tab.kind}`}
+              type="button"
+              onClick={() => tab.savedVideo ? setVideoFlowOpen(true) : onOpenBookend(tab.kind)}
+              className="h-9 shrink-0 rounded-full border border-white/[0.12] bg-white/[0.07] px-4 text-[1rem] text-white/55"
+              aria-label={`${BOOKEND_PROMPTS[tab.kind].label}を${tab.savedVideo ? "ビデオで見る" : "あとから語る"}`}
+            >
+              {tab.savedVideo ? "" : "＋ "}{BOOKEND_PROMPTS[tab.kind].label}
+            </button>
+          );
+        }
+        const { section, sectionIndex: index } = tab;
         const hasAnswers = section.answers.length > 0;
         const isSelected = index === safeChapterIndex;
+        const chapterNumber = chapterSections.slice(0, index + 1).filter(item => !item.isTrial && !item.bookendKind).length;
 
         return (
           <button
-            key={section.chapterTitle}
+            key={section.key}
             type="button"
             disabled={!hasAnswers}
             onClick={() => {
               if (!hasAnswers) return;
               setSelectedChapterIndex(index);
             }}
-            className={`w-9 h-9 rounded-full shrink-0 border text-xs transition ${
+            className={`${section.isTrial || section.bookendKind ? "px-4" : "w-9"} h-9 rounded-full shrink-0 border text-[1rem] transition ${
               isSelected
                 ? "bg-white text-slate-900 border-white"
                 : hasAnswers
                   ? "bg-white/[0.07] text-white/55 border-white/[0.12]"
                   : "bg-transparent text-white/18 border-white/[0.06] opacity-45"
             }`}
-            aria-label={`章 ${index + 1}${hasAnswers ? "" : " 未回答"}`}
+            aria-pressed={isSelected}
+            aria-label={section.bookendKind ? section.chapterTitle : section.isTrial ? `無料体験の語り ${section.answers.length}件` : `章 ${chapterNumber}${hasAnswers ? "" : " 未回答"}`}
           >
-            {index + 1}
+            {section.bookendKind ? section.chapterTitle : section.isTrial ? `無料体験の語り（${section.answers.length}）` : chapterNumber}
           </button>
         );
       })}
     </div>
 
     {selectedChapter && (
-      <p className="text-center text-white/48 text-xs text-narrative">
+      <p className="text-center text-white/48 text-[1rem] text-narrative">
         {selectedChapter.chapterTitle}
       </p>
     )}
@@ -19440,14 +20198,14 @@ return (
 )}
 
 
-      <div className="flex-1 overflow-y-auto space-y-5 pb-6">
+      <div className="space-y-5 pb-6" data-story-pages-content>
         {loading ? (
           <div className="h-full flex items-center justify-center">
-            <p className="text-white/35 text-sm tracking-widest animate-pulse">読み込んでいます...</p>
+            <p className="text-white/35 text-[1rem] tracking-widest animate-pulse">読み込んでいます...</p>
           </div>
         ) : visibleAnswers.length === 0 && visibleThemeMemories.length === 0 ? (
           <div className="h-full flex items-center justify-center text-center">
-          <p className="text-white/35 text-sm leading-loose">
+          <p className="text-white/35 text-[1rem] leading-loose">
             まだ語られていません
           </p>
           </div>
@@ -19459,13 +20217,16 @@ return (
 
             const media = mediaByAnswerId[answer.id] || [];
             const photos = media.filter(m => m.asset_type === "photo" && m.url);
-            const audios = media.filter(m => m.asset_type === "audio" && m.url);
+            const audios = media.filter(m => m.asset_type === "audio" && (m.url || (renderAudio && m.storage_path)));
 
             return (
               <article key={answer.id} className="glass-card p-5 text-left">
+                {isTrialStoryQuestion(getQuestionForAnswer(answer)) && (
+                  <p className="mb-3 text-[1rem] text-white/60">無料３問</p>
+                )}
                 {questionText && (
                   <div className="border-l-2 border-amber-400/60 pl-4 mb-5">
-                    <p className="text-white/58 text-[0.92rem] leading-loose text-narrative">
+                    <p className="text-white/58 text-[1rem] leading-loose text-narrative">
                       {questionText}
                     </p>
                   </div>
@@ -19489,7 +20250,7 @@ return (
             type="button"
             onClick={() => deletePhoto(photo)}
             disabled={deletingPhotoPath === photo.storage_path || replacingPhotoPath === photo.storage_path}
-            className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/55 text-white/85 text-sm"
+            className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/55 text-white/85 text-[1rem]"
             aria-label="写真を削除"
           >
             {deletingPhotoPath === photo.storage_path ? "…" : "×"}
@@ -19499,7 +20260,7 @@ return (
             type="button"
             onClick={() => openExistingPhotoEditor(photo, answer.id)}
             disabled={preparingPhotoPath === photo.storage_path || replacingPhotoPath === photo.storage_path}
-            className="absolute z-10 left-3 bottom-3 rounded-full border border-white/30 bg-slate-950/95 px-3 py-2 text-white text-xs flex items-center gap-2 shadow-xl backdrop-blur"
+            className="absolute z-10 left-3 bottom-3 rounded-full border border-white/30 bg-slate-950/95 px-3 py-2 text-white text-[1rem] flex items-center gap-2 shadow-xl backdrop-blur"
           >
             <Pencil size={13} strokeWidth={1.8} />
             {preparingPhotoPath === photo.storage_path ? "読み込み中" : "切り抜き・補正"}
@@ -19513,7 +20274,7 @@ return (
     onClick={() => openPhotoActionSheet(answer.id)}
     className="w-full rounded-2xl border border-dashed border-white/10 bg-white/[0.03] h-14 flex items-center justify-center"
   >
-    <span className="text-white/42 text-sm tracking-widest">
+    <span className="text-white/42 text-[1rem] tracking-widest">
       ＋ 写真を添える
     </span>
   </button>
@@ -19526,11 +20287,12 @@ return (
         <button
           type="button"
   onClick={() => openAnswerEditor(answer)}
-  className="mt-5 text-white/35 text-sm underline underline-offset-4"
+  className="mt-5 text-white/35 text-[1rem] underline underline-offset-4"
 >
   文章を整える
 </button>
 
+              {renderRecordInfo?.(answer, audios)}
               {audios.length > 0 && (
                 <div className="mt-5 space-y-4">
                   {audios.map((audio, audioIndex) => {
@@ -19540,18 +20302,18 @@ return (
                     return (
                       <div key={audio.storage_path || audioIndex}>
                         <div className="mb-2 flex items-center justify-between gap-3">
-                          <p className="text-white/28 text-xs">
+                          <p className="text-white/28 text-[1rem]">
                             {audioLabel}
                           </p>
 
                           {recordedAt && (
-                            <p className="text-white/22 text-[0.68rem] tracking-widest">
+                            <p className="text-white/22 text-[1rem] tracking-widest">
                               {recordedAt}
                             </p>
                           )}
                         </div>
 
-                        <audio src={audio.url} controls className="w-full" />
+                        {renderAudio ? renderAudio(audio) : <audio src={audio.url} controls className="w-full" />}
                       </div>
                     );
                   })}
@@ -19578,14 +20340,14 @@ return (
                 <div className="mb-5 flex items-center gap-3 border-b border-white/[0.07] pb-4">
                   <Users size={18} className="text-amber-100/52" strokeWidth={1.6} />
                   <div>
-                    <p className="text-[0.68rem] tracking-[0.16em] text-amber-100/42">家族から聞いた記憶</p>
-                    <p className="mt-1 text-sm text-white/58">{withHonorific(memory.request.recipientName)}から</p>
+                    <p className="text-[1rem] tracking-[0.16em] text-amber-100/42">家族から聞いた記憶</p>
+                    <p className="mt-1 text-[1rem] text-white/58">{withHonorific(memory.request.recipientName)}から</p>
                   </div>
                 </div>
                 <div className="space-y-6">
                   {contributions.map((item, index) => (
                     <div key={`${item.questionId || "extra"}-${index}`}>
-                      {item.prompt && <p className="border-l-2 border-amber-400/45 pl-4 text-[0.85rem] leading-[1.8] text-white/48">{item.prompt}</p>}
+                      {item.prompt && <p className="border-l-2 border-amber-400/45 pl-4 text-[1rem] leading-[1.8] text-white/48">{item.prompt}</p>}
                       {item.text && <p className="mt-3 whitespace-pre-wrap text-narrative text-[0.96rem] leading-[2.1] text-white/74">{item.text}</p>}
                       {item.audioPath && mediaUrls[item.audioPath] && <audio controls src={mediaUrls[item.audioPath]} className="mt-4 w-full" />}
                     </div>
@@ -19605,29 +20367,54 @@ return (
         )}
       </div>
 
+      <div className="mb-5 flex flex-wrap gap-2 border-t border-white/10 pt-5" aria-label="その他の語り">
+        <button
+          type="button"
+          onClick={() => setVideoFlowOpen(true)}
+          className="min-h-10 rounded-full border border-white/[0.12] bg-white/[0.07] px-4 text-[0.95rem] text-white/65"
+        >
+          ビデオ（{videoStories.length}/2）
+        </button>
+        {hasLifeOutline && onOpenLifeOutline && (
+          <button
+            type="button"
+            onClick={onOpenLifeOutline}
+            className="min-h-10 rounded-full border border-white/[0.12] bg-white/[0.07] px-4 text-[0.95rem] text-white/65"
+          >
+            人生の輪郭
+          </button>
+        )}
+      </div>
+
       <div className="pt-5 border-t border-white/10 space-y-4">
         <button onClick={onTalkMore} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white">
           もう1ページ進める
         </button>
-        <button onClick={onBack} className="w-full py-3 text-white/40 text-sm underline underline-offset-4">
+        <button onClick={onBack} className="w-full py-3 text-white/40 text-[1rem] underline underline-offset-4">
           戻る
         </button>
       </div>
     </div>
   );
 }
-function Scene_NotificationSetup({
+export function Scene_NotificationSetup({
   user,
   bookProjectId,
+  keepOnboardingDraft = false,
   storyName,
   recipientMode = "subject",
   initialPreference,
+  notificationAccess,
   onPreferenceSaved,
   onBack,
   onComplete,
   completeLabel = "次へ",
-  showCompleteButton = false
+  showCompleteButton = false,
+  adminReadOnly = false,
+  adminPreviewClient = null
 }) {
+  const supabaseClient = adminPreviewClient || applicationSupabaseClient;
+  const emailUnavailable = Boolean(notificationAccess && !user?.email);
   const weekdayOptions = [
     "日曜日",
     "月曜日",
@@ -19639,12 +20426,16 @@ function Scene_NotificationSetup({
   ];
   const hourOptions = Array.from({ length: 24 }, (_, index) => index);
   const minuteOptions = [0, 15, 30, 45];
-  const initialSchedules = getNotificationSchedules(initialPreference);
-  const [schedules, setSchedules] = useState(() => (
-    initialSchedules.length > 0
-      ? initialSchedules.map((schedule, index) => ({ ...schedule, localId: schedule.id || `schedule-${index}` }))
+  // TEST delivery is inactive, but its saved editing choices still exist.
+  // This presentation-only normalization never enables a delivery schedule.
+  const initialSchedules = getNotificationSchedules(notificationAccess ? {...initialPreference,is_active:true} : initialPreference);
+  const [schedules, setSchedules] = useState(() => {
+    const restored = keepOnboardingDraft ? readOnboardingNotificationDraft(bookProjectId) : null;
+    const startingSchedules = restored || initialSchedules;
+    return startingSchedules.length > 0
+      ? startingSchedules.map((schedule, index) => ({ ...schedule, localId: schedule.id || `schedule-${index}` }))
       : [{ localId: "schedule-initial", weekday: 0, hour: 20, minute: 0, sort_order: 1, is_active: true }]
-  ));
+  });
   const [saveState, setSaveState] = useState("idle");
   const [removedSchedule, setRemovedSchedule] = useState(null);
   const initialPhoneVerified = Boolean(
@@ -19692,6 +20483,8 @@ function Scene_NotificationSetup({
   };
 
   const persistSchedules = nextSchedules => {
+    if (adminReadOnly) return Promise.resolve([]);
+    if (keepOnboardingDraft) writeOnboardingNotificationDraft(bookProjectId, nextSchedules);
     const requestId = saveRequestIdRef.current + 1;
     saveRequestIdRef.current = requestId;
     setSaveState("saving");
@@ -19706,6 +20499,15 @@ function Scene_NotificationSetup({
     const request = saveQueueRef.current
       .catch(() => undefined)
       .then(async () => {
+        if (notificationAccess) {
+          const saved = await notificationAccess.saveSchedules(payload);
+          const savedSchedules = saved.schedules.map((schedule,index)=>({...schedule,sort_order:index+1,is_active:true}));
+          publishPreference(saved, savedSchedules);
+          if (keepOnboardingDraft && saveRequestIdRef.current === requestId) {
+            clearOnboardingNotificationDraft(bookProjectId);
+          }
+          return savedSchedules;
+        }
         const rpcName = bookProjectId
           ? "save_project_notification_schedules"
           : "save_own_notification_schedules";
@@ -19735,6 +20537,9 @@ function Scene_NotificationSetup({
           delivery_channel: smsEnabledRef.current ? "both" : "email",
           is_active: true,
         }, savedSchedules);
+        if (keepOnboardingDraft && saveRequestIdRef.current === requestId) {
+          clearOnboardingNotificationDraft(bookProjectId);
+        }
         await logActivity(supabaseClient, {
           actorUserId: user?.id,
           subjectUserId: user?.id,
@@ -19833,6 +20638,17 @@ function Scene_NotificationSetup({
   const saveSmsSetting = async enabled => {
     setPhoneState("saving");
     setPhoneMessage("");
+    if (notificationAccess) {
+      const request = saveQueueRef.current.catch(()=>undefined).then(()=>notificationAccess.saveSms(enabled));
+      saveQueueRef.current = request;
+      latestSaveRef.current = request;
+      const saved = await request;
+      smsEnabledRef.current = Boolean(saved.sms_enabled);
+      setSmsEnabled(Boolean(saved.sms_enabled));
+      publishPreference(saved);
+      setPhoneState("idle");
+      return;
+    }
     const { data, error } = await supabaseClient.rpc("save_own_sms_delivery_setting", {
       input_enabled: enabled
     });
@@ -19871,6 +20687,10 @@ function Scene_NotificationSetup({
   };
 
   const openPhoneSetup = () => {
+    if (notificationAccess) {
+      alert("認証に使う電話番号の変更は、縦糸横糸サポートへご連絡ください。");
+      return;
+    }
     setPhoneNumber(verifiedPhone || "");
     setVerificationCode("");
     setMaskedPhone("");
@@ -19951,14 +20771,14 @@ function Scene_NotificationSetup({
   const returnAfterSave = async () => {
     try {
       await latestSaveRef.current;
-      onBack?.();
+      await onBack?.();
     } catch (_error) {
       alert("配信日時を保存できませんでした。もう一度お試しください。");
     }
   };
 
   return (
-    <div className="h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
+    <div className="notification-setup h-full flex flex-col fade-enter px-4 py-8 overflow-y-auto">
       {onBack ? (
         <div className="relative flex items-center justify-center h-10 mb-8 shrink-0">
           <button
@@ -19973,25 +20793,26 @@ function Scene_NotificationSetup({
         </div>
       ) : null}
 
-      <div className="flex-1 flex flex-col justify-start">
-        <div className="text-center mb-10">
+      <div className="notification-setup__content flex-1 flex flex-col justify-start">
+        <div className="notification-setup__intro text-center mb-10">
           <p className="text-white/90 text-[1.1rem] text-narrative mb-4">
             {recipientMode === "facilitator" && storyName
               ? `${withHonorific(storyName)}の問いを、あなたに届けます`
               : "選んだ時間に、問いをひとつ届けます"}
           </p>
 
-          <p className="text-white/48 text-sm leading-loose">
+          <p className="text-white/48 text-[1rem] leading-loose">
             {recipientMode === "facilitator"
               ? "親御さんへの登録や配信はありません"
               : "テーマに沿って、少しずつ進みます"}
           </p>
-          <p className="mt-1 text-white/48 text-sm leading-loose">
+          <p className="mt-1 text-white/48 text-[1rem] leading-loose">
             週1〜3回、語りやすい時間を選んでください
           </p>
         </div>
 
-        <div className="space-y-3">
+        <div className="notification-setup__schedule space-y-3">
+          <p className="notification-setup__schedule-title text-white/68 text-[1rem] text-narrative">受け取り時間</p>
           {schedules.map((schedule, index) => (
             <div key={schedule.localId || schedule.id || index} className="glass-card px-4 py-4 flex items-center gap-2">
               <select
@@ -20022,20 +20843,20 @@ function Scene_NotificationSetup({
           ))}
 
           {schedules.length < 3 && (
-            <button type="button" onClick={addSchedule} className="w-full py-3 flex items-center justify-center gap-2 text-white/48 text-sm">
+            <button type="button" onClick={addSchedule} className="w-full py-3 flex items-center justify-center gap-2 text-white/48 text-[1rem]">
               <Plus size={16} strokeWidth={1.7} />
               受け取り時間を追加
             </button>
           )}
         </div>
 
-        <div className="mt-4 space-y-1 text-center text-xs leading-relaxed text-white/30">
+        <div className="notification-setup__schedule-note mt-4 space-y-1 text-center text-[1rem] leading-relaxed text-white/30">
           <p>時間はあとで変更できます。</p>
           <p>届くのを待たず、いつでも語れます。</p>
         </div>
 
-        <div className="mt-8 pt-7 border-t border-white/[0.08]">
-          <p className="mb-4 text-white/68 text-sm text-narrative">受け取り方法</p>
+        <div className="notification-setup__channels mt-8 pt-7 border-t border-white/[0.08]">
+          <p className="mb-4 text-white/68 text-[1rem] text-narrative">受け取り方法</p>
 
           <div className="space-y-3">
             <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-4 flex items-center gap-3">
@@ -20044,12 +20865,12 @@ function Scene_NotificationSetup({
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-white/82 text-sm">メール</p>
-                  <Check size={14} className="text-emerald-200/70" strokeWidth={2} />
+                  <p className="text-white/82 text-[1rem]">メール</p>
+                  {!emailUnavailable && <Check size={14} className="text-emerald-200/70" strokeWidth={2} />}
                 </div>
-                <p className="mt-1 text-white/34 text-xs truncate">{user?.email || "登録メールアドレス"}</p>
+                <p className="mt-1 text-white/34 text-[1rem] truncate">{emailUnavailable ? "メール未登録" : user?.email || "登録メールアドレス"}</p>
               </div>
-              <span className="text-white/30 text-xs">常に受け取る</span>
+              <span className="text-white/30 text-[1rem]">{emailUnavailable ? "—" : "常に受け取る"}</span>
             </div>
 
             <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-4">
@@ -20059,11 +20880,11 @@ function Scene_NotificationSetup({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="text-white/82 text-sm">SMS</p>
+                    <p className="text-white/82 text-[1rem]">{notificationAccess && verifiedPhone ? "SMS認証済み" : "SMS"}</p>
                     {smsEnabled && <Check size={14} className="text-emerald-200/70" strokeWidth={2} />}
                   </div>
-                  <p className="mt-1 text-white/34 text-xs truncate">
-                    {verifiedPhone || "メールに加えて、SMSでも受け取れます"}
+                  <p className="mt-1 text-white/34 text-[1rem] truncate">
+                    {verifiedPhone || (emailUnavailable ? "携帯電話番号の認証が必要です" : "メールに加えて、SMSでも受け取れます")}
                   </p>
                 </div>
 
@@ -20072,7 +20893,7 @@ function Scene_NotificationSetup({
                     type="button"
                     onClick={disableSms}
                     disabled={phoneState === "saving"}
-                    className="px-3 py-2 rounded-full border border-white/10 text-white/42 text-xs disabled:opacity-40"
+                    className="px-3 py-2 rounded-full border border-white/10 text-white/42 text-[1rem] disabled:opacity-40"
                   >
                     停止
                   </button>
@@ -20081,7 +20902,7 @@ function Scene_NotificationSetup({
                     type="button"
                     onClick={enableVerifiedSms}
                     disabled={phoneState === "saving"}
-                    className="px-3 py-2 rounded-full border border-white/14 text-white/68 text-xs disabled:opacity-40"
+                    className="px-3 py-2 rounded-full border border-white/14 text-white/68 text-[1rem] disabled:opacity-40"
                   >
                     再開
                   </button>
@@ -20089,7 +20910,7 @@ function Scene_NotificationSetup({
                   <button
                     type="button"
                     onClick={openPhoneSetup}
-                    className="px-3 py-2 rounded-full border border-white/14 text-white/68 text-xs"
+                    className="px-3 py-2 rounded-full border border-white/14 text-white/68 text-[1rem]"
                   >
                     追加
                   </button>
@@ -20100,7 +20921,7 @@ function Scene_NotificationSetup({
                 <button
                   type="button"
                   onClick={openPhoneSetup}
-                  className="mt-3 ml-12 text-white/30 text-xs underline underline-offset-4"
+                  className="mt-3 ml-12 text-white/30 text-[1rem] underline underline-offset-4"
                 >
                   電話番号を変更
                 </button>
@@ -20110,7 +20931,7 @@ function Scene_NotificationSetup({
                 <div className="mt-5 pt-5 border-t border-white/[0.07]">
                   {phoneStep === "phone" ? (
                     <>
-                      <label className="block text-white/48 text-xs mb-2" htmlFor="notification-phone-number">
+                      <label className="block text-white/48 text-[1rem] mb-2" htmlFor="notification-phone-number">
                         携帯電話番号
                       </label>
                       <input
@@ -20123,14 +20944,14 @@ function Scene_NotificationSetup({
                         placeholder="09012345678"
                         className="w-full rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3 text-white/88 placeholder:text-white/20 outline-none focus:border-white/25"
                       />
-                      <p className="mt-2 text-white/28 text-[0.7rem] leading-relaxed">
+                      <p className="mt-2 text-white/28 text-[1rem] leading-relaxed">
                         認証後、問いのお知らせをSMSでもお届けします。
                       </p>
                       <div className="mt-4 flex gap-2">
                         <button
                           type="button"
                           onClick={closePhoneSetup}
-                          className="flex-1 py-3 rounded-full border border-white/10 text-white/42 text-xs"
+                          className="flex-1 py-3 rounded-full border border-white/10 text-white/42 text-[1rem]"
                         >
                           キャンセル
                         </button>
@@ -20138,7 +20959,7 @@ function Scene_NotificationSetup({
                           type="button"
                           onClick={startPhoneVerification}
                           disabled={phoneState === "sending" || !phoneNumber.trim()}
-                          className="flex-[1.5] py-3 rounded-full bg-white/10 text-white/82 text-xs disabled:opacity-35"
+                          className="flex-[1.5] py-3 rounded-full bg-white/10 text-white/82 text-[1rem] disabled:opacity-35"
                         >
                           {phoneState === "sending" ? "送信しています..." : "認証コードを送る"}
                         </button>
@@ -20146,7 +20967,7 @@ function Scene_NotificationSetup({
                     </>
                   ) : (
                     <>
-                      <p className="text-white/48 text-xs leading-relaxed">
+                      <p className="text-white/48 text-[1rem] leading-relaxed">
                         {maskedPhone} に届いた6桁のコードを入力してください
                       </p>
                       <input
@@ -20168,7 +20989,7 @@ function Scene_NotificationSetup({
                             setPhoneState("idle");
                             setPhoneMessage("");
                           }}
-                          className="flex-1 py-3 rounded-full border border-white/10 text-white/42 text-xs"
+                          className="flex-1 py-3 rounded-full border border-white/10 text-white/42 text-[1rem]"
                         >
                           戻る
                         </button>
@@ -20176,7 +20997,7 @@ function Scene_NotificationSetup({
                           type="button"
                           onClick={verifyPhoneNumber}
                           disabled={phoneState === "verifying" || verificationCode.length !== 6}
-                          className="flex-[1.5] py-3 rounded-full bg-white/10 text-white/82 text-xs disabled:opacity-35"
+                          className="flex-[1.5] py-3 rounded-full bg-white/10 text-white/82 text-[1rem] disabled:opacity-35"
                         >
                           {phoneState === "verifying" ? "確認しています..." : "確認して追加"}
                         </button>
@@ -20186,26 +21007,26 @@ function Scene_NotificationSetup({
                 </div>
               )}
 
-              {phoneMessage && <p className="mt-3 text-rose-200/70 text-xs leading-relaxed">{phoneMessage}</p>}
+              {phoneMessage && <p className="mt-3 text-rose-200/70 text-[1rem] leading-relaxed">{phoneMessage}</p>}
             </div>
           </div>
         </div>
 
-        <div className="mt-6 text-center min-h-[70px]">
-          <p className="text-white/40 text-sm leading-loose">
+        <div className="notification-setup__status mt-6 text-center min-h-[70px]">
+          <p className="text-white/40 text-[1rem] leading-loose">
             メールは必ず届き、SMSは追加で受け取れます
           </p>
 
-          {saveState === "saving" && <p className="mt-3 text-white/28 text-xs">保存しています...</p>}
-          {saveState === "saved" && <p className="mt-3 text-white/42 text-xs">✓ 保存しました</p>}
-          {saveState === "error" && <button type="button" onClick={() => persistSchedules(schedules)} className="mt-3 text-rose-200/70 text-xs underline underline-offset-4">保存できませんでした。もう一度</button>}
-          {saveState === "idle" && <p className="mt-3 text-white/28 text-xs leading-loose">変更すると自動で保存されます</p>}
-          {removedSchedule && <button type="button" onClick={undoRemove} className="mt-3 ml-4 text-white/48 text-xs underline underline-offset-4">削除を元に戻す</button>}
+          {saveState === "saving" && <p className="mt-3 text-white/28 text-[1rem]">保存しています...</p>}
+          {saveState === "saved" && <p className="mt-3 text-white/42 text-[1rem]">✓ 保存しました</p>}
+          {saveState === "error" && <button type="button" onClick={() => persistSchedules(schedules)} className="mt-3 text-rose-200/70 text-[1rem] underline underline-offset-4">保存できませんでした。もう一度</button>}
+          {saveState === "idle" && <p className="mt-3 text-white/28 text-[1rem] leading-loose">変更すると自動で保存されます</p>}
+          {removedSchedule && <button type="button" onClick={undoRemove} className="mt-3 ml-4 text-white/48 text-[1rem] underline underline-offset-4">削除を元に戻す</button>}
         </div>
       </div>
 
       {onComplete && (!onBack || showCompleteButton) && (
-        <button type="button" onClick={finishAndContinue} disabled={saveState === "saving"} className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white disabled:opacity-40">
+        <button type="button" onClick={finishAndContinue} disabled={saveState === "saving" || (notificationAccess && phoneState === "saving")} className="notification-setup__submit btn-quiet bg-white/10 w-full py-4 rounded-full text-white disabled:opacity-40">
           {completeLabel}
         </button>
       )}

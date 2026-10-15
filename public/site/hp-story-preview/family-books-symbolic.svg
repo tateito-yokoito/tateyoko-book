@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="460" viewBox="0 0 840 460" role="img" aria-label="異なる色の家族の本が並ぶ棚のイメージ">
+  <defs>
+    <linearGradient id="wall" x2="0" y2="1"><stop stop-color="#f6f3e9"/><stop offset="1" stop-color="#eae4d6"/></linearGradient>
+    <linearGradient id="wood" x2="0" y2="1"><stop stop-color="#aa8b67"/><stop offset="1" stop-color="#7e6448"/></linearGradient>
+    <filter id="shadow"><feDropShadow dx="3" dy="4" stdDeviation="4" flood-opacity=".18"/></filter>
+  </defs>
+  <rect width="840" height="460" fill="url(#wall)"/>
+  <path d="M0 392h840v22H0z" fill="url(#wood)"/>
+  <path d="M0 414h840v46H0z" fill="#7d674e"/>
+  <g filter="url(#shadow)" stroke="#837d6a" stroke-opacity=".26">
+    <rect x="83" y="78" width="126" height="309" rx="2" fill="#a8b39d"/>
+    <path d="M92 78v309M197 78v309" stroke="#e8e7d7" stroke-opacity=".42"/>
+    <rect x="230" y="53" width="126" height="334" rx="2" fill="#d6c5af"/>
+    <path d="M239 53v334M344 53v334" stroke="#f9f4e8" stroke-opacity=".6"/>
+    <rect x="377" y="91" width="126" height="296" rx="2" fill="#889895"/>
+    <path d="M386 91v296M491 91v296" stroke="#dfe5de" stroke-opacity=".5"/>
+    <rect x="524" y="62" width="126" height="325" rx="2" fill="#b6a08f"/>
+    <path d="M533 62v325M638 62v325" stroke="#f3e9da" stroke-opacity=".46"/>
+    <rect x="671" y="103" width="90" height="284" rx="2" fill="#b9bdaf"/>
+    <path d="M680 103v284M749 103v284" stroke="#f0f0e6" stroke-opacity=".6"/>
+  </g>
+  <g fill="none" stroke="#ece9da" stroke-opacity=".62" stroke-width="1.5">
+    <path d="M105 174h81m-81 8h81M252 165h81m-81 8h81M399 178h81m-81 8h81M546 166h81m-81 8h81M690 186h52m-52 8h52"/>
+  </g>
+</svg>

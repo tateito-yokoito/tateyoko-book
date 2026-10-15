@@ -1,0 +1,240 @@
+.hp-book-sample {
+  color: var(--ink);
+  padding: 8px 0 30px;
+}
+
+.hp-book-sample-heading {
+  margin-bottom: 22px;
+}
+
+.hp-book-sample-kicker {
+  display: block;
+  color: var(--green);
+  font: 600 12px/1.5 'Noto Sans JP', sans-serif;
+  letter-spacing: .13em;
+}
+
+.hp-book-sample-heading h2 {
+  margin-top: 7px;
+  font-size: 25px;
+  font-weight: 500;
+}
+
+.hp-book-sample-heading p {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.hp-book-sample-spread {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  max-width: 960px;
+  margin-inline: auto;
+}
+
+.hp-book-sample-sheet {
+  min-width: 0;
+}
+
+.hp-book-sample-page-button {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  border-radius: 5px;
+  background: #ebe7df;
+  cursor: zoom-in;
+  box-shadow: 0 12px 27px rgb(23 38 41 / 8%);
+}
+
+.hp-book-sample-page-button:focus-visible,
+.hp-book-sample-dialog-close:focus-visible {
+  outline: 3px solid var(--green);
+  outline-offset: 4px;
+}
+
+.hp-book-sample-page-frame {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 574.913 / 787.512;
+  background: #fff;
+}
+
+.hp-book-sample .hp-book-sample-page-frame img {
+  position: absolute;
+  top: -5%;
+  left: -5%;
+  width: 110%;
+  height: 110%;
+  max-width: none;
+  object-fit: fill;
+}
+
+.hp-book-sample-zoom-mark {
+  position: absolute;
+  right: 22px;
+  bottom: 22px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+  font: 24px/1 'Noto Sans JP', sans-serif;
+}
+
+.hp-book-sample-sheet figcaption {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.hp-book-sample-swipe {
+  display: none;
+}
+
+.hp-book-sample-audio {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  max-width: 960px;
+  margin: 13px auto 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.hp-book-sample-audio-label {
+  flex: 0 0 auto;
+  color: var(--green);
+  font: 500 13px/1.4 'Noto Sans JP', sans-serif;
+}
+
+.hp-book-sample-audio audio {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  max-width: 360px;
+  height: 38px;
+  margin-left: auto;
+}
+
+.hp-book-sample-dialog {
+  position: fixed;
+  max-width: calc(100vw - 28px);
+  max-height: calc(100vh - 28px);
+  padding: 24px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--paper);
+  box-shadow: 0 25px 90px rgb(0 0 0 / 25%);
+}
+
+.hp-book-sample-dialog::backdrop {
+  background: rgb(20 35 48 / 80%);
+}
+
+.hp-book-sample-dialog-content .hp-book-sample-page-frame {
+  width: min(90vw, 65vh);
+  box-shadow: 0 6px 22px rgb(0 0 0 / 13%);
+}
+
+.hp-book-sample-dialog-close {
+  position: absolute;
+  z-index: 2;
+  top: 5px;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+  font: 25px/1 'Noto Sans JP', sans-serif;
+  cursor: pointer;
+}
+
+@media (max-width: 700px) {
+  .hp-book-sample-heading {
+    margin-bottom: 15px;
+  }
+
+  .hp-book-sample-heading h2 {
+    font-size: 21px;
+  }
+
+  .hp-book-sample-heading p {
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .hp-book-sample-spread {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    margin-right: -18px;
+    padding: 0 18px 8px 0;
+  }
+
+  .hp-book-sample-spread::-webkit-scrollbar {
+    display: none;
+  }
+
+  .hp-book-sample-sheet {
+    flex: 0 0 calc(100% - 30px);
+    scroll-snap-align: start;
+  }
+
+  .hp-book-sample-page-button {
+    padding: 8px;
+  }
+
+  .hp-book-sample-zoom-mark {
+    right: 16px;
+    bottom: 16px;
+    width: 32px;
+    height: 32px;
+    font-size: 21px;
+  }
+
+  .hp-book-sample-sheet figcaption {
+    margin-top: 5px;
+    font-size: 11px;
+  }
+
+  .hp-book-sample-swipe {
+    display: block;
+    margin-top: 2px !important;
+    color: var(--muted);
+    font: 11px/1.5 'Noto Sans JP', sans-serif;
+    text-align: right;
+  }
+
+  .hp-book-sample-audio {
+    gap: 8px;
+    margin-top: 9px;
+    padding: 8px 0;
+  }
+
+  .hp-book-sample-audio audio {
+    max-width: none;
+    margin-left: 0;
+  }
+
+  .hp-book-sample-dialog {
+    padding: 18px 10px 10px;
+  }
+}

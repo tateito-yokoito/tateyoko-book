@@ -91,6 +91,7 @@ body.voice-page-active {
 .voice-photo-strip img { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 4px; background: #ddd6c9; object-fit: contain; }
 .voice-photo-strip figcaption { margin-top: 8px; color: var(--muted); font-size: .75rem; }
 .voice-audio-console { padding: clamp(24px, 5vw, 44px); border: 1px solid var(--line); border-radius: 24px; background: rgba(255,255,255,.45); }
+.voice-text-only-note { margin: 28px 0 0; color: var(--muted); font-size: .9rem; line-height: 1.8; }
 .voice-parts-badge { display: inline-block; margin-top: 8px; padding: 4px 10px; border-radius: 6px; background: rgba(185,94,50,.08); color: var(--accent); font-size: .75rem; }
 .voice-parts > p:first-child { margin: 0 0 14px; color: var(--muted); font-size: .85rem; line-height: 1.7; }
 .voice-parts ol { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }

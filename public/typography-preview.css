@@ -1,0 +1,59 @@
+/* Preview only. Scope every rule to the existing public HP. */
+.landing-site {
+  --hp-type-story: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --hp-type-read: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+}
+
+/* Product facts and comparisons are read to make a decision. */
+.landing-site #price :is(h3, li, .hp-price-v2-guarantee),
+.landing-site #price :is(.hp-price-v2-cta, .hp-price-v2-cta-family),
+.landing-site #ways :is(.hp-v4-ways-note, .hp-v4-way-card p, .hp-v4-way-steps p),
+.landing-site #trust :is(h3, p, .hp-text-link),
+.landing-site #faq :is(summary, p),
+.landing-site #origin :is(.hp-origin-toggle, .hp-origin-quote-note),
+.landing-site #book-sample-preview :is(.hp-label, p, figcaption, button),
+.landing-site #scenes :is(.hp-v4-scene-label, .hp-v4-scene-copy, .hp-v4-scene-tag-label, .hp-v4-scene-assist, li),
+.landing-site #price :is(.hp-price-v2-extras p, .hp-price-v2-family p:not(.hp-price-v2-family-amount), .hp-price-v2-action-heading p, .hp-price-v2-gift-path) {
+  font-family: var(--hp-type-read);
+  font-feature-settings: normal;
+  letter-spacing: .015em;
+}
+
+/* Keep the named products and the main amount in the brand voice. */
+.landing-site #price :is(h2, h4, .hp-price-v2-brand, .hp-price-v2-amount, .hp-price-v2-family-amount),
+.landing-site #price :is(.hp-price-v2-family h3, .hp-price-v2-action-heading h3),
+.landing-site #origin :is(h2, h3, .hp-story-emphasis),
+.landing-site #ways :is(h2, h3),
+.landing-site #trust h2,
+.landing-site #faq h2 {
+  font-family: var(--hp-type-story);
+}
+
+/* Longer origin prose needs a calmer, more legible reading texture. */
+.landing-site #origin p:not(.hp-origin-kicker):not(.hp-story-emphasis):not(.hp-origin-signature):not(.hp-origin-white) {
+  font-family: var(--hp-type-read);
+  font-feature-settings: normal;
+  letter-spacing: .015em;
+}
+
+/* The original two-column trust rows make long labels overlap the copy on phones. */
+@media (max-width: 900px) {
+  .landing-site #trust article {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: .25rem;
+  }
+
+  .landing-site #trust article :is(h3, p) {
+    min-width: 0;
+    margin: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .landing-site #price :is(li, .hp-price-v2-guarantee),
+  .landing-site #origin p:not(.hp-origin-kicker):not(.hp-story-emphasis),
+  .landing-site #trust p,
+  .landing-site #faq :is(summary, p) {
+    line-height: 1.85;
+  }
+}
