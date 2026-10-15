@@ -21,6 +21,8 @@
 
 同日の公開アプリ `/?app=1` は `/assets/main-sJeeAdCK.js` を読み込む。公開用に隔離した同名成果物には `voice_upload_failed`、`voice_transcription_failed`、`answer_save_failed` の3件の記録経路が含まれ、`activity_logs` の認証済み利用者向け INSERT 権限と本人限定 RLS も確認した。したがって「ブラウザーの報告コードがまだ本番にない」という以前の見立ては訂正する。ただし、実際の保存失敗を発生させるエンドツーエンド試験は未実施で、0件は成功の証明ではない。
 
+権限監査で `activity_logs` にクライアントロールの `TRUNCATE` 権限が残っていた。RLSではこの操作を制限できないため、`202610150003_restrict_activity_log_truncate.sql` をTEST・本番に適用した。両環境で `anon` と `authenticated` の `TRUNCATE=false`、認証済み利用者の `INSERT/SELECT=true`、サーバー側 `service_role` の権限維持を確認済み。
+
 ## 現時点の検知範囲と限界
 
 - 配信失敗・滞留はサーバーDB上の配信ログから検知する。
