@@ -6,7 +6,7 @@
   "scripts": {
     "migrate:v1": "node scripts/migrate-v1-html.mjs",
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/check-build-entrypoints.mjs",
     "preview": "vite preview",
     "deploy": "npm run build && gh-pages -d dist"
   },
