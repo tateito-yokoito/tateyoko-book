@@ -25,16 +25,15 @@ export function giftThreeTokenFromLocation(pathname, search) {
     return Array.from(bytes, char => char.charCodeAt(0).toString(16).padStart(2, '0')).join('');
   } catch { return ''; }
 }
-export const GIFT_THREE_MESSAGE = recipientUrl => `「縦糸+横糸」
+export const GIFT_THREE_MESSAGE = (recipientUrl, personalNote = '') => {
+  const note = personalNote.trim();
+  return `${note ? `${note}\n\n──────────\n` : ''}【縦糸＋横糸からのご案内】
+縦糸＋横糸は、スマホに届く質問に答えながら、人生を振り返り、歩みや想いを言葉にしていくサービスです。
+ご自身のペースで答えられます。語った声や内容は、ご本人が選ばない限り贈り主にも共有されません。
 
-スマホに届く質問に、声で答えていくだけ。
-これまでの人生を振り返り、言葉にする体験です。
-
-無料の3問から、試してみませんか？
-
-3問を試す：${recipientUrl}
-
-語った内容は、本人の許可なく共有されません。`;
+まずは無料の3問からお試しください。
+3問を開く：${recipientUrl}`;
+};
 
 export async function giftThreeRequest(action, body = {}, accessToken = '') {
   const url = import.meta.env.VITE_SUPABASE_URL || 'https://wquxjeqkumossjxehdop.supabase.co';

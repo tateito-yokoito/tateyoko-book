@@ -12,3 +12,11 @@ body.g3-page,.g3-feedback{--paper:#f7f6f1;--ink:#18303d;--muted:#43534f;--line:#
 .g3-recipient-entry-copy p+p{margin-top:17px}
 .g3-recipient-entry .g3-recipient-entry-note{margin-top:28px;font-size:12px;line-height:1.8}
 @media(max-width:740px){.g3-mobile-break{display:block}.g3-recipient-entry{padding-top:42px}.g3-recipient-entry .g3-title{font-size:clamp(29px,8vw,36px)}.g3-recipient-entry-copy{margin-top:27px}.g3-recipient-entry .g3-cta{margin-top:34px}}
+
+.g3-panel .g3-note-label{margin-top:29px}
+.g3-note-input{display:block;width:100%;min-height:92px;margin-top:8px;padding:13px 14px;border:1px solid #bfcfc3;border-radius:5px;background:#fff;color:var(--deep);font:inherit;font-size:16px;line-height:1.7;resize:vertical}
+.g3-note-input::placeholder{color:#899790;opacity:1}
+.g3-card .g3-personal-note{margin:0 0 14px;white-space:pre-wrap}
+.g3-message-divider{width:100%;height:1px;margin:14px 0;background:#d5ded8}
+.g3-card p+p{margin-top:14px}
+.g3-about-link{display:inline-block;margin-top:22px;padding:10px;color:#315c4b;font-size:14px;text-decoration:underline;text-underline-offset:4px}
