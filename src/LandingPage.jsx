@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import "./landing-parity.css";
+import "./monitor-launch.css";
 import LandingBookEditions from './landing/LandingBookEditions.jsx';
 import StoryIntro from './landing/StoryIntro.jsx';
 
@@ -35,6 +36,51 @@ function Placeholder({ name, children, className = "" }) {
   return <div className={"hp-placeholder " + className}><span className="hp-placeholder-label">ビジュアル仮置き · {name}</span>{children}</div>;
 }
 function SectionLabel({ children }) { return <p className="hp-label">{children}</p>; }
+
+function MonitorApplicationDialog({ close, reviewOnly }) {
+  const dialog = useRef(null);
+  const [draft, setDraft] = useState(null);
+  useEffect(() => {
+    const previous = document.activeElement;
+    dialog.current.showModal();
+    return () => { previous?.focus(); };
+  }, []);
+  const prepareDraft = event => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") || "").trim();
+    const email = String(form.get("email") || "").trim();
+    const interest = String(form.get("interest") || "").trim();
+    if (!name || !email) return;
+    const body = [
+      "縦糸横糸のモニター利用を希望します。",
+      "",
+      `お名前：${name}`,
+      `返信先メールアドレス：${email}`,
+      `残したい物語：${interest || "未記入"}`
+    ].join("\n");
+    setDraft(`mailto:${EMAIL}?subject=${encodeURIComponent("縦糸横糸 モニター利用のお申し込み")}&body=${encodeURIComponent(body)}`);
+  };
+  return <dialog className="hp-monitor-dialog" ref={dialog} aria-labelledby="hp-monitor-title" onCancel={close} onClick={event => { if (event.target === event.currentTarget) close(); }}>
+    <div className="hp-monitor-dialog-inner">
+      <button className="hp-monitor-close" type="button" onClick={close} aria-label="閉じる">×</button>
+      <h2 id="hp-monitor-title">モニター利用のお申し込み</h2>
+      <p>正式リリース前のサービスをご案内しています。お申し込みをいただいた後、運営からご連絡します。</p>
+      <form onSubmit={prepareDraft} onChange={() => setDraft(null)}>
+        <label>お名前<input name="name" type="text" autoComplete="name" maxLength="80" required /></label>
+        <label>メールアドレス<input name="email" type="email" autoComplete="email" maxLength="254" required /></label>
+        <label>どなたの物語を残したいですか（任意）<textarea name="interest" maxLength="500" placeholder="ご自身・ご家族など" /></label>
+        <button className="hp-monitor-primary" type="submit">申込メールを作成する</button>
+      </form>
+      {draft && <div className="hp-monitor-draft" role="status">
+        <p>メールアプリが開きます。内容を確認し、送信してください。</p>
+        <a className="hp-monitor-primary" href={reviewOnly ? "#hp-review-notice" : draft}>メールアプリを開く ↗</a>
+        {!reviewOnly && <p className="hp-monitor-fallback">開かない場合は、{EMAIL} に「モニター利用希望」とメールしてください。</p>}
+      </div>}
+      <p className="hp-monitor-note">入力内容は、この画面では送信・保存されません。メールアプリで送信して初めてお申し込みとなります。</p>
+    </div>
+  </dialog>;
+}
 
 function InformationDialog({ panel, close, reviewOnly }) {
   const dialog = useRef(null);
@@ -86,6 +132,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
   const [panel, setPanel] = useState(null);
   const [zoomedProduct, setZoomedProduct] = useState(null);
   const [moreFaq, setMoreFaq] = useState(false);
+  const [monitorApplicationOpen, setMonitorApplicationOpen] = useState(false);
   useEffect(() => {
     document.body.classList.add("landing-page-active");
     return () => document.body.classList.remove("landing-page-active");
@@ -98,7 +145,11 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
   }, [menu]);
   return <div className="landing-site">
     <a className="hp-skip" href="#hp-main">本文へ移動</a>
-    <div id="hp-review-notice" className="hp-preview-note" role="note">{reviewOnly ? "HP Preview" : "サイト準備中"} <span>{reviewOnly ? "表示確認専用：登録・購入・ログイン・送信はできません。" : "画像・音声の一部は確認用です。"}</span></div>
+    {reviewOnly && <div id="hp-review-notice" className="hp-preview-note" role="note">HP Preview <span>表示確認専用：登録・購入・ログイン・送信はできません。</span></div>}
+    <div className="hp-monitor-strip" role="note" aria-label="モニター利用のご案内">
+      <p><strong>正式リリース前</strong><span aria-hidden="true">｜</span>現在はモニター利用をご案内しています。</p>
+      <button type="button" onClick={() => setMonitorApplicationOpen(true)}>モニター利用を申し込む <span aria-hidden="true">↗</span></button>
+    </div>
     <header className="hp-header">
       <a href="#top" aria-label="縦糸横糸 トップへ"><img src="/brand-logo-lockup-kyokasho.svg" alt="縦糸横糸" width="200" height="48" /></a>
       <div className="hp-header-actions"><a href={reviewOnly ? "#hp-review-notice" : LOGIN}>ログイン</a><button id="hp-menu-toggle" aria-label={menu ? "メニューを閉じる" : "メニューを開く"} aria-expanded={menu} aria-controls="hp-nav" onClick={() => setMenu(!menu)}>{menu ? "閉じる ×" : "メニュー ☰"}</button></div>
@@ -210,8 +261,9 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
       </section>
       <section className="hp-final hp-dark hp-section"><div className="hp-shell"><img src="/brand-logo-symbol.svg" alt="" width="52" height="52" /><h2>まずは、三つだけ。</h2><p>幼い頃のことを、<br />少し話してみませんか。</p><TrialLink reviewOnly={reviewOnly} /><p className="hp-note">約10分・カード登録不要・自動課金なし。</p></div></section>
     </main>
-    <footer className="hp-footer hp-shell"><a href="#top"><img src="/brand-logo-lockup-kyokasho.svg" alt="縦糸横糸" width="200" height="48" /></a><div><button onClick={() => setPanel("contact")}>お問い合わせ</button><button onClick={() => setPanel("privacy")}>プライバシー</button><button onClick={() => setPanel("commerce")}>特定商取引法に基づく表記</button></div><p>© SaltLight</p></footer>
+    <footer className="hp-footer hp-shell"><a href="#top"><img src="/brand-logo-lockup-kyokasho.svg" alt="縦糸横糸" width="200" height="48" /></a><div><button onClick={() => setPanel("contact")}>お問い合わせ</button><button onClick={() => setPanel("privacy")}>プライバシー</button><button onClick={() => setPanel("commerce")}>特定商取引法に基づく表記</button></div><p>© 縦糸横糸</p></footer>
     {panel && <InformationDialog reviewOnly={reviewOnly} panel={panel} close={() => setPanel(null)} />}
+    {monitorApplicationOpen && <MonitorApplicationDialog reviewOnly={reviewOnly} close={() => setMonitorApplicationOpen(false)} />}
     {zoomedProduct && <ProductImageDialog product={zoomedProduct} close={() => setZoomedProduct(null)} />}
   </div>;
 }
