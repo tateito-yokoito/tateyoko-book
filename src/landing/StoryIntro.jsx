@@ -92,7 +92,7 @@ export function StoryOrigin() {
         <div className="hp-origin-split hp-origin-memory"><figure><img src={asset + 'grandparents.jpg'} alt="創業者の祖父母の実際の写真" loading="lazy" width="1102" height="713" /></figure><p>1000世帯を超える方々の人生を聞いてきた私自身、<br />一番身近な家族については、<br />恥ずかしいほど何も聞けていませんでした。</p></div>
       </div>
 
-      <div className="hp-origin-conclusion"><p>特別な人だけが、自伝を書くのではなく。<br />成功した人生だけを、きれいな物語にするのでもなく。</p><p className="hp-story-emphasis">誰もが、自分の人生を気軽に語れるものをつくりたい。</p><p>語ることで、自分の人生をもう一度辿る。<br />忙しい毎日の中では見えなかったものに気づく。</p><p>そして、いつか誰かがその人生を受け取りたいと思ったとき、</p><p className="hp-story-emphasis">時を越えて、その人らしさに触れられる器をつくりたい。</p><p>それが、縦糸横糸の始まりです。</p><p className="hp-origin-signature">株式会社ソルトライト<br />代表　菅原 英俊</p></div>
+      <div className="hp-origin-conclusion"><p>特別な人だけが、自伝を書くのではなく。<br />成功した人生だけを、きれいな物語にするのでもなく。</p><p className="hp-story-emphasis">誰もが、自分の人生を気軽に語れるものをつくりたい。</p><p>語ることで、自分の人生をもう一度辿る。<br />忙しい毎日の中では見えなかったものに気づく。</p><p>そして、いつか誰かがその人生を受け取りたいと思ったとき、</p><p className="hp-story-emphasis">時を越えて、その人らしさに触れられる器をつくりたい。</p><p>それが、縦糸横糸の始まりです。</p><p className="hp-origin-signature">菅原 英俊</p></div>
       </div>
     </section>
   );

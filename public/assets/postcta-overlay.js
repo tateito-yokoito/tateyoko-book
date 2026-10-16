@@ -5805,11 +5805,7 @@ function Od() {
         /* @__PURE__ */ m.jsx("p", { children: "そして、いつか誰かがその人生を受け取りたいと思ったとき、" }),
         /* @__PURE__ */ m.jsx("p", { className: "hp-story-emphasis", children: "時を越えて、その人らしさに触れられる器をつくりたい。" }),
         /* @__PURE__ */ m.jsx("p", { children: "それが、縦糸横糸の始まりです。" }),
-        /* @__PURE__ */ m.jsxs("p", { className: "hp-origin-signature", children: [
-          "株式会社SaltLight",
-          /* @__PURE__ */ m.jsx("br", {}),
-          "代表　菅原 英俊"
-        ] })
+        /* @__PURE__ */ m.jsx("p", { className: "hp-origin-signature", children: "菅原 英俊" })
       ] })
     ] })
   ] });

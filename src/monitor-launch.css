@@ -1,0 +1,92 @@
+.landing-site .hp-monitor-strip {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  padding: 9px 24px;
+  border-block: 1px solid #cbd5ce;
+  background: #eaf0e9;
+  color: #244a3f;
+  font-family: "Noto Sans JP", sans-serif;
+}
+.landing-site .hp-monitor-strip p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  letter-spacing: .02em;
+}
+.landing-site .hp-monitor-strip strong { font-weight: 700; }
+.landing-site .hp-monitor-strip button {
+  border: 1px solid #6f9889;
+  border-radius: 3px;
+  background: #fff;
+  color: #244a3f;
+  padding: 6px 14px;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.landing-site .hp-monitor-strip button:hover { background: #f6faf5; }
+.hp-monitor-dialog {
+  width: min(530px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  border: 1px solid #becdc3;
+  border-radius: 8px;
+  padding: 0;
+  box-shadow: 0 20px 80px #102b2750;
+  background: #faf9f5;
+  color: #1a2b35;
+  font-family: "Noto Sans JP", sans-serif;
+}
+.hp-monitor-dialog::backdrop { background: #142a3b99; }
+.hp-monitor-dialog-inner { position: relative; padding: 32px; }
+.hp-monitor-dialog h2 {
+  margin: 0 0 12px;
+  font: 400 28px/1.5 "Noto Serif JP", "Yu Mincho", serif;
+}
+.hp-monitor-dialog p { margin: 0 0 12px; font-size: 14px; line-height: 1.8; }
+.hp-monitor-close { position: absolute; right: 18px; top: 14px; border: 0; background: none; font-size: 26px; }
+.hp-monitor-dialog label { display: block; margin-top: 18px; font-size: 14px; }
+.hp-monitor-dialog input,
+.hp-monitor-dialog textarea {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  padding: 12px;
+  border: 1px solid #bac6bd;
+  border-radius: 3px;
+  background: #fff;
+  color: #1a2b35;
+  font: inherit;
+}
+.hp-monitor-dialog textarea { min-height: 94px; resize: vertical; }
+.hp-monitor-primary {
+  display: block;
+  width: 100%;
+  margin-top: 26px;
+  padding: 14px;
+  border: 0;
+  border-radius: 3px;
+  background: #28473e;
+  color: #fff !important;
+  text-align: center;
+  text-decoration: none;
+  font: 15px/1.6 "Noto Sans JP", sans-serif;
+  cursor: pointer;
+}
+.hp-monitor-primary:hover { background: #1e3b32; }
+.hp-monitor-draft { margin-top: 20px; padding-top: 16px; border-top: 1px solid #cbd5ce; }
+.hp-monitor-draft .hp-monitor-primary { margin-top: 10px; }
+.hp-monitor-dialog .hp-monitor-note,
+.hp-monitor-dialog .hp-monitor-fallback { margin-top: 14px; color: #69756e; font-size: 12px; }
+.hp-monitor-dialog :is(button,a,input,textarea):focus-visible,
+.landing-site .hp-monitor-strip button:focus-visible { outline: 3px solid #a6472d; outline-offset: 3px; }
+@media (max-width: 650px) {
+  .landing-site .hp-monitor-strip { flex-direction: column; gap: 4px; padding: 8px 15px 10px; text-align: center; }
+  .landing-site .hp-monitor-strip p,
+  .landing-site .hp-monitor-strip button { font-size: 12px; }
+  .landing-site .hp-monitor-strip button { padding: 4px 9px; }
+  .hp-monitor-dialog-inner { padding: 28px 22px; }
+  .hp-monitor-dialog h2 { font-size: 24px; }
+}
