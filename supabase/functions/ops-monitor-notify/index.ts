@@ -18,6 +18,29 @@ type Finding = {
   first_detected_at: string;
 };
 
+type Incident = {
+  id: string;
+  kind: "voice_upload_failed" | "voice_transcription_failed" | "answer_save_failed";
+  importance: "review" | "urgent";
+  attempt_count: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  failure_point: string | null;
+  error_code: string | null;
+  http_status: number | null;
+};
+
+const incidentLabels: Record<Incident["kind"], string> = {
+  voice_upload_failed: "音声の保存",
+  voice_transcription_failed: "文字起こし",
+  answer_save_failed: "回答の保存",
+};
+const importanceLabels = { review: "要確認", urgent: "至急確認" };
+const japaneseTime = (value: string) => new Date(value).toLocaleString("ja-JP", {
+  timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+});
+
 const labels: Record<Finding["kind"], string> = {
   delivery_failed: "問いの配信に失敗しました",
   delivery_stuck: "問いの配信処理が20分以上進んでいません",
@@ -73,6 +96,34 @@ async function sendFinding(finding: Finding, alertEmail: string) {
   if (!response.ok) {
     throw new Error(`Resend returned ${response.status}`);
   }
+}
+
+async function sendIncident(incident: Incident, alertEmail: string) {
+  const importance = importanceLabels[incident.importance];
+  const label = incidentLabels[incident.kind] || "保存処理";
+  const body = [
+    `検証の重要度: ${importance}`,
+    `事象: ${label}の失敗が同じ操作で${incident.attempt_count}回報告されました。`,
+    `初回 (JST): ${japaneseTime(incident.first_seen_at)}`,
+    `最終 (JST): ${japaneseTime(incident.last_seen_at)}`,
+    `工程: ${incident.failure_point || "不明"}`,
+    `安全なエラーコード: ${incident.error_code || "記録なし"}${incident.http_status ? ` / HTTP ${incident.http_status}` : ""}`,
+    `履歴ID: ${incident.id}`,
+    "",
+    `対象のアカウントと物語は管理画面の「エラー履歴」で確認: ${appUrl.replace(/\/$/, "")}/?admin=1`,
+    "このメールには顧客名・メールアドレス・語りの本文・音声・保存パスを含めていません。",
+    "自動修正や顧客への連絡は行っていません。",
+  ].join("\n");
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: alertFrom, to: alertEmail,
+      subject: `【縦糸横糸・${importance}】${label}の失敗（${incident.attempt_count}回）`,
+      text: body,
+    }),
+  });
+  if (!response.ok) throw new Error(`Resend returned ${response.status}`);
 }
 
 async function sendTestEmail(alertEmail: string) {
@@ -186,6 +237,7 @@ Deno.serve(async (request) => {
   const { data: findings, error: findingsError } = await supabase
     .from("ops_monitor_findings")
     .select("fingerprint,kind,severity,affected_count,first_detected_at")
+    .in("kind", ["delivery_failed", "delivery_stuck", "site_unavailable"])
     .is("email_sent_at", null)
     .gte("first_detected_at", new Date(Date.now() - 24 * 60 * 60_000).toISOString())
     .order("first_detected_at", { ascending: true })
@@ -216,5 +268,43 @@ Deno.serve(async (request) => {
     }
   }
 
-  return json({ ok: true, pendingCount: findings?.length || 0, sentCount });
+  const { data: settings, error: settingsError } = await supabase
+    .from("ops_monitor_settings")
+    .select("incident_alerts_enabled")
+    .eq("singleton", true)
+    .single();
+  if (settingsError) {
+    console.error("ops monitor incident setting lookup failed", settingsError.code);
+    return json({ error: "Incident setting lookup failed", sentCount }, 503);
+  }
+
+  let incidentSentCount = 0;
+  if (settings?.incident_alerts_enabled) {
+    const { data: pendingIncidents, error: claimError } = await supabase
+      .rpc("claim_ops_error_notifications", { input_limit: 10 });
+    if (claimError) {
+      console.error("ops monitor incident claim failed", claimError.code);
+      return json({ error: "Incident claim failed", sentCount }, 503);
+    }
+    for (const incident of (pendingIncidents || []) as Incident[]) {
+      try {
+        await sendIncident(incident, alertEmail);
+        const { error: finishError } = await supabase.rpc("finish_ops_error_notification", {
+          input_id: incident.id, input_importance: incident.importance, input_sent: true,
+        });
+        if (finishError) throw new Error(`Incident mark failed: ${finishError.code}`);
+        incidentSentCount += 1;
+      } catch (error) {
+        console.error("ops monitor incident delivery failed", {
+          id: incident.id, message: error instanceof Error ? error.message : "unknown",
+        });
+        await supabase.rpc("finish_ops_error_notification", {
+          input_id: incident.id, input_importance: incident.importance, input_sent: false,
+        });
+        return json({ error: "Incident delivery failed", sentCount, incidentSentCount }, 502);
+      }
+    }
+  }
+
+  return json({ ok: true, pendingCount: findings?.length || 0, sentCount, incidentSentCount });
 });

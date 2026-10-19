@@ -4460,6 +4460,10 @@ const startEditRecording = (
 
 const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
   let failureStage = "upload";
+  let failurePoint = "prepare";
+  let telemetryAnswerId = sourceVoiceData.targetAnswerId || sourceVoiceData.answerId || null;
+  const telemetryQuestion = questionsDB[progress.currentIndex] || null;
+  const telemetryAttemptId = crypto.randomUUID();
   setVoiceData(prev => ({
     ...prev,
     transcriptionStatus: "processing",
@@ -4479,6 +4483,7 @@ let targetAnswerId =
   sourceVoiceData.targetAnswerId ||
   sourceVoiceData.answerId ||
   crypto.randomUUID();
+telemetryAnswerId = targetAnswerId;
 
 if (!sourceVoiceData.targetAnswerId) {
   const { data: existingAnswer } = await supabaseClient
@@ -4491,9 +4496,11 @@ if (!sourceVoiceData.targetAnswerId) {
     .maybeSingle();
 
   if (existingAnswer) targetAnswerId = existingAnswer.id;
+  telemetryAnswerId = targetAnswerId;
 }
 
 if (foundation?.project?.id && currentQ?.user_question_id) {
+  failurePoint = "reserve";
   const { error: permitError } = await supabaseClient.rpc('reserve_recording_audio_upload', {
     input_project_id: foundation.project.id,
     input_question_id: currentQ.user_question_id,
@@ -4526,6 +4533,7 @@ const uploadStartIndex =
     : 0;
 
 for (let i = 0; i < audioSegments.length; i++) {
+      failurePoint = "storage";
       const segment = audioSegments[i];
       const blob = segment?.blob;
 
@@ -4556,7 +4564,7 @@ for (let i = 0; i < audioSegments.length; i++) {
 
       if (uploadError) {
         console.error("storage upload error", uploadError);
-        throw new Error("音声の保存に失敗しました");
+        throw uploadError;
       }
 
       paths.push(path);
@@ -4567,7 +4575,22 @@ const combinedStoragePaths =
     ? [...existingAudioPaths, ...paths]
     : paths;
 
+if (paths.length > 0) {
+  void logActivity(supabaseClient, {
+    actorUserId: user?.id,
+    bookProjectId: foundation?.project?.id || currentQ?.book_project_id || null,
+    answerId: targetAnswerId,
+    action: "voice_upload_succeeded",
+    source: "app",
+    metadata: {
+      user_question_id: currentQ?.user_question_id || null,
+      attempt_id: telemetryAttemptId,
+    },
+  });
+}
+
 failureStage = "transcription";
+failurePoint = "transcription";
 
 setVoiceData(prev => ({
   ...prev,
@@ -4705,14 +4728,26 @@ try {
   } catch (error) {
     console.error(error);
 
-    // Operational telemetry contains only a stage label, never the recording
-    // or transcript. Failure to write telemetry must not block the retry UI.
+    // Operational telemetry uses stable identifiers and allowlisted error codes
+    // only. Never include audio, transcripts, storage paths or error messages.
+    const safeCode = typeof error?.code === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(error.code)
+      ? error.code : null;
+    const safeStatus = Number(error?.statusCode || error?.status || 0);
     void logActivity(supabaseClient, {
       actorUserId: user?.id,
+      bookProjectId: foundation?.project?.id || telemetryQuestion?.book_project_id || null,
+      answerId: telemetryAnswerId,
       action: failureStage === "upload" ? "voice_upload_failed" : "voice_transcription_failed",
       source: "app",
       outcome: "failure",
-      metadata: { stage: failureStage === "upload" ? "upload" : "transcription" },
+      metadata: {
+        stage: failureStage,
+        failure_point: failurePoint,
+        user_question_id: telemetryQuestion?.user_question_id || null,
+        attempt_id: telemetryAttemptId,
+        error_code: safeCode,
+        http_status: Number.isInteger(safeStatus) && safeStatus >= 400 && safeStatus <= 599 ? safeStatus : null,
+      },
     });
 
   setVoiceData(prev => ({
@@ -6199,6 +6234,7 @@ const restartFreeTrial = async ({ confirmReplace = true } = {}) => {
 const handleSaveAnswer = async (tag = null) => {
   emitJourney('save_start');
   setIsInitializing(true);
+  let telemetrySaveAnswerId = voiceData.targetAnswerId || voiceData.answerId || null;
 
   try {
     const currentQ = questionsDB[progress.currentIndex];
@@ -6226,6 +6262,7 @@ const handleSaveAnswer = async (tag = null) => {
       const editMode = voiceData.editRecordingMode || null;
       const isEditRecording = editMode === "replace" || editMode === "append";
       const ansId = voiceData.targetAnswerId || voiceData.answerId || crypto.randomUUID();
+      telemetrySaveAnswerId = ansId;
 
       const { data: savedAnswer, error: dbError } = await supabaseClient
         .from("answers")
@@ -6733,9 +6770,15 @@ setScene(1);
       console.error(error);
       void logActivity(supabaseClient, {
         actorUserId: user?.id,
+        bookProjectId: foundation?.project?.id || questionsDB[progress.currentIndex]?.book_project_id || null,
+        answerId: telemetrySaveAnswerId,
         action: "answer_save_failed",
         source: "app",
         outcome: "failure",
+        metadata: {
+          user_question_id: questionsDB[progress.currentIndex]?.user_question_id || null,
+          error_code: typeof error?.code === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(error.code) ? error.code : null,
+        },
       });
       alert(error?.code === "42501"
         ? "本編の開始状態を確認できませんでした。録音はこの画面に残っています。"
