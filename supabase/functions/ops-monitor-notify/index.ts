@@ -237,7 +237,7 @@ Deno.serve(async (request) => {
   const { data: findings, error: findingsError } = await supabase
     .from("ops_monitor_findings")
     .select("fingerprint,kind,severity,affected_count,first_detected_at")
-    .in("kind", ["delivery_failed", "delivery_stuck", "site_unavailable"])
+    .in("kind", (await supabase.from("ops_monitor_settings").select("incident_alerts_enabled").eq("singleton", true).single()).data?.incident_alerts_enabled ? ["delivery_failed", "delivery_stuck", "site_unavailable"] : ["delivery_failed", "delivery_stuck", "site_unavailable", "voice_save_failed", "voice_transcription_failed", "answer_save_failed"])
     .is("email_sent_at", null)
     .gte("first_detected_at", new Date(Date.now() - 24 * 60 * 60_000).toISOString())
     .order("first_detected_at", { ascending: true })
