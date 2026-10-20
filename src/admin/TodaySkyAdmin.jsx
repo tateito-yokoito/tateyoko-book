@@ -4,6 +4,7 @@ import './today-sky-admin.css';
 import {skyAssetUrl} from '../home/skyAssetUrl.js';
 import ApprovedHome from '../home/ApprovedHome.jsx';
 import { Scene1_MyPage } from '../App.jsx';
+import { encodeDailySkyImage } from './skyImage.js';
 
 const todayJst = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
 const position = (x, y) => `${x}% ${y}%`;
@@ -92,6 +93,8 @@ export default function TodaySkyAdmin({ client }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [editorError, setEditorError] = useState('');
+  const [editorMessage, setEditorMessage] = useState('');
   const [file, setFile] = useState(null);
   const [src, setSrc] = useState('');
   const [editId, setEditId] = useState(null);
@@ -140,12 +143,13 @@ export default function TodaySkyAdmin({ client }) {
     setDim(Math.round((sky.questionDim ?? .5) * 100));
     setPcOverride(Boolean(sky.pcHomeObjectPosition || sky.pcQuestionObjectPosition));
     setFile(null); setEditId(item.id); setChecked(false);
+    setEditorError(''); setEditorMessage('');
     document.getElementById('sky-editor')?.scrollIntoView({behavior:'smooth',block:'start'});
   }
-  async function run(task, success) {
-    setBusy(true); setError(''); setMessage('');
-    try { await task(); await load(); setMessage(success); }
-    catch (e) { setError(e.message || String(e)); }
+  async function run(task, success, scope = 'global') {
+    setBusy(true); setError(''); setMessage(''); setEditorError(''); setEditorMessage('');
+    try { await task(); await load(); (scope === 'editor' ? setEditorMessage : setMessage)(success); }
+    catch (e) { (scope === 'editor' ? setEditorError : setError)(e.message || String(e)); }
     finally { setBusy(false); }
   }
   async function register() {
@@ -157,11 +161,10 @@ export default function TodaySkyAdmin({ client }) {
       const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
       canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale);
       canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height); bitmap.close();
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', .84));
-      if (!blob || blob.size > 5 * 1024 * 1024) throw new Error('画像の変換に失敗しました。');
+      const { blob, extension, contentType } = await encodeDailySkyImage(canvas);
       const id = `sky-${crypto.randomUUID()}`;
-      const name = `${id}.webp`;
-      const { error: uploadError } = await client.storage.from('daily-skies').upload(name, blob, { contentType: 'image/webp', upsert: false });
+      const name = `${id}.${extension}`;
+      const { error: uploadError } = await client.storage.from('daily-skies').upload(name, blob, { contentType, upsert: false });
       if (uploadError) throw uploadError;
       const sky = { id, src: `/storage/v1/object/public/daily-skies/${name}`, homeObjectPosition: position(homeX, homeY), homeHeightPx: fixedHomeHeight,
         questionObjectPosition: position(questionX, questionY), questionDim: dim / 100,
@@ -169,7 +172,7 @@ export default function TodaySkyAdmin({ client }) {
       const { error: registerError } = await client.rpc('admin_register_daily_sky', { input_id: id, input_sky: sky });
       if (registerError) throw registerError;
       setFile(null); setChecked(false);
-    }, '空をライブラリへ登録しました。日付への割当はまだ行われていません。');
+    }, '空をライブラリへ登録しました。日付への割当はまだ行われていません。', 'editor');
   }
   async function saveEdits() {
     if (!editingItem || !checked) return;
@@ -187,7 +190,7 @@ export default function TodaySkyAdmin({ client }) {
       const { error: updateError } = await client.rpc('admin_update_daily_sky_display', { input_id: editId, input_sky: sky });
       if (updateError) throw updateError;
       setEditId(null); setChecked(false);
-    }, '表示調整を保存しました。過去の日付の表示は変更されません。');
+    }, '表示調整を保存しました。過去の日付の表示は変更されません。', 'editor');
   }
   function jumpTo(sectionId) {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -204,7 +207,7 @@ export default function TodaySkyAdmin({ client }) {
     {message && <p role="status" className="sky-admin-message">{message}</p>}
     <section id="sky-today"><h4>今日の空 <small>{today}</small></h4>{todaySky ? <div className="sky-today"><img src={skyAssetUrl(client,(todayEntry.sky || todaySky.sky).src)} alt="今日の空" /><span>{todaySky.id}</span></div> : <p>今日の割当はまだありません。顧客が最初に開いた際に確定します。</p>}</section>
     <section id="sky-library-section"><div className="sky-library-heading"><h4>空のライブラリ <small>{catalog.length}枚</small></h4><div className="sky-library-heading-actions"><button type="button" aria-pressed={libraryView === 'large'} onClick={() => setLibraryView(value => value === 'compact' ? 'large' : 'compact')}>{libraryView === 'compact' ? '大きく見る' : '一覧を詰めて見る'}</button><button type="button" aria-pressed={organizingLibrary} onClick={() => setOrganizingLibrary(value => !value)}>{organizingLibrary ? '整理を終える' : '整理する'}</button></div></div><div className={`sky-library sky-library-${libraryView}`}>{catalog.map(item => <div key={item.id} className="sky-library-item"><div className="approved-home sky-library-home-preview"><div className="ah-sky" role="img" aria-label={`${item.id}のスマホホーム表示`}><img src={skyAssetUrl(client,item.sky.src)} alt="" style={{objectPosition:item.sky.homeObjectPosition || '50% 50%','--sky-phone-position':item.sky.homeObjectPosition || '50% 50%'}} /></div></div><b>{item.id}</b><span>登録日 {item.registered_on || '2026-09-24'}</span><span>{item.active ? '今後使用する' : '今後使用しない'} · 使用済み {item.used_count}日{item.next_day ? ` · 次回 ${item.next_day}` : ''}</span><div className="sky-library-actions"><button disabled={busy} onClick={() => startEdit(item)}>表示を調整</button>{organizingLibrary && <button className="sky-library-archive" disabled={busy} onClick={() => { if (!window.confirm(`${item.id}を${item.active ? '今後使用しない' : '今後使用する'}設定にしますか？\n過去に割り当てた日は変更されません。`)) return; void run(async () => { const { error: e } = await client.rpc('admin_set_daily_sky_active', { input_id: item.id, input_active: !item.active }); if (e) throw e; }, '今後の利用設定を変更しました。過去の日付は変更していません。'); }}>{item.active ? '今後使用しない' : '今後使用する'}</button>}</div></div>)}</div></section>
-    <section id="sky-editor"><h4>{editingItem ? `${editingItem.id} の表示調整` : '空を追加'}</h4><p>{editingItem ? '画像は変えずに構図と暗さを調整します。過去に表示された日の見え方は変えません。' : '画像を選び、ホームと質問画面をスマホ・PCで確認してください。登録だけでは顧客画面には表示されません。'}</p>{editingItem ? <button onClick={() => {setEditId(null);setChecked(false);}}>調整をやめる</button> : <input type="file" accept="image/*" onChange={e => { setFile(e.target.files?.[0] || null); setChecked(false); }} />}
+    <section id="sky-editor"><h4>{editingItem ? `${editingItem.id} の表示調整` : '空を追加'}</h4><p>{editingItem ? '画像は変えずに構図と暗さを調整します。過去に表示された日の見え方は変えません。' : '画像を選び、ホームと質問画面をスマホ・PCで確認してください。登録だけでは顧客画面には表示されません。'}</p>{editingItem ? <button onClick={() => {setEditId(null);setChecked(false);setEditorError('');setEditorMessage('');}}>調整をやめる</button> : <input type="file" accept="image/*" onChange={e => { setFile(e.target.files?.[0] || null); setChecked(false); setEditorError(''); setEditorMessage(''); }} />}
       {previewSrc && <><div className="sky-controls"><NumberControl label="ホーム・横位置" value={homeX} min={0} max={100} onChange={setHomeX} /><NumberControl label="ホーム・縦位置" value={homeY} min={0} max={100} onChange={setHomeY} /><NumberControl label="質問・横位置" value={questionX} min={0} max={100} onChange={setQuestionX} /><NumberControl label="質問・縦位置" value={questionY} min={0} max={100} onChange={setQuestionY} /><NumberControl label="質問・暗さ" value={dim} min={0} max={80} onChange={setDim} /></div>
       <p>ホーム画像の高さは全画像共通で260pxです。</p>
       <div className="sky-check-grid">
@@ -218,6 +221,8 @@ export default function TodaySkyAdmin({ client }) {
         <SkyFrame label="PC · 質問" sky={previewSky} desktop />
       </div>
       <label><input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} /> 4画面の構図と文字の読みやすさを確認しました</label><button disabled={busy || !checked} onClick={editingItem ? saveEdits : register}>{editingItem ? '表示調整を保存する' : 'この空を登録する'}</button></>}
+      {editorError && <p role="alert" className="sky-admin-error sky-editor-feedback">{editorError}</p>}
+      {editorMessage && <p role="status" className="sky-admin-message sky-editor-feedback">{editorMessage}</p>}
     </section>
     <section id="sky-schedule"><h4>未来の割当</h4><p>今日と過去は変更できません。画像追加・非表示の後も予定は自動では変わりません。</p><div className="sky-schedule-actions"><label>再配置の最終日 <input type="date" value={until} min={today} onChange={e => setUntil(e.target.value)} /></label><button disabled={busy || !active.length} onClick={() => { if (window.confirm(`明日から${until}までの予定を再配置します。今日と過去は変更しません。`)) void run(async () => { const { error: e } = await client.rpc('admin_rebuild_future_daily_skies', { input_until: until }); if (e) throw e; }, '未来の空を再配置しました。'); }}>今後の空に反映する</button></div>
       <div className="sky-schedule-actions"><label>日付 <input type="date" value={assignDay} min={today} onChange={e => setAssignDay(e.target.value)} /></label><label>空 <select value={assignId} onChange={e => setAssignId(e.target.value)}><option value="">選択してください</option>{active.map(s => <option key={s.id} value={s.id}>{s.id}</option>)}</select></label><button disabled={busy || !assignDay || !assignId || assignDay <= today} onClick={() => run(async () => { const { error: e } = await client.rpc('admin_assign_daily_sky', { input_day: assignDay, input_id: assignId }); if (e) throw e; }, '未来の日付を変更しました。')}>この日に割り当てる</button></div>
