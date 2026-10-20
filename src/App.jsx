@@ -3,6 +3,7 @@ import { paidConversationIndex, paidOnboardingApplies, paidOnboardingCheckpoint,
 import { getActiveOnboardingRitualScene, onboardingSetupScenes, resolveOnboardingRitualEntryScene } from './lib/onboardingRitualResume.js';
 import { clearOnboardingNotificationDraft, clearOnboardingPreferenceDraft, clearOnboardingSharingDraft, draftTimestamp, readOnboardingNotificationDraft, readOnboardingPreferenceDraft, readOnboardingSharingDraft, writeOnboardingNotificationDraft, writeOnboardingPreferenceDraft, writeOnboardingSharingDraft } from './lib/onboardingPreferenceDraft.js';
 import ApprovedHome from './home/ApprovedHome.jsx';
+import LineNotificationConnection from './LineNotificationConnection.jsx';
 import SupporterContextFrame from './SupporterContextFrame.jsx';
 import StorySkySurface, { PersistentStorySkyBackdrop } from './home/StorySkySurface.jsx';
 import { configureSkyClient } from './home/liveSkies.js';
@@ -16,6 +17,7 @@ import { createSupportJourney } from './lib/supportJourney.js';
 import { loadBookWork } from "./lib/bookWork.js";
 import { assertPublicTestEnvironment, TEST_SUPABASE_URL } from "./lib/publicTestSafety.js";
 import { findNextDeliveryQuestionIndex, resolveDeliveryEntry, withoutDeliveryToken } from "./lib/deliveryEntry.js";
+import { completePlaceholderLineProfile, hasLineIdentity, saveLineRegistrationDraft, startLineSignIn, takeLineNotificationReturn, takeLineRegistrationDraft } from "./lib/lineAuth.js";
 import { createRecordingClock, mergeRecordingDuration, RECORDING_LIMIT_SECONDS, RECORDING_WARNING_SECONDS, RECORDING_LIMIT_NOTICE } from "./lib/recordingTime.js";
 import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
@@ -438,6 +440,12 @@ function getAuthReturnUrlFromCurrentLocation() {
 
   const entryMode = params.get("entry");
   if (entryMode) url.searchParams.set("entry", entryMode);
+
+  // Preserve a question deep link across the LINE OAuth round-trip.
+  const deliveryToken = params.get("token");
+  if (deliveryToken) url.searchParams.set("token", deliveryToken);
+  const journeyLink = params.get("journey_link");
+  if (journeyLink) url.searchParams.set("journey_link", journeyLink);
 
   const purchaseFor = params.get("purchase_for");
   if (purchaseFor) url.searchParams.set("purchase_for", purchaseFor);
@@ -927,8 +935,16 @@ const DEV_LOGIN_EMAIL = import.meta.env.VITE_DEV_LOGIN_EMAIL || "";
 const DEV_LOGIN_PASSWORD = import.meta.env.VITE_DEV_LOGIN_PASSWORD || "";
 
 async function ensureProfileExists(sessionUser, registrationData = {}) {
+  // LINE does not require an email address. Keep the name entered just before
+  // the OAuth redirect, but never apply that draft to a non-LINE account.
+  if (hasLineIdentity(sessionUser)) {
+    const lineDraft = takeLineRegistrationDraft(window.sessionStorage);
+    if (lineDraft) registrationData = { ...lineDraft, ...registrationData };
+  }
   const userId = sessionUser.id;
-  const email = sessionUser.email || registrationData.email || "";
+  // Email is unique in profiles. Empty strings would make the second
+  // email-less LINE registration collide with the first one.
+  const email = sessionUser.email || registrationData.email || null;
 
   const userMetadata = sessionUser.user_metadata || {};
 
@@ -962,6 +978,10 @@ async function ensureProfileExists(sessionUser, registrationData = {}) {
 
 if (existingProfile) {
   const updatePayload = {};
+
+  if (hasLineIdentity(sessionUser)) {
+    Object.assign(updatePayload, completePlaceholderLineProfile(existingProfile, registrationData));
+  }
 
   if (registrationData.hasSpouse !== undefined) {
     updatePayload.has_spouse = registrationData.hasSpouse;
@@ -1279,7 +1299,7 @@ function getNextNotificationOccurrence(preference, now = new Date()) {
   return occurrences[0];
 }
 
-function formatNextNotificationLabel(preference, now = new Date()) {
+function formatNextNotificationLabel(preference, now = new Date(), emailAvailable = true) {
   const occurrence = getNextNotificationOccurrence(preference, now);
   if (!occurrence) return "";
 
@@ -1287,9 +1307,12 @@ function formatNextNotificationLabel(preference, now = new Date()) {
   const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
   const targetHour = String(hour).padStart(2, "0");
   const targetMinute = String(minute).padStart(2, "0");
-  const deliveryLabel = preference?.sms_enabled && preference?.phone_verified_at && preference?.phone_number
-    ? "メール・SMS"
-    : "メール";
+  const channels = [
+    emailAvailable && 'メール',
+    preference?.sms_enabled && preference?.phone_verified_at && preference?.phone_number && 'SMS',
+    preference?.line_enabled && 'LINE',
+  ].filter(Boolean);
+  const deliveryLabel = channels.join('・') || '受け取り方法未設定';
 
   return (
     `次の問い　${targetDate.getUTCMonth() + 1}/${targetDate.getUTCDate()}` +
@@ -3611,6 +3634,12 @@ await logActivity(supabaseClient, {
 nextScene = await resolveMainExperienceEntryScene(
   activeFoundationData?.project, questionSet[currentIndex], nextScene
 );
+const pendingLineNotificationReturn = takeLineNotificationReturn(window.sessionStorage);
+if (pendingLineNotificationReturn && hasLineIdentity(session.user)
+  && activeFoundationData?.project?.onboarding_status === 'completed') {
+  nextScene = 'notification_setup';
+  setNotificationSetupReturnScene('home');
+}
 let sceneAfterInvite = resolveOnboardingRitualEntryScene(nextScene, activeFoundationData?.project);
 if (isFreeTrialExpired(loadedTrialRetention)
   && getCheckoutReturnFromUrl().status !== "success") {
@@ -7846,6 +7875,10 @@ if (isFreeTrialExpired(loadedTrialRetention)
          onOpenBookBuilder={() => setScene("book_builder")}
          onOpenQuestionLibrary={() => setScene("question_library")}
          onOpenSettings={() => setScene("settings")}
+         onOpenLineDelivery={import.meta.env.VITE_LINE_AUTH_ENABLED === 'true' && user?.email && foundation?.project?.onboarding_status === 'completed' && notificationPref && !notificationPref.line_enabled ? () => {
+           setNotificationSetupReturnScene('home');
+           setScene('notification_setup');
+         } : null}
          onOpenSupportedProject={openSupportedProject}
          onOpenReceivedProject={openReceivedProject}
          onAddFamilyStory={() => setScene("family_story_invite_flow")}
@@ -8042,6 +8075,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
       {scene === "settings" && (
         <Scene_SettingsHome
           notificationPref={notificationPref}
+          emailAvailable={Boolean(user?.email)}
           sharingPreference={sharingPreference}
           onOpenDelivery={() => {
             setNotificationSetupReturnScene("settings");
@@ -8507,7 +8541,7 @@ onRetry={() => {
       {scene === "theme_intro" && foundation?.project?.onboarding_status === "completed" && (
         <Scene_ThemeIntro
           theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1) || null}
-          notificationLabel={formatNextNotificationLabel(notificationPref)}
+          notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
           onChangeDelivery={() => {
             setNotificationSetupReturnScene("theme_intro");
             setScene("notification_setup");
@@ -8607,10 +8641,24 @@ function StoryThemeToggle({ label, value, onToggle }) {
 }
 
 function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, onAuthenticated, onInvalid }) {
+  const lineAuthEnabled = import.meta.env.VITE_LINE_AUTH_ENABLED === "true";
   const [step, setStep] = useState("ready");
   const [pin, setPin] = useState("");
   const [maskedEmail, setMaskedEmail] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const continueWithLine = async () => {
+    setLoading(true);
+    try {
+      const { error } = await startLineSignIn(supabaseClient, getAuthReturnUrlFromCurrentLocation());
+      if (error) throw error;
+      // The app resolves the delivery token again after OAuth and compares
+      // its recipient to session.user.id before loading any story data.
+    } catch {
+      alert("LINEで確認できませんでした。少し時間をおいて、もう一度お試しください。");
+      setLoading(false);
+    }
+  };
 
   const sendCode = async () => {
     try {
@@ -8694,9 +8742,9 @@ function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, on
 
         <p className="text-white/62 text-[0.96rem] leading-loose">
           {accountMismatch && <>現在ログインしているアカウントとは、<br />この問いの宛先が異なります。<br /><br /></>}
-          ご本人確認のため、<br />
-          登録済みのメールアドレスに<br />
-          認証コードをお送りします。
+          {lineAuthEnabled
+            ? <>ご本人確認のため、<br />前回と同じログイン方法を選んでください。</>
+            : <>ご本人確認のため、<br />登録済みのメールアドレスに<br />認証コードをお送りします。</>}
         </p>
 
         {(maskedEmail || tokenData.email_masked) && (
@@ -8707,6 +8755,13 @@ function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, on
       </div>
 
       {accountMismatch && <p className="mb-6 text-sm text-white/55">認証が完了すると、問いの宛先のアカウントに切り替わります。</p>}
+      {lineAuthEnabled && step === "ready" && <div className="w-full max-w-[280px] mb-6 space-y-3">
+        <button type="button" onClick={continueWithLine} disabled={loading}
+          className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${loading ? "opacity-40" : ""}`}>
+          LINEで確認して開く
+        </button>
+        <p className="ui-small">LINEで登録・連携した方はこちら</p>
+      </div>}
       {step === "ready" ? (
         <button
           type="button"
@@ -8716,7 +8771,7 @@ function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, on
             loading ? "opacity-40" : ""
           }`}
         >
-          {loading ? "送信中..." : "認証コードを送る"}
+          {loading ? "確認中..." : lineAuthEnabled ? "メールに認証コードを送る" : "認証コードを送る"}
         </button>
       ) : (
         <div className="w-full max-w-[280px] space-y-6">
@@ -8724,17 +8779,19 @@ function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, on
             type="text"
             className="quiet-input tracking-widest text-xl text-center"
             value={pin}
-            onChange={e => setPin(e.target.value)}
-            placeholder="000000"
-            maxLength="6"
+            onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="メール記載の数字（6〜8桁）"
+            maxLength="8"
           />
 
           <button
             type="button"
             onClick={verifyCode}
-            disabled={pin.length !== 6 || loading}
+            disabled={!/^\d{6,8}$/.test(pin) || loading}
             className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${
-              pin.length !== 6 || loading ? "opacity-40" : ""
+              !/^\d{6,8}$/.test(pin) || loading ? "opacity-40" : ""
             }`}
           >
             {loading ? "確認中..." : "続きを開く"}
@@ -8792,6 +8849,10 @@ function Scene_Login({ onLogin, giftPreview, familyInvitePreview }) {
   const isFamilyInviteEntry = Boolean(getFamilyInviteTokenFromUrl()) && Boolean(
     familyInvitePreview?.valid || familyInvitePreview?.claimed
   );
+  // Keep trial and invitation identity-claim flows unchanged until their
+  // separate account-linking tests are complete.
+  const lineAuthEnabled = import.meta.env.VITE_LINE_AUTH_ENABLED === "true"
+    && !isTrialEntry && !isGiftEntry && !isFamilyInviteEntry && !isSupporterInviteLogin;
   const [mode, setMode] = useState(
     isSupporterInviteLogin ? "supporter" : "entry"
   ); // entry | new | returning | supporter | pin
@@ -8801,6 +8862,37 @@ function Scene_Login({ onLogin, giftPreview, familyInvitePreview }) {
   const [givenName, setGivenName] = useState("");
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const handleReturningLineLogin = async () => {
+    setLoading(true);
+    try {
+      // Returning sign-in must not reuse an abandoned registration draft.
+      takeLineRegistrationDraft(window.sessionStorage);
+      const { error } = await startLineSignIn(supabaseClient, authReturnUrl);
+      if (error) throw error;
+    } catch {
+      alert("LINEで続けられませんでした。少し時間をおいて、もう一度お試しください。");
+      setLoading(false);
+    }
+  };
+
+  const handleStartLineRegistration = async () => {
+    if (!familyName.trim() || !givenName.trim()) {
+      alert("お名前を入力してください。");
+      return;
+    }
+    setLoading(true);
+    try {
+      saveLineRegistrationDraft(window.sessionStorage, { familyName, givenName });
+      const { error } = await startLineSignIn(supabaseClient, authReturnUrl);
+      if (error) throw error;
+    } catch (error) {
+      console.error("LINE sign-in failed", error);
+      takeLineRegistrationDraft(window.sessionStorage);
+      alert("LINEで続けられませんでした。少し時間をおいて、もう一度お試しください。");
+      setLoading(false);
+    }
+  };
 
 const checkExistingProfileByEmail = async (targetEmail) => {
   const normalizedEmail = String(targetEmail || "").trim().toLowerCase();
@@ -9161,8 +9253,11 @@ if (isNewMode) {
                 )}
 
                 <p className="text-white/55 text-[0.95rem] leading-loose">
-                  お名前とメールアドレスを登録すると、<br />
-                  {giftPreview?.purchaser_name || "ご家族"}からの贈りものを開けます。
+                  {lineAuthEnabled ? (
+                    <>お名前を入力してLINEで進むと、<br />{giftPreview?.purchaser_name || "ご家族"}からの贈りものを開けます。メールも選べます。</>
+                  ) : (
+                    <>お名前とメールアドレスを登録すると、<br />{giftPreview?.purchaser_name || "ご家族"}からの贈りものを開けます。</>
+                  )}
                 </p>
               </>
             ) : isTrialEntry ? (
@@ -9189,8 +9284,11 @@ if (isNewMode) {
                 </p>
 
                 <p className="text-white/55 text-[0.95rem] leading-loose">
-                  はじめて利用する方は、お名前とメールアドレスを登録します。<br />
-                  以前に利用した方は、メールアドレスで前回の続きが開けます。
+                  {lineAuthEnabled ? (
+                    <>はじめての方は、お名前を入力してLINEで進めます。<br />前回の続きも、同じ方法で開けます。メールも選べます。</>
+                  ) : (
+                    <>はじめて利用する方は、お名前とメールアドレスを登録します。<br />以前に利用した方は、メールアドレスで前回の続きが開けます。</>
+                  )}
                 </p>
               </>
             )}
@@ -9237,7 +9335,7 @@ if (isNewMode) {
             </p>
 
             <p className="ui-small">
-              お名前とメールアドレスを教えてください。
+              {lineAuthEnabled ? "お名前を入力して、LINEかメールを選んでください。" : "お名前とメールアドレスを教えてください。"}
             </p>
           </div>
 
@@ -9262,6 +9360,17 @@ if (isNewMode) {
               />
             </div>
           </div>
+
+          {lineAuthEnabled && (
+            <button
+              type="button"
+              onClick={handleStartLineRegistration}
+              disabled={!familyName.trim() || !givenName.trim() || loading}
+              className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${!familyName.trim() || !givenName.trim() || loading ? "opacity-40" : ""}`}
+            >
+              {loading ? "LINEを開いています..." : "LINEで続ける"}
+            </button>
+          )}
 
           <div>
             <p className="ui-label mb-2">メールアドレス</p>
@@ -9303,10 +9412,21 @@ if (isNewMode) {
             </p>
 
             <p className="ui-small">
-              登録したメールアドレスを入力してください。<br />
-              同じメールアドレスで、前回の続きが開きます。
+              {lineAuthEnabled
+                ? "前回と同じログイン方法を選んでください。"
+                : <>登録したメールアドレスを入力してください。<br />同じメールアドレスで、前回の続きが開きます。</>}
             </p>
           </div>
+
+          {lineAuthEnabled && (
+            <div className="space-y-3">
+              <button type="button" onClick={handleReturningLineLogin} disabled={loading}
+                className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${loading ? "opacity-40" : ""}`}>
+                {loading ? "LINEを開いています..." : "LINEで続ける"}
+              </button>
+              <p className="ui-small">LINEで登録・連携した方はこちら。メールで登録した方は、下からお進みください。</p>
+            </div>
+          )}
 
           <div>
             <p className="ui-label mb-2">メールアドレス</p>
@@ -9349,8 +9469,8 @@ if (isNewMode) {
 
             <p className="ui-small">
               {authMode === "supporter"
-                ? "お手伝いの依頼メールに記載された6桁コードを入力してください"
-                : "メールのボタンを押すか、記載された6桁コードを入力してください"}
+                ? "お手伝いの依頼メールに記載された認証コードを入力してください"
+                : "メールのボタンを押すか、記載された数字を6〜8桁すべて入力してください"}
             </p>
           </div>
 
@@ -9358,17 +9478,19 @@ if (isNewMode) {
             type="text"
             className="quiet-input tracking-widest text-xl"
             value={pin}
-            onChange={e => setPin(e.target.value)}
-            placeholder="000000"
-            maxLength="6"
+            onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="メール記載の数字（6〜8桁）"
+            maxLength="8"
           />
 
           <button
             type="button"
             onClick={handleVerifyPin}
-            disabled={pin.length !== 6 || loading}
+            disabled={!/^\d{6,8}$/.test(pin) || loading}
             className={`btn-quiet w-full py-4 rounded-full text-sm ${
-              pin.length !== 6 || loading ? "opacity-40" : ""
+              !/^\d{6,8}$/.test(pin) || loading ? "opacity-40" : ""
             }`}
           >
             {loading
@@ -13761,6 +13883,7 @@ function SettingsMenuButton({ icon: Icon, label, detail, onClick }) {
 
 export function Scene_SettingsHome({
   notificationPref,
+  emailAvailable = true,
   sharingPreference,
   onOpenDelivery,
   onOpenPrivacy,
@@ -13797,7 +13920,7 @@ export function Scene_SettingsHome({
         <SettingsMenuButton
           icon={Bell}
           label="問いの届け方"
-          detail={notificationPref ? formatNextNotificationLabel(notificationPref) : "未設定"}
+          detail={notificationPref ? formatNextNotificationLabel(notificationPref, new Date(), emailAvailable) : "未設定"}
           onClick={onOpenDelivery}
         />
         <SettingsMenuButton
@@ -20457,7 +20580,7 @@ export function Scene_NotificationSetup({
   adminPreviewClient = null
 }) {
   const supabaseClient = adminPreviewClient || applicationSupabaseClient;
-  const emailUnavailable = Boolean(notificationAccess && !user?.email);
+  const emailUnavailable = !user?.email;
   const weekdayOptions = [
     "日曜日",
     "月曜日",
@@ -20481,6 +20604,10 @@ export function Scene_NotificationSetup({
   });
   const [saveState, setSaveState] = useState("idle");
   const [removedSchedule, setRemovedSchedule] = useState(null);
+  const [scheduleReadyForLine, setScheduleReadyForLine] = useState(() =>
+    initialPreference?.is_active !== false &&
+    initialPreference?.schedules?.some(schedule => schedule.enabled !== false && schedule.is_active !== false) === true
+  );
   const initialPhoneVerified = Boolean(
     initialPreference?.phone_number && initialPreference?.phone_verified_at
   );
@@ -20568,6 +20695,7 @@ export function Scene_NotificationSetup({
           sort_order: Number(schedule.sort_order || index + 1),
           is_active: schedule.is_active !== false
         }));
+        setScheduleReadyForLine(true);
         const first = savedSchedules[0];
         publishPreference({
           user_id: user?.id,
@@ -20902,6 +21030,9 @@ export function Scene_NotificationSetup({
           <p className="mb-4 text-white/68 text-[1rem] text-narrative">受け取り方法</p>
 
           <div className="space-y-3">
+            {import.meta.env.VITE_LINE_AUTH_ENABLED === 'true' && !adminReadOnly && !notificationAccess && (
+              <LineNotificationConnection client={supabaseClient} initialEnabled={initialPreference?.line_enabled} ready={scheduleReadyForLine} onChanged={patch => publishPreference(patch)} />
+            )}
             <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-4 flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-white/[0.07] flex items-center justify-center shrink-0">
                 <Mail size={17} className="text-white/62" strokeWidth={1.7} />
@@ -21057,7 +21188,7 @@ export function Scene_NotificationSetup({
 
         <div className="notification-setup__status mt-6 text-center min-h-[70px]">
           <p className="text-white/40 text-[1rem] leading-loose">
-            メールは必ず届き、SMSは追加で受け取れます
+            {emailUnavailable ? 'メールの登録は不要です。使いやすい方法で受け取れます。' : '登録済みのメールでもお届けします。SMSも追加できます。'}
           </p>
 
           {saveState === "saving" && <p className="mt-3 text-white/28 text-[1rem]">保存しています...</p>}

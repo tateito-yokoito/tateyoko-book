@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const code = fs.readFileSync('supabase/functions/create-checkout-session/index.ts', 'utf8');
+const body = code.match(/function appReturnUrl\(params: Record<string, string>\) \{([\s\S]*?)\n\}/)[1];
+const build = vm.runInNewContext(`(params) => {${body}}`, { URL, Deno: { env: { get: () => 'http://127.0.0.1:5175/' } } });
+const result = build({ checkout:'success', session_id:'{CHECKOUT_SESSION_ID}', family_invite_checkout:'test & id' });
+assert.ok(result.includes('session_id={CHECKOUT_SESSION_ID}'));
+assert.equal(new URL(result).searchParams.get('family_invite_checkout'), 'test & id');
+assert.equal(new URL(result.replace('{CHECKOUT_SESSION_ID}', 'cs_test_example')).searchParams.get('session_id'), 'cs_test_example');
+assert.equal(new URL(build({ checkout:'cancelled' })).searchParams.get('checkout'), 'cancelled');
+console.log('PASS Checkout literal session placeholder and safe query encoding');
