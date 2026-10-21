@@ -9,7 +9,7 @@
 - 本番では既存アカウントの手動連携を有効化した。`line-connection` / `line-webhook` v1 を配置し、`super-task` v69 に実チャネルを記録する限定修正を適用・取得確認した。LINEの資格情報は未登録で、`LINE_DELIVERY_ENABLED=false`、LINE通知先0件。配信は開始していない。
 - 本番Authの `custom:line` は有効化済み。本番Supabaseの認証エンドポイントからLINEログイン画面への遷移を確認した。`LINE_LOGIN_CHANNEL_ID`、`LINE_CHANNEL_ACCESS_TOKEN`、`LINE_MESSAGING_CHANNEL_SECRET` は本番Secretsへ保存済み。本番Webhookは署名なし試験リクエストを401で拒否。LINE ManagerのWebhook URLを本番へ変更後、公式アカウントへのテスト送信に対して本番関数がLINEの `LineBotWebhook/2.0` をHTTP 200で受けたことをログで確認した。
 - 本番LINE認証の実機テストで、2つ目のLINEアカウントからQRログイン・スマホ側の本人確認を完了し、本番サイトへ戻った。本番Supabaseに `custom:line` のidentityが1件作られたことを確認した。これは認証単体の確認であり、本番サイト内のLINE登録導線の公開確認ではない。
-- プレビュー用ビルドでLINEを有効にし、本編の新規・既存ログイン画面を確認。無料3問は従来どおりメール必須で、シニアの離脱原因が残る。本番Supabaseの許可済みリダイレクト先にはPR固有のVercel URLがないため、プレビューからLINE認証すると本番トップへ戻る。PR専用URL追加の可否を確認中。
+- プレビュー用ビルドでLINEを有効にし、本編の新規・既存ログイン画面を確認。無料3問は従来どおりメール必須で、シニアの離脱原因が残る。本番SupabaseへPR固有のVercel戻り先を一時追加し、LINE認証後に同じプレビューの物語画面へ戻ること、LINE利用者のプロフィールが作成されることを確認した。検証後、この一時URLは許可リストから削除済み（4件から3件に復元）。
 - 無料3問の認証要否は別途検討し、本編のLINE公開を先行する方針。GitHub PagesのビルドにLINE有効フラグを加えたが、ドラフトPRをマージするまでは公開サイトに影響しない。
 - GitHubの本人認証を完了し、ブランチ `codex/line-release-candidate` を送信。ドラフトPR #7を作成済み。サイトの本番公開、Android、無料3問とメール/SMSの回帰が残る。workerはこのブランチの旧ソースから再デプロイしない。
 
