@@ -10,11 +10,12 @@
 - 本番Authの `custom:line` は有効化済み。本番Supabaseの認証エンドポイントからLINEログイン画面への遷移を確認した。`LINE_LOGIN_CHANNEL_ID`、`LINE_CHANNEL_ACCESS_TOKEN`、`LINE_MESSAGING_CHANNEL_SECRET` は本番Secretsへ保存済み。本番Webhookは署名なし試験リクエストを401で拒否。LINE ManagerのWebhook URLを本番へ変更後、公式アカウントへのテスト送信に対して本番関数がLINEの `LineBotWebhook/2.0` をHTTP 200で受けたことをログで確認した。
 - 本番LINE認証の実機テストで、2つ目のLINEアカウントからQRログイン・スマホ側の本人確認を完了し、本番サイトへ戻った。本番Supabaseに `custom:line` のidentityが1件作られたことを確認した。これは認証単体の確認であり、本番サイト内のLINE登録導線の公開確認ではない。
 - プレビュー用ビルドでLINEを有効にし、本編の新規・既存ログイン画面を確認。無料3問は従来どおりメール必須で、シニアの離脱原因が残る。本番Supabaseの許可済みリダイレクト先にはPR固有のVercel URLがないため、プレビューからLINE認証すると本番トップへ戻る。PR専用URL追加の可否を確認中。
+- 無料3問の認証要否は別途検討し、本編のLINE公開を先行する方針。GitHub PagesのビルドにLINE有効フラグを加えたが、ドラフトPRをマージするまでは公開サイトに影響しない。
 - GitHubの本人認証を完了し、ブランチ `codex/line-release-candidate` を送信。ドラフトPR #7を作成済み。サイトの本番公開、Android、無料3問とメール/SMSの回帰が残る。workerはこのブランチの旧ソースから再デプロイしない。
 
 このブランチは `origin/main` から作成し、LINE認証・通知UIとLINE専用のサーバー部品を切り出した。元の作業ツリーにある本・管理画面等の大量の別変更は含まない。
 
-- `VITE_LINE_AUTH_ENABLED` の既定値は `false`。本番にはまだ公開しない。
+- `VITE_LINE_AUTH_ENABLED` のコード上の既定値は `false`。GitHub Pagesワークフローはマージ後に `true` でビルドする。現行本番にはまだ公開していない。
 - LINEのみの利用者はStripe Checkoutへ空のメールアドレスを渡さない。
 - DBに有効な受け取り時間が保存されるまで、画面の「LINEで受け取る」を有効にしない。
 - SQLを含む全テスト36件、LINE有効の `npm run build`、単一アプリの公開エントリ検査は成功。SQLテスト用の `@electric-sql/pglite` は検証用に一時導入し、依存定義・lockfileは変更していない。
