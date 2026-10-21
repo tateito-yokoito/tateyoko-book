@@ -6,7 +6,9 @@
 - テスト環境の配信workerで、仮の問い1件をLINEへ実送信。HTTP 200、対象1件・送信成功1件・失敗0件、配信ログ `line/sent` を確認。本人のiPhoneでもLINEへの到着と外部ブラウザ起動を確認した。
 - 旧配信台帳でLINEのみの通知がメール扱いになる問題を発見。テスト用worker v13で新規記録を実チャネルに修正し、単体テスト成功。既に送った仮の1行は監査のため書き換えていない。
 - 仮スケジュール・仮通知設定・テスト環境の `LINE_DELIVERY_ENABLED` はOFFに復元。仮プロジェクトの削除はSupabase管理APIの `Invalid or expired requestState` により未完了だが、対象IDと配信停止を再確認した。同じ失敗経路で削除を繰り返さない。
-- 本番のLINE認証・LINE通知は引き続きOFF。本番Auth連携、LINE Secrets/Webhook、Android、無料3問とメール/SMSの回帰、サイト公開が残る。workerはすでに配置済みの版を維持し、このブランチの旧ソースから再デプロイしない。
+- 本番では既存アカウントの手動連携を有効化した。`line-connection` / `line-webhook` v1 を配置し、`super-task` v69 に実チャネルを記録する限定修正を適用・取得確認した。LINEの資格情報は未登録で、`LINE_DELIVERY_ENABLED=false`、LINE通知先0件。配信は開始していない。
+- 本番Authの `custom:line` は公開項目のみ入力済み。ログインチャネルのシークレット入力と確定は所有者の操作待ち。本番Secrets画面にも3項目の名前を用意したが、Messaging APIトークンとWebhook署名用シークレットは未入力・未保存。LINE Webhook転送先もまだテスト環境のまま。
+- GitHubへのコード反映は、接続済みアプリによるブランチ作成が403、端末のHTTPS資格情報なしで停止。公式GitHub CLI 2.102.1をチェックサム検証して一時フォルダへ展開し、所有者のブラウザ認証待ち。サイトの本番公開、Android、無料3問とメール/SMSの回帰が残る。workerはこのブランチの旧ソースから再デプロイしない。
 
 このブランチは `origin/main` から作成し、LINE認証・通知UIとLINE専用のサーバー部品を切り出した。元の作業ツリーにある本・管理画面等の大量の別変更は含まない。
 
