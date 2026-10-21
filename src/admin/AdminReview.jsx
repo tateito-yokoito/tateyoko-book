@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { buildProjectHistory, deliveryChannelText } from './projectHistory.js';
+import { buildProjectHistory, deliveryChannelText, deliveryDestinationText } from './projectHistory.js';
 import {DeliverySummary, LoginSmsSummary} from './DeliverySummary.jsx';
 import SupportJourneyReview from './SupportJourneyReview.jsx';
 import BrandLogo from "../BrandLogo.jsx";
@@ -1314,8 +1314,8 @@ function DeliveryHistoryList({ rows, emptyText = "配信履歴はまだありま
             </div>
             <p className="mt-1 truncate text-xs text-slate-400">
               {item.project_name ? `物語：${withoutHonorific(item.project_name)}` : ""}
-              {item.project_name && (item.resolved_recipient_email || item.recipient_email) ? "｜" : ""}
-              {item.delivery_channel === 'sms' ? 'SMS送信先（番号は連絡先で確認）' : (item.resolved_recipient_email || item.recipient_email) ? `送信先：${item.resolved_recipient_email || item.recipient_email}` : ""}
+              {item.project_name && deliveryDestinationText(item, '') ? "｜" : ""}
+              {deliveryDestinationText(item, '') ? `送信先：${deliveryDestinationText(item, '')}` : ""}
               {item.subject ? `｜${item.subject}` : ""}
             </p>
             {item.error_message && <p className="mt-2 text-xs leading-5 text-rose-600">{item.error_message}</p>}
@@ -1337,7 +1337,7 @@ export function DeliveryTable({ rows, onOpenProject }) {
     <td><span className="mb-1 block text-sm font-medium">{deliveryChannelText(item.delivery_channel)}</span><StatusPill tone={deliveryStatusTone(item.delivery_status)}>{deliveryStatusLabel(item.delivery_status)}</StatusPill></td>
     <td className="account-date">{formatDate(deliveryEventAt(item))}</td>
     <td><AdminText>{deliverySummary(item)}</AdminText></td>
-    <td><AdminText>{item.delivery_channel === 'sms' ? 'SMS送信先（番号は連絡先で確認）' : item.resolved_recipient_email || item.recipient_email || "送信先未登録"}</AdminText></td>
+    <td><AdminText>{deliveryDestinationText(item)}</AdminText></td>
     <td className="text-rose-700"><AdminText>{item.error_message}</AdminText></td>
   </tr>)}</AdminListTable>;
 }
@@ -1467,9 +1467,9 @@ function AttentionItemCard({ item, busy, onRetry, onResolve }) {
   const [showResolution, setShowResolution] = useState(false);
   const [reason, setReason] = useState("system_fixed");
   const [note, setNote] = useState("");
-  const recipient = item.delivery_channel === "sms"
-    ? item.recipient_phone
-    : item.recipient_email;
+  const recipient = item.delivery_channel === 'line'
+    ? 'LINEの連携先'
+    : item.delivery_channel === 'sms' ? item.recipient_phone : item.recipient_email;
 
   return (
     <article className="rounded-2xl border border-rose-200 bg-rose-50/70 p-5">
@@ -1478,7 +1478,7 @@ function AttentionItemCard({ item, busy, onRetry, onResolve }) {
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill tone="error">{item.title || "配信失敗"}</StatusPill>
             <span className="text-xs text-slate-500">
-              {item.delivery_channel === "sms" ? "SMS" : "メール"}
+              {deliveryChannelText(item.delivery_channel)}
             </span>
           </div>
           {item.question_text && <p className="mt-3 text-sm leading-6 text-slate-700">{item.question_text}</p>}
@@ -2687,7 +2687,7 @@ export default function AdminReview({ supabaseClient }) {
         const details = await functionErrorDetails(retryError, data);
         throw new Error(details?.error || "再送できませんでした。");
       }
-      setNotice(`${item.delivery_channel === "sms" ? "SMS" : "メール"}を再送しました。`);
+      setNotice(`${deliveryChannelText(item.delivery_channel)}を再送しました。`);
       await loadDashboard();
       await openDetail(detailId);
     } catch (retryError) {
