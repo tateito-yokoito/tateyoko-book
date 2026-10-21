@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.108.2";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const lineAccessToken = Deno.env.get("LINE_CHANNEL_ACCESS_TOKEN") || "";
 const lineLoginChannelId = Deno.env.get("LINE_LOGIN_CHANNEL_ID") || "";
@@ -21,7 +22,7 @@ function respond(body: Record<string, unknown>, status = 200) {
 async function handleRequest(request: Request) {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") return respond({ error: "Method not allowed" }, 405);
-  if (!supabaseUrl || !serviceRoleKey || !lineAccessToken || !lineLoginChannelId) {
+  if (!supabaseUrl || !anonKey || !serviceRoleKey || !lineAccessToken || !lineLoginChannelId) {
     return respond({ error: "LINE connection is not configured" }, 503);
   }
 
@@ -128,9 +129,15 @@ async function handleRequest(request: Request) {
   }
 
   if (action === "enable" && status === "active") {
+    // This table grants SELECT to authenticated users for their own rows, but
+    // intentionally does not grant a blanket SELECT to service_role.
+    const owner = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
     const [{ data: preference, error: preferenceError }, { data: schedules, error: scheduleError }] = await Promise.all([
       admin.from("notification_preferences").select("is_active").eq("user_id", authData.user.id).maybeSingle(),
-      admin.from("notification_schedules").select("id").eq("user_id", authData.user.id).eq("enabled", true).limit(1),
+      owner.from("notification_schedules").select("id").eq("user_id", authData.user.id).eq("enabled", true).limit(1),
     ]);
     if (preferenceError || scheduleError) return respond({ error: "Notification schedule could not be checked" }, 500);
     if (!preference?.is_active || !schedules?.length) {
