@@ -5,7 +5,7 @@
     "homeObjectPosition": "50% 45%",
     "homeHeightPx": 260,
     "questionObjectPosition": "60% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -16,7 +16,7 @@
     "homeObjectPosition": "50% 60%",
     "homeHeightPx": 260,
     "questionObjectPosition": "50% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -27,7 +27,7 @@
     "homeObjectPosition": "50% 60%",
     "homeHeightPx": 260,
     "questionObjectPosition": "65% center",
-    "questionDim": 0.48,
+    "questionDim": 0.85,
     "brightness": 0.7,
     "visualFamily": "warm",
     "active": true
@@ -38,7 +38,7 @@
     "homeObjectPosition": "50% 60%",
     "homeHeightPx": 260,
     "questionObjectPosition": "50% center",
-    "questionDim": 0.48,
+    "questionDim": 0.85,
     "brightness": 0.7,
     "visualFamily": "warm",
     "active": true
@@ -49,7 +49,7 @@
     "homeObjectPosition": "50% 50%",
     "homeHeightPx": 260,
     "questionObjectPosition": "70% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -60,7 +60,7 @@
     "homeObjectPosition": "50% 68%",
     "homeHeightPx": 260,
     "questionObjectPosition": "0% center",
-    "questionDim": 0.48,
+    "questionDim": 0.85,
     "brightness": 0.7,
     "visualFamily": "warm",
     "active": true
@@ -71,7 +71,7 @@
     "homeObjectPosition": "50% 53%",
     "homeHeightPx": 260,
     "questionObjectPosition": "60% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -82,7 +82,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "55% center",
-    "questionDim": 0.48,
+    "questionDim": 0.85,
     "brightness": 0.7,
     "visualFamily": "warm",
     "active": true
@@ -93,7 +93,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "70% center",
-    "questionDim": 0.48,
+    "questionDim": 0.85,
     "brightness": 0.7,
     "visualFamily": "warm",
     "active": true
@@ -104,7 +104,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.3,
+    "questionDim": 0.85,
     "brightness": 0.35,
     "visualFamily": "twilight",
     "active": true
@@ -115,7 +115,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.3,
+    "questionDim": 0.85,
     "brightness": 0.35,
     "visualFamily": "twilight",
     "active": true
@@ -126,7 +126,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -137,7 +137,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.3,
+    "questionDim": 0.85,
     "brightness": 0.35,
     "visualFamily": "twilight",
     "active": true
@@ -148,7 +148,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.3,
+    "questionDim": 0.85,
     "brightness": 0.35,
     "visualFamily": "twilight",
     "active": true
@@ -159,7 +159,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -170,7 +170,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.48,
+    "questionDim": 0.85,
     "brightness": 0.7,
     "visualFamily": "warm",
     "active": true
@@ -181,7 +181,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.3,
+    "questionDim": 0.85,
     "brightness": 0.35,
     "visualFamily": "twilight",
     "active": true
@@ -192,7 +192,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -203,7 +203,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.48,
+    "questionDim": 0.85,
     "brightness": 0.7,
     "visualFamily": "warm",
     "active": true
@@ -214,7 +214,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -225,7 +225,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -236,7 +236,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -247,7 +247,7 @@
     "homeObjectPosition": "50% 33%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.3,
+    "questionDim": 0.85,
     "brightness": 0.35,
     "visualFamily": "twilight",
     "active": true
@@ -259,7 +259,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.48,
+    "questionDim": 0.85,
     "brightness": 0.7,
     "visualFamily": "warm",
     "active": true
@@ -270,7 +270,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.3,
+    "questionDim": 0.85,
     "brightness": 0.35,
     "visualFamily": "twilight",
     "active": true
@@ -281,7 +281,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.3,
+    "questionDim": 0.85,
     "brightness": 0.35,
     "visualFamily": "twilight",
     "active": true
@@ -292,7 +292,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.48,
+    "questionDim": 0.85,
     "brightness": 0.7,
     "visualFamily": "warm",
     "active": true
@@ -303,7 +303,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.3,
+    "questionDim": 0.85,
     "brightness": 0.35,
     "visualFamily": "twilight",
     "active": true
@@ -314,7 +314,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -325,7 +325,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.48,
+    "questionDim": 0.85,
     "brightness": 0.7,
     "visualFamily": "warm",
     "active": true
@@ -336,7 +336,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.3,
+    "questionDim": 0.85,
     "brightness": 0.35,
     "visualFamily": "twilight",
     "active": true
@@ -347,7 +347,7 @@
     "homeObjectPosition": "50% 55%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -358,7 +358,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.3,
+    "questionDim": 0.85,
     "brightness": 0.35,
     "visualFamily": "twilight",
     "active": true
@@ -369,7 +369,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.48,
+    "questionDim": 0.85,
     "brightness": 0.7,
     "visualFamily": "warm",
     "active": true
@@ -380,7 +380,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.48,
+    "questionDim": 0.85,
     "brightness": 0.7,
     "visualFamily": "warm",
     "active": true
@@ -391,7 +391,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.3,
+    "questionDim": 0.85,
     "brightness": 0.35,
     "visualFamily": "twilight",
     "active": true
@@ -402,7 +402,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.48,
+    "questionDim": 0.85,
     "brightness": 0.7,
     "visualFamily": "warm",
     "active": true
@@ -413,7 +413,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.3,
+    "questionDim": 0.85,
     "brightness": 0.35,
     "visualFamily": "twilight",
     "active": true
@@ -424,7 +424,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -435,7 +435,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true
@@ -446,7 +446,7 @@
     "homeObjectPosition": "50% 65%",
     "homeHeightPx": 260,
     "questionObjectPosition": "44% center",
-    "questionDim": 0.55,
+    "questionDim": 0.85,
     "brightness": 0.8,
     "visualFamily": "day",
     "active": true

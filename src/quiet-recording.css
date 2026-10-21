@@ -17,7 +17,7 @@
    changes when only the controls change. */
 .story-sky-persistent.is-active .story-sky-backdrop::after,
 .story-sky-surface:has(.question-flow-content) .story-sky-backdrop::after{
-  background:rgba(10,21,36,.85);
+  background:rgba(10,21,36,var(--sky-dim, .85));
 }
 .story-sky-content.question-flow-content>header.question-flow-header{
   margin-bottom:56px;
