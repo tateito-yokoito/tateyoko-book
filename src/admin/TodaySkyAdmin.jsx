@@ -208,17 +208,26 @@ export default function TodaySkyAdmin({ client }) {
     <section id="sky-today"><h4>今日の空 <small>{today}</small></h4>{todaySky ? <div className="sky-today"><img src={skyAssetUrl(client,(todayEntry.sky || todaySky.sky).src)} alt="今日の空" /><span>{todaySky.id}</span></div> : <p>今日の割当はまだありません。顧客が最初に開いた際に確定します。</p>}</section>
     <section id="sky-library-section"><div className="sky-library-heading"><h4>空のライブラリ <small>{catalog.length}枚</small></h4><div className="sky-library-heading-actions"><button type="button" aria-pressed={libraryView === 'large'} onClick={() => setLibraryView(value => value === 'compact' ? 'large' : 'compact')}>{libraryView === 'compact' ? '大きく見る' : '一覧を詰めて見る'}</button><button type="button" aria-pressed={organizingLibrary} onClick={() => setOrganizingLibrary(value => !value)}>{organizingLibrary ? '整理を終える' : '整理する'}</button></div></div><div className={`sky-library sky-library-${libraryView}`}>{catalog.map(item => <div key={item.id} className="sky-library-item"><div className="approved-home sky-library-home-preview"><div className="ah-sky" role="img" aria-label={`${item.id}のスマホホーム表示`}><img src={skyAssetUrl(client,item.sky.src)} alt="" style={{objectPosition:item.sky.homeObjectPosition || '50% 50%','--sky-phone-position':item.sky.homeObjectPosition || '50% 50%'}} /></div></div><b>{item.id}</b><span>登録日 {item.registered_on || '2026-09-24'}</span><span>{item.active ? '今後使用する' : '今後使用しない'} · 使用済み {item.used_count}日{item.next_day ? ` · 次回 ${item.next_day}` : ''}</span><div className="sky-library-actions"><button disabled={busy} onClick={() => startEdit(item)}>表示を調整</button>{organizingLibrary && <button className="sky-library-archive" disabled={busy} onClick={() => { if (!window.confirm(`${item.id}を${item.active ? '今後使用しない' : '今後使用する'}設定にしますか？\n過去に割り当てた日は変更されません。`)) return; void run(async () => { const { error: e } = await client.rpc('admin_set_daily_sky_active', { input_id: item.id, input_active: !item.active }); if (e) throw e; }, '今後の利用設定を変更しました。過去の日付は変更していません。'); }}>{item.active ? '今後使用しない' : '今後使用する'}</button>}</div></div>)}</div></section>
     <section id="sky-editor"><h4>{editingItem ? `${editingItem.id} の表示調整` : '空を追加'}</h4><p>{editingItem ? '画像は変えずに構図と暗さを調整します。過去に表示された日の見え方は変えません。' : '画像を選び、ホームと質問画面をスマホ・PCで確認してください。登録だけでは顧客画面には表示されません。'}</p>{editingItem ? <button onClick={() => {setEditId(null);setChecked(false);setEditorError('');setEditorMessage('');}}>調整をやめる</button> : <input type="file" accept="image/*" onChange={e => { setFile(e.target.files?.[0] || null); setChecked(false); setEditorError(''); setEditorMessage(''); }} />}
-      {previewSrc && <><div className="sky-controls"><NumberControl label="ホーム・横位置" value={homeX} min={0} max={100} onChange={setHomeX} /><NumberControl label="ホーム・縦位置" value={homeY} min={0} max={100} onChange={setHomeY} /><NumberControl label="質問・横位置" value={questionX} min={0} max={100} onChange={setQuestionX} /><NumberControl label="質問・縦位置" value={questionY} min={0} max={100} onChange={setQuestionY} /><NumberControl label="質問・暗さ（%）" value={dim} min={0} max={100} onChange={setDim} /></div>
-      <p>ホーム画像の高さは全画像共通で260pxです。</p>
-      <div className="sky-check-grid">
-        <SkyFrame label="スマホ · ホーム" sky={previewSky} home />
-        <SkyFrame label="スマホ · 質問" sky={previewSky} />
-        <div className="sky-check-pc-controls">
-          <label><input type="checkbox" checked={pcOverride} onChange={e => setPcOverride(e.target.checked)} /> PC用の構図を個別に調整する</label>
-          {pcOverride && <div className="sky-controls"><NumberControl label="PCホーム・横位置" value={pcHomeX} min={0} max={100} onChange={setPcHomeX} /><NumberControl label="PCホーム・縦位置" value={pcHomeY} min={0} max={100} onChange={setPcHomeY} /><NumberControl label="PC質問・横位置" value={pcQuestionX} min={0} max={100} onChange={setPcQuestionX} /><NumberControl label="PC質問・縦位置" value={pcQuestionY} min={0} max={100} onChange={setPcQuestionY} /></div>}
+      {previewSrc && <>
+      <label className="sky-pc-override"><input type="checkbox" checked={pcOverride} onChange={e => setPcOverride(e.target.checked)} /> PC用の構図を個別に調整する</label>
+      <div className="sky-preview-group">
+        <h5>ホーム画面</h5>
+        <div className="sky-controls"><NumberControl label="ホーム・横位置" value={homeX} min={0} max={100} onChange={setHomeX} /><NumberControl label="ホーム・縦位置" value={homeY} min={0} max={100} onChange={setHomeY} /></div>
+        {pcOverride && <div className="sky-controls"><NumberControl label="PCホーム・横位置" value={pcHomeX} min={0} max={100} onChange={setPcHomeX} /><NumberControl label="PCホーム・縦位置" value={pcHomeY} min={0} max={100} onChange={setPcHomeY} /></div>}
+        <p>ホーム画像の高さは全画像共通で260pxです。</p>
+        <div className="sky-check-grid">
+          <SkyFrame label="スマホ · ホーム" sky={previewSky} home />
+          <SkyFrame label="PC · ホーム" sky={previewSky} home desktop />
         </div>
-        <SkyFrame label="PC · ホーム" sky={previewSky} home desktop />
-        <SkyFrame label="PC · 質問" sky={previewSky} desktop />
+      </div>
+      <div className="sky-preview-group">
+        <h5>質問画面</h5>
+        <div className="sky-controls"><NumberControl label="質問・横位置" value={questionX} min={0} max={100} onChange={setQuestionX} /><NumberControl label="質問・縦位置" value={questionY} min={0} max={100} onChange={setQuestionY} /><NumberControl label="質問・暗さ（スマホ・PC共通、%）" value={dim} min={0} max={100} onChange={setDim} /></div>
+        {pcOverride && <div className="sky-controls"><NumberControl label="PC質問・横位置" value={pcQuestionX} min={0} max={100} onChange={setPcQuestionX} /><NumberControl label="PC質問・縦位置" value={pcQuestionY} min={0} max={100} onChange={setPcQuestionY} /></div>}
+        <div className="sky-check-grid">
+          <SkyFrame label="スマホ · 質問" sky={previewSky} />
+          <SkyFrame label="PC · 質問" sky={previewSky} desktop />
+        </div>
       </div>
       <label><input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} /> 4画面の構図と文字の読みやすさを確認しました</label><button disabled={busy || !checked} onClick={editingItem ? saveEdits : register}>{editingItem ? '表示調整を保存する' : 'この空を登録する'}</button></>}
       {editorError && <p role="alert" className="sky-admin-error sky-editor-feedback">{editorError}</p>}
