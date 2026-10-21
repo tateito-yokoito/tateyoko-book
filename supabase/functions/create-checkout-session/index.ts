@@ -27,7 +27,8 @@ function appReturnUrl(params: Record<string, string>) {
   const url = new URL(configured);
   url.search = "";
   Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
-  return url.toString();
+  // Stripe substitutes this literal token, not URLSearchParams' encoded braces.
+  return url.toString().replace(/%7BCHECKOUT_SESSION_ID%7D/g, "{CHECKOUT_SESSION_ID}");
 }
 
 function stripeMode(secret: string) {
@@ -590,7 +591,8 @@ serve(async request => {
     });
     if (couponId) form.set("discounts[0][coupon]", couponId);
     form.set("client_reference_id", order.id);
-    form.set("customer_email", authData.user.email || "");
+    // LINE-only accounts have no email; Stripe should collect one at checkout.
+    if (authData.user.email?.trim()) form.set("customer_email", authData.user.email.trim());
     form.set("metadata[order_id]", order.id);
     form.set("metadata[project_id]", projectId);
     form.set("metadata[user_id]", authData.user.id);

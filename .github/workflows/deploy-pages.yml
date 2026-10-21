@@ -37,6 +37,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: https://wquxjeqkumossjxehdop.supabase.co
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_LINE_AUTH_ENABLED: "true"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

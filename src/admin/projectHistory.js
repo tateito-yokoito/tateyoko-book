@@ -6,6 +6,11 @@ export function smsPreferenceLabel(row) {
 }
 
 export const deliveryChannelText = channel => ({email:'メール',sms:'SMS',line:'LINE',both:'メール・SMS'}[channel] || '方法未記録');
+export const deliveryDestinationText = (item, fallback = '送信先未登録') => {
+  if (item?.delivery_channel === 'line') return 'LINEの連携先';
+  if (item?.delivery_channel === 'sms') return 'SMS送信先（番号は連絡先で確認）';
+  return item?.resolved_recipient_email || item?.recipient_email || fallback;
+};
 export const historyDeliveryTime = row => row.event_at || row.answered_at || row.opened_at || row.delivered_at || row.sent_at || row.attempted_at || row.scheduled_for || row.created_at;
 
 // Group only matching scheduled questions, never invitations or repeated attempts

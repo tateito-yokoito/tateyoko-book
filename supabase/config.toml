@@ -25,6 +25,15 @@ verify_jwt = false
 [functions.super-task]
 verify_jwt = false
 
+# The handler validates the signed-in user before using its service role.
+[functions.line-connection]
+verify_jwt = false
+
+# LINE sends a signed webhook without a Supabase JWT; the handler verifies
+# the raw-body X-Line-Signature before changing friendship state.
+[functions.line-webhook]
+verify_jwt = false
+
 [functions.twilio-status-webhook]
 verify_jwt = false
 
