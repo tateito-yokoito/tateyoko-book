@@ -24,6 +24,12 @@
 .sky-library-compact .sky-library-item{max-width:none;padding:8px}
 .sky-library-compact .sky-library-item .sky-library-home-preview .ah-sky{height:130px}
 .sky-admin #sky-editor .sky-editor-feedback{margin:12px 0 0;max-width:680px}
+.sky-pc-override{display:inline-flex;align-items:center;gap:8px;margin:20px 0 4px;font-size:14px;color:#475569}
+.sky-preview-group{margin-top:22px;padding-top:20px;border-top:1px solid #e2e8f0}
+.sky-preview-group h5{margin:0;font-size:17px;color:#1e293b}
+.sky-preview-group>p{margin:4px 0 0;color:#64748b;font-size:13px}
+.sky-preview-group .sky-controls{margin:14px 0 0}
+.sky-preview-group .sky-check-grid{margin:16px 0 0}
 @media(max-width:650px){.sky-admin .sky-section-nav{top:0}.sky-admin .sky-section-nav button{font-size:12px;padding:7px 10px}.sky-library-heading{align-items:flex-start;flex-wrap:wrap}}
 
 /* Render each customer preview in its own viewport. Parent admin styles and
