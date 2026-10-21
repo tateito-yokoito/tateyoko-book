@@ -6,20 +6,20 @@ import { transform } from 'esbuild';
 const source = readFileSync('supabase/functions/line-connection/index.ts','utf8').replace(/^import.*\n/, '');
 const {code} = await transform(source,{loader:'ts',format:'iife'});
 async function run({ jwt=true, linked=true, friend=true, clientId='login', profileId='U'+'a'.repeat(32), action='check', preference=true, schedule=true, active=true, network=false }={}) {
-  let handler; let writes=[]; let lineEnabled=false;
+  let handler; let writes=[]; let lineEnabled=false; let scopedReads=0;
   const user={id:'test-user',identities:linked?[{provider:'custom:line',provider_id:'U'+'a'.repeat(32)}]:[]};
-  const client={auth:{getUser:async()=>({data:{user},error:null})},from(table){
+  const makeClient=(owner=false)=>({auth:{getUser:async()=>({data:{user},error:null})},from(table){
     let operation='read', patch;
-    const query={select(){return query;},eq(){return query;},limit(){return query;},update(value){operation='update';patch=value;return query;},upsert(value){writes.push({table,value});return Promise.resolve({error:null});},maybeSingle(){return Promise.resolve({data:table==='line_notification_connections'?null:preference?{line_enabled:lineEnabled,is_active:active}:null,error:null});},then(resolve){if(operation==='update'){writes.push({table,value:patch});if(typeof patch.line_enabled==='boolean')lineEnabled=patch.line_enabled;}return Promise.resolve({data:table==='notification_schedules'?(schedule?[{id:'test-schedule'}]:[]):preference?[{user_id:user.id}]:[],error:null}).then(resolve);}};
+    const query={select(){return query;},eq(){return query;},limit(){return query;},update(value){operation='update';patch=value;return query;},upsert(value){writes.push({table,value});return Promise.resolve({error:null});},maybeSingle(){return Promise.resolve({data:table==='line_notification_connections'?null:preference?{line_enabled:lineEnabled,is_active:active}:null,error:null});},then(resolve){if(operation==='update'){writes.push({table,value:patch});if(typeof patch.line_enabled==='boolean')lineEnabled=patch.line_enabled;}if(table==='notification_schedules'){if(owner)scopedReads++;return Promise.resolve({data:owner&&schedule?[{id:'test-schedule'}]:[],error:owner?null:{code:'42501'}}).then(resolve);}return Promise.resolve({data:preference?[{user_id:user.id}]:[],error:null}).then(resolve);}};
     return query;
-  }};
-  vm.runInNewContext(code,{Deno:{env:{get:key=>({SUPABASE_URL:'test',SUPABASE_SERVICE_ROLE_KEY:'test',LINE_CHANNEL_ACCESS_TOKEN:'test',LINE_LOGIN_CHANNEL_ID:'login'})[key]},serve:f=>handler=f},createClient:()=>client,Response,Request,URL,AbortSignal,console,fetch:async url=>{
+  }});
+  vm.runInNewContext(code,{Deno:{env:{get:key=>({SUPABASE_URL:'test',SUPABASE_ANON_KEY:'anon',SUPABASE_SERVICE_ROLE_KEY:'service',LINE_CHANNEL_ACCESS_TOKEN:'test',LINE_LOGIN_CHANNEL_ID:'login'})[key]},serve:f=>handler=f},createClient:(_url,key,options)=>{if(key==='anon')assert.equal(options.global.headers.Authorization,'Bearer test');return makeClient(key==='anon');},Response,Request,URL,AbortSignal,console,fetch:async url=>{
     if(network)throw Error('secret');
     const path=new URL(url).pathname;
     return new Response(JSON.stringify(path.includes('/verify')?{client_id:clientId}:path.includes('/friendship/')?{friendFlag:friend}:{userId:profileId}),{status:200});
   }});
   const response=await handler(new Request('https://test/',{method:'POST',headers:{'Content-Type':'application/json',...(jwt?{Authorization:'Bearer test'}:{})},body:JSON.stringify({action,provider_token:'test'})}));
-  return {status:response.status,body:await response.json(),writes};
+  return {status:response.status,body:await response.json(),writes,scopedReads};
 }
 test('unauthenticated requests are rejected',async()=>assert.equal((await run({jwt:false})).status,401));
 test('non-LINE accounts cannot claim a destination',async()=>assert.equal((await run({linked:false})).status,409));
@@ -43,6 +43,7 @@ test('LINE cannot be enabled before an active schedule is saved',async()=>{
  const ready=await run({action:'enable'});
  assert.equal(ready.status,200);
  assert.equal(ready.body.notification_enabled,true);
+ assert.equal(ready.scopedReads,1);
  assert.ok(ready.writes.some(x=>x.value.line_enabled===true));
 });
 test('disable works without contacting LINE',async()=>{
