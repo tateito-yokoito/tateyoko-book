@@ -8646,6 +8646,7 @@ function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, on
   const [pin, setPin] = useState("");
   const [maskedEmail, setMaskedEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const emailAuthAvailable = Boolean(maskedEmail || tokenData?.email_masked);
 
   const continueWithLine = async () => {
     setLoading(true);
@@ -8762,7 +8763,7 @@ function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, on
         </button>
         <p className="ui-small">LINEで登録・連携した方はこちら</p>
       </div>}
-      {step === "ready" ? (
+      {step === "ready" && emailAuthAvailable ? (
         <button
           type="button"
           onClick={sendCode}
@@ -8773,7 +8774,7 @@ function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, on
         >
           {loading ? "確認中..." : lineAuthEnabled ? "メールに認証コードを送る" : "認証コードを送る"}
         </button>
-      ) : (
+      ) : step === "pin" ? (
         <div className="w-full max-w-[280px] space-y-6">
           <input
             type="text"
@@ -8806,7 +8807,7 @@ function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, on
             認証コードを再送する
           </button>
         </div>
-      )}
+      ) : null}
       {accountMismatch && <button type="button" onClick={onInvalid} disabled={loading} className="mt-6 py-3 text-white/55 text-sm underline underline-offset-4">切り替えずに戻る</button>}
     </div>
   );
