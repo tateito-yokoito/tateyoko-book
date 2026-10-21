@@ -7,7 +7,7 @@
 - 旧配信台帳でLINEのみの通知がメール扱いになる問題を発見。テスト用worker v13で新規記録を実チャネルに修正し、単体テスト成功。既に送った仮の1行は監査のため書き換えていない。
 - 仮スケジュール・仮通知設定・テスト環境の `LINE_DELIVERY_ENABLED` はOFFに復元。仮プロジェクトの削除はSupabase管理APIの `Invalid or expired requestState` により未完了だが、対象IDと配信停止を再確認した。同じ失敗経路で削除を繰り返さない。
 - 本番では既存アカウントの手動連携を有効化した。`line-connection` / `line-webhook` v1 を配置し、`super-task` v69 に実チャネルを記録する限定修正を適用・取得確認した。LINEの資格情報は未登録で、`LINE_DELIVERY_ENABLED=false`、LINE通知先0件。配信は開始していない。
-- 本番Authの `custom:line` は公開項目のみ入力済み。ログインチャネルのシークレット入力と確定は所有者の操作待ち。本番Secrets画面にも3項目の名前を用意したが、Messaging APIトークンとWebhook署名用シークレットは未入力・未保存。LINE Webhook転送先もまだテスト環境のまま。
+- 本番Authの `custom:line` は有効化済み。本番Supabaseの認証エンドポイントからLINEログイン画面への遷移を確認した。`LINE_LOGIN_CHANNEL_ID`、`LINE_CHANNEL_ACCESS_TOKEN`、`LINE_MESSAGING_CHANNEL_SECRET` は本番Secretsへ保存済み。本番Webhookは署名なし試験リクエストを401で拒否。LINE ManagerのWebhook URLを本番へ変更後、公式アカウントへのテスト送信に対して本番関数がLINEの `LineBotWebhook/2.0` をHTTP 200で受けたことをログで確認した。
 - GitHubの本人認証を完了し、ブランチ `codex/line-release-candidate` を送信。ドラフトPR #7を作成済み。サイトの本番公開、Android、無料3問とメール/SMSの回帰が残る。workerはこのブランチの旧ソースから再デプロイしない。
 
 このブランチは `origin/main` から作成し、LINE認証・通知UIとLINE専用のサーバー部品を切り出した。元の作業ツリーにある本・管理画面等の大量の別変更は含まない。
@@ -18,6 +18,6 @@
 - LINE/決済テスト26件、`npm run build`、単一アプリの公開エントリ検査は成功。
 - LINEの接続、Webhook、送信ヘルパー、DB移行のソースを含む。移行はテスト/本番DBには既に適用済み。再適用しない。
 - 配信workerのソースはこの候補では更新していない。既に配置済みのworkerを再デプロイしないこと。LINE以外も含むworker全体の取り込みは安全審査で拒否されたため、分割検証・明示確認なしに迂回しない。
-- 実際の問いのLINE配信とiPhoneでの外部ブラウザ起動は確認済み。無料３問および既存メール/SMSの実機回帰、本番Auth接続は未完了。これらを確認してからフラグを有効化する。
+- テスト環境で実際の問いのLINE配信とiPhoneでの外部ブラウザ起動は確認済み。本番AuthはLINEログイン画面への遷移まで確認済みで、認証完了までの実機検証は未完了。無料３問および既存メール/SMSの実機回帰と合わせ、これらを確認してからフラグを有効化する。
 - 実機は現時点で iPhone のみ利用可能。Android の LINE→外部ブラウザは未検証のまま公開済みと扱わない。
 - 先行検証では認証エラーやブラウザのタイムアウトがあったが、その後の安全な単一対象のテストで実送信成功を確認した。古い失敗結果を現状の未完了項目と取り違えないこと。
