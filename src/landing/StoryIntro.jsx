@@ -55,14 +55,17 @@ export function StoryOrigin() {
   return (
     <section className="hp-story hp-origin hp-section hp-shell" id="origin" aria-labelledby="origin-title">
       <p className="hp-origin-kicker">Origin｜縦糸♾️横糸が生まれた理由</p>
-      <h2 id="origin-title">家族でも知らない<br />人生がある。</h2>
+      <h2 id="origin-title">家族でも知らない、<br className="hp-origin-heading-break" />人生がある。</h2>
       <div className="hp-origin-brief">
         <p>18年間、約1,000世帯の方々の人生に関わってきました。</p>
         <p>その中で感じたのは、誰の人生にも、<br />家族さえ知らない物語や想いがあるということです。<br />けれど、その多くは、語られないまま失われていきます。</p>
         <p>私自身、祖父が用意した「家族史」を見つけたとき、<br />胸を突かれる思いがしました。</p>
         <p>最初のページには家紋が貼られていましたが、<br />その先は全て白紙のままだったのです。</p>
       </div>
-      <figure className="hp-origin-book"><img src={asset + 'origin-family-history-preview-20261021.jpg'} alt="家紋が貼られたページと、白紙のままの家系図のページ" width="1052" height="746" loading="lazy" /></figure>
+      <div className="hp-origin-photo-stack">
+        <figure className="hp-origin-cover"><img src={asset + 'family-history-spine-20261022.jpeg'} alt="祖父が用意した「わが家の歴史」の冊子と背表紙" width="5712" height="4284" loading="lazy" /></figure>
+        <figure className="hp-origin-book"><img src={asset + 'origin-family-history-preview-20261021.jpg'} alt="家紋が貼られたページと、白紙のままの家系図のページ" width="1052" height="746" loading="lazy" /></figure>
+      </div>
       <div className="hp-origin-closing">
         <p>祖父は、どんな想いでこの冊子を用意したのか。<br />何を残したかったのか。</p>
         <p>今なら聞いてみたいことが、たくさんあります。<br />でも、もう聞くことはできません。</p>
@@ -83,12 +86,16 @@ export function StoryOrigin() {
         </div>
         <div className="hp-origin-scene hp-origin-scene-grandparents">
           <h3>02　聞けなかったことと、まだ聞けること。</h3>
-          <figure className="hp-origin-grandparents-photo"><img src={asset + 'grandparents.jpg'} alt="創業者の祖父母の写真" width="1102" height="713" loading="lazy" /></figure>
-          <p>多くの方々の人生に触れてきた私自身、<br />身近な祖父母の人生については、<br />驚くほど何も聞けていませんでした。</p>
-          <p>あの「わが家の歴史」には、<br />どんな物語が綴られるはずだったのだろう。</p>
-          <p>今となっては、想像することしかできません。</p>
-          <p>そして、思いました。</p>
-          <p>まだ話を聞ける両親についても、<br />いつか同じ後悔をするのではないか、と。</p>
+          <div className="hp-origin-grandparents-layout">
+            <figure className="hp-origin-grandparents-photo"><img src={asset + 'grandparents.jpg'} alt="創業者の祖父母の写真" width="1102" height="713" loading="lazy" /></figure>
+            <div className="hp-origin-grandparents-copy">
+              <p>多くの方々の人生に触れてきた私自身、<br />身近な祖父母の人生については、<br />驚くほど何も聞けていませんでした。</p>
+              <p>あの「わが家の歴史」には、<br />どんな物語が綴られるはずだったのだろう。</p>
+              <p>今となっては、想像することしかできません。</p>
+              <p>そして、思いました。</p>
+              <p>まだ話を聞ける両親についても、<br />いつか同じ後悔をするのではないか、と。</p>
+            </div>
+          </div>
         </div>
       </div>
       <div className="hp-origin-vision">
@@ -103,7 +110,7 @@ export function StoryOrigin() {
             <p>そんな願いを、<br className="hp-origin-mobile-break" />「縦糸♾️横糸」に込めています。</p>
           </div>
           <div className="hp-origin-vision-person">
-            <figure><img src={asset + 'founder-and-son.jpg'} alt="創業者・菅原英俊と息子" width="890" height="1122" loading="lazy" /></figure>
+            <figure><img src={asset + 'founder-and-son-landscape-20261022.png'} alt="創業者・菅原英俊と息子" width="1402" height="1122" loading="lazy" /></figure>
             <p><span>株式会社SaltLight</span><span>代表取締役</span><strong>菅原 英俊</strong></p>
           </div>
         </div>
