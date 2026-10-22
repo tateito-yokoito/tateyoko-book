@@ -25,7 +25,7 @@ assert.ok(!published.includes('33歳'), 'Published Origin still contains the old
 assert.ok(!published.includes('37歳で旅立った彼と、家族に届いた言葉'), 'Published Origin still contains the previous story title');
 assert.ok(css.includes('.hp-origin-vision-layout'), 'Published Origin layout is missing');
 assert.ok(css.includes('.hp-origin-grandparents-photo'), 'Grandparents photo styling is missing');
-for (const image of ['family-history-spine-20261022.jpeg', 'founder-and-son-landscape-20261022.png']) {
+for (const image of ['family-history-spine-wide-20261023.png', 'origin-family-history-open-20261023.jpg', 'founder-and-son-landscape-20261022.png']) {
   assert.ok(source.includes(image), `Origin source is missing ${image}`);
   assert.ok(published.includes(image), `Published Origin is missing ${image}`);
   assert.ok(existsSync(`dist/site/hp-story-preview/${image}`), `Published Origin image is missing ${image}`);
@@ -33,8 +33,9 @@ for (const image of ['family-history-spine-20261022.jpeg', 'founder-and-son-land
 assert.ok(source.includes('hp-origin-photo-stack'), 'Desktop family-history photo stack is missing');
 assert.ok(source.includes('hp-origin-grandparents-layout'), 'Grandparents two-column layout is missing');
 assert.ok(css.includes('.hp-origin-photo-stack'), 'Published photo stack styling is missing');
+assert.ok(css.includes('.hp-origin-cover img{display:block;width:100%;height:auto}'), 'Spine photo must retain its full aspect ratio');
+assert.ok(css.includes('.hp-origin-photo-stack .hp-origin-book img{height:auto;object-fit:contain}'), 'Open-book photo must not be cropped');
 assert.ok(css.includes('.hp-origin-grandparents-layout'), 'Published grandparents layout styling is missing');
 assert.ok(html.includes('/assets/postcta-overlay.js'), 'The homepage does not load the Origin section');
-assert.ok(existsSync('dist/site/hp-story-preview/origin-family-history-preview-20261021.jpg'), 'Family history photo is missing');
 
 console.log('PASS Origin copy, layout, and image are present in the deployable build');
