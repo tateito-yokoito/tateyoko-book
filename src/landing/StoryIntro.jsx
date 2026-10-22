@@ -54,45 +54,59 @@ export function StoryOrigin() {
   const [originExpanded, setOriginExpanded] = useState(false);
   return (
     <section className="hp-story hp-origin hp-section hp-shell" id="origin" aria-labelledby="origin-title">
-      <h2 id="origin-title">だから、縦糸横糸を<br className="hp-mobile-break" />つくりました。</h2>
+      <p className="hp-origin-kicker">Origin｜縦糸♾️横糸が生まれた理由</p>
+      <h2 id="origin-title">家族でも知らない<br />人生がある。</h2>
       <div className="hp-origin-brief">
-        <p>私は18年間、生命保険の仕事を通じて、<br />1000世帯を超える方々の<br className="hp-mobile-break" />人生に触れてきました。</p>
-        <p>誰の中にも、まだ語られていない人生がある。<br />そして、それを受け取りたい<br className="hp-mobile-break" />と思ったときには、<br />もう聞けないことがある。</p>
-        <p className="hp-story-emphasis">そのことを、仕事でも、自分の家族でも知りました。</p>
+        <p>18年間、約1,000世帯の方々の人生に関わってきました。</p>
+        <p>その中で感じたのは、誰の人生にも、<br />家族さえ知らない物語や想いがあるということです。<br />けれど、その多くは、語られないまま失われていきます。</p>
+        <p>私自身、祖父が用意した「家族史」を見つけたとき、<br />胸を突かれる思いがしました。</p>
+        <p>最初のページには家紋が貼られていましたが、<br />その先は全て白紙のままだったのです。</p>
       </div>
-      <div className="hp-origin-teasers">
-        <article><figure><img src={asset + 'founder-and-son.jpg'} alt="窓辺で息子とスマートフォンを見る創業者・菅原英俊" loading="lazy" width="890" height="1122" /></figure><div><h3>生命保険の現場で知ったこと</h3><p>私が初めて死亡保険金をお支払いしたのは、当時の私と同じ33歳の男性でした。</p></div></article>
-        <article><figure><img src={asset + 'family-history-cover.jpg'} alt="祖父が用意した「わが家の歴史」の表紙" loading="lazy" width="746" height="1020" /></figure><div><h3>祖父が残した、真っ白な家族史</h3><p>亡くなった祖父が用意していた「わが家の歴史」。その先は、真っ白でした。</p></div></article>
+      <figure className="hp-origin-book"><img src={asset + 'origin-family-history-preview-20261021.jpg'} alt="家紋が貼られたページと、白紙のままの家系図のページ" width="1052" height="746" loading="lazy" /></figure>
+      <div className="hp-origin-closing">
+        <p>祖父は、どんな想いでこの冊子を用意したのか。<br />何を残したかったのか。</p>
+        <p>今なら聞いてみたいことが、たくさんあります。<br />でも、もう聞くことはできません。</p>
       </div>
-      <button className="hp-origin-toggle" type="button" aria-expanded={originExpanded} aria-controls="origin-full-story" onClick={() => setOriginExpanded(!originExpanded)}>{originExpanded ? '− 閉じる' : '＋ 続きを読む'}</button>
-
+      <button className="hp-origin-toggle" type="button" aria-expanded={originExpanded} aria-controls="origin-full-story" onClick={() => setOriginExpanded(!originExpanded)}>{originExpanded ? '− 実話を閉じる' : '＋ 縦糸♾️横糸が生まれた２つの実話を読む'}</button>
       <div id="origin-full-story" hidden={!originExpanded}>
-      <div className="hp-origin-full-intro"><p>私は18年間、生命保険の仕事を通じて、<br />1000世帯を超える方々の人生に伴走してきました。</p><p>20代から90代まで。</p><p>家族のこと。仕事のこと。<br />叶えたかったこと。<br />誰にも言わず、抱えてきたこと。</p><p className="hp-story-emphasis">どんな人の中にも、<br />まだ言葉になっていない人生がありました。</p><p>でも、その多くは、どこにも残りません。</p></div>
-
-      <div className="hp-origin-scene hp-origin-client">
-        <p>私が初めて死亡保険金をお支払いしたのは、<br />当時の私と同じ、33歳の男性でした。</p>
-        <p>持病もなく、いつもの通勤電車で突然具合が悪くなり、<br />病院へ運ばれ、数日後にこの世を去りました。</p>
-        <p>九州から駆けつけたご両親とお姉さまに、<br />私ができたことが一つありました。</p>
-        <p>それまで彼と何度も話す中で聞いていた、<br />家族への想い。今の自分。これからやりたいこと。</p>
-        <p>そのメモを、お渡しすることでした。</p>
-        <p>決して十分なものではありません。</p>
-        <p>それでも、ご家族から、</p>
-        <blockquote>「何を考えているかわからないところもあった息子だったけれど、<br />その話を聞いて、誇らしく思った」</blockquote>
-        <p className="hp-origin-quote-note">という趣旨の言葉をいただいたことを、今も忘れません。</p>
+        <div className="hp-origin-scene hp-origin-client">
+          <h3>37歳で旅立った彼と、家族に届いた言葉</h3>
+          <p>私が初めて死亡保険金をお支払いしたのは、<br />当時の私と同じ、37歳の男性でした。</p>
+          <p>持病もなく、いつもの通勤電車で突然具合が悪くなり、<br />病院へ運ばれ、数日後にこの世を去りました。</p>
+          <p>九州から駆けつけたご両親とお姉さまに、<br />私ができることが一つありました。</p>
+          <p>それは、生前、彼から聞いていた、<br />家族への想いや、今の自分、これからやりたいこと。</p>
+          <p>それらを記したメモを、お渡しすることでした。</p>
+          <p>決して十分なものではありません。</p>
+          <p>それでも、ご両親から、こんな言葉をいただきました。</p>
+          <blockquote>一人東京に出てから、<br />会話もあまりできていなかった。<br />息子を誇りに思う。</blockquote>
+          <p>その言葉を、今も忘れることができません。</p>
+        </div>
+        <div className="hp-origin-scene hp-origin-scene-grandparents">
+          <h3>02　聞けなかったことと、まだ聞けること。</h3>
+          <figure className="hp-origin-grandparents-photo"><img src={asset + 'grandparents.jpg'} alt="創業者の祖父母の写真" width="1102" height="713" loading="lazy" /></figure>
+          <p>多くの方々の人生に触れてきた私自身、<br />身近な祖父母の人生については、<br />驚くほど何も聞けていませんでした。</p>
+          <p>あの「わが家の歴史」には、<br />どんな物語が綴られるはずだったのだろう。</p>
+          <p>今となっては、想像することしかできません。</p>
+          <p>そして、思いました。</p>
+          <p>まだ話を聞ける両親についても、<br />いつか同じ後悔をするのではないか、と。</p>
+        </div>
       </div>
-
-      <div className="hp-origin-scene hp-origin-grandfather">
-        <p>一方で、ある日、実家から、<br />亡くなった祖父が用意した<br />「わが家の歴史」という冊子が出てきました。</p>
-        <div className="hp-origin-documents"><figure><img src={asset + 'family-history-cover.jpg'} alt="祖父が用意した「わが家の歴史」の表紙" loading="lazy" width="746" height="1020" /></figure><figure><img src={asset + 'family-history-contents.jpg'} alt="「わが家の歴史」の目次" loading="lazy" width="1008" height="779" /></figure></div>
-        <p>家系図。<br />古来から言い伝えられたこと。<br />亡くなった人たちの思い出。</p>
-        <p>残そうとしていたものが、目次には並んでいました。</p>
-        <figure className="hp-origin-blank"><img src={asset + 'family-history-blank.jpg'} alt="家紋の隣で、記入されないまま残った家系図のページ" loading="lazy" width="1050" height="746" /></figure>
-        <p className="hp-origin-white">その先は、真っ白でした。</p>
-        <p>祖父は、いつこれを準備したのか。<br />何を残そうとしていたのか。</p><p>もう、聞くことはできません。</p>
-        <div className="hp-origin-split hp-origin-memory"><figure><img src={asset + 'grandparents.jpg'} alt="創業者の祖父母の実際の写真" loading="lazy" width="1102" height="713" /></figure><p>1000世帯を超える方々の人生を聞いてきた私自身、<br />一番身近な家族については、<br />恥ずかしいほど何も聞けていませんでした。</p></div>
-      </div>
-
-      <div className="hp-origin-conclusion"><p>特別な人だけが、自伝を書くのではなく。<br />成功した人生だけを、きれいな物語にするのでもなく。</p><p className="hp-story-emphasis">誰もが、自分の人生を気軽に語れるものをつくりたい。</p><p>語ることで、自分の人生をもう一度辿る。<br />忙しい毎日の中では見えなかったものに気づく。</p><p>そして、いつか誰かがその人生を受け取りたいと思ったとき、</p><p className="hp-story-emphasis">時を越えて、その人らしさに触れられる器をつくりたい。</p><p>それが、縦糸横糸の始まりです。</p><p className="hp-origin-signature">菅原 英俊</p></div>
+      <div className="hp-origin-vision">
+        <p className="hp-origin-vision-label">創業者の想い</p>
+        <h3>家族に還れる場所をつくる</h3>
+        <div className="hp-origin-vision-layout">
+          <div className="hp-origin-vision-copy">
+            <p>特別な人だけが、自伝を書くのではなく。<br />成功した人生だけを、きれいな物語にするのでもなく。</p>
+            <p className="hp-origin-vision-pledge">誰もが、自分の人生を気軽に残せないか。</p>
+            <p>語ることで、自分の人生をもう一度辿る。<br />忙しい日々に埋もれていた、大切なものに気づく。</p>
+            <p>そして、<br />いつかその人生を受け取りたいと思ったとき、<br />時を越えて、その人らしさに触れられる場所をつくる。</p>
+            <p>そんな願いを、<br className="hp-origin-mobile-break" />「縦糸♾️横糸」に込めています。</p>
+          </div>
+          <div className="hp-origin-vision-person">
+            <figure><img src={asset + 'founder-and-son.jpg'} alt="創業者・菅原英俊と息子" width="890" height="1122" loading="lazy" /></figure>
+            <p><span>株式会社SaltLight</span><span>代表取締役</span><strong>菅原 英俊</strong></p>
+          </div>
+        </div>
       </div>
     </section>
   );

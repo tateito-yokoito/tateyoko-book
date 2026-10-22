@@ -6,7 +6,8 @@
   "scripts": {
     "migrate:v1": "node scripts/migrate-v1-html.mjs",
     "dev": "vite",
-    "build": "vite build && node scripts/check-build-entrypoints.mjs",
+    "build": "npm run build:postcta && vite build && node scripts/check-build-entrypoints.mjs",
+    "build:postcta": "vite build --config vite.postcta-overlay.config.js && cp postcta-overlay-dist/postcta-overlay.js public/assets/postcta-overlay.js && cp postcta-overlay-dist/style.css public/assets/postcta-overlay.css",
     "preview": "vite preview",
     "deploy": "npm run build && gh-pages -d dist"
   },
