@@ -1,0 +1,27 @@
+FROM node:24-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium fonts-noto-cjk python3 python3-reportlab python3-renderpm poppler-utils ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY package.json ./
+COPY scripts/book_pdf_server.mjs scripts/render_book_pdf.mjs scripts/book_qr_svg.py scripts/preflight_book_pdf.py ./scripts/
+COPY src/lib/bookEdition.js src/lib/bookPagination.js src/lib/bookPrintHtml.js src/lib/bookPhotoLayout.js ./src/lib/
+
+# Exercise the QR import path during image builds, including ReportLab's
+# separately packaged renderPM dependency.
+RUN printf 'https://www.tateito-yokoito.jp/?voice=000000000000000000000000000000000000000000000000' \
+    | python3 scripts/book_qr_svg.py > /tmp/qr-smoke.svg \
+    && test -s /tmp/qr-smoke.svg \
+    && printf 'https://tateyoko-book-test.vercel.app/?voice=000000000000000000000000000000000000000000000000' \
+    | python3 scripts/book_qr_svg.py > /tmp/qr-stage-smoke.svg \
+    && test -s /tmp/qr-stage-smoke.svg \
+    && rm /tmp/qr-smoke.svg /tmp/qr-stage-smoke.svg
+
+ENV BOOK_CHROME_BINARY=/usr/bin/chromium \
+    BOOK_PYTHON_BINARY=/usr/bin/python3 \
+    BOOK_CHROME_NO_SANDBOX=1 \
+    PORT=8080
+EXPOSE 8080
+CMD ["node", "scripts/book_pdf_server.mjs"]

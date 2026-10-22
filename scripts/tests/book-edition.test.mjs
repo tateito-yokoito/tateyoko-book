@@ -11,7 +11,11 @@ const edition = createBookEdition({ title: "私の歩み", mode: "draft", storie
 const pages = buildBookPages(edition);
 assert.equal(pages[0].kind, "title");
 assert.equal(pages[1].kind, "web-entry");
-assert.equal(pages.find(page => page.storyId === "a" && page.kind === "story-opener")?.pageNumber, 3);
+assert.equal(pages[2].kind, "contents");
+assert.equal(pages.find(page => page.storyId === "a" && page.kind === "story-opener")?.pageNumber, 5);
+assert.deepEqual(pages[2].entries.map(entry => [entry.storyId, entry.pageNumber]), [
+  ["a", 5], ["b", pages.find(page => page.storyId === "b" && page.kind === "story-opener").pageNumber]
+]);
 assert.equal(pages.filter(page => page.storyId === "a" && page.kind === "story-body")
   .flatMap(page => page.paragraphs).join(""), first);
 assert.equal(pages.find(page => page.storyId === "b" && page.kind === "story-opener").pageNumber % 2, 1);
@@ -37,10 +41,10 @@ const photoPlan = renderBookHtml({ title: "写真ページ検証", mode: "draft"
     { url: "https://example.com/first.jpg" }, { url: "https://example.com/second.jpg" }
   ] }
 ] });
-assert.deepEqual(photoPlan.plannedColorPages, [3, 5]);
+assert.deepEqual(photoPlan.plannedColorPages, [5, 7]);
 assert.deepEqual(photoPlan.photoPages, [
-  { page: 3, storyId: "a", photoIndex: 1 },
-  { page: 5, storyId: "a", photoIndex: 2 }
+  { page: 5, storyId: "a", photoIndex: 1 },
+  { page: 7, storyId: "a", photoIndex: 2 }
 ]);
 assert.equal(photoPlan.plannedMonochromePages + photoPlan.plannedColorPages.length,
   photoPlan.pageCount);
@@ -55,6 +59,15 @@ const publicEdition = createBookEdition({ title: "私の歩み", mode: "final", 
   webBookUrl: `https://www.tateito-yokoito.jp/?voice=${"a".repeat(48)}`,
   stories: [{ id: "a", body: "本文" }] });
 assert.equal(buildBookPages(publicEdition)[1].kind, "web-entry");
+assert.match(renderBookPrintHtml(publicEdition), /<h2>目次<\/h2>/);
+const manyStories = Array.from({ length: 23 }, (_, index) => ({
+  id: `story-${index + 1}`, question: `質問${index + 1}`, body: "本文。"
+}));
+const manyPages = buildBookPages(createBookEdition({ stories: manyStories }));
+const contentsPages = manyPages.filter(page => page.kind === "contents");
+assert.deepEqual(contentsPages.map(page => page.entries.length), [11, 11, 1]);
+assert.equal(contentsPages[2].entries[0].pageNumber,
+  manyPages.find(page => page.kind === "story-opener" && page.storyId === "story-23").pageNumber);
 const stagingEdition = createBookEdition({ ...publicEdition,
   webBookUrl: `https://tateyoko-book-test.vercel.app/?voice=${"b".repeat(48)}` });
 assert.equal(buildBookPages(stagingEdition)[1].webBookUrl, stagingEdition.webBookUrl);

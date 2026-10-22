@@ -148,3 +148,5 @@ vite.config.ts.timestamp-*
 # Generated production candidate and local release evidence
 output/production-stage/
 output/production-cutover-20260916/
+output/family-test-stage/
+output/family-test-build-report.json

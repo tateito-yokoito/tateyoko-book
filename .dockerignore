@@ -1,0 +1,12 @@
+**
+!package.json
+!scripts/
+!scripts/book_pdf_server.mjs
+!scripts/render_book_pdf.mjs
+!scripts/book_qr_svg.py
+!scripts/preflight_book_pdf.py
+!src/
+!src/lib/
+!src/lib/bookEdition.js
+!src/lib/bookPagination.js
+!src/lib/bookPrintHtml.js

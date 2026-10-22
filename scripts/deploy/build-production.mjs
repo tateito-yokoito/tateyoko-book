@@ -75,5 +75,6 @@ fs.mkdirSync(path.join(outDir,'.vercel'),{recursive:true});
 fs.writeFileSync(path.join(outDir,'.vercel/project.json'),JSON.stringify({projectId:'prj_WZM2OzVMdtm4x6VbwWLeISqMzjM4',orgId:'team_027fdPcnI7A33ybpJtw7Db4D',projectName:'tateyoko-book'}));
 const report={ref,at:new Date().toISOString(),adminBundle:true,sourceMaps:false,testRef:false,bookProductionEnabled:enableBookProduction,deployed:false,
  files:files.map(p=>({file:path.relative(outDir,p),sha256:crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')}))};
+fs.mkdirSync('output/production-cutover-20260916',{recursive:true});
 fs.writeFileSync('output/production-cutover-20260916/build-manifest.json',JSON.stringify(report,null,2));
 console.log(JSON.stringify({ref,files:files.length,adminBundle:true,testRef:false}));
