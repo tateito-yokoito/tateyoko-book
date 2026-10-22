@@ -73,19 +73,20 @@ export function StoryOrigin() {
       <button className="hp-origin-toggle" type="button" aria-expanded={originExpanded} aria-controls="origin-full-story" onClick={() => setOriginExpanded(!originExpanded)}>{originExpanded ? '− 実話を閉じる' : '＋ 縦糸♾️横糸が生まれた２つの実話を読む'}</button>
       <div id="origin-full-story" hidden={!originExpanded}>
         <div className="hp-origin-scene hp-origin-client">
-          <h3>37歳で旅立った彼と、家族に届いた言葉</h3>
+          <h3>01　家族に届いた、12年前の言葉</h3>
           <p>私が初めて死亡保険金をお支払いしたのは、<br />当時の私と同じ、37歳の男性でした。</p>
           <p>持病もなく、いつもの通勤電車で突然具合が悪くなり、<br />病院へ運ばれ、数日後にこの世を去りました。</p>
-          <p>九州から駆けつけたご両親とお姉さまに、<br />私ができることが一つありました。</p>
-          <p>それは、生前、彼から聞いていた、<br />家族への想いや、今の自分、これからやりたいこと。</p>
+          <p>九州から駆けつけたご両親とお姉さまは、<br />深い悲しみと戸惑いの中にいらっしゃいました。</p>
+          <p>そんなご家族に、私ができたことが一つ。</p>
+          <p>それは、12年前、彼が25歳のときの面談で聞いた、<br />家族への想いや、今の自分のこと、将来への希望。</p>
           <p>それらを記したメモを、お渡しすることでした。</p>
           <p>決して十分なものではありません。</p>
           <p>それでも、ご両親から、こんな言葉をいただきました。</p>
-          <blockquote>一人東京に出てから、<br />会話もあまりできていなかった。<br />息子を誇りに思う。</blockquote>
+          <blockquote>東京に出てから、あまり話もできていなかった。<br />息子を誇りに思う。</blockquote>
           <p>その言葉を、今も忘れることができません。</p>
         </div>
         <div className="hp-origin-scene hp-origin-scene-grandparents">
-          <h3>02　聞けなかったことと、まだ聞けること。</h3>
+          <h3>02　聞けなかったこと。まだ聞けること。</h3>
           <div className="hp-origin-grandparents-layout">
             <figure className="hp-origin-grandparents-photo"><img src={asset + 'grandparents.jpg'} alt="創業者の祖父母の写真" width="1102" height="713" loading="lazy" /></figure>
             <div className="hp-origin-grandparents-copy">
@@ -105,8 +106,8 @@ export function StoryOrigin() {
           <div className="hp-origin-vision-copy">
             <p>特別な人だけが、自伝を書くのではなく。<br />成功した人生だけを、きれいな物語にするのでもなく。</p>
             <p className="hp-origin-vision-pledge">誰もが、自分の人生を気軽に残せないか。</p>
-            <p>語ることで、自分の人生をもう一度辿る。<br />忙しい日々に埋もれていた、大切なものに気づく。</p>
-            <p>そして、<br />いつかその人生を受け取りたいと思ったとき、<br />時を越えて、その人らしさに触れられる場所をつくる。</p>
+            <p>語ることで、自分の人生をもう一度辿り、<br />忙しい日々に埋もれていた、大切なものに気づく。</p>
+            <p>そして、家族が受け取りたいと思ったときには、<br />時を越えて、その人らしさに触れられる場所として。</p>
             <p>そんな願いを、<br className="hp-origin-mobile-break" />「縦糸♾️横糸」に込めています。</p>
           </div>
           <div className="hp-origin-vision-person">
