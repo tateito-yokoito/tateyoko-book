@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { findPaymentConfirmation, finalizeExperienceCheckout, requireStripeEnvironment, requireEventMode } from "../_shared/experience-commerce.ts";
+import { kickBookProduction } from "../_shared/book-production.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,6 +32,7 @@ serve(async request => {
   }
 
   try {
+    requireStripeEnvironment(stripeSecretKey);
     const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const token = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
     const { data: authData, error: authError } = await admin.auth.getUser(token);
@@ -43,6 +46,7 @@ serve(async request => {
       headers: { Authorization: `Bearer ${stripeSecretKey}` }
     });
     const checkout = await stripeResponse.json();
+    requireEventMode(checkout.livemode);
     if (!stripeResponse.ok) return json({ success: false, error: "決済状況を確認できませんでした" }, 502);
     if (checkout?.metadata?.user_id !== authData.user.id) return json({ success: false, error: "この決済情報を確認できません" }, 403);
 
@@ -51,6 +55,23 @@ serve(async request => {
 
     if (orderId) {
       if (!isComplete) return json({ success: true, paid: false, orderType: checkout?.metadata?.order_type || "self" });
+      if (["2.0", "2.1"].includes(checkout.metadata?.experience_policy_version)) {
+        const { data: contract, error } = await admin.from("experience_contracts").select("payment_confirmed_at")
+          .eq("order_id", orderId).single();
+        if (error) throw error;
+        const confirmedAt = contract.payment_confirmed_at || await findPaymentConfirmation(stripeSecretKey, checkout);
+        if (!confirmedAt) return json({ success: true, paid: false, pendingConfirmation: true });
+        const finalized = await finalizeExperienceCheckout(admin, checkout, confirmedAt, checkout.livemode);
+        kickBookProduction(supabaseUrl, serviceRoleKey, orderId);
+        let project = null;
+        if (finalized.order?.book_project_id) {
+          const { data, error: projectError } = await admin.from("book_projects").select("*").eq("id", finalized.order.book_project_id).single();
+          if (projectError) throw projectError;
+          project = data;
+        }
+        return json({ success: true, paid: true, accessStopped: finalized.access_stopped === true,
+          orderType: finalized.order.order_type, order: finalized.order, gift: finalized.gift, project });
+      }
       const { data: finalized, error: finalizeError } = await admin.rpc("finalize_commerce_order", {
         input_order_id: orderId,
         input_checkout_session_id: checkout.id,
@@ -62,6 +83,7 @@ serve(async request => {
         input_purchased_at: checkout.created ? new Date(checkout.created * 1000).toISOString() : new Date().toISOString()
       });
       if (finalizeError) throw finalizeError;
+      kickBookProduction(supabaseUrl, serviceRoleKey, orderId);
 
       const order = finalized?.order || null;
       let project = null;

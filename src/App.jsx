@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { paidConversationIndex, paidOnboardingApplies, paidOnboardingCheckpoint, resolvePaidOnboardingScene } from './lib/paidOnboarding.js';
 import { getActiveOnboardingRitualScene, onboardingSetupScenes, resolveOnboardingRitualEntryScene } from './lib/onboardingRitualResume.js';
 import { clearOnboardingNotificationDraft, clearOnboardingPreferenceDraft, clearOnboardingSharingDraft, draftTimestamp, readOnboardingNotificationDraft, readOnboardingPreferenceDraft, readOnboardingSharingDraft, writeOnboardingNotificationDraft, writeOnboardingPreferenceDraft, writeOnboardingSharingDraft } from './lib/onboardingPreferenceDraft.js';
@@ -15,6 +15,12 @@ import { createClient } from "@supabase/supabase-js";
 import { logActivity } from "./lib/activityLog.js";
 import { createSupportJourney } from './lib/supportJourney.js';
 import { loadBookWork } from "./lib/bookWork.js";
+import { editionFromBookWork } from "./lib/bookEditionAdapter.js";
+import { buildBookPages, selectedBookText } from "./lib/bookEdition.js";
+import { renderBookPrintHtml } from "./lib/bookPrintHtml.js";
+import BookPhotoPlacementFlow from "./BookPhotoPlacementFlow.jsx";
+import BookPaperViewer from "./BookPaperViewer.jsx";
+import { bookPhotoSlots, photoBookLayout } from "./lib/bookPhotoLayout.js";
 import { assertPublicTestEnvironment, TEST_SUPABASE_URL } from "./lib/publicTestSafety.js";
 import { findNextDeliveryQuestionIndex, resolveDeliveryEntry, withoutDeliveryToken } from "./lib/deliveryEntry.js";
 import { completePlaceholderLineProfile, hasLineIdentity, saveLineRegistrationDraft, startLineSignIn, takeLineNotificationReturn, takeLineRegistrationDraft } from "./lib/lineAuth.js";
@@ -6125,7 +6131,9 @@ const startPurchase = async ({
   familyInvitationId = null,
   expectedAmount = null,
   expectedPolicyVersion = null,
-  checkoutWindow = null
+  checkoutWindow = null,
+  subjectConfirmed = false,
+  bookProductionVersion = 1
 } = {}) => {
   if (orderType === "self" && !foundation?.project?.id) {
     closeCheckoutWindow(checkoutWindow);
@@ -6153,7 +6161,9 @@ const startPurchase = async ({
           gift,
           expectedAmount,
           expectedPolicyVersion,
-          familyInvitationId
+          familyInvitationId,
+          subjectConfirmed,
+          bookProductionVersion
         }
       }
     );
@@ -15457,6 +15467,7 @@ export function Scene_BookBuilder({
   questionSet = [],
   initialBookStories = null,
   initialBookMediaByAnswerId = null,
+  onOpenStories = null,
   readOnly = false,
   purchaseStatus = "idle",
   purchaseError = "",
@@ -15504,11 +15515,15 @@ export function Scene_BookBuilder({
   const [bookTitle, setBookTitle] = useState("わたしの物語");
   const [bookSubtitle, setBookSubtitle] = useState("");
   const [bookFooterText, setBookFooterText] = useState("");
+  const [includeWebBookQr, setIncludeWebBookQr] = useState(
+    import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED !== "true"
+  );
   const [coverPhotoCorrectionOpen, setCoverPhotoCorrectionOpen] = useState(false);
   const [coverPhotoCorrectionTarget, setCoverPhotoCorrectionTarget] = useState("standard");
   const [shippingAddress, setShippingAddress] = useState(() => normalizeBookShippingAddress());
   const [showCheckoutCancelled, setShowCheckoutCancelled] = useState(checkoutWasCancelled);
   const [orderCompleted, setOrderCompleted] = useState(false);
+  const [productionJob, setProductionJob] = useState(null);
   const [coverSettingsReady, setCoverSettingsReady] = useState(false);
   const [coverSettingsSaveError, setCoverSettingsSaveError] = useState("");
   const [coverPhotoSaving, setCoverPhotoSaving] = useState(false);
@@ -15527,7 +15542,25 @@ export function Scene_BookBuilder({
   const [bookWork, setBookWork] = useState(null);
   const [workSaving, setWorkSaving] = useState(false);
   const [workError, setWorkError] = useState("");
+  const [draftPdfStatus, setDraftPdfStatus] = useState("idle");
+  const [paperPreviewOpen, setPaperPreviewOpen] = useState(false);
+  const [paperPreviewStoryId, setPaperPreviewStoryId] = useState(null);
+  const [draftPdfError, setDraftPdfError] = useState("");
   const workSaveLock = useRef(false);
+  useEffect(() => {
+    if (import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED !== "true" || !bookProjectId
+      || !["paid", "zero_paid"].includes(project?.access_status) && !orderCompleted && !orderCompletedAt) return undefined;
+    let cancelled = false;
+    const refresh = async () => {
+      const { data, error } = await supabaseClient.functions.invoke("book-production-status", {
+        body: { projectId: bookProjectId }
+      });
+      if (!cancelled && !error && data?.success) setProductionJob(data.job);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 15_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [bookProjectId, project?.access_status, orderCompleted, orderCompletedAt]);
   const saveSelection = async ids => {
     const {data,error}=await supabaseClient.rpc("save_book_selection",{
       input_project_id:bookProjectId,input_answer_ids:ids,input_expected_revision:bookWork?.revision ?? 0
@@ -15543,6 +15576,26 @@ export function Scene_BookBuilder({
         ? includedStoryIds.filter(id=>id!==answer.id):[...includedStoryIds,answer.id]);
     }catch(error){setWorkError(error.message || "収録選択を保存できませんでした。再読み込みしてください。");}
     finally {workSaveLock.current=false;setWorkSaving(false);}
+  };
+
+  const moveWorkStory = async (answerId, direction) => {
+    if (readOnly || bookWork?.confirmed_at || workSaveLock.current) return;
+    const from = includedStoryIds.indexOf(answerId);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= includedStoryIds.length) return;
+    const next = [...includedStoryIds];
+    [next[from], next[to]] = [next[to], next[from]];
+    workSaveLock.current = true;
+    setWorkSaving(true);
+    setWorkError("");
+    try {
+      await saveSelection(next);
+    } catch (error) {
+      setWorkError(error.message || "順番を保存できませんでした。再読み込みしてください。");
+    } finally {
+      workSaveLock.current = false;
+      setWorkSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -15593,6 +15646,7 @@ export function Scene_BookBuilder({
       title: Object.prototype.hasOwnProperty.call(overrides, "title") ? overrides.title : bookTitle,
       subtitle: Object.prototype.hasOwnProperty.call(overrides, "subtitle") ? overrides.subtitle : bookSubtitle,
       footer_text: Object.prototype.hasOwnProperty.call(overrides, "footerText") ? overrides.footerText : bookFooterText,
+      include_web_book_qr: Object.prototype.hasOwnProperty.call(overrides, "includeWebBookQr") ? overrides.includeWebBookQr : includeWebBookQr,
       cover_style: Object.prototype.hasOwnProperty.call(overrides, "coverStyle") ? overrides.coverStyle : coverStyle,
       cloth_color: Object.prototype.hasOwnProperty.call(overrides, "clothColor") ? overrides.clothColor : clothCoverColor,
       print_color: Object.prototype.hasOwnProperty.call(overrides, "printColor") ? overrides.printColor : printCoverColor,
@@ -15624,7 +15678,7 @@ export function Scene_BookBuilder({
 
     if(bookWork?.snapshot?.cover) {
       // Reprints/shipping may change; the completed cover may not.
-      for(const key of ["title","subtitle","footer_text","cover_style","cloth_color","print_color","cover_photo_path","cover_photo_transform"]) {
+      for(const key of ["title","subtitle","footer_text","include_web_book_qr","cover_style","cloth_color","print_color","cover_photo_path","cover_photo_transform"]) {
         payload[key]=bookWork.snapshot.cover[key];
       }
     }
@@ -15675,7 +15729,7 @@ export function Scene_BookBuilder({
       try {
         const { data: liveCover, error } = await supabaseClient
           .from("book_cover_settings")
-          .select("title, subtitle, footer_text, cover_style, cloth_color, print_color, cover_photo_path, cover_photo_transform, suggestions, standard_extra_copy_count, premium_copy_count, include_gift_package, premium_title, premium_subtitle, premium_footer_text, premium_cover_style, premium_cloth_color, premium_print_color, premium_cover_photo_mode, premium_cover_photo_path, premium_cover_photo_transform, shipping_address")
+          .select("title, subtitle, footer_text, include_web_book_qr, cover_style, cloth_color, print_color, cover_photo_path, cover_photo_transform, suggestions, standard_extra_copy_count, premium_copy_count, include_gift_package, premium_title, premium_subtitle, premium_footer_text, premium_cover_style, premium_cloth_color, premium_print_color, premium_cover_photo_mode, premium_cover_photo_path, premium_cover_photo_transform, shipping_address")
           .eq("book_project_id", bookProjectId)
           .maybeSingle();
         if (error) throw error;
@@ -15689,6 +15743,7 @@ export function Scene_BookBuilder({
           setBookTitle(data.title || "わたしの物語");
           setBookSubtitle(data.subtitle || "");
           setBookFooterText(data.footer_text || "");
+          setIncludeWebBookQr(Boolean(data.include_web_book_qr));
           setCoverStyle("print");
           setClothCoverColor(data.cloth_color || CLOTH_COVER_COLORS[0].value);
           setPrintCoverColor(data.print_color || PRINT_COVER_COLORS[0].value);
@@ -15777,6 +15832,7 @@ export function Scene_BookBuilder({
     bookTitle,
     bookSubtitle,
     bookFooterText,
+    includeWebBookQr,
     coverStyle,
     clothCoverColor,
     printCoverColor,
@@ -15842,30 +15898,10 @@ export function Scene_BookBuilder({
 
   const getQuestionForAnswer = (answer) => {
     if(bookWork?.snapshot) return bookWork.snapshot.questions.find(q=>q.id===answer.user_question_id)||null;
-    return (questionSet || []).find(q =>
-      Number(q.sequence_order) === Number(answer.sequence_order)
-    ) || null;
+    return questionForStory(answer, questionSet || []);
   };
 
-  const getStoryBody = (answer) => {
-    if (answer.transcript_edited) return answer.transcript_edited;
-
-    if (answer.selected_style === "clean") {
-      return answer.transcript_clean || answer.transcript_raw || "";
-    }
-
-    if (answer.selected_style === "essay") {
-      return (
-        answer.transcript_essay ||
-        answer.transcript_readable ||
-        answer.transcript_clean ||
-        answer.transcript_raw ||
-        ""
-      );
-    }
-
-    return answer.transcript_readable || answer.transcript_clean || answer.transcript_raw || "";
-  };
+  const getStoryBody = selectedBookText;
   useEffect(() => {
     let cancelled=false;
     setBookWork(null);setBookStories([]);setIncludedStoryIds([]);setBookMediaByAnswerId({});
@@ -16002,7 +16038,10 @@ export function Scene_BookBuilder({
 
   const submitBookOrder = async () => {
     if (!shippingAddressComplete || !orderQuote || !onPurchase || workSaving || workError || !bookWork) return;
-    if(!bookWork.confirmed_at && !window.confirm("選択した語りを、この紙ブックとWebブックの共通の収録内容として確定します。確定後は作品の内容を変更できません。ご本人が紙面を確認済みですか？"))return;
+    const productionV2 = import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED === "true";
+    if(!bookWork.confirmed_at && !window.confirm(productionV2
+      ? "現在の紙面を確認済みですか？決済を開始すると、この時点の内容を注文用に保存します。注文が成立した後、その内容で紙の本とWebブックを制作します。"
+      : "選択した語りを、この紙ブックとWebブックの共通の収録内容として確定します。確定後は作品の内容を変更できません。ご本人が紙面を確認済みですか？"))return;
     setWorkSaving(true);
     setShowCheckoutCancelled(false);
     const noPaymentRequired = Number(orderQuote.amount_total || 0) === 0;
@@ -16011,18 +16050,23 @@ export function Scene_BookBuilder({
       setCoverSettingsSaveError("");
       await persistCoverSettings();
       if(!bookWork.confirmed_at) {
-        const selection=await saveSelection(includedStoryIds);
-        const {data:confirmed,error}=await supabaseClient.rpc("confirm_book_work",{
-          input_project_id:bookProjectId,input_expected_revision:selection.revision,input_subject_confirmed:true
-        });
-        if(error)throw error;
-        setBookWork(confirmed);
+        const selection = await saveSelection(includedStoryIds);
+        if (!productionV2) {
+          const { data: confirmed, error } = await supabaseClient.rpc("confirm_book_work", {
+            input_project_id: bookProjectId,
+            input_expected_revision: selection.revision,
+            input_subject_confirmed: true
+          });
+          if (error) throw error;
+          setBookWork(confirmed);
+        }
       }
-      const {data:publication,error:publishError}=await supabaseClient.functions.invoke("publish-voice-edition",{
-        // Fix the work without implicitly enabling anonymous QR access.
-        body:{action:"prepare",bookProjectId}
-      });
-      if(publishError || !publication?.success)throw publishError || Error(publication?.error||"Webブックを固定できませんでした");
+      if (!productionV2) {
+        const { data: publication, error: publishError } = await supabaseClient.functions.invoke("publish-voice-edition", {
+          body: { action: "prepare", bookProjectId }
+        });
+        if (publishError || !publication?.success) throw publishError || Error(publication?.error || "Webブックを固定できませんでした");
+      }
       const started = await onPurchase({
         orderType: "self",
         discountCode: orderDiscountCode,
@@ -16030,6 +16074,8 @@ export function Scene_BookBuilder({
         premiumCopyCount,
         includeGiftPackage,
         shippingAddress,
+        subjectConfirmed: true,
+        bookProductionVersion: productionV2 ? 2 : 1,
         returnContext: "book_builder",
         checkoutWindow
       });
@@ -16047,61 +16093,68 @@ export function Scene_BookBuilder({
     }
   };
 
-  const includedStories = [...bookStories]
+  const includedStories = useMemo(() => [...bookStories]
     .filter(answer => includedStoryIds.includes(answer.id))
-    .sort((a, b) => includedStoryIds.indexOf(a.id) - includedStoryIds.indexOf(b.id));
+    .sort((a, b) => includedStoryIds.indexOf(a.id) - includedStoryIds.indexOf(b.id)),
+  [bookStories, includedStoryIds]);
 
-  // 横組みの冊子では、右ページを奇数、左ページを偶数にします。
-  // 扉を1ページ目とし、最初の見開きは左2・右3から始めます。
-  let previewPageNumber = 2;
+  const previewEdition = useMemo(() => includedStories.some(answer => getStoryBody(answer).trim())
+    ? editionFromBookWork({
+        title: bookTitle,
+        subtitle: bookSubtitle,
+        subjectName: project?.subject_name || project?.person_name || "",
+        footerText: bookFooterText,
+        includeWebBookQr,
+        answers: includedStories,
+        questionForAnswer: getQuestionForAnswer,
+        mediaByAnswerId: bookMediaByAnswerId
+      })
+    : null,
+  [includedStories, bookTitle, bookSubtitle, bookFooterText, includeWebBookQr,
+    project?.subject_name, project?.person_name, bookMediaByAnswerId, bookWork?.snapshot, questionSet]);
+  const previewPages = useMemo(() => previewEdition ? buildBookPages(previewEdition) : [], [previewEdition]);
+  // Page count stays live in the header. Build the heavier full-page HTML only
+  // while a paper preview is actually visible, then follow edits automatically.
+  const previewPrintHtml = useMemo(() =>
+    previewEdition && (paperPreviewOpen || stepIndex === 2)
+      ? renderBookPrintHtml(previewEdition)
+      : "",
+  [previewEdition, paperPreviewOpen, stepIndex]);
 
-  let photoStoryCounter = 0;
-  const previewPageGroups = includedStories.map(answer => {
-    const question = getQuestionForAnswer(answer);
-    const media = bookMediaByAnswerId[answer.id] || [];
-    const photos = media.filter(item => item.asset_type === "photo" && item.url);
-    const headingPhoto = photos[0] || null;
-    const additionalPhotos = photos.slice(1);
-    const body = getStoryBody(answer);
-    const bodyParagraphs = formatBodyForPagePreview(body);
-    const isPhotoStory = answer.meta_json?.story_origin === "photo";
-    const photoSequence = isPhotoStory ? ++photoStoryCounter : null;
-
-    const leftPageNumber = previewPageNumber;
-    const rightPageNumber = previewPageNumber + 1;
-
-    previewPageNumber += 2;
-
-    const photoPages = additionalPhotos.map(photo => {
-      const pageNumber = previewPageNumber;
-      previewPageNumber += 1;
-
-      return {
-        photo,
-        pageNumber
-      };
-    });
-
-    // 写真ページが奇数枚増えた場合は、次の語りが左（偶数）ページから
-    // 始まるよう、右ページ分を空けます。
-    if (previewPageNumber % 2 !== 0) {
-      previewPageNumber += 1;
+  const downloadDraftPdf = async () => {
+    if (!previewEdition || !bookProjectId || draftPdfStatus === "loading") return;
+    setDraftPdfStatus("loading");
+    setDraftPdfError("");
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.access_token) throw new Error("ログインし直してください。");
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/book-pdf`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: SUPABASE_ANON_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ projectId: bookProjectId, edition: previewEdition })
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || "PDFを作成できませんでした。");
+      }
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = "縦糸横糸ブック-校正用-入稿不可.pdf";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (error) {
+      setDraftPdfError(error.message || "PDFを作成できませんでした。");
+    } finally {
+      setDraftPdfStatus("idle");
     }
-
-    return {
-      answer,
-      question,
-      headingPhoto,
-      bodyParagraphs,
-      leftPageNumber,
-      rightPageNumber,
-      photoPages,
-      isPhotoStory,
-      photoSequence,
-      photoTitle: answer.meta_json?.print_title || "この一枚のこと",
-      photoCaption: answer.meta_json?.photo_caption || ""
-    };
-  });
+  };
 
   return (
     <div className="fixed inset-0 max-w-[760px] mx-auto min-h-0 bg-[#0f172a] flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
@@ -16166,7 +16219,24 @@ export function Scene_BookBuilder({
             ))}
           </div>
         </div>
+        <button type="button" onClick={() => { setPaperPreviewStoryId(null); setPaperPreviewOpen(true); }}
+          className="mt-2 flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-left text-xs text-white/72"
+          aria-label="現在の紙面プレビューを開く">
+          <span>紙面プレビュー　{previewEdition ? `B5・${previewPages.length}ページ` : "収録する語りを選択してください"}</span>
+          <span className="text-white/45">開く ›</span>
+        </button>
       </div>
+
+      {previewEdition && <BookPaperViewer
+        open={paperPreviewOpen}
+        printHtml={previewPrintHtml}
+        pages={previewPages}
+        initialStoryId={paperPreviewStoryId}
+        onClose={() => setPaperPreviewOpen(false)}
+        onDownload={!readOnly && import.meta.env.VITE_BOOK_PDF_ENABLED === "true" ? downloadDraftPdf : null}
+        downloading={draftPdfStatus === "loading"}
+        downloadError={draftPdfError}
+      />}
 
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pb-6">
         {stepIndex === 0 && (
@@ -16319,7 +16389,7 @@ export function Scene_BookBuilder({
               </p>
 
               <p className="text-white/40 text-xs tracking-widest">
-                {includedStoryIds.length} / {bookStories.length} ページ
+                {includedStoryIds.length} / {bookStories.length} 件の語りを収録
               </p>
             </div>
 
@@ -16337,7 +16407,14 @@ export function Scene_BookBuilder({
               </div>
             ) : (
                             [...bookStories]
-                .sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0))
+                .sort((a, b) => {
+                  const ai = includedStoryIds.indexOf(a.id);
+                  const bi = includedStoryIds.indexOf(b.id);
+                  if (ai >= 0 && bi >= 0) return ai - bi;
+                  if (ai >= 0) return -1;
+                  if (bi >= 0) return 1;
+                  return Number(a.sequence_order || 0) - Number(b.sequence_order || 0);
+                })
                 .map((answer, index) => {
 
                   const included = includedStoryIds.includes(answer.id);
@@ -16345,6 +16422,7 @@ export function Scene_BookBuilder({
                   const body = getStoryBody(answer);
                   const media = bookMediaByAnswerId[answer.id] || [];
                   const photo = media.find(item => item.asset_type === "photo" && item.url);
+                  const photoSlots = bookPhotoSlots(media.filter(item => item.asset_type === "photo" && item.url));
                   const isShort = String(body || "").trim().length < 80;
 
                   return (
@@ -16357,7 +16435,7 @@ export function Scene_BookBuilder({
                       <div className="flex gap-4">
                         <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 overflow-hidden shrink-0 flex items-center justify-center">
                           {photo ? (
-                            <img src={photo.url} alt="" className="w-full h-full object-cover" />
+                            <img src={photo.url} alt="" className="w-full h-full object-cover" loading="lazy" />
                           ) : (
                             <Files size={22} className="text-white/25" strokeWidth={1.7} />
                           )}
@@ -16369,6 +16447,9 @@ export function Scene_BookBuilder({
                           </p>
 
                           <div className="mt-2 space-y-1">
+                            <p className="text-white/45 text-xs">
+                              写真：質問の下 {photoSlots.opener ? "1" : "0"}枚／本文のあと {photoSlots.afterFull.length + photoSlots.afterHalf.length}枚
+                            </p>
                             {!included && (
                               <p className="text-white/35 text-xs">
                                 本には入りません
@@ -16384,6 +16465,13 @@ export function Scene_BookBuilder({
                           </div>
                         </div>
                       </div>
+                      {!readOnly && onOpenStories && !bookWork?.confirmed_at && (
+                        <button type="button" onClick={() => onOpenStories(answer.id)} className="mt-3 text-xs text-white/65 underline underline-offset-4">
+                          語りを見るで写真の配置を編集
+                        </button>
+                      )}
+                      {included && <button type="button" onClick={() => { setPaperPreviewStoryId(answer.id); setPaperPreviewOpen(true); }}
+                        className="ml-4 mt-3 text-xs text-white/65 underline underline-offset-4">この語りの紙面を見る</button>}
 
                       {!readOnly && <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3">
                         <p className={`text-sm ${included ? "text-white/65" : "text-white/35"}`}>
@@ -16408,6 +16496,21 @@ export function Scene_BookBuilder({
                           />
                         </button>
                       </div>}
+                      {!readOnly && included && !bookWork?.confirmed_at && (
+                        <div className="mt-2 flex items-center justify-between px-1 text-xs text-white/45">
+                          <span>本の中の順番 {includedStoryIds.indexOf(answer.id) + 1}</span>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => moveWorkStory(answer.id, -1)}
+                              disabled={workSaving || includedStoryIds.indexOf(answer.id) === 0}
+                              className="rounded-full border border-white/15 px-3 py-1.5 disabled:opacity-30"
+                              aria-label={`語り ${includedStoryIds.indexOf(answer.id) + 1} を前へ`}>前へ</button>
+                            <button type="button" onClick={() => moveWorkStory(answer.id, 1)}
+                              disabled={workSaving || includedStoryIds.indexOf(answer.id) === includedStoryIds.length - 1}
+                              className="rounded-full border border-white/15 px-3 py-1.5 disabled:opacity-30"
+                              aria-label={`語り ${includedStoryIds.indexOf(answer.id) + 1} を後へ`}>後へ</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -16417,62 +16520,54 @@ export function Scene_BookBuilder({
 
         {stepIndex === 2 && (
           <div className="space-y-5">
+            {!readOnly && import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED === "true" && (
+              <label className="glass-card flex gap-3 p-5 text-left cursor-pointer">
+                <input type="checkbox" checked={includeWebBookQr}
+                  onChange={event => setIncludeWebBookQr(event.target.checked)} className="mt-1" />
+                <span>
+                  <span className="block text-sm text-white/80">紙の本にWebブックのQRを載せる</span>
+                  <span className="mt-2 block text-xs leading-relaxed text-white/45">
+                    QRを載せると、リンクを知っている人がWebブックを開けます。載せない場合もWebブックは制作します。
+                  </span>
+                </span>
+              </label>
+            )}
             <div className="glass-card p-5 text-center">
               <p className="text-white/82 text-[1.05rem] text-narrative mb-3">
                 紙面プレビュー
               </p>
 
               <p className="text-white/45 text-sm leading-loose">
-                語った言葉が、このような紙面になります。
+                語った言葉を省略せず、必要なページに分けて表示します。
               </p>
 
-              <p className="mt-4 text-white/32 text-xs leading-loose">
-                ※ 実際の書籍では、読みやすさに合わせて余白や改行を整えます。
-              </p>
+              {previewEdition && <p className="mt-4 text-white/58 text-xs leading-loose">
+                B5・全{previewPages.length}ページ。ここで見える紙面とPDFには同じページ構成を使います。
+              </p>}
+              {previewEdition && !readOnly && import.meta.env.VITE_BOOK_PDF_ENABLED === "true" && (
+                <button type="button" onClick={downloadDraftPdf} disabled={draftPdfStatus === "loading"}
+                  className="btn-quiet mt-5 rounded-full bg-white/10 px-6 py-3 text-sm text-white disabled:opacity-50">
+                  {draftPdfStatus === "loading" ? "PDFを作成しています…" : "校正用PDFをダウンロード（入稿不可）"}
+                </button>
+              )}
+              {draftPdfError && <p role="alert" className="mt-3 text-sm text-rose-200">{draftPdfError}</p>}
             </div>
 
-            {previewPageGroups.length === 0 ? (
+            {!previewEdition ? (
               <div className="glass-card p-6 text-center">
                 <p className="text-white/40 text-sm leading-loose">
                   収録する語りを選ぶと、紙面プレビューが表示されます。
                 </p>
               </div>
             ) : (
-              <div className="space-y-10">
-                {previewPageGroups.map(group => (
-                  <div key={group.answer.id} className="space-y-5">
-                    <div className="rounded-3xl border border-white/[0.07] bg-white/[0.018] p-3 sm:p-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-1 items-start">
-                        <BookPagePreview
-                          type="left"
-                          pageNumber={group.leftPageNumber}
-                          sequenceOrder={group.answer.sequence_order}
-                          questionText={group.question?.content || ""}
-                          headingPhoto={group.headingPhoto}
-                          isPhotoStory={group.isPhotoStory}
-                          photoSequence={group.photoSequence}
-                          photoCaption={group.photoCaption}
-                          {...(group.isPhotoStory ? { questionText: group.photoTitle } : {})}
-                        />
-
-                        <BookPagePreview
-                          type="right"
-                          pageNumber={group.rightPageNumber}
-                          bodyParagraphs={group.bodyParagraphs}
-                        />
-                      </div>
-                    </div>
-
-                    {group.photoPages.map(photoPage => (
-                      <BookPagePreview
-                        key={photoPage.photo.storage_path || photoPage.pageNumber}
-                        type="photo"
-                        pageNumber={photoPage.pageNumber}
-                        photo={photoPage.photo}
-                      />
-                    ))}
-                  </div>
-                ))}
+              <div className="rounded-3xl border border-white/[0.07] bg-white/[0.018] p-2 sm:p-4">
+                <iframe
+                  title="縦糸+横糸ブック B5紙面プレビュー"
+                  srcDoc={previewPrintHtml}
+                  sandbox="allow-scripts"
+                  className="block w-full min-h-[70vh] rounded-xl bg-[#e7e7e4]"
+                />
+                {includeWebBookQr && <p className="px-2 pt-3 text-center text-xs text-white/45">確認用の紙面です。QRは注文完了後に固定します。</p>}
               </div>
             )}
           </div>
@@ -16710,10 +16805,21 @@ export function Scene_BookBuilder({
         )}
 
         {stepIndex === 4 && !readOnly && (
-          orderCompleted ? (
+          orderCompleted || orderCompletedAt ? (
             <div className="glass-card p-7 text-center">
               <p className="text-white/82 text-[1.05rem] text-narrative">注文を受け付けました</p>
               <p className="mt-5 text-sm leading-loose text-white/42">選んだ内容とお届け先を保存しました。</p>
+              {import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED === "true" && (
+                <div className="mt-6 text-sm leading-loose text-white/65">
+                  {productionJob?.state === "ready_review" ? <>
+                    <p>紙の本とWebブックの制作データができました。全{productionJob.pageCount}ページです。</p>
+                    {productionJob.pdfUrl && <a href={productionJob.pdfUrl} target="_blank" rel="noreferrer"
+                      className="mt-3 inline-block underline underline-offset-4">校正用PDFを開く</a>}
+                  </> : productionJob?.state === "error" ? (
+                    <p>制作データを確認しています。再注文は不要です。</p>
+                  ) : <p>注文内容から紙の本とWebブックを制作しています。</p>}
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-5">
@@ -19490,6 +19596,7 @@ export function PhotoCorrectionFlow({
 export function Scene_StoryPages({
   user,
   foundation,
+  initialAnswerId = null,
   questionSet: suppliedQuestionSet = [],
   onOpenLifeOutline,
   onTalkMore,
@@ -19553,7 +19660,9 @@ export function Scene_StoryPages({
     return question?.content || "";
   };
 
-  const buildChapterSections = answerRows => buildStorySections(questionSet, answerRows);
+  const buildChapterSections = answerRows => buildStorySections(questionSet, answerRows, {
+    trialCarryDecision: foundation?.project?.trial_carry_decision,
+  });
 
   const [answers, setAnswers] = useState([]);
   const [mediaByAnswerId, setMediaByAnswerId] = useState({});
@@ -19564,6 +19673,8 @@ export function Scene_StoryPages({
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
   const [editingAnswer, setEditingAnswer] = useState(null);
   const [photoActionAnswerId, setPhotoActionAnswerId] = useState(null);
+  const [editingLayoutPhoto, setEditingLayoutPhoto] = useState(null);
+  const [photoLayoutSaving, setPhotoLayoutSaving] = useState(false);
   const [editingPhoto, setEditingPhoto] = useState(null);
   const [preparingPhotoPath, setPreparingPhotoPath] = useState(null);
   const [replacingPhotoPath, setReplacingPhotoPath] = useState(null);
@@ -19864,7 +19975,7 @@ const startEditRecordFromModal = async (mode) => {
   const deletePhoto = async (photo) => {
     if (!photo?.storage_path) return;
 
-    const ok = window.confirm("この写真をページから削除しますか？");
+    const ok = window.confirm("この写真を語りから削除しますか？ 本の紙面からも削除されます。");
     if (!ok) return;
 
     try {
@@ -20007,7 +20118,7 @@ const replaceStoryPhoto = async (file, target) => {
   }
 };
 
-const handleStoryPhotoSelect = async (file, answerId) => {
+const handleStoryPhotoSelect = async (file, answerId, bookLayout = null) => {
     const selectedFiles = file?.type?.startsWith("image/") ? [file] : [];
 
     if (!answerId || selectedFiles.length === 0 || !user?.id) {
@@ -20018,7 +20129,7 @@ const handleStoryPhotoSelect = async (file, answerId) => {
       setUploadingPhotoAnswerId(answerId);
 
       if (storyAccess) {
-        await storyAccess.addPhoto(file, answerId);
+        await storyAccess.addPhoto(file, answerId, null, bookLayout);
         await loadAnswers({ showLoading: false });
         return;
       }
@@ -20040,14 +20151,13 @@ const handleStoryPhotoSelect = async (file, answerId) => {
               ? "webp"
               : "jpg";
 
-        const photoNo = String(existingPhotoCount + i + 1).padStart(2, "0");
-        const photoPath = `${recordingStorageRoot(user.id, foundation.project.id, answerId)}/photo-${photoNo}.${ext}`;
+        const photoPath = `${recordingStorageRoot(user.id, foundation.project.id, answerId)}/photo-${crypto.randomUUID()}.${ext}`;
 
         const { error: uploadError } = await supabaseClient.storage
           .from("photos")
           .upload(photoPath, file, {
             contentType,
-            upsert: true
+            upsert: false
           });
 
         if (uploadError) {
@@ -20067,7 +20177,8 @@ const handleStoryPhotoSelect = async (file, answerId) => {
             part: existingPhotoCount + i + 1,
             total_parts: existingPhotoCount + selectedFiles.length,
             file_name: file.name || null,
-            content_type: contentType
+            content_type: contentType,
+            book_layout: bookLayout
           }
         });
       }
@@ -20086,11 +20197,28 @@ const handleStoryPhotoSelect = async (file, answerId) => {
       await loadAnswers({ showLoading: false });
     } catch (e) {
       console.error(e);
-      if (storyAccess) throw e;
-      alert(e.message || "写真の追加に失敗しました。");
+      throw e;
     } finally {
       setUploadingPhotoAnswerId(null);
     }
+  };
+
+  const saveStoryPhotoLayout = async (answerId, { file, photo, layout }) => {
+    setPhotoLayoutSaving(true);
+    try {
+      if (file) {
+        await handleStoryPhotoSelect(file, answerId, layout);
+      } else if (photo?.id) {
+        if (storyAccess) await storyAccess.setPhotoLayout(photo, layout);
+        else {
+          const { error } = await supabaseClient.from("media_assets")
+            .update({ meta_json: { ...(photo.meta_json || {}), book_layout: layout } })
+            .eq("id", photo.id).eq("user_id", user.id);
+          if (error) throw error;
+        }
+        await loadAnswers({ showLoading: false });
+      }
+    } finally { setPhotoLayoutSaving(false); }
   };
 
 useEffect(() => {
@@ -20112,6 +20240,16 @@ useEffect(() => {
 }, [answers, questionSet, selectedChapterIndex]);
 
   const chapterSections = buildChapterSections(answers);
+  useEffect(() => {
+    if (!initialAnswerId || !answers.length) return;
+    const sectionIndex = chapterSections.findIndex(section => section.answers?.some(answer => answer.id === initialAnswerId));
+    if (sectionIndex < 0) return;
+    setSelectedChapterIndex(sectionIndex);
+    const timer = window.setTimeout(() => {
+      document.querySelector(`[data-story-answer-id="${initialAnswerId}"]`)?.scrollIntoView({block:"center",behavior:"smooth"});
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [initialAnswerId, answers, questionSet]);
   const bookendMedia = kind => ({
     voice: chapterSections.find(section => section.bookendKind === kind)?.answers?.length || 0,
     video: videoStories.find(story => bookendKindForVideo(story) === kind) || null
@@ -20154,20 +20292,13 @@ return (
       onReload={() => loadAnswers({ showLoading: false })}
       onClose={() => setVideoFlowOpen(false)}
     />
-    <PhotoCorrectionFlow
+    <BookPhotoPlacementFlow
       open={!!photoActionAnswerId}
-      awaitCompletion={Boolean(storyAccess)}
-      onClose={() => setPhotoActionAnswerId(null)}
-      onComplete={async (file) => {
-        const answerId = photoActionAnswerId;
-        if (storyAccess) {
-          await handleStoryPhotoSelect(file, answerId);
-          setPhotoActionAnswerId(null);
-          return;
-        }
-        setPhotoActionAnswerId(null);
-        handleStoryPhotoSelect(file, answerId);
-      }}
+      photos={(mediaByAnswerId[photoActionAnswerId] || []).filter(item => item.asset_type === "photo" && item.url)}
+      initialPhoto={editingLayoutPhoto}
+      busy={photoLayoutSaving}
+      onClose={() => { setPhotoActionAnswerId(null); setEditingLayoutPhoto(null); }}
+      onSave={selection => saveStoryPhotoLayout(photoActionAnswerId, selection)}
     />
     <PhotoCorrectionFlow
       open={!!editingPhoto}
@@ -20387,7 +20518,7 @@ return (
             const audios = media.filter(m => m.asset_type === "audio" && (m.url || (renderAudio && m.storage_path)));
 
             return (
-              <article key={answer.id} className="glass-card p-5 text-left">
+              <article key={answer.id} data-story-answer-id={answer.id} className="glass-card p-5 text-left">
                 {isTrialStoryQuestion(getQuestionForAnswer(answer)) && (
                   <p className="mb-3 text-[1rem] text-white/60">無料３問</p>
                 )}
@@ -20413,12 +20544,21 @@ return (
             className="w-full h-auto object-contain bg-black/20"
           />
 
+          <div className="absolute left-3 top-3 rounded-full bg-slate-950/85 px-3 py-1 text-xs text-white">
+            {photoBookLayout(photo, photoIndex).placement === "excluded"
+              ? "配置を選んでください"
+              : `本では：${{ opener: "質問の下", after_full: "本文のあと・大きく", after_half: "本文のあと・小さく" }[photoBookLayout(photo, photoIndex).placement]}`}
+          </div>
+
+          <button type="button" onClick={() => { setEditingLayoutPhoto(photo); setPhotoActionAnswerId(answer.id); }}
+            className="absolute right-12 top-2 rounded-full bg-slate-950/85 px-3 py-2 text-xs text-white">配置を変える</button>
+
           <button
             type="button"
             onClick={() => deletePhoto(photo)}
             disabled={deletingPhotoPath === photo.storage_path || replacingPhotoPath === photo.storage_path}
             className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/55 text-white/85 text-[1rem]"
-            aria-label="写真を削除"
+            aria-label="写真を語りから削除"
           >
             {deletingPhotoPath === photo.storage_path ? "…" : "×"}
           </button>

@@ -1,0 +1,19 @@
+{
+  "framework": null,
+  "buildCommand": "",
+  "installCommand": "",
+  "outputDirectory": ".",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" },
+        { "key": "X-Tateyoko-Environment", "value": "test" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https://zpswxefgfabzvxdbtyvq.supabase.co https://zpswxefgfabzvxdbtyvq.storage.supabase.co; connect-src 'self' https://zpswxefgfabzvxdbtyvq.supabase.co wss://zpswxefgfabzvxdbtyvq.supabase.co https://zpswxefgfabzvxdbtyvq.storage.supabase.co; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" }
+      ]
+    }
+  ]
+}

@@ -5,7 +5,7 @@ import { SupporterSmsEntry } from './SupporterSms.jsx';
 import LandingPage from "./LandingPage.jsx";
 import GiftThreeQuestionsPage from "./gift-three-questions.jsx";
 import VoiceLibraryPage from "./VoiceLibraryPage.jsx";
-import VoicePlaybackPage from "./VoicePlaybackPage.jsx";
+import PublishedWebBook from "./PublishedWebBook.jsx";
 import { ThemeMemoryRequestRecipient } from "./ThemeMemoryRequestFlow.jsx";
 import "./index.css";
 import FamilyConnectionTest from './FamilyConnectionTest.jsx';
@@ -67,7 +67,7 @@ function RootScreen() {
 
   if (params.has("voice")) {
     return (
-      <VoicePlaybackPage
+      <PublishedWebBook
         supabaseClient={adminSupabaseClient}
         publicId={params.get("voice") || ""}
       />

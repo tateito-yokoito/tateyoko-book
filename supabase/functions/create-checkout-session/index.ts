@@ -1,5 +1,8 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { kickBookProduction } from "../_shared/book-production.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import {requireFamilyRelease} from '../_shared/family-release.ts';
+import { requireStripeEnvironment, commerceMode, requireCheckoutEnabled, requireEventMode, finalizeExperienceCheckout } from "../_shared/experience-commerce.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,6 +58,12 @@ async function stripeRequest(secret: string, path: string, form?: URLSearchParam
 async function ensureStripePrice(admin: any, secret: string, product: any) {
   const mode = stripeMode(secret);
   if (product?.stripe_mode === mode && product?.stripe_product_id && product?.stripe_price_id) {
+    // Keep the existing Stripe product copy aligned when a cached price is reused.
+    if (product.product_code === "self_book_v1" && product.description) {
+      const productForm = new URLSearchParams();
+      productForm.set("description", product.description);
+      await stripeRequest(secret, `products/${encodeURIComponent(product.stripe_product_id)}`, productForm);
+    }
     return { productId: product.stripe_product_id, priceId: product.stripe_price_id };
   }
 
@@ -190,11 +199,27 @@ serve(async request => {
   let orderId = "";
 
   try {
-    const token = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    try {
+      requireStripeEnvironment(stripeSecretKey);
+      requireCheckoutEnabled();
+      const {error:modeError}=await admin.rpc("require_commerce_mode",{input_mode:commerceMode()});
+      if(modeError)throw modeError;
+    } catch {
+      return json({success:false,error:"ただいま新しいお申し込みを停止しています。"},503);
+    }
+    const bearer = (request.headers.get("Authorization") || "").match(/^Bearer\s+(\S+)$/i);
+    if(!bearer) return json({success:false,error:'ログインが必要です'},401);
+    const token = bearer[1];
     const { data: authData, error: authError } = await admin.auth.getUser(token);
     if (authError || !authData.user) return json({ success: false, error: "ログインが必要です" }, 401);
 
     const body = await request.json().catch(() => ({}));
+    // Never sell v2 UI terms through a legacy/40-day backend. Release requires
+    // an explicit, separately approved backend rollout, not just a UI flag.
+    if (body.expectedPolicyVersion != null &&
+        (!["2.0", "2.1"].includes(body.expectedPolicyVersion))) {
+      return json({success:false,error:"新しいお申し込み条件の公開準備中です。しばらくお待ちください。"},409);
+    }
     const projectId = String(body.projectId || "").trim();
     const orderType = body.orderType === "gift"
       ? "gift"
@@ -204,7 +229,7 @@ serve(async request => {
     const familyInvitationId = String(body.familyInvitationId || "").trim();
     let discountCode = String(body.discountCode || "").trim();
     const standardExtraCopyCount = orderType === "self"
-      ? Number.parseInt(String(body.standardExtraCopyCount ?? "0"), 10)
+      ? Number(String(body.standardExtraCopyCount ?? "0"))
       : 0;
     const premiumCopyCount = orderType === "self"
       ? Number.parseInt(String(body.premiumCopyCount ?? (body.includePremiumHardcover === true ? "1" : "0")), 10)
@@ -212,7 +237,15 @@ serve(async request => {
     const includeGiftPackage = orderType === "gift" || orderType === "family_trial_package"
       ? body.includeGiftPackage !== false
       : body.includeGiftPackage === true;
-    const returnContext = body.returnContext === "book_builder" ? "book_builder" : "purchase";
+    const returnContext = body.returnContext === "book_builder" ? "book_builder"
+      : body.returnContext === "family" ? "family"
+      : body.returnContext === "trial" && orderType === "self" ? "trial" : "purchase";
+    const bookProductionRequested = Deno.env.get("BOOK_PRODUCTION_V2_ENABLED") === "true"
+      && orderType === "self" && returnContext === "book_builder"
+      && body.bookProductionVersion === 2;
+    if (bookProductionRequested && body.subjectConfirmed !== true) {
+      return json({ success: false, error: "紙面の確認が必要です" }, 400);
+    }
     const gift = typeof body.gift === "object" && body.gift ? body.gift : {};
     const shippingAddress = typeof body.shippingAddress === "object" && body.shippingAddress
       ? body.shippingAddress
@@ -220,6 +253,7 @@ serve(async request => {
 
     let project: any = null;
     let familyInvitation: any = null;
+    let managedFamily = false;
     if (familyInvitationId) {
       const invitationResult = await admin.from("family_story_invitations")
         .select("*").eq("id", familyInvitationId).maybeSingle();
@@ -304,12 +338,73 @@ serve(async request => {
         .select("id, owner_user_id, access_status, product_code, premium_hardcover_status, premium_hardcover_purchased_at")
         .eq("id", projectId).maybeSingle();
       project = result.data;
-      if (result.error || !project || project.owner_user_id !== authData.user.id) {
+      const {data:managed,error:managedError}=await admin.rpc('family_managed',{p:projectId});
+      if(managedError)throw managedError;
+      managedFamily=managed===true;
+      if(managedFamily)await requireFamilyRelease(admin,projectId,authData.user.id);
+      if (result.error || !project || (!managedFamily && project.owner_user_id !== authData.user.id)) {
         return json({ success: false, error: "この物語の購入手続きを開始できません" }, 403);
       }
+      if(managedFamily && returnContext!=='family'){
+        const {data:producer,error:producerError}=await admin.rpc('family_creator',{p:projectId,u:authData.user.id});
+        if(producerError || !producer || returnContext!=='book_builder')return json({success:false,error:'制作権限を確認してください'},403);
+      }
+      if (returnContext === "family") {
+        if(!managedFamily)return json({success:false,error:'Family project required'},403);
+        const {data:permitted,error:permissionError}=await admin.rpc('family_supporter',{p:projectId,u:authData.user.id});
+        if(permissionError || !permitted) return json({success:false,error:'この物語の購入手続きを開始できません'},403);
+        if(standardExtraCopyCount!==0 || premiumCopyCount!==0 || includeGiftPackage) return json({success:false,error:'基本プランをご確認ください'},400);
+      }
+      let freeTrialRetentionEnabled = false;
+      if (Deno.env.get("FREE_TRIAL_RETENTION_ENABLED") === "true") {
+        const { data: allowed, error: rolloutError } = await admin.rpc(
+          "free_trial_retention_enabled_for",
+          { input_account_id: project.owner_user_id },
+        );
+        if (rolloutError) throw rolloutError;
+        freeTrialRetentionEnabled = allowed === true;
+      }
+      if (freeTrialRetentionEnabled) {
+        const { data: pendingTrialOrder, error: pendingTrialError } = await admin
+          .from("commerce_orders")
+          .select("id,stripe_checkout_session_id")
+          .eq("book_project_id", projectId)
+          .eq("purchaser_user_id", authData.user.id)
+          .eq("order_type", "self")
+          .eq("includes_base_book", true)
+          .eq("status", "checkout_pending")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (pendingTrialError) throw pendingTrialError;
+        if (pendingTrialOrder) {
+          if (!pendingTrialOrder.stripe_checkout_session_id) {
+            return json({ success: false, error: "前のお支払いを確認しています。少し待ってからお試しください" }, 409);
+          }
+          const previousCheckout = await stripeRequest(stripeSecretKey,
+            `checkout/sessions/${encodeURIComponent(pendingTrialOrder.stripe_checkout_session_id)}`);
+          requireEventMode(previousCheckout.livemode);
+          if (previousCheckout.status === "complete") {
+            return json({ success: false, error: "お支払いの完了を確認しています。画面を再読み込みしてください" }, 409);
+          }
+          if (previousCheckout.status === "open") {
+            const expiredCheckout = await stripeRequest(stripeSecretKey,
+              `checkout/sessions/${encodeURIComponent(pendingTrialOrder.stripe_checkout_session_id)}/expire`,
+              new URLSearchParams());
+            requireEventMode(expiredCheckout.livemode);
+            if (expiredCheckout.status !== "expired") throw new Error("前のお支払いを終了できませんでした");
+          } else if (previousCheckout.status !== "expired") {
+            return json({ success: false, error: "前のお支払いを確認しています" }, 409);
+          }
+          const { error: releaseError } = await admin.rpc("expire_commerce_order", {
+            input_order_id: pendingTrialOrder.id
+          });
+          if (releaseError) throw releaseError;
+        }
+      }
       if (!Number.isInteger(standardExtraCopyCount)
-        || (standardExtraCopyCount !== 0 && (standardExtraCopyCount < 2 || standardExtraCopyCount > 30))) {
-        return json({ success: false, error: "スタンダード冊子の増刷は2冊から30冊で指定してください" }, 400);
+        || standardExtraCopyCount < 0 || standardExtraCopyCount > 30) {
+        return json({ success: false, error: "スタンダード冊子の増刷は1冊から30冊で指定してください" }, 400);
       }
       if (!Number.isInteger(premiumCopyCount) || premiumCopyCount < 0 || premiumCopyCount > 30) {
         return json({ success: false, error: "プレミアム冊子は0冊から30冊で指定してください" }, 400);
@@ -400,6 +495,10 @@ serve(async request => {
     const quote = created?.quote;
     orderId = String(order?.id || "");
     if (!orderId || !quote) throw new Error("注文を作成できませんでした");
+    if (bookProductionRequested) {
+      const { error: prepareError } = await admin.rpc("prepare_book_order_work", { input_order_id: orderId });
+      if (prepareError) throw prepareError;
+    }
 
     let discountScope = "base_product";
     if (quote.campaign_id) {
@@ -443,7 +542,15 @@ serve(async request => {
     let familyInviteDiscountPercent = 0;
     let familyInviteDiscountAmount = 0;
     if (familyInvitation && orderType !== "family_trial_package") {
-      familyInviteDiscountPercent = await getFamilyInviteDiscountPercent(admin);
+      if (familyInvitation.pricing_policy_version === "2.0") {
+        const { data: percent, error: qualificationError } = await admin.rpc("get_conversion_invitation_discount", {
+          input_invitation_id: familyInvitation.id
+        });
+        if (qualificationError) throw qualificationError;
+        familyInviteDiscountPercent = Number(percent);
+      } else {
+        familyInviteDiscountPercent = await getFamilyInviteDiscountPercent(admin);
+      }
       const baseBookAmount = Number(
         order.base_book_amount
         || quote.base_book_amount
@@ -485,6 +592,11 @@ serve(async request => {
       }
     }
 
+    if (body.expectedAmount != null && Number(body.expectedAmount) !== Number(quote.amount_total)) {
+      // New confirmation UI: never open Stripe with a silently changed total.
+      throw new Error("お申し込み金額が変更されました。内容・料金を再確認してください。");
+    }
+
     if (familyInvitation) {
       const linkedGiftId = created?.gift?.id || null;
       const { error: invitationLinkError } = await admin.from("family_story_invitations").update({
@@ -494,10 +606,34 @@ serve(async request => {
       if (invitationLinkError) throw invitationLinkError;
     }
 
+    const useV2 = order.includes_base_book;
+    let experiencePolicyVersion = "";
+    if (useV2) {
+      requireStripeEnvironment(stripeSecretKey);
+      const { data: contract, error } = await admin.rpc("register_experience_contract", { input_order_id: order.id });
+      if (error) throw error;
+      experiencePolicyVersion = String(contract?.policy_version || "");
+      const validSelfContract = contract?.purchase_kind === "self"
+        && ((experiencePolicyVersion === "2.0" && contract.guarantee_days === 30)
+          || (experiencePolicyVersion === "2.1" && contract.guarantee_days === null));
+      const validGiftContract = contract?.purchase_kind === "gift"
+        && experiencePolicyVersion === "2.0" && contract.guarantee_days === 45;
+      if ((!validSelfContract && !validGiftContract)
+        || (body.expectedPolicyVersion != null && body.expectedPolicyVersion !== experiencePolicyVersion)) {
+        throw new Error("購入条件が更新されました。内容・料金を再確認してください。");
+      }
+    }
+
     // A fully discounted order does not need Stripe products, coupons, or a
     // Checkout Session. Finalize it directly as a zero-yen purchase.
     if (Number(order.amount_total) === 0) {
       const completionId = `zero-${order.id}`;
+      if (useV2) {
+        await finalizeExperienceCheckout(admin, { id: completionId, metadata: { order_id: order.id },
+          amount_total: 0, currency: "jpy", payment_status: "no_payment_required" }, new Date().toISOString(), commerceMode() === "live");
+        kickBookProduction(supabaseUrl, serviceRoleKey, order.id);
+        return json({ success: true, completed: true, orderId: order.id, quote });
+      }
       const { error: finalizeError } = await admin.rpc("finalize_commerce_order", {
         input_order_id: order.id,
         input_checkout_session_id: completionId,
@@ -509,6 +645,7 @@ serve(async request => {
         input_purchased_at: new Date().toISOString()
       });
       if (finalizeError) throw finalizeError;
+      kickBookProduction(supabaseUrl, serviceRoleKey, order.id);
       return json({ success: true, completed: true, orderId: order.id, quote });
     }
 
@@ -516,6 +653,7 @@ serve(async request => {
       ? [
           { code: "self_book_v1", quantity: Number(order.base_book_amount ?? quote.base_book_amount ?? 0) > 0 ? 1 : 0 },
           { code: "standard_reprint_pair_v1", quantity: Number(quote.standard_reprint_pair_quantity || 0) },
+          { code: "standard_reprint_single_v1", quantity: Number(quote.standard_reprint_single_quantity || 0) },
           { code: "standard_reprint_additional_v1", quantity: Number(quote.standard_reprint_additional_quantity || 0) },
           { code: "premium_hardcover_v1", quantity: Number(quote.premium_copy_count_due || 0) },
           { code: "gift_package_v1", quantity: Number(quote.gift_package_amount || 0) > 0 ? 1 : 0 }
@@ -584,6 +722,7 @@ serve(async request => {
     form.set("mode", "payment");
     form.set("locale", "ja");
     form.set("payment_method_types[0]", "card");
+    if (useV2) form.set("payment_method_options[card][installments][enabled]", "true");
     form.set("customer_creation", "always");
     stripeLines.forEach((line, lineIndex) => {
       form.set(`line_items[${lineIndex}][price]`, line.priceId);
@@ -591,9 +730,11 @@ serve(async request => {
     });
     if (couponId) form.set("discounts[0][coupon]", couponId);
     form.set("client_reference_id", order.id);
-    // LINE-only accounts have no email; Stripe should collect one at checkout.
+    // LINE-only accounts have no email. Let Checkout collect one instead of
+    // sending an invalid empty customer_email parameter to Stripe.
     if (authData.user.email?.trim()) form.set("customer_email", authData.user.email.trim());
     form.set("metadata[order_id]", order.id);
+    if (useV2) form.set("metadata[experience_policy_version]", experiencePolicyVersion);
     form.set("metadata[project_id]", projectId);
     form.set("metadata[user_id]", authData.user.id);
     form.set("metadata[order_type]", orderType);
@@ -607,6 +748,14 @@ serve(async request => {
     form.set("expires_at", String(Math.floor(Date.now() / 1000) + 60 * 60));
     const returnParams: Record<string, string> = { app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout: "success", session_id: "{CHECKOUT_SESSION_ID}" };
     const cancelParams: Record<string, string> = { app: "1", entry: "purchase", purchase_for: orderType, checkout_context: returnContext, checkout: "cancelled" };
+    if (returnContext === "trial") cancelParams.entry = "trial";
+    if (managedFamily) {
+      Object.assign(returnParams,{family:'1',family_project:projectId});
+      Object.assign(cancelParams,{family:'1',family_project:projectId});
+      if(returnContext==='book_builder'){
+        returnParams.family_scene='book';cancelParams.family_scene='book';
+      }
+    }
     if (familyInvitationId) {
       returnParams.family_invite_checkout = familyInvitationId;
       cancelParams.family_invite_checkout = familyInvitationId;
@@ -615,6 +764,7 @@ serve(async request => {
     form.set("cancel_url", appReturnUrl(cancelParams));
 
     const checkout = await stripeRequest(stripeSecretKey, "checkout/sessions", form);
+    requireEventMode(checkout.livemode);
     if (!checkout?.id || !checkout?.url) throw new Error("購入画面を開けませんでした");
 
     const existingOrderMetadata = order.metadata && typeof order.metadata === "object" ? order.metadata : {};
@@ -637,8 +787,9 @@ serve(async request => {
         projectUpdate.premium_hardcover_status = "checkout_pending";
       }
       if (Object.keys(projectUpdate).length > 0) {
-        const { error: projectUpdateError } = await admin.from("book_projects").update(projectUpdate)
-          .eq("id", project.id).eq("owner_user_id", authData.user.id);
+        let updateQuery = admin.from("book_projects").update(projectUpdate).eq("id", project.id);
+        if(!managedFamily) updateQuery=updateQuery.eq("owner_user_id", authData.user.id);
+        const { error: projectUpdateError } = await updateQuery;
         if (projectUpdateError) throw projectUpdateError;
       }
     }
