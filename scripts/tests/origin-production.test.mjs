@@ -7,16 +7,22 @@ const css = readFileSync('dist/assets/postcta-overlay.css', 'utf8');
 const html = readFileSync('dist/index.html', 'utf8');
 
 for (const text of [
-  '37歳で旅立った彼と、家族に届いた言葉',
-  '聞けなかったことと、まだ聞けること。',
+  '01　家族に届いた、12年前の言葉',
+  'それは、12年前、彼が25歳のときの面談で聞いた、',
+  '東京に出てから、あまり話もできていなかった。',
+  '02　聞けなかったこと。まだ聞けること。',
   '家族に還れる場所をつくる',
   '誰もが、自分の人生を気軽に残せないか。',
+  '語ることで、自分の人生をもう一度辿り、',
+  'そして、家族が受け取りたいと思ったときには、',
+  '時を越えて、その人らしさに触れられる場所として。',
 ]) {
   assert.ok(source.includes(text), `Origin source is missing ${text}`);
   assert.ok(published.includes(text), `Published Origin is missing ${text}`);
 }
 
 assert.ok(!published.includes('33歳'), 'Published Origin still contains the old age');
+assert.ok(!published.includes('37歳で旅立った彼と、家族に届いた言葉'), 'Published Origin still contains the previous story title');
 assert.ok(css.includes('.hp-origin-vision-layout'), 'Published Origin layout is missing');
 assert.ok(css.includes('.hp-origin-grandparents-photo'), 'Grandparents photo styling is missing');
 for (const image of ['family-history-spine-20261022.jpeg', 'founder-and-son-landscape-20261022.png']) {

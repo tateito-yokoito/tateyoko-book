@@ -5743,7 +5743,7 @@ function Od() {
     /* @__PURE__ */ h.jsx("button", { className: "hp-origin-toggle", type: "button", "aria-expanded": e, "aria-controls": "origin-full-story", onClick: () => t(!e), children: e ? "− 実話を閉じる" : "＋ 縦糸♾️横糸が生まれた２つの実話を読む" }),
     /* @__PURE__ */ h.jsxs("div", { id: "origin-full-story", hidden: !e, children: [
       /* @__PURE__ */ h.jsxs("div", { className: "hp-origin-scene hp-origin-client", children: [
-        /* @__PURE__ */ h.jsx("h3", { children: "37歳で旅立った彼と、家族に届いた言葉" }),
+        /* @__PURE__ */ h.jsx("h3", { children: "01　家族に届いた、12年前の言葉" }),
         /* @__PURE__ */ h.jsxs("p", { children: [
           "私が初めて死亡保険金をお支払いしたのは、",
           /* @__PURE__ */ h.jsx("br", {}),
@@ -5755,29 +5755,28 @@ function Od() {
           "病院へ運ばれ、数日後にこの世を去りました。"
         ] }),
         /* @__PURE__ */ h.jsxs("p", { children: [
-          "九州から駆けつけたご両親とお姉さまに、",
+          "九州から駆けつけたご両親とお姉さまは、",
           /* @__PURE__ */ h.jsx("br", {}),
-          "私ができることが一つありました。"
+          "深い悲しみと戸惑いの中にいらっしゃいました。"
         ] }),
+        /* @__PURE__ */ h.jsx("p", { children: "そんなご家族に、私ができたことが一つ。" }),
         /* @__PURE__ */ h.jsxs("p", { children: [
-          "それは、生前、彼から聞いていた、",
+          "それは、12年前、彼が25歳のときの面談で聞いた、",
           /* @__PURE__ */ h.jsx("br", {}),
-          "家族への想いや、今の自分、これからやりたいこと。"
+          "家族への想いや、今の自分のこと、将来への希望。"
         ] }),
         /* @__PURE__ */ h.jsx("p", { children: "それらを記したメモを、お渡しすることでした。" }),
         /* @__PURE__ */ h.jsx("p", { children: "決して十分なものではありません。" }),
         /* @__PURE__ */ h.jsx("p", { children: "それでも、ご両親から、こんな言葉をいただきました。" }),
         /* @__PURE__ */ h.jsxs("blockquote", { children: [
-          "一人東京に出てから、",
-          /* @__PURE__ */ h.jsx("br", {}),
-          "会話もあまりできていなかった。",
+          "東京に出てから、あまり話もできていなかった。",
           /* @__PURE__ */ h.jsx("br", {}),
           "息子を誇りに思う。"
         ] }),
         /* @__PURE__ */ h.jsx("p", { children: "その言葉を、今も忘れることができません。" })
       ] }),
       /* @__PURE__ */ h.jsxs("div", { className: "hp-origin-scene hp-origin-scene-grandparents", children: [
-        /* @__PURE__ */ h.jsx("h3", { children: "02　聞けなかったことと、まだ聞けること。" }),
+        /* @__PURE__ */ h.jsx("h3", { children: "02　聞けなかったこと。まだ聞けること。" }),
         /* @__PURE__ */ h.jsxs("div", { className: "hp-origin-grandparents-layout", children: [
           /* @__PURE__ */ h.jsx("figure", { className: "hp-origin-grandparents-photo", children: /* @__PURE__ */ h.jsx("img", { src: gr + "grandparents.jpg", alt: "創業者の祖父母の写真", width: "1102", height: "713", loading: "lazy" }) }),
           /* @__PURE__ */ h.jsxs("div", { className: "hp-origin-grandparents-copy", children: [
@@ -5816,16 +5815,14 @@ function Od() {
           ] }),
           /* @__PURE__ */ h.jsx("p", { className: "hp-origin-vision-pledge", children: "誰もが、自分の人生を気軽に残せないか。" }),
           /* @__PURE__ */ h.jsxs("p", { children: [
-            "語ることで、自分の人生をもう一度辿る。",
+            "語ることで、自分の人生をもう一度辿り、",
             /* @__PURE__ */ h.jsx("br", {}),
             "忙しい日々に埋もれていた、大切なものに気づく。"
           ] }),
           /* @__PURE__ */ h.jsxs("p", { children: [
-            "そして、",
+            "そして、家族が受け取りたいと思ったときには、",
             /* @__PURE__ */ h.jsx("br", {}),
-            "いつかその人生を受け取りたいと思ったとき、",
-            /* @__PURE__ */ h.jsx("br", {}),
-            "時を越えて、その人らしさに触れられる場所をつくる。"
+            "時を越えて、その人らしさに触れられる場所として。"
           ] }),
           /* @__PURE__ */ h.jsxs("p", { children: [
             "そんな願いを、",
