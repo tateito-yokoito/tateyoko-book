@@ -2,6 +2,7 @@ import { paginateBookBody } from "./bookPagination.js";
 import { bookPhotoSlots, photoBookLayout } from "./bookPhotoLayout.js";
 
 export const BOOK_EDITION_SCHEMA_VERSION = 1;
+export const BOOK_TOC_STORIES_PER_PAGE = 11;
 export const BOOK_PRINT_PROFILE = Object.freeze({
   widthMm: 182,
   heightMm: 257,
@@ -98,6 +99,13 @@ export function buildBookPages(edition, profile = BOOK_PRINT_PROFILE) {
   add({ kind: "title", title: edition.title, subtitle: edition.subtitle, subjectName: edition.subjectName });
   if (edition.includeWebBookQr) add({ kind: "web-entry", webBookUrl: edition.webBookUrl });
 
+  // Reserve the contents pages before pagination. Their entries are filled
+  // after every story opener has received its final physical page number.
+  const tocPageCount = Math.ceil(edition.stories.length / BOOK_TOC_STORIES_PER_PAGE);
+  for (let index = 0; index < tocPageCount; index += 1) {
+    add({ kind: "contents", entries: [] });
+  }
+
   for (let storyIndex = 0; storyIndex < edition.stories.length; storyIndex += 1) {
     const story = edition.stories[storyIndex];
     if (pages.length % 2 !== 0) add({ kind: "blank" }); // Story opener is always on a right-hand page.
@@ -123,5 +131,15 @@ export function buildBookPages(edition, profile = BOOK_PRINT_PROFILE) {
   }
   add({ kind: "colophon", title: edition.title, footerText: edition.footerText });
   while (pages.length % 4 !== 0) add({ kind: "blank" });
+  const contents = pages.filter(page => page.kind === "story-opener").map(page => ({
+    storyId: page.storyId,
+    storyIndex: page.storyIndex,
+    question: page.question,
+    pageNumber: page.pageNumber
+  }));
+  pages.filter(page => page.kind === "contents").forEach((page, index) => {
+    page.entries = contents.slice(index * BOOK_TOC_STORIES_PER_PAGE,
+      (index + 1) * BOOK_TOC_STORIES_PER_PAGE);
+  });
   return pages;
 }

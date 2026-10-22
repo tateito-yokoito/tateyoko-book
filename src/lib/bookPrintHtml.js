@@ -95,6 +95,10 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
     } else if (page.kind === "web-entry") {
       content = `<div class="entry-block"><div class="brand">縦糸+横糸</div><div class="rule"></div><p>この物語を、</p><p>声とともに。</p><div class="qr">${page.webBookUrl && qrSvg
         ? qrSvg : `<span class="qr-placeholder">QR未確定</span>`}</div></div>`;
+    } else if (page.kind === "contents") {
+      content = `<div class="contents-block"><h2>目次</h2><ol class="contents-list">${page.entries.map(entry =>
+        `<li><span class="contents-index">${String(entry.storyIndex).padStart(2, "0")}</span><span class="contents-question">${escapeHtml(entry.question || "この語り")}</span><span class="contents-page">${entry.pageNumber}</span></li>`
+      ).join("")}</ol></div>`;
     } else if (page.kind === "story-opener") {
       content = `<div class="story-heading"><span class="story-label">Story ${String(page.storyIndex).padStart(2, "0")}</span><h2>${questionMarkup(page.question)}</h2></div>${page.photo ? "" : '<div class="story-divider" aria-hidden="true"></div>'}${imageTag(page.photo, "story-photo", eagerImages)}${page.paragraphs?.length ? bodyMarkup(page.paragraphs) : ""}`;
     } else if (page.kind === "story-body") {
@@ -131,6 +135,13 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
     .qr { width: 20mm; height: 20mm; margin: 25mm auto 0; }
     .qr svg { width: 100%; height: 100%; }
     .qr-placeholder { display: grid; place-items: center; width: 20mm; height: 20mm; border: .4pt solid #b1bbb5; font-size: 6pt; color: #8b9890; }
+    .contents-block { position: absolute; inset: 0; padding: 29mm 20mm 20mm; }
+    .contents-block h2 { margin: 0; font-size: 15pt; font-weight: 400; letter-spacing: .25em; text-align: center; }
+    .contents-list { display: grid; grid-template-rows: repeat(11, 16mm); margin: 20mm 0 0; padding: 0; list-style: none; }
+    .contents-list li { display: grid; grid-template-columns: 8mm minmax(0, 1fr) 8mm; column-gap: 2mm; align-items: start; border-bottom: .3pt solid #d5ddd7; padding-top: 1.6mm; }
+    .contents-index, .contents-page { font: 9pt/1.7 sans-serif; color: #6e8176; }
+    .contents-question { min-width: 0; font-size: 11pt; line-height: 1.55; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .contents-page { text-align: right; }
     .story-heading { position: absolute; inset: 0; text-align: center; }
     .story-label { position: absolute; top: 34mm; left: 20mm; right: 20mm; font-family: sans-serif; font-size: 9pt; letter-spacing: .2em; color: #6e8176; }
     .story-heading h2 { position: absolute; top: 62mm; left: 29mm; right: 29mm; transform: translateY(-50%); font-size: 17pt; font-weight: 400; line-height: 1.75; margin: 0; }
