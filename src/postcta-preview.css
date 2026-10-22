@@ -108,11 +108,12 @@
 .hp-origin-heading-break { display: none; }
 .hp-origin .hp-origin-brief { max-width: 790px; }
 .hp-origin-photo-stack { display: grid; gap: 20px; align-self: start; width: 100%; max-width: 430px; justify-self: end; }
-.hp-origin-cover { width: 100%; aspect-ratio: 1.38 / 1; overflow: hidden; }
-.hp-origin-cover img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 49%; }
+.hp-origin-cover { width: 100%; }
+.hp-origin-cover img { display: block; width: 100%; height: auto; }
 .hp-origin-book { width: min(820px,70%); aspect-ratio: 1.8 / 1; overflow: hidden; margin: 26px 0 0!important; }
 .hp-origin-book img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 45%; }
-.hp-origin-photo-stack .hp-origin-book { width: 100%; aspect-ratio: 1.65 / 1; margin: 0!important; }
+.hp-origin-photo-stack .hp-origin-book { width: 100%; aspect-ratio: auto; overflow: visible; margin: 0!important; }
+.hp-origin-photo-stack .hp-origin-book img { height: auto; object-fit: contain; }
 .hp-origin-closing { width: min(790px,100%); margin: 0; padding-top: clamp(28px,3vw,40px); font-size: 18px; line-height: 2.05; }
 .hp-origin-closing p + p { margin-top: 25px; }
 .hp-origin .hp-origin-toggle { width: min(790px,100%); margin-top: 38px; }
@@ -147,16 +148,15 @@
   .hp-origin-grandparents-photo { width: min(600px,100%); height: auto; aspect-ratio: auto; margin: 0 0 32px; }
   .hp-origin-grandparents-photo img { height: auto; object-fit: initial; }
   .hp-origin-photo-stack { grid-template-columns: 1fr 1fr; max-width: none; margin-top: 22px; }
-  .hp-origin-cover { aspect-ratio: 1 / 1; }
-  .hp-origin-photo-stack .hp-origin-book { aspect-ratio: 1 / 1; }
+  .hp-origin-cover,.hp-origin-photo-stack .hp-origin-book { aspect-ratio: auto; }
   .hp-origin-vision-layout { grid-template-columns: 1fr; gap: 36px; }
   .hp-origin-vision-person { width: min(390px,75%); justify-self: center; }
 }
 @media (max-width: 620px) {
   .hp-origin-heading-break { display: initial; }
-  .hp-origin-photo-stack { display: contents; }
-  .hp-origin-cover { display: none; }
-  .hp-origin-photo-stack .hp-origin-book { width: 88%; aspect-ratio: 1.8 / 1; margin-top: 15px!important; }
+  .hp-origin-photo-stack { display: grid; grid-template-columns: 1fr; width: 88%; gap: 12px; margin: 15px 0 0; }
+  .hp-origin-cover { display: block; }
+  .hp-origin-photo-stack .hp-origin-book { width: 100%; aspect-ratio: auto; margin-top: 0!important; }
   .hp-origin-book { width: 88%; margin-top: 15px!important; }
   .hp-origin-closing { padding-top: 19px; font-size: 15px; line-height: 1.95; }
   .hp-origin-closing p + p { margin-top: 19px; }
