@@ -20,6 +20,17 @@ const publicWebBookBase = (supabaseUrl: string) => {
     ? "https://tateyoko-book-test.vercel.app/"
     : "https://www.tateito-yokoito.jp/";
 };
+const bookThemes: Record<string, { label: string; order: number }> = {
+  ty_theme_childhood: { label: "幼い頃のこと", order: 1 },
+  ty_theme_youth: { label: "学生時代", order: 2 },
+  ty_theme_likes: { label: "好きなこと", order: 3 },
+  ty_theme_living: { label: "暮らし", order: 4 },
+  ty_theme_work: { label: "仕事・役割", order: 5 },
+  ty_theme_connections: { label: "人とのつながり", order: 6 },
+  ty_theme_family: { label: "家族の記憶", order: 7 },
+  ty_theme_turning_points: { label: "人生の転機", order: 8 },
+  ty_theme_now_future: { label: "今とこれから", order: 9 }
+};
 
 serve(async request => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -73,6 +84,8 @@ serve(async request => {
       .eq("publication_id", publication.publicationId).order("item_order");
     if (itemError || !items?.length) throw new Error("Published stories missing");
     const frozenAnswers = Array.isArray(work.snapshot.answers) ? work.snapshot.answers : [];
+    const frozenQuestions = new Map((Array.isArray(work.snapshot.questions) ? work.snapshot.questions : [])
+      .map((question: Record<string, any>) => [question.id, question]));
     if (items.length !== frozenAnswers.length || items.some((item, index) =>
       item.source_answer_id !== frozenAnswers[index]?.id
       || item.transcript_text !== selectedText(frozenAnswers[index]))) {
@@ -80,6 +93,16 @@ serve(async request => {
     }
     const stories = [];
     for (const item of items) {
+      const answer = frozenAnswers.find((row: Record<string, any>) => row.id === item.source_answer_id);
+      const question = frozenQuestions.get(answer?.user_question_id) as Record<string, any> | undefined;
+      const themeCode = String(question?.meta_json?.theme_code || question?.theme_code || "");
+      const themeHint = String(question?.meta_json?.theme_label || question?.theme_label
+        || question?.chapter_title_snapshot || "");
+      const matchedTheme = bookThemes[themeCode]
+        ? [themeCode, bookThemes[themeCode]] as const
+        : Object.entries(bookThemes).find(([, value]) => value.label === themeHint
+          || value.order === 1 && themeHint === "幼い頃");
+      const theme = matchedTheme?.[1];
       const photos = [];
       for (const photo of item.photo_assets || []) {
         const { data: signed, error: signError } = await admin.storage.from("photos")
@@ -89,7 +112,8 @@ serve(async request => {
           caption: photo.caption || "", bookLayout: photo.bookLayout || null });
       }
       stories.push({ id: item.source_answer_id, question: item.question_text || "",
-        body: item.transcript_text || "", photos });
+        body: item.transcript_text || "", photos,
+        themeCode: matchedTheme?.[0] || "", themeLabel: theme?.label || "", themeOrder: theme?.order || null });
     }
     const snapshot = work.snapshot;
     const edition = {

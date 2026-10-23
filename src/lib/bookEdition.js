@@ -68,6 +68,10 @@ export function createBookEdition({
     return {
       id: text(story.id) || `story-${index + 1}`,
       question: text(story.question),
+      themeCode: text(story.themeCode),
+      themeLabel: text(story.themeLabel),
+      themeOrder: Number.isInteger(Number(story.themeOrder)) && Number(story.themeOrder) >= 1
+        && Number(story.themeOrder) <= 9 ? Number(story.themeOrder) : null,
       body,
       photos: (story.photos || []).filter(photo => photo?.url || photo?.path).map((photo, photoIndex) => ({
         id: text(photo.id) || `photo-${photoIndex + 1}`,
@@ -117,24 +121,26 @@ export function buildBookPages(edition, profile = BOOK_PRINT_PROFILE) {
       linesPerPage: profile.bodyLinesPerPage,
       firstPageLines: hasOpeningPhoto ? profile.bodyLinesPerPage : profile.openerBodyLines
     });
-    add({ kind: "story-opener", storyId: story.id, storyIndex: storyIndex + 1,
+    const theme = { themeCode: story.themeCode, themeLabel: story.themeLabel,
+      themeOrder: story.themeOrder };
+    add({ kind: "story-opener", storyId: story.id, storyIndex: storyIndex + 1, ...theme,
       question: story.question, photo: photoSlots.opener,
       paragraphs: hasOpeningPhoto ? [] : bodyPages.shift() });
     for (const [partIndex, bodyParagraphs] of bodyPages.entries()) {
-      add({ kind: "story-body", storyId: story.id, partIndex, paragraphs: bodyParagraphs });
+      add({ kind: "story-body", storyId: story.id, partIndex, paragraphs: bodyParagraphs, ...theme });
     }
-    for (const photo of photoSlots.afterFull) add({ kind: "photo", storyId: story.id, photo });
+    for (const photo of photoSlots.afterFull) add({ kind: "photo", storyId: story.id, photo, ...theme });
     for (let index = 0; index < photoSlots.afterHalf.length; index += 2) {
       const photos = photoSlots.afterHalf.slice(index, index + 2);
-      add({ kind: "photo-half", storyId: story.id, photo: photos[0], photos });
+      add({ kind: "photo-half", storyId: story.id, photo: photos[0], photos, ...theme });
     }
   }
   add({ kind: "colophon", title: edition.title, footerText: edition.footerText });
   while (pages.length % 4 !== 0) add({ kind: "blank" });
   const contents = pages.filter(page => page.kind === "story-opener").map(page => ({
     storyId: page.storyId,
-    storyIndex: page.storyIndex,
     question: page.question,
+    themeLabel: page.themeLabel,
     pageNumber: page.pageNumber
   }));
   pages.filter(page => page.kind === "contents").forEach((page, index) => {
