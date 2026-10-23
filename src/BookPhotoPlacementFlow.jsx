@@ -18,7 +18,7 @@ function PlacementPage({ placement }) {
 }
 
 export default function BookPhotoPlacementFlow({ open, photos = [], initialPhoto = null,
-  onClose, onSave, busy = false }) {
+  onClose, onSave, onCorrectFile, busy = false }) {
   const [step, setStep] = useState("placement");
   const [placement, setPlacement] = useState(BOOK_PHOTO_PLACEMENTS.OPENER);
   const [photo, setPhoto] = useState(null);
@@ -80,9 +80,19 @@ export default function BookPhotoPlacementFlow({ open, photos = [], initialPhoto
           <label className="block rounded-2xl border border-dashed border-white/30 p-5 text-center cursor-pointer">
             端末から写真を選ぶ<input type="file" accept="image/*" className="sr-only" onChange={event => {
               const selected = event.target.files?.[0];
+              event.target.value = "";
               if (!selected) return;
               if (!["image/jpeg", "image/png", "image/webp"].includes(selected.type) || selected.size > 25_000_000) { setError("JPEG・PNG・WebP形式で25MB以下の写真を選んでください。"); return; }
-              setError(""); setFile(selected); setPhoto(null); setStep("frame");
+              setError("");
+              if (onCorrectFile) {
+                onCorrectFile(selected, corrected => {
+                  setFile(corrected);
+                  setPhoto(null);
+                  setStep("frame");
+                });
+              } else {
+                setFile(selected); setPhoto(null); setStep("frame");
+              }
             }} />
           </label>
         </>}
@@ -91,7 +101,7 @@ export default function BookPhotoPlacementFlow({ open, photos = [], initialPhoto
       {step === "frame" && <>
         <h2 className="mb-3 text-lg">本に載る範囲を確認</h2>
         <p className="mb-4 text-sm text-white/55">{choices.find(([value]) => value === placement)?.[1]}</p>
-        <div className={`mx-auto bg-white ${full ? "aspect-[142/208] max-w-64" : "aspect-[142/100] max-w-md"}`}>
+        <div className={`mx-auto bg-white ${full ? "aspect-[138/200] max-w-64" : "aspect-[138/100] max-w-md"}`}>
           <figure className="flex h-full w-full flex-col"><img src={src} alt="本の写真枠のプレビュー" className="min-h-0 w-full flex-1" style={{objectFit: fit, objectPosition: `${positionX}% ${positionY}%`}} />
             {photo?.caption && <figcaption className="px-2 py-1 text-center text-xs text-slate-700">{photo.caption}</figcaption>}</figure>
         </div>

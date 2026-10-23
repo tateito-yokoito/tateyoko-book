@@ -120,7 +120,7 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
     // changing story pagination or the theme heading.
     const themeIndexMark = Number.isInteger(page.themeOrder) && page.themeOrder >= 1 && page.themeOrder <= 9
       ? `<span class="theme-index-mark" style="top:${38 + (page.themeOrder - 1) * 14}mm" aria-hidden="true"></span>` : "";
-    return `<section class="book-page kind-${page.kind}" data-page="${page.pageNumber}" data-kind="${page.kind}"><div class="trim-area">${content}${themeHeading}${themeIndexMark}${pageNumber}${edition.mode !== "final"
+    return `<section class="book-page page-${page.pageNumber % 2 === 1 ? "odd" : "even"} kind-${page.kind}" data-page="${page.pageNumber}" data-kind="${page.kind}"><div class="trim-area">${content}${themeHeading}${themeIndexMark}${pageNumber}${edition.mode !== "final"
       ? `<span class="draft-mark">校正用・入稿不可</span>` : ""}</div></section>`;
   }).join("\n");
 
@@ -143,6 +143,8 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
     .qr svg { width: 100%; height: 100%; }
     .qr-placeholder { display: grid; place-items: center; width: 20mm; height: 20mm; border: .4pt solid #b1bbb5; font-size: 6pt; color: #8b9890; }
     .contents-block { position: absolute; inset: 0; padding: 29mm 20mm 20mm; }
+    .book-page.page-odd .contents-block { padding-left: 25mm; padding-right: 19mm; }
+    .book-page.page-even .contents-block { padding-left: 19mm; padding-right: 25mm; }
     .contents-block h2 { margin: 0; font-size: 15pt; font-weight: 400; letter-spacing: .25em; text-align: center; }
     .contents-list { display: grid; grid-template-rows: repeat(11, 16mm); margin: 20mm 0 0; padding: 0; list-style: none; }
     .contents-list li { display: grid; grid-template-columns: minmax(0, 1fr) 8mm; column-gap: 2mm; align-items: start; border-bottom: .3pt solid #d5ddd7; padding-top: 1.6mm; }
@@ -151,30 +153,42 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
     .contents-page { text-align: right; }
     .story-heading { position: absolute; inset: 0; text-align: center; }
     .theme-heading { position: absolute; top: 13mm; font-size: 10pt; letter-spacing: .08em; color: #6e8176; }
-    .book-page:nth-of-type(odd) .theme-heading { right: 20mm; }
-    .book-page:nth-of-type(even) .theme-heading { left: 20mm; }
+    .book-page.page-odd .theme-heading { right: 20mm; }
+    .book-page.page-even .theme-heading { left: 20mm; }
     .theme-index-mark { position: absolute; width: 2mm; height: 11mm; background: #81918a; }
-    .book-page:nth-of-type(odd) .theme-index-mark { right: 6mm; }
-    .book-page:nth-of-type(even) .theme-index-mark { left: 6mm; }
+    .book-page.page-odd .theme-index-mark { right: 6mm; }
+    .book-page.page-even .theme-index-mark { left: 6mm; }
     .story-heading h2 { position: absolute; top: 62mm; left: 29mm; right: 29mm; transform: translateY(-50%); font-size: 17pt; font-weight: 400; line-height: 1.75; margin: 0; }
+    .book-page.page-odd .story-heading h2 { left: 34mm; right: 24mm; }
+    .book-page.page-even .story-heading h2 { left: 24mm; right: 34mm; }
     .question-line { display: block; white-space: nowrap; }
     .story-divider { position: absolute; top: 116mm; left: 36mm; width: 110mm; border-top: .4pt solid #b7c0ba; }
+    .book-page.page-odd .story-divider { left: 39mm; }
+    .book-page.page-even .story-divider { left: 33mm; }
     figure { margin: 0; }
     .story-photo { position: absolute; left: 20mm; top: 116mm; width: 142mm; height: 100mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .book-page.page-odd .story-photo { left: 25mm; width: 138mm; }
+    .book-page.page-even .story-photo { left: 19mm; width: 138mm; }
     .story-photo img, .half-photo img { width: 100%; flex: 1; min-height: 0; object-fit: contain; }
     figcaption { font-size: 8pt; line-height: 1.6; margin-top: 3mm; align-self: center; text-align: center; max-width: 100%; }
     .body-copy { position: absolute; top: 25mm; left: 20mm; right: 20mm; bottom: 24mm; overflow: hidden; font-size: 16pt; line-height: 1.65; overflow-wrap: anywhere; }
+    .book-page.page-odd .body-copy { left: 25mm; right: 19mm; }
+    .book-page.page-even .body-copy { left: 19mm; right: 25mm; }
     .kind-story-opener .body-copy { top: 132mm; }
     .body-copy p { white-space: pre-wrap; text-indent: 1em; margin: 0 0 5mm; }
     .full-photo { position: absolute; left: 20mm; right: 20mm; top: 29mm; bottom: 28mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .book-page.page-odd .full-photo { left: 25mm; right: 19mm; }
+    .book-page.page-even .full-photo { left: 19mm; right: 25mm; }
     .full-photo img { width: 100%; flex: 1; min-height: 0; object-fit: contain; }
     .half-photo-stack { position: absolute; top: 25mm; left: 20mm; width: 142mm; display: flex; flex-direction: column; gap: 8mm; }
-    .half-photo { width: 142mm; height: 100mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .book-page.page-odd .half-photo-stack { left: 25mm; width: 138mm; }
+    .book-page.page-even .half-photo-stack { left: 19mm; width: 138mm; }
+    .half-photo { width: 100%; height: 100mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     .colophon { position: absolute; left: 22mm; right: 22mm; bottom: 40mm; font-size: 9pt; line-height: 2; }
     .colophon h2 { font-size: 11pt; font-weight: 400; }
     .page-number { position: absolute; bottom: 12mm; font: 11pt sans-serif; color: #83908a; }
-    .book-page:nth-of-type(odd) .page-number { right: 18mm; }
-    .book-page:nth-of-type(even) .page-number { left: 18mm; }
+    .book-page.page-odd .page-number { right: 18mm; }
+    .book-page.page-even .page-number { left: 18mm; }
     .draft-mark { position: absolute; bottom: 3mm; right: 6mm; font: 7pt sans-serif; color: #a1aaa5; }
     @media screen { body { padding: 16px 0; } .book-page { box-shadow: 0 6px 25px #0002; } }
     @media screen and (max-width: 720px) { .book-page { zoom: calc((100vw - 32px) / 688px); } }

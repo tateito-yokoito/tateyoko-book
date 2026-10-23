@@ -47,7 +47,7 @@ assert.deepEqual(bookBodyParagraphs("【TEST用・架空の語り】子どもの
   ["【TEST用・架空の語り】子どもの頃は海辺の町で暮らしていました。", "朝、窓を開けると潮の匂いがして、通学路から遠くの船が見えました。"]);
 assert.match(renderBookPrintHtml(createBookEdition({ title: "試し読み", stories: [
   { id: "plain", question: "どこで暮らしましたか？", body: "短い語り。" }
-] })), /class="book-page kind-story-opener"[^>]*>[\s\S]*?<div class="body-copy"><p>短い語り。<\/p>/);
+] })), /class="book-page page-odd kind-story-opener"[^>]*>[\s\S]*?<div class="body-copy"><p>短い語り。<\/p>/);
 const photoPlan = renderBookHtml({ title: "写真ページ検証", mode: "draft", stories: [
   { id: "a", body: "本文", photos: [
     { url: "https://example.com/first.jpg" }, { url: "https://example.com/second.jpg" }
