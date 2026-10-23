@@ -31,6 +31,15 @@ const bookThemes: Record<string, { label: string; order: number }> = {
   ty_theme_turning_points: { label: "人生の転機", order: 8 },
   ty_theme_now_future: { label: "今とこれから", order: 9 }
 };
+const legacyBookChapters: Record<string, { label: string; order: number }> = {
+  "生まれ育ちと原点": { label: "幼い頃", order: 1 },
+  "学びと青春": { label: "学生時代", order: 2 },
+  "仕事と担ってきた役割": { label: "仕事・役割", order: 3 },
+  "家族と大切な人": { label: "家族", order: 4 },
+  "転機と心に残る出来事": { label: "人生の転機", order: 5 },
+  "大切にしてきたこと": { label: "大切なこと", order: 6 },
+  "受け継いだもの、伝えたいこと": { label: "伝えたいこと", order: 7 }
+};
 
 serve(async request => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -97,12 +106,16 @@ serve(async request => {
       const question = frozenQuestions.get(answer?.user_question_id) as Record<string, any> | undefined;
       const themeCode = String(question?.meta_json?.theme_code || question?.theme_code || "");
       const themeHint = String(question?.meta_json?.theme_label || question?.theme_label
-        || question?.chapter_title_snapshot || "");
+        || question?.chapter_label || question?.chapter_title_snapshot || question?.chapter || "");
+      const themeOrder = Number(question?.meta_json?.theme_order ?? question?.theme_order);
       const matchedTheme = bookThemes[themeCode]
         ? [themeCode, bookThemes[themeCode]] as const
         : Object.entries(bookThemes).find(([, value]) => value.label === themeHint
-          || value.order === 1 && themeHint === "幼い頃");
-      const theme = matchedTheme?.[1];
+          || value.order === 1 && themeHint === "幼い頃")
+          || (!themeCode && Number.isInteger(themeOrder)
+            ? Object.entries(bookThemes).find(([, value]) => value.order === themeOrder) : undefined);
+      const theme = matchedTheme?.[1] || legacyBookChapters[themeHint]
+        || (["はじめの会話", "体験の一頁"].includes(themeHint) ? { label: "はじまり", order: 0 } : undefined);
       const photos = [];
       for (const photo of item.photo_assets || []) {
         const { data: signed, error: signError } = await admin.storage.from("photos")
@@ -113,7 +126,8 @@ serve(async request => {
       }
       stories.push({ id: item.source_answer_id, question: item.question_text || "",
         body: item.transcript_text || "", photos,
-        themeCode: matchedTheme?.[0] || "", themeLabel: theme?.label || "", themeOrder: theme?.order || null });
+        themeCode: matchedTheme?.[0] || (theme ? theme.order === 0 ? "book-intro" : `legacy-${theme.order}` : ""),
+        themeLabel: theme?.label || "", themeOrder: theme?.order ?? null });
     }
     const snapshot = work.snapshot;
     const edition = {

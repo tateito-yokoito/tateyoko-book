@@ -39,10 +39,10 @@ assert.equal(openerPhotoTop, dividerTop, "The text divider and opener photo star
 assert.match(html, /class="half-photo-stack"/);
 assert.match(html, /object-fit:cover;object-position:70% 30%/);
 assert.match(html, /\.half-photo \{ width: 100%; height: 100mm/);
-assert.match(html, /page-odd \.body-copy \{ left: 25mm; right: 19mm/);
-assert.match(html, /page-even \.body-copy \{ left: 19mm; right: 25mm/);
-assert.match(html, /page-odd \.story-photo \{ left: 25mm; width: 138mm/);
-assert.match(html, /page-even \.story-photo \{ left: 19mm; width: 138mm/);
+assert.match(html, /page-odd \.body-copy \{ left: 30mm; right: 18mm/);
+assert.match(html, /page-even \.body-copy \{ left: 18mm; right: 30mm/);
+assert.match(html, /page-odd \.story-photo \{ left: 30mm; width: 134mm/);
+assert.match(html, /page-even \.story-photo \{ left: 18mm; width: 134mm/);
 
 const excluded = buildBookPages(story([photo("x", "excluded")]));
 assert.equal(excluded.some(page => page.photo?.id === "x"), false);

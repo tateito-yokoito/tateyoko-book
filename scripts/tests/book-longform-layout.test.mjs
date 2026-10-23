@@ -71,6 +71,8 @@ assert.equal(picturedPages.find(page => page.storyId === "one" && page.kind === 
 assert.deepEqual(picturedPages.find(page => page.storyId === "three" && page.kind === "photo-half")
   .photos.map(photo => photo.id), ["half-a", "half-b"]);
 const picturedHtml = renderBookPrintHtml(withPhotos);
+assert.match(picturedHtml, /class="story-photo"><img[^>]+object-position:100% 50%/);
+assert.match(picturedHtml, /class="half-photo"><img[^>]+object-position:100% 50%/);
 for (const caption of ["質問の下の写真", "冒頭の写真", "前半の写真", "後半の写真"]) {
   assert.match(picturedHtml, new RegExp(`<figcaption>${caption}</figcaption>`));
 }
