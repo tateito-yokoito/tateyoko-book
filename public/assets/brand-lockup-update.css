@@ -5,6 +5,14 @@
   object-fit: contain;
 }
 
+.landing-site .hp-footer > a > img {
+  display: block;
+  width: 245px;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
 .hp-price-v2 .hp-price-v2-brand img {
   display: block;
   width: 300px;
@@ -17,6 +25,10 @@
   .landing-site .hp-header > a > img {
     width: 168px;
     height: auto;
+  }
+
+  .landing-site .hp-footer > a > img {
+    width: 168px;
   }
 
   .hp-price-v2 .hp-price-v2-brand img {
