@@ -31,6 +31,13 @@ for(const relative of assets){
  const source=path.join(root,'public',relative);assert.ok(fs.existsSync(source),`Missing asset ${relative}`);
  const dest=path.join(outDir,relative);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(source,dest);
 }
+// StoryIntro builds image paths from a shared prefix and filename, so the
+// literal-path scan above cannot see them. This directory contains only
+// explicitly public homepage artwork and must be present in every release.
+fs.cpSync(path.join(root,'public/site/hp-story-preview'),path.join(outDir,'site/hp-story-preview'),{recursive:true});
+for(const image of ['records-photos-and-phone.png','past-family-photograph.png','present-mother-daughter.png','ways-to-preserve-reference.jpg']){
+ assert.ok(fs.existsSync(path.join(outDir,'site/hp-story-preview',image)),`Missing homepage image ${image}`);
+}
 // Vite's publicDir is disabled to keep private and unused candidate assets out
 // of the release. The landing shell still loads these small, explicitly public
 // scripts/styles, and its book sample loads media from public/assets.
