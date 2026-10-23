@@ -5737,7 +5737,7 @@ function Fd({ reviewOnly: e = !1 }) {
           /* @__PURE__ */ p.jsx("br", { className: "hp-price-v2-mobile-only" }),
           "二つの作品に。"
         ] }),
-        /* @__PURE__ */ p.jsx("p", { className: "hp-price-v2-brand", children: "縦糸横糸" }),
+        /* @__PURE__ */ p.jsx("p", { className: "hp-price-v2-brand", children: /* @__PURE__ */ p.jsx("img", { src: "/brand-logo-mark-wordmark.png", alt: "縦糸横糸", width: "300", height: "51" }) }),
         /* @__PURE__ */ p.jsxs("p", { className: "hp-price-v2-amount", children: [
           "49,800",
           /* @__PURE__ */ p.jsx("span", { children: "円（税込）" })
