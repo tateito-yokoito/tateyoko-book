@@ -16514,7 +16514,7 @@ export function Scene_BookBuilder({
 
         {stepIndex === 2 && (
           <div className="space-y-5">
-            {!readOnly && import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED === "true" && (
+            {!readOnly && (
               <label className="glass-card flex gap-3 p-5 text-left cursor-pointer">
                 <input type="checkbox" checked={includeWebBookQr}
                   onChange={event => setIncludeWebBookQr(event.target.checked)} className="mt-1" />
@@ -16541,7 +16541,7 @@ export function Scene_BookBuilder({
               {previewEdition && <button type="button"
                 onClick={() => { setPaperPreviewStoryId(null); setPaperPreviewOpen(true); }}
                 className="btn-quiet mt-5 rounded-full bg-white/10 px-6 py-3 text-sm text-white">
-                見開きで紙面を見る
+                {"紙面を見る（PCは見開き・スマホは1ページずつ）"}
               </button>}
               {previewEdition && !readOnly && import.meta.env.VITE_BOOK_PDF_ENABLED === "true" && (
                 <button type="button" onClick={downloadDraftPdf} disabled={draftPdfStatus === "loading"}
@@ -16558,17 +16558,7 @@ export function Scene_BookBuilder({
                   収録する語りを選ぶと、紙面プレビューが表示されます。
                 </p>
               </div>
-            ) : (
-              <div className="rounded-3xl border border-white/[0.07] bg-white/[0.018] p-2 sm:p-4">
-                <iframe
-                  title="縦糸+横糸ブック B5紙面プレビュー"
-                  srcDoc={previewPrintHtml}
-                  sandbox="allow-scripts"
-                  className="block w-full min-h-[70vh] rounded-xl bg-[#e7e7e4]"
-                />
-                {includeWebBookQr && <p className="px-2 pt-3 text-center text-xs text-white/45">確認用の紙面です。QRは注文完了後に固定します。</p>}
-              </div>
-            )}
+            ) : includeWebBookQr && <p className="px-2 text-center text-xs text-white/45">確認用の紙面です。QRは注文完了後に固定します。</p>}
           </div>
         )}
 
@@ -19375,7 +19365,7 @@ export function PhotoCorrectionFlow({
       />
 
       {!scanPreview ? (
-        <div className="fixed inset-0 z-[9998] bg-black/45 flex items-end px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <div className="fixed inset-0 z-[10000] bg-black/45 flex items-end px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <div className="w-full rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl fade-enter">
             <p className="text-white/72 text-center text-narrative mb-5">
               {title}
@@ -19411,7 +19401,7 @@ export function PhotoCorrectionFlow({
           </div>
         </div>
       ) : (
-        <div className="fixed inset-0 z-[9999] w-[100dvw] h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden overscroll-none">
+        <div className="fixed inset-0 z-[10000] w-[100dvw] h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden overscroll-none">
           {scanPreview.step === "crop" ? (
             <>
               <CropPreview
@@ -19675,6 +19665,7 @@ export function Scene_StoryPages({
   const [editingLayoutPhoto, setEditingLayoutPhoto] = useState(null);
   const [photoLayoutSaving, setPhotoLayoutSaving] = useState(false);
   const [editingPhoto, setEditingPhoto] = useState(null);
+  const [newPhotoCorrection, setNewPhotoCorrection] = useState(null);
   const [preparingPhotoPath, setPreparingPhotoPath] = useState(null);
   const [replacingPhotoPath, setReplacingPhotoPath] = useState(null);
   const [videoStories, setVideoStories] = useState([]);
@@ -20296,8 +20287,19 @@ return (
       photos={(mediaByAnswerId[photoActionAnswerId] || []).filter(item => item.asset_type === "photo" && item.url)}
       initialPhoto={editingLayoutPhoto}
       busy={photoLayoutSaving}
+      onCorrectFile={(file, onComplete) => setNewPhotoCorrection({ file, onComplete })}
       onClose={() => { setPhotoActionAnswerId(null); setEditingLayoutPhoto(null); }}
       onSave={selection => saveStoryPhotoLayout(photoActionAnswerId, selection)}
+    />
+    <PhotoCorrectionFlow
+      open={!!newPhotoCorrection}
+      title="写真を切り抜き・補正"
+      initialFile={newPhotoCorrection?.file || null}
+      onClose={() => setNewPhotoCorrection(null)}
+      onComplete={file => {
+        newPhotoCorrection?.onComplete(file);
+        setNewPhotoCorrection(null);
+      }}
     />
     <PhotoCorrectionFlow
       open={!!editingPhoto}
@@ -20534,8 +20536,8 @@ return (
     <div className="space-y-3">
       {photos.map((photo, photoIndex) => {
           const layout = photoBookLayout(photo, photoIndex);
-          const aspectRatio = layout.placement === "after_full" ? "142 / 200"
-            : layout.placement === "excluded" ? "4 / 3" : "142 / 100";
+          const aspectRatio = layout.placement === "after_full" ? "138 / 200"
+            : layout.placement === "excluded" ? "4 / 3" : "138 / 100";
           return (
         <div
           key={photo.storage_path || photoIndex}

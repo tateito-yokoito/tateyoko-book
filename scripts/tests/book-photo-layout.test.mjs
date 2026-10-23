@@ -38,7 +38,11 @@ const openerPhotoTop = html.match(/\.story-photo \{[^}]*top: (\d+)mm/)?.[1];
 assert.equal(openerPhotoTop, dividerTop, "The text divider and opener photo start on the same line");
 assert.match(html, /class="half-photo-stack"/);
 assert.match(html, /object-fit:cover;object-position:70% 30%/);
-assert.match(html, /width: 142mm; height: 100mm/);
+assert.match(html, /\.half-photo \{ width: 100%; height: 100mm/);
+assert.match(html, /page-odd \.body-copy \{ left: 25mm; right: 19mm/);
+assert.match(html, /page-even \.body-copy \{ left: 19mm; right: 25mm/);
+assert.match(html, /page-odd \.story-photo \{ left: 25mm; width: 138mm/);
+assert.match(html, /page-even \.story-photo \{ left: 19mm; width: 138mm/);
 
 const excluded = buildBookPages(story([photo("x", "excluded")]));
 assert.equal(excluded.some(page => page.photo?.id === "x"), false);
