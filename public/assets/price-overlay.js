@@ -5731,25 +5731,27 @@ function Fd({ reviewOnly: e = !1 }) {
   const t = (n) => e ? "#hp-review-notice" : n;
   return /* @__PURE__ */ p.jsx("section", { className: "hp-price-v2 hp-section", id: "price", "aria-labelledby": "hp-price-v2-title", children: /* @__PURE__ */ p.jsxs("div", { className: "hp-shell", children: [
     /* @__PURE__ */ p.jsxs("div", { className: "hp-price-v2-intro", children: [
-      /* @__PURE__ */ p.jsxs("div", { className: "hp-price-v2-intro-copy", children: [
+      /* @__PURE__ */ p.jsx("div", { className: "hp-price-v2-intro-copy", children:
         /* @__PURE__ */ p.jsxs("h2", { id: "hp-price-v2-title", children: [
           "世界に一つの物語を、",
           /* @__PURE__ */ p.jsx("br", { className: "hp-price-v2-mobile-only" }),
           "二つの作品に。"
-        ] }),
+        ] }) }),
+      /* @__PURE__ */ p.jsxs("div", { className: "hp-price-v2-product-grid", "aria-label": "縦糸横糸の二つの作品", children: [
+        /* @__PURE__ */ p.jsx("figure", { className: "hp-price-v2-product hp-price-v2-product-book", children: /* @__PURE__ */ p.jsx("div", { className: "hp-price-v2-product-art", children: /* @__PURE__ */ p.jsx("img", { src: "/site/hp-story-preview/price-book-rose-user.png", alt: "縦糸横糸ブックのダスティローズの表紙と4色の色見本", width: "1024", height: "1536", loading: "lazy" }) }) }),
+        /* @__PURE__ */ p.jsx("figure", { className: "hp-price-v2-product hp-price-v2-product-web", children: /* @__PURE__ */ p.jsx("div", { className: "hp-price-v2-product-art", children: /* @__PURE__ */ p.jsx("img", { src: "/site/hp-story-preview/web-book-user.png", alt: "縦糸横糸Webブックを表示したスマートフォン", width: "1536", height: "1024", loading: "lazy" }) }) })
+      ] }),
+      /* @__PURE__ */ p.jsxs("div", { className: "hp-price-v2-offer", children: [
         /* @__PURE__ */ p.jsx("p", { className: "hp-price-v2-brand", children: /* @__PURE__ */ p.jsx("img", { src: "/brand-logo-mark-wordmark.png", alt: "縦糸横糸", width: "300", height: "51" }) }),
+        /* @__PURE__ */ p.jsx("p", { className: "hp-price-v2-offer-label", children: "ブックとWebブック、２つをセットで" }),
         /* @__PURE__ */ p.jsxs("p", { className: "hp-price-v2-amount", children: [
           "49,800",
           /* @__PURE__ */ p.jsx("span", { children: "円（税込）" })
         ] })
-      ] }),
-      /* @__PURE__ */ p.jsxs("div", { className: "hp-price-v2-product-grid", "aria-label": "縦糸横糸の二つの作品", children: [
-        /* @__PURE__ */ p.jsx("figure", { className: "hp-price-v2-product hp-price-v2-product-book", children: /* @__PURE__ */ p.jsx("div", { className: "hp-price-v2-product-art", children: /* @__PURE__ */ p.jsx("img", { src: "/site/hp-story-preview/price-book-rose-user.png", alt: "縦糸横糸ブックのダスティローズの表紙と4色の色見本", width: "1024", height: "1536", loading: "lazy" }) }) }),
-        /* @__PURE__ */ p.jsx("figure", { className: "hp-price-v2-product hp-price-v2-product-web", children: /* @__PURE__ */ p.jsx("div", { className: "hp-price-v2-product-art", children: /* @__PURE__ */ p.jsx("img", { src: "/site/hp-story-preview/web-book-user.png", alt: "縦糸横糸Webブックを表示したスマートフォン", width: "1536", height: "1024", loading: "lazy" }) }) })
       ] })
     ] }),
     /* @__PURE__ */ p.jsxs("div", { className: "hp-price-v2-group hp-price-v2-included", children: [
-      /* @__PURE__ */ p.jsx("h3", { children: "49,800円に含まれるもの" }),
+      /* @__PURE__ */ p.jsx("h3", { children: "セットに含まれるもの" }),
       /* @__PURE__ */ p.jsxs("div", { className: "hp-price-v2-included-grid", children: [
         /* @__PURE__ */ p.jsxs(Ho, { title: "縦糸横糸ブック", icon: "book", children: [
           /* @__PURE__ */ p.jsxs("li", { children: [
