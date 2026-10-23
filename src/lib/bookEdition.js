@@ -70,7 +70,7 @@ export function createBookEdition({
       question: text(story.question),
       themeCode: text(story.themeCode),
       themeLabel: text(story.themeLabel),
-      themeOrder: Number.isInteger(Number(story.themeOrder)) && Number(story.themeOrder) >= 1
+      themeOrder: story.themeOrder != null && Number.isInteger(Number(story.themeOrder)) && Number(story.themeOrder) >= 0
         && Number(story.themeOrder) <= 9 ? Number(story.themeOrder) : null,
       body,
       photos: (story.photos || []).filter(photo => photo?.url || photo?.path).map((photo, photoIndex) => ({

@@ -4,10 +4,13 @@ const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 })[char]);
 
-const imageTag = (photo, className = "story-photo", eagerImages = false) => {
+const imageTag = (photo, className = "story-photo", eagerImages = false, pageNumber = 1) => {
   if (!photo?.url || !/^https:\/\//i.test(photo.url)) return "";
   const fit = photo.bookLayout?.fit === "cover" ? "cover" : "contain";
-  const x = Math.min(100, Math.max(0, Number(photo.bookLayout?.positionX ?? 50) || 0));
+  // Contained portraits have spare horizontal space inside their figure. Put
+  // that space on the gutter side, not evenly on both sides of the picture.
+  const x = fit === "contain" ? (pageNumber % 2 ? 100 : 0)
+    : Math.min(100, Math.max(0, Number(photo.bookLayout?.positionX ?? 50) || 0));
   const y = Math.min(100, Math.max(0, Number(photo.bookLayout?.positionY ?? 50) || 0));
   return `<figure class="${className}"><img src="${escapeHtml(photo.url)}" alt="" loading="${eagerImages ? "eager" : "lazy"}" style="object-fit:${fit};object-position:${x}% ${y}%" />${photo.caption
     ? `<figcaption>${escapeHtml(photo.caption)}</figcaption>` : ""}</figure>`;
@@ -101,13 +104,13 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
         `<li><span class="contents-question">${escapeHtml(entry.question || "この語り")}</span><span class="contents-page">${entry.pageNumber}</span></li>`
       ).join("")}</ol></div>`;
     } else if (page.kind === "story-opener") {
-      content = `<div class="story-heading"><h2>${questionMarkup(page.question)}</h2></div>${page.photo ? "" : '<div class="story-divider" aria-hidden="true"></div>'}${imageTag(page.photo, "story-photo", eagerImages)}${page.paragraphs?.length ? bodyMarkup(page.paragraphs) : ""}`;
+      content = `<div class="story-heading"><h2>${questionMarkup(page.question)}</h2></div>${page.photo ? "" : '<div class="story-divider" aria-hidden="true"></div>'}${imageTag(page.photo, "story-photo", eagerImages, page.pageNumber)}${page.paragraphs?.length ? bodyMarkup(page.paragraphs) : ""}`;
     } else if (page.kind === "story-body") {
       content = bodyMarkup(page.paragraphs);
     } else if (page.kind === "photo") {
-      content = imageTag(page.photo, "full-photo", eagerImages);
+      content = imageTag(page.photo, "full-photo", eagerImages, page.pageNumber);
     } else if (page.kind === "photo-half") {
-      content = `<div class="half-photo-stack">${page.photos.map(photo => imageTag(photo, "half-photo", eagerImages)).join("")}</div>`;
+      content = `<div class="half-photo-stack">${page.photos.map(photo => imageTag(photo, "half-photo", eagerImages, page.pageNumber)).join("")}</div>`;
     } else if (page.kind === "colophon") {
       content = `<div class="colophon"><h2>${escapeHtml(page.title)}</h2>${page.footerText
         ? `<p>${escapeHtml(page.footerText)}</p>` : ""}<p>縦糸+横糸</p></div>`;
@@ -118,7 +121,7 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
       ? `<span class="theme-heading">${escapeHtml(page.themeLabel)}</span>` : "";
     // One independent fore-edge mark per theme; keep it removable without
     // changing story pagination or the theme heading.
-    const themeIndexMark = Number.isInteger(page.themeOrder) && page.themeOrder >= 1 && page.themeOrder <= 9
+    const themeIndexMark = Number.isInteger(page.themeOrder) && page.themeOrder >= 0 && page.themeOrder <= 9
       ? `<span class="theme-index-mark" style="top:${38 + (page.themeOrder - 1) * 14}mm" aria-hidden="true"></span>` : "";
     return `<section class="book-page page-${page.pageNumber % 2 === 1 ? "odd" : "even"} kind-${page.kind}" data-page="${page.pageNumber}" data-kind="${page.kind}"><div class="trim-area">${content}${themeHeading}${themeIndexMark}${pageNumber}${edition.mode !== "final"
       ? `<span class="draft-mark">校正用・入稿不可</span>` : ""}</div></section>`;
@@ -143,8 +146,8 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
     .qr svg { width: 100%; height: 100%; }
     .qr-placeholder { display: grid; place-items: center; width: 20mm; height: 20mm; border: .4pt solid #b1bbb5; font-size: 6pt; color: #8b9890; }
     .contents-block { position: absolute; inset: 0; padding: 29mm 20mm 20mm; }
-    .book-page.page-odd .contents-block { padding-left: 25mm; padding-right: 19mm; }
-    .book-page.page-even .contents-block { padding-left: 19mm; padding-right: 25mm; }
+    .book-page.page-odd .contents-block { padding-left: 30mm; padding-right: 18mm; }
+    .book-page.page-even .contents-block { padding-left: 18mm; padding-right: 30mm; }
     .contents-block h2 { margin: 0; font-size: 15pt; font-weight: 400; letter-spacing: .25em; text-align: center; }
     .contents-list { display: grid; grid-template-rows: repeat(11, 16mm); margin: 20mm 0 0; padding: 0; list-style: none; }
     .contents-list li { display: grid; grid-template-columns: minmax(0, 1fr) 8mm; column-gap: 2mm; align-items: start; border-bottom: .3pt solid #d5ddd7; padding-top: 1.6mm; }
@@ -159,30 +162,30 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
     .book-page.page-odd .theme-index-mark { right: 6mm; }
     .book-page.page-even .theme-index-mark { left: 6mm; }
     .story-heading h2 { position: absolute; top: 62mm; left: 29mm; right: 29mm; transform: translateY(-50%); font-size: 17pt; font-weight: 400; line-height: 1.75; margin: 0; }
-    .book-page.page-odd .story-heading h2 { left: 34mm; right: 24mm; }
-    .book-page.page-even .story-heading h2 { left: 24mm; right: 34mm; }
+    .book-page.page-odd .story-heading h2 { left: 39mm; right: 23mm; }
+    .book-page.page-even .story-heading h2 { left: 23mm; right: 39mm; }
     .question-line { display: block; white-space: nowrap; }
     .story-divider { position: absolute; top: 116mm; left: 36mm; width: 110mm; border-top: .4pt solid #b7c0ba; }
-    .book-page.page-odd .story-divider { left: 39mm; }
-    .book-page.page-even .story-divider { left: 33mm; }
+    .book-page.page-odd .story-divider { left: 45mm; }
+    .book-page.page-even .story-divider { left: 27mm; }
     figure { margin: 0; }
     .story-photo { position: absolute; left: 20mm; top: 116mm; width: 142mm; height: 100mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    .book-page.page-odd .story-photo { left: 25mm; width: 138mm; }
-    .book-page.page-even .story-photo { left: 19mm; width: 138mm; }
+    .book-page.page-odd .story-photo { left: 30mm; width: 134mm; }
+    .book-page.page-even .story-photo { left: 18mm; width: 134mm; }
     .story-photo img, .half-photo img { width: 100%; flex: 1; min-height: 0; object-fit: contain; }
     figcaption { font-size: 8pt; line-height: 1.6; margin-top: 3mm; align-self: center; text-align: center; max-width: 100%; }
     .body-copy { position: absolute; top: 25mm; left: 20mm; right: 20mm; bottom: 24mm; overflow: hidden; font-size: 16pt; line-height: 1.65; overflow-wrap: anywhere; }
-    .book-page.page-odd .body-copy { left: 25mm; right: 19mm; }
-    .book-page.page-even .body-copy { left: 19mm; right: 25mm; }
+    .book-page.page-odd .body-copy { left: 30mm; right: 18mm; }
+    .book-page.page-even .body-copy { left: 18mm; right: 30mm; }
     .kind-story-opener .body-copy { top: 132mm; }
     .body-copy p { white-space: pre-wrap; text-indent: 1em; margin: 0 0 5mm; }
     .full-photo { position: absolute; left: 20mm; right: 20mm; top: 29mm; bottom: 28mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    .book-page.page-odd .full-photo { left: 25mm; right: 19mm; }
-    .book-page.page-even .full-photo { left: 19mm; right: 25mm; }
+    .book-page.page-odd .full-photo { left: 30mm; right: 18mm; }
+    .book-page.page-even .full-photo { left: 18mm; right: 30mm; }
     .full-photo img { width: 100%; flex: 1; min-height: 0; object-fit: contain; }
     .half-photo-stack { position: absolute; top: 25mm; left: 20mm; width: 142mm; display: flex; flex-direction: column; gap: 8mm; }
-    .book-page.page-odd .half-photo-stack { left: 25mm; width: 138mm; }
-    .book-page.page-even .half-photo-stack { left: 19mm; width: 138mm; }
+    .book-page.page-odd .half-photo-stack { left: 30mm; width: 134mm; }
+    .book-page.page-even .half-photo-stack { left: 18mm; width: 134mm; }
     .half-photo { width: 100%; height: 100mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     .colophon { position: absolute; left: 22mm; right: 22mm; bottom: 40mm; font-size: 9pt; line-height: 2; }
     .colophon h2 { font-size: 11pt; font-weight: 400; }

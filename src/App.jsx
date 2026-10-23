@@ -19027,6 +19027,7 @@ export function PhotoCorrectionFlow({
   open,
   title = "写真を添える",
   initialFile = null,
+  bookPlacement = null,
   onClose,
   onComplete,
   awaitCompletion = false
@@ -19036,6 +19037,9 @@ export function PhotoCorrectionFlow({
   const initializedFileRef = useRef(null);
   const confirmationLock = useRef(false);
   const [scanPreview, setScanPreview] = useState(null);
+  const [bookFit, setBookFit] = useState("contain");
+  const [bookPositionX, setBookPositionX] = useState(50);
+  const [bookPositionY, setBookPositionY] = useState(50);
 
   const isDesktopBrowser =
     typeof window !== "undefined" &&
@@ -19071,6 +19075,10 @@ export function PhotoCorrectionFlow({
       });
       return;
     }
+
+    setBookFit("contain");
+    setBookPositionX(50);
+    setBookPositionY(50);
 
     const previousBodyOverflow = document.body.style.overflow;
     const previousHtmlOverflow = document.documentElement.style.overflow;
@@ -19324,7 +19332,10 @@ export function PhotoCorrectionFlow({
       confirmationLock.current = true;
       setScanPreview(prev => prev ? {...prev, processing: true} : prev);
       try {
-        await onComplete?.(file);
+        await onComplete?.(file, bookPlacement ? {
+          placement: bookPlacement, fit: bookFit,
+          positionX: bookPositionX, positionY: bookPositionY
+        } : undefined);
       } catch {
         // Keep the corrected photo and retry the same pending upload.
         setScanPreview(prev => prev ? {...prev, processing: false} : prev);
@@ -19341,7 +19352,10 @@ export function PhotoCorrectionFlow({
     releasePreviewUrls(scanPreview);
     setScanPreview(null);
     onClose?.();
-    onComplete?.(file);
+    onComplete?.(file, bookPlacement ? {
+      placement: bookPlacement, fit: bookFit,
+      positionX: bookPositionX, positionY: bookPositionY
+    } : undefined);
   };
 
   if (!open) return null;
@@ -19401,7 +19415,7 @@ export function PhotoCorrectionFlow({
           </div>
         </div>
       ) : (
-        <div className="fixed inset-0 z-[10000] w-[100dvw] h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden overscroll-none">
+        <div className={`fixed inset-0 z-[10000] w-[100dvw] h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overscroll-none ${bookPlacement && scanPreview.step === "adjust" ? "overflow-y-auto" : "overflow-hidden"}`}>
           {scanPreview.step === "crop" ? (
             <>
               <CropPreview
@@ -19476,13 +19490,21 @@ export function PhotoCorrectionFlow({
             </>
           ) : (
             <>
-              <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/25 mb-4 shrink min-h-0 flex items-center justify-center">
-                <img
-                  src={scanPreview.url}
-                  alt="補正後のプレビュー"
-                  className="w-full max-h-[38dvh] object-contain"
-                />
-              </div>
+              {bookPlacement ? <div className="mb-3 shrink-0 text-center">
+                <p className="mb-2 text-sm text-white/70">本に載る範囲</p>
+                <div className={`mx-auto bg-white ${bookPlacement === "after_full" ? "aspect-[134/200] max-w-40" : "aspect-[134/100] max-w-xs"}`}>
+                  <img src={scanPreview.url} alt="本の写真枠の仕上がり" className="h-full w-full" style={{objectFit: bookFit, objectPosition: `${bookPositionX}% ${bookPositionY}%`}} />
+                </div>
+                <div className="mt-3 flex gap-2">{[["contain", "写真全体を見せる"], ["cover", "枠いっぱいに切り抜く"]].map(([value, label]) =>
+                  <button key={value} type="button" aria-pressed={bookFit === value} onClick={() => setBookFit(value)}
+                    className={`flex-1 rounded-xl border px-2 py-2 text-xs ${bookFit === value ? "border-white bg-white/15" : "border-white/20"}`}>{label}</button>)}</div>
+                {bookFit === "cover" && <div className="mt-3 space-y-2 text-left text-xs">
+                  <label className="block">左右の位置<input type="range" min="0" max="100" value={bookPositionX} onChange={event => setBookPositionX(Number(event.target.value))} className="mt-1 block w-full" /></label>
+                  <label className="block">上下の位置<input type="range" min="0" max="100" value={bookPositionY} onChange={event => setBookPositionY(Number(event.target.value))} className="mt-1 block w-full" /></label>
+                </div>}
+              </div> : <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/25 mb-4 shrink min-h-0 flex items-center justify-center">
+                <img src={scanPreview.url} alt="補正後のプレビュー" className="w-full max-h-[38dvh] object-contain" />
+              </div>}
 
               <div className="glass-card p-5 space-y-5 shrink-0">
                 <div>
@@ -19570,7 +19592,7 @@ export function PhotoCorrectionFlow({
                     scanPreview.processing ? "opacity-40" : ""
                   }`}
                 >
-                  この写真を使う
+                  {bookPlacement ? "この仕上がりで本に載せる" : "この写真を使う"}
                 </button>
               </div>
             </>
@@ -20287,17 +20309,19 @@ return (
       photos={(mediaByAnswerId[photoActionAnswerId] || []).filter(item => item.asset_type === "photo" && item.url)}
       initialPhoto={editingLayoutPhoto}
       busy={photoLayoutSaving}
-      onCorrectFile={(file, onComplete) => setNewPhotoCorrection({ file, onComplete })}
+      onCorrectFile={(file, placement, onComplete) => setNewPhotoCorrection({ file, placement, onComplete })}
       onClose={() => { setPhotoActionAnswerId(null); setEditingLayoutPhoto(null); }}
       onSave={selection => saveStoryPhotoLayout(photoActionAnswerId, selection)}
     />
     <PhotoCorrectionFlow
       open={!!newPhotoCorrection}
+      awaitCompletion
       title="写真を切り抜き・補正"
       initialFile={newPhotoCorrection?.file || null}
+      bookPlacement={newPhotoCorrection?.placement || null}
       onClose={() => setNewPhotoCorrection(null)}
-      onComplete={file => {
-        newPhotoCorrection?.onComplete(file);
+      onComplete={async (file, layout) => {
+        await newPhotoCorrection?.onComplete(file, layout);
         setNewPhotoCorrection(null);
       }}
     />
