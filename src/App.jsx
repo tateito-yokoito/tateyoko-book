@@ -13000,7 +13000,7 @@ function BookCoverPreview({
             <CoverPhotoFrame
               photo={coverPhoto}
               backgroundColor="transparent"
-              className="absolute left-[4.32%] top-[33.69%] h-[41.49%] w-[87.33%]"
+              className={`absolute left-[11%] top-[33.69%] w-[78%] ${isSoftcover ? "h-[42%]" : "h-[36%]"}`}
             />
           )}
 
@@ -16219,12 +16219,6 @@ export function Scene_BookBuilder({
             ))}
           </div>
         </div>
-        <button type="button" onClick={() => { setPaperPreviewStoryId(null); setPaperPreviewOpen(true); }}
-          className="mt-2 flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-left text-xs text-white/72"
-          aria-label="現在の紙面プレビューを開く">
-          <span>紙面プレビュー　{previewEdition ? `B5・${previewPages.length}ページ` : "収録する語りを選択してください"}</span>
-          <span className="text-white/45">開く ›</span>
-        </button>
       </div>
 
       {previewEdition && <BookPaperViewer
@@ -16544,6 +16538,11 @@ export function Scene_BookBuilder({
               {previewEdition && <p className="mt-4 text-white/58 text-xs leading-loose">
                 B5・全{previewPages.length}ページ。ここで見える紙面とPDFには同じページ構成を使います。
               </p>}
+              {previewEdition && <button type="button"
+                onClick={() => { setPaperPreviewStoryId(null); setPaperPreviewOpen(true); }}
+                className="btn-quiet mt-5 rounded-full bg-white/10 px-6 py-3 text-sm text-white">
+                見開きで紙面を見る
+              </button>}
               {previewEdition && !readOnly && import.meta.env.VITE_BOOK_PDF_ENABLED === "true" && (
                 <button type="button" onClick={downloadDraftPdf} disabled={draftPdfStatus === "loading"}
                   className="btn-quiet mt-5 rounded-full bg-white/10 px-6 py-3 text-sm text-white disabled:opacity-50">
@@ -20533,21 +20532,25 @@ return (
 <div className="mb-5 space-y-3">
   {photos.length > 0 && (
     <div className="space-y-3">
-      {photos.map((photo, photoIndex) => (
+      {photos.map((photo, photoIndex) => {
+          const layout = photoBookLayout(photo, photoIndex);
+          const aspectRatio = layout.placement === "after_full" ? "142 / 200"
+            : layout.placement === "excluded" ? "4 / 3" : "142 / 100";
+          return (
         <div
           key={photo.storage_path || photoIndex}
           className="relative w-full rounded-2xl overflow-hidden border border-white/10 bg-white/5"
         >
-          <img
-            src={photo.url}
-            alt={`写真 ${photoIndex + 1}`}
-            className="w-full h-auto object-contain bg-black/20"
-          />
+          <div className="w-full bg-black/20" style={{ aspectRatio }}>
+            <img src={photo.url} alt={`写真 ${photoIndex + 1}`}
+              className="block h-full w-full"
+              style={{ objectFit: layout.fit, objectPosition: `${layout.positionX}% ${layout.positionY}%` }} />
+          </div>
 
           <div className="absolute left-3 top-3 rounded-full bg-slate-950/85 px-3 py-1 text-xs text-white">
-            {photoBookLayout(photo, photoIndex).placement === "excluded"
+            {layout.placement === "excluded"
               ? "配置を選んでください"
-              : `本では：${{ opener: "質問の下", after_full: "本文のあと・大きく", after_half: "本文のあと・小さく" }[photoBookLayout(photo, photoIndex).placement]}`}
+              : `本では：${{ opener: "質問の下", after_full: "本文のあと・大きく", after_half: "本文のあと・小さく" }[layout.placement]}`}
           </div>
 
           <button type="button" onClick={() => { setEditingLayoutPhoto(photo); setPhotoActionAnswerId(answer.id); }}
@@ -20573,7 +20576,8 @@ return (
             {preparingPhotoPath === photo.storage_path ? "読み込み中" : "切り抜き・補正"}
           </button>
         </div>
-      ))}
+          );
+      })}
     </div>
   )}
   <button

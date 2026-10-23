@@ -82,7 +82,8 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
     }
     @media print {
       html, body, .book-page, .trim-area { background: device-cmyk(0% 0% 0% 0%); color: device-cmyk(0% 0% 0% 88%); }
-      .story-label, .page-number, .draft-mark, .qr-placeholder { color: device-cmyk(0% 0% 0% 52%); }
+      .theme-heading, .page-number, .draft-mark, .qr-placeholder { color: device-cmyk(0% 0% 0% 52%); }
+      .theme-index-mark { background: device-cmyk(0% 0% 0% 52%); }
       .rule, .story-divider, .qr-placeholder { border-color: device-cmyk(0% 0% 0% 45%); }
     }
   ` : "";
@@ -97,10 +98,10 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
         ? qrSvg : `<span class="qr-placeholder">QR未確定</span>`}</div></div>`;
     } else if (page.kind === "contents") {
       content = `<div class="contents-block"><h2>目次</h2><ol class="contents-list">${page.entries.map(entry =>
-        `<li><span class="contents-index">${String(entry.storyIndex).padStart(2, "0")}</span><span class="contents-question">${escapeHtml(entry.question || "この語り")}</span><span class="contents-page">${entry.pageNumber}</span></li>`
+        `<li><span class="contents-question">${escapeHtml(entry.question || "この語り")}</span><span class="contents-page">${entry.pageNumber}</span></li>`
       ).join("")}</ol></div>`;
     } else if (page.kind === "story-opener") {
-      content = `<div class="story-heading"><span class="story-label">Story ${String(page.storyIndex).padStart(2, "0")}</span><h2>${questionMarkup(page.question)}</h2></div>${page.photo ? "" : '<div class="story-divider" aria-hidden="true"></div>'}${imageTag(page.photo, "story-photo", eagerImages)}${page.paragraphs?.length ? bodyMarkup(page.paragraphs) : ""}`;
+      content = `<div class="story-heading"><h2>${questionMarkup(page.question)}</h2></div>${page.photo ? "" : '<div class="story-divider" aria-hidden="true"></div>'}${imageTag(page.photo, "story-photo", eagerImages)}${page.paragraphs?.length ? bodyMarkup(page.paragraphs) : ""}`;
     } else if (page.kind === "story-body") {
       content = bodyMarkup(page.paragraphs);
     } else if (page.kind === "photo") {
@@ -113,7 +114,13 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
     }
     const pageNumber = page.kind === "blank" || page.kind === "title" || page.kind === "web-entry"
       ? "" : `<span class="page-number">${page.pageNumber}</span>`;
-    return `<section class="book-page kind-${page.kind}" data-page="${page.pageNumber}" data-kind="${page.kind}"><div class="trim-area">${content}${pageNumber}${edition.mode !== "final"
+    const themeHeading = page.themeLabel
+      ? `<span class="theme-heading">${escapeHtml(page.themeLabel)}</span>` : "";
+    // One independent fore-edge mark per theme; keep it removable without
+    // changing story pagination or the theme heading.
+    const themeIndexMark = Number.isInteger(page.themeOrder) && page.themeOrder >= 1 && page.themeOrder <= 9
+      ? `<span class="theme-index-mark" style="top:${38 + (page.themeOrder - 1) * 14}mm" aria-hidden="true"></span>` : "";
+    return `<section class="book-page kind-${page.kind}" data-page="${page.pageNumber}" data-kind="${page.kind}"><div class="trim-area">${content}${themeHeading}${themeIndexMark}${pageNumber}${edition.mode !== "final"
       ? `<span class="draft-mark">校正用・入稿不可</span>` : ""}</div></section>`;
   }).join("\n");
 
@@ -138,17 +145,22 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
     .contents-block { position: absolute; inset: 0; padding: 29mm 20mm 20mm; }
     .contents-block h2 { margin: 0; font-size: 15pt; font-weight: 400; letter-spacing: .25em; text-align: center; }
     .contents-list { display: grid; grid-template-rows: repeat(11, 16mm); margin: 20mm 0 0; padding: 0; list-style: none; }
-    .contents-list li { display: grid; grid-template-columns: 8mm minmax(0, 1fr) 8mm; column-gap: 2mm; align-items: start; border-bottom: .3pt solid #d5ddd7; padding-top: 1.6mm; }
-    .contents-index, .contents-page { font: 9pt/1.7 sans-serif; color: #6e8176; }
+    .contents-list li { display: grid; grid-template-columns: minmax(0, 1fr) 8mm; column-gap: 2mm; align-items: start; border-bottom: .3pt solid #d5ddd7; padding-top: 1.6mm; }
+    .contents-page { font: 10pt/1.7 sans-serif; color: #6e8176; }
     .contents-question { min-width: 0; font-size: 11pt; line-height: 1.55; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
     .contents-page { text-align: right; }
     .story-heading { position: absolute; inset: 0; text-align: center; }
-    .story-label { position: absolute; top: 34mm; left: 20mm; right: 20mm; font-family: sans-serif; font-size: 9pt; letter-spacing: .2em; color: #6e8176; }
+    .theme-heading { position: absolute; top: 13mm; font-size: 10pt; letter-spacing: .08em; color: #6e8176; }
+    .book-page:nth-of-type(odd) .theme-heading { right: 20mm; }
+    .book-page:nth-of-type(even) .theme-heading { left: 20mm; }
+    .theme-index-mark { position: absolute; width: 2mm; height: 11mm; background: #81918a; }
+    .book-page:nth-of-type(odd) .theme-index-mark { right: 6mm; }
+    .book-page:nth-of-type(even) .theme-index-mark { left: 6mm; }
     .story-heading h2 { position: absolute; top: 62mm; left: 29mm; right: 29mm; transform: translateY(-50%); font-size: 17pt; font-weight: 400; line-height: 1.75; margin: 0; }
     .question-line { display: block; white-space: nowrap; }
     .story-divider { position: absolute; top: 116mm; left: 36mm; width: 110mm; border-top: .4pt solid #b7c0ba; }
     figure { margin: 0; }
-    .story-photo { position: absolute; left: 20mm; top: 105mm; width: 142mm; height: 100mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .story-photo { position: absolute; left: 20mm; top: 116mm; width: 142mm; height: 100mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     .story-photo img, .half-photo img { width: 100%; flex: 1; min-height: 0; object-fit: contain; }
     figcaption { font-size: 8pt; line-height: 1.6; margin-top: 3mm; align-self: center; text-align: center; max-width: 100%; }
     .body-copy { position: absolute; top: 25mm; left: 20mm; right: 20mm; bottom: 24mm; overflow: hidden; font-size: 16pt; line-height: 1.65; overflow-wrap: anywhere; }
@@ -160,7 +172,7 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
     .half-photo { width: 142mm; height: 100mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     .colophon { position: absolute; left: 22mm; right: 22mm; bottom: 40mm; font-size: 9pt; line-height: 2; }
     .colophon h2 { font-size: 11pt; font-weight: 400; }
-    .page-number { position: absolute; bottom: 12mm; font: 8pt sans-serif; color: #83908a; }
+    .page-number { position: absolute; bottom: 12mm; font: 11pt sans-serif; color: #83908a; }
     .book-page:nth-of-type(odd) .page-number { right: 18mm; }
     .book-page:nth-of-type(even) .page-number { left: 18mm; }
     .draft-mark { position: absolute; bottom: 3mm; right: 6mm; font: 7pt sans-serif; color: #a1aaa5; }

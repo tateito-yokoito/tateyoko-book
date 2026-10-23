@@ -8,9 +8,10 @@ import {build} from 'vite';
 const ref='wquxjeqkumossjxehdop';
 assert.equal(process.env.RELEASE_PRODUCTION_REF,ref);
 const enableBookProduction=process.env.RELEASE_ENABLE_BOOK_V2==='true';
-const cli=process.env.QA_SUPABASE_CLI;assert.ok(cli);
-const raw=execFileSync(cli,['projects','api-keys','--project-ref',ref,'--output','json'],{encoding:'utf8',stdio:['ignore','pipe','pipe']});
-const anon=JSON.parse(raw.slice(raw.indexOf('['))).find(k=>k.name==='anon').api_key;
+const cli=process.env.QA_SUPABASE_CLI;
+const raw=cli?execFileSync(cli,['projects','api-keys','--project-ref',ref,'--output','json'],{encoding:'utf8',stdio:['ignore','pipe','pipe']}):null;
+const anon=raw?JSON.parse(raw.slice(raw.indexOf('['))).find(k=>k.name==='anon')?.api_key:process.env.RELEASE_SUPABASE_ANON_KEY;
+assert.ok(anon,'Production anon key is required');
 for(const key of Object.keys(process.env))if(key.startsWith('VITE_'))delete process.env[key];
 Object.assign(process.env,{
  VITE_PUBLIC_TEST_MODE:'false',VITE_SUPABASE_URL:`https://${ref}.supabase.co`,VITE_SUPABASE_ANON_KEY:anon,

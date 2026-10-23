@@ -22,6 +22,18 @@ assert.equal(pages.find(page => page.storyId === "b" && page.kind === "story-ope
 assert.deepEqual(pages.find(page => page.storyId === "b" && page.kind === "story-opener").paragraphs, ["今も元気です。"]);
 assert.equal(pages.some(page => page.storyId === "b" && page.kind === "story-body"), false);
 assert.equal(pages.length % 4, 0);
+const themedEdition = createBookEdition({ title: "テーマ索引", stories: [
+  { id: "theme", question: "家族の思い出は？", body: first, themeCode: "ty_theme_family",
+    themeLabel: "家族の記憶", themeOrder: 7 }
+] });
+const themedPages = buildBookPages(themedEdition).filter(page => page.storyId === "theme");
+assert.ok(themedPages.length > 1);
+assert.ok(themedPages.every(page => page.themeLabel === "家族の記憶" && page.themeOrder === 7));
+const themedHtml = renderBookPrintHtml(themedEdition);
+assert.equal((themedHtml.match(/class="theme-index-mark"/g) || []).length, themedPages.length);
+assert.match(themedHtml, /class="theme-index-mark" style="top:122mm"/);
+assert.doesNotMatch(themedHtml, /Story 01|contents-index/);
+assert.match(themedHtml, /font: 11pt sans-serif/);
 const unpicturedText = "海辺の町で暮らしました。朝には潮の香りがしました。".repeat(30);
 const unpicturedPages = buildBookPages(createBookEdition({ title: "試し読み", stories: [
   { id: "plain", question: "どこで暮らしましたか？", body: unpicturedText }
