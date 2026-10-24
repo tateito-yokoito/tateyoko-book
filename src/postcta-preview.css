@@ -145,7 +145,7 @@
 @media (min-width: 821px) {
   .landing-site .hp-origin .hp-origin-client {
     position: relative;
-    width: min(750px, 100%);
+    width: min(880px, 100%);
     max-width: none;
     margin-left: 0;
     margin-right: 0;
