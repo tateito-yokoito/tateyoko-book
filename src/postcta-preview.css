@@ -138,9 +138,9 @@
 .hp-origin-vision-person { width: 100%; justify-self: start; align-self: center; }
 .hp-origin-vision-person figure { width: 100%; aspect-ratio: 1.3 / 1; overflow: hidden; }
 .hp-origin-vision-person img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 49%; }
-.hp-origin-vision-person p { margin-top: 10px; text-align: left; font: 500 14px/1.65 "Noto Sans JP",sans-serif; }
-.hp-origin-vision-person p span,.hp-origin-vision-person p strong { display: block; }
-.hp-origin-vision-person p strong { margin-top: 4px; font-size: 16px; font-weight: 600; }
+.hp-origin-vision-signature { margin-top: 32px; text-align: right; font: 500 16px/1.7 "Noto Sans JP",sans-serif; font-style: normal; }
+.hp-origin-vision-signature span,.hp-origin-vision-signature strong { display: block; }
+.hp-origin-vision-signature strong { margin-top: 4px; font-weight: 600; }
 /* Origin 01: approved A reading layout, aligned to the existing 02 baseline on desktop. */
 @media (min-width: 821px) {
   .landing-site .hp-origin .hp-origin-client {
@@ -201,8 +201,7 @@
   .hp-origin-vision-layout { gap: 52px; }
   .hp-origin-mobile-break { display: initial; }
   .hp-origin-vision-person { width: min(280px,70vw); justify-self: center; }
-  .hp-origin-vision-person p { margin-top: 8px; font-size: 12px; line-height: 1.55; }
-  .hp-origin-vision-person p strong { margin-top: 5px; font-size: 16px; }
+  .hp-origin-vision-signature { margin-top: 30px; font-size: 16px; }
   .hp-origin .hp-origin-brief,.hp-origin-closing,.hp-origin .hp-origin-scene p,.hp-origin-vision-copy p { font-size: 13.5px; line-height: 1.95; }
   .hp-origin .hp-origin-brief p + p { margin-top: 13px; }
   .hp-origin-closing p + p { margin-top: 16px; }
@@ -236,9 +235,9 @@
   .landing-site .hp-origin-vision-layout {
     grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr);
     column-gap: 56px;
-    align-items: center;
+    align-items: start;
   }
-  .landing-site .hp-origin-vision-person { width: 100%; align-self: center; }
+  .landing-site .hp-origin-vision-person { width: 100%; align-self: start; }
 }
 @media (max-width: 620px) {
   .landing-site .hp-origin.hp-shell { width: calc(100% - 44px); max-width: none; }

@@ -109,10 +109,10 @@ export function StoryOrigin() {
             <p>語ることで、自分の人生をもう一度辿り、<br />忙しい日々に埋もれていた、大切なものに気づく。</p>
             <p>そして、家族が受け取りたいと思ったときには、<br />時を越えて、その人らしさに触れられる場所として。</p>
             <p>そんな願いを、<br className="hp-origin-mobile-break" />「縦糸♾️横糸」に込めています。</p>
+            <address className="hp-origin-vision-signature"><span>株式会社SaltLight 代表取締役</span><strong>菅原 英俊</strong></address>
           </div>
           <div className="hp-origin-vision-person">
             <figure><img src={asset + 'founder-and-son-landscape-20261022.png'} alt="創業者・菅原英俊と息子" width="1402" height="1122" loading="lazy" /></figure>
-            <p><span>株式会社SaltLight</span><span>代表取締役</span><strong>菅原 英俊</strong></p>
           </div>
         </div>
       </div>

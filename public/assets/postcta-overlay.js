@@ -5836,16 +5836,13 @@ function Od() {
             "そんな願いを、",
             /* @__PURE__ */ h.jsx("br", { className: "hp-origin-mobile-break" }),
             "「縦糸♾️横糸」に込めています。"
-          ] })
-        ] }),
-        /* @__PURE__ */ h.jsxs("div", { className: "hp-origin-vision-person", children: [
-          /* @__PURE__ */ h.jsx("figure", { children: /* @__PURE__ */ h.jsx("img", { src: gr + "founder-and-son-landscape-20261022.png", alt: "創業者・菅原英俊と息子", width: "1402", height: "1122", loading: "lazy" }) }),
-          /* @__PURE__ */ h.jsxs("p", { children: [
-            /* @__PURE__ */ h.jsx("span", { children: "株式会社SaltLight" }),
-            /* @__PURE__ */ h.jsx("span", { children: "代表取締役" }),
+          ] }),
+          /* @__PURE__ */ h.jsxs("address", { className: "hp-origin-vision-signature", children: [
+            /* @__PURE__ */ h.jsx("span", { children: "株式会社SaltLight 代表取締役" }),
             /* @__PURE__ */ h.jsx("strong", { children: "菅原 英俊" })
           ] })
-        ] })
+        ] }),
+        /* @__PURE__ */ h.jsx("div", { className: "hp-origin-vision-person", children: /* @__PURE__ */ h.jsx("figure", { children: /* @__PURE__ */ h.jsx("img", { src: gr + "founder-and-son-landscape-20261022.png", alt: "創業者・菅原英俊と息子", width: "1402", height: "1122", loading: "lazy" }) }) })
       ] })
     ] })
   ] });
