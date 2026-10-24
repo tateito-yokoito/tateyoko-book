@@ -73,7 +73,7 @@ export function StoryOrigin() {
       <button className="hp-origin-toggle" type="button" aria-expanded={originExpanded} aria-controls="origin-full-story" onClick={() => setOriginExpanded(!originExpanded)}>{originExpanded ? '− 実話を閉じる' : '＋ 縦糸♾️横糸が生まれた２つの実話を読む'}</button>
       <div id="origin-full-story" hidden={!originExpanded}>
         <div className="hp-origin-scene hp-origin-client">
-          <h3>01　家族に届いた、12年前の言葉</h3>
+          <h3>01　家族に届いた、<br className="hp-origin-heading-mobile-break" />12年前の言葉</h3>
           <p>私が初めて死亡保険金をお支払いしたのは、<br />当時の私と同じ、37歳の男性でした。</p>
           <p>持病もなく、いつもの通勤電車で突然具合が悪くなり、<br />病院へ運ばれ、数日後にこの世を去りました。</p>
           <p>九州から駆けつけたご両親とお姉さまは、<br />深い悲しみと戸惑いの中にいらっしゃいました。</p>
@@ -86,7 +86,7 @@ export function StoryOrigin() {
           <p>その言葉を、今も忘れることができません。</p>
         </div>
         <div className="hp-origin-scene hp-origin-scene-grandparents">
-          <h3>02　聞けなかったこと。まだ聞けること。</h3>
+          <h3>02　聞けなかったこと。<br className="hp-origin-heading-mobile-break" />まだ聞けること。</h3>
           <div className="hp-origin-grandparents-layout">
             <figure className="hp-origin-grandparents-photo"><img src={asset + 'grandparents.jpg'} alt="創業者の祖父母の写真" width="1102" height="713" loading="lazy" /></figure>
             <div className="hp-origin-grandparents-copy">

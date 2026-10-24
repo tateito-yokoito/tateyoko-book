@@ -210,3 +210,59 @@
   .hp-origin-vision-copy p + p { margin-top: 14px; }
   .hp-origin-vision-copy .hp-origin-vision-pledge { font-weight: 400; }
 }
+
+/* Origin reading layout: approved 1100px desktop grid and 18px mobile copy. */
+.hp-origin-heading-mobile-break { display: none; }
+@media (min-width: 821px) {
+  .landing-site .hp-origin.hp-shell {
+    width: min(1100px, calc(100% - 96px));
+    max-width: none;
+    grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr);
+    column-gap: 56px;
+  }
+  .landing-site .hp-origin-photo-stack { width: 100%; max-width: none; justify-self: stretch; gap: 16px; }
+  .landing-site .hp-origin-cover img,
+  .landing-site .hp-origin-photo-stack .hp-origin-book img { width: 100%; height: auto; object-fit: contain; }
+  .landing-site .hp-origin #origin-full-story { width: 100%; max-width: none; margin: 72px 0 0; }
+  .landing-site .hp-origin .hp-origin-scene-grandparents { width: 100%; max-width: none; }
+  .landing-site .hp-origin-grandparents-layout {
+    grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+    column-gap: 40px;
+    align-items: center;
+  }
+  .landing-site .hp-origin-grandparents-photo { width: 100%; aspect-ratio: 1.42 / 1; }
+  .landing-site .hp-origin-grandparents-photo img { object-fit: cover; object-position: center; }
+  .landing-site .hp-origin-vision { width: 100%; max-width: none; margin-top: 72px; }
+  .landing-site .hp-origin-vision-layout {
+    grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr);
+    column-gap: 56px;
+    align-items: center;
+  }
+  .landing-site .hp-origin-vision-person { width: 100%; align-self: center; }
+}
+@media (max-width: 620px) {
+  .landing-site .hp-origin.hp-shell { width: calc(100% - 44px); max-width: none; }
+  .landing-site .hp-origin-brief,
+  .landing-site .hp-origin-closing,
+  .landing-site .hp-origin-scene p,
+  .landing-site .hp-origin-vision-copy p {
+    font-size: 18px;
+    line-height: 1.85;
+    overflow-wrap: normal;
+    word-break: normal;
+    line-break: strict;
+    text-wrap: pretty;
+  }
+  .landing-site .hp-origin-brief p br,
+  .landing-site .hp-origin-closing p br,
+  .landing-site .hp-origin-scene p br,
+  .landing-site .hp-origin-vision-copy p br:not(.hp-origin-mobile-break) { display: none; }
+  .landing-site .hp-origin-brief p + p,
+  .landing-site .hp-origin-closing p + p,
+  .landing-site .hp-origin-scene p + p,
+  .landing-site .hp-origin-vision-copy p + p { margin-top: 26px; }
+  .landing-site .hp-origin-grandparents-copy p:last-child { margin-top: 36px; }
+  .landing-site .hp-origin-scene blockquote { font-size: 18px; line-height: 1.85; text-wrap: pretty; }
+  .landing-site .hp-origin-heading-mobile-break { display: initial; }
+  .landing-site .hp-origin-vision-person { margin-inline: auto; }
+}

@@ -5743,7 +5743,11 @@ function Od() {
     /* @__PURE__ */ h.jsx("button", { className: "hp-origin-toggle", type: "button", "aria-expanded": e, "aria-controls": "origin-full-story", onClick: () => t(!e), children: e ? "− 実話を閉じる" : "＋ 縦糸♾️横糸が生まれた２つの実話を読む" }),
     /* @__PURE__ */ h.jsxs("div", { id: "origin-full-story", hidden: !e, children: [
       /* @__PURE__ */ h.jsxs("div", { className: "hp-origin-scene hp-origin-client", children: [
-        /* @__PURE__ */ h.jsx("h3", { children: "01　家族に届いた、12年前の言葉" }),
+        /* @__PURE__ */ h.jsxs("h3", { children: [
+          "01　家族に届いた、",
+          /* @__PURE__ */ h.jsx("br", { className: "hp-origin-heading-mobile-break" }),
+          "12年前の言葉"
+        ] }),
         /* @__PURE__ */ h.jsxs("p", { children: [
           "私が初めて死亡保険金をお支払いしたのは、",
           /* @__PURE__ */ h.jsx("br", {}),
@@ -5776,7 +5780,11 @@ function Od() {
         /* @__PURE__ */ h.jsx("p", { children: "その言葉を、今も忘れることができません。" })
       ] }),
       /* @__PURE__ */ h.jsxs("div", { className: "hp-origin-scene hp-origin-scene-grandparents", children: [
-        /* @__PURE__ */ h.jsx("h3", { children: "02　聞けなかったこと。まだ聞けること。" }),
+        /* @__PURE__ */ h.jsxs("h3", { children: [
+          "02　聞けなかったこと。",
+          /* @__PURE__ */ h.jsx("br", { className: "hp-origin-heading-mobile-break" }),
+          "まだ聞けること。"
+        ] }),
         /* @__PURE__ */ h.jsxs("div", { className: "hp-origin-grandparents-layout", children: [
           /* @__PURE__ */ h.jsx("figure", { className: "hp-origin-grandparents-photo", children: /* @__PURE__ */ h.jsx("img", { src: gr + "grandparents.jpg", alt: "創業者の祖父母の写真", width: "1102", height: "713", loading: "lazy" }) }),
           /* @__PURE__ */ h.jsxs("div", { className: "hp-origin-grandparents-copy", children: [
