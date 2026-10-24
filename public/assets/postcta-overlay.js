@@ -5726,7 +5726,7 @@ function Od() {
     ] }),
     /* @__PURE__ */ h.jsxs("div", { className: "hp-origin-photo-stack", children: [
       /* @__PURE__ */ h.jsx("figure", { className: "hp-origin-cover", children: /* @__PURE__ */ h.jsx("img", { src: gr + "family-history-spine-wide-20261023.png", alt: "祖父が用意した「わが家の歴史」の冊子と背表紙", width: "2852", height: "1534", loading: "lazy" }) }),
-      /* @__PURE__ */ h.jsx("figure", { className: "hp-origin-book", children: /* @__PURE__ */ h.jsx("img", { src: gr + "origin-family-history-open-20261023.jpg", alt: "家紋が貼られたページと、白紙のままの家系図のページ", width: "1024", height: "768", loading: "lazy" }) })
+      /* @__PURE__ */ h.jsx("figure", { className: "hp-origin-book", children: /* @__PURE__ */ h.jsx("img", { src: gr + "origin-family-history-open-20261023.jpg", alt: "家紋が貼られたページと、白紙のままの家系図のページ", width: "1024", height: "768", loading: "eager" }) })
     ] }),
     /* @__PURE__ */ h.jsxs("div", { className: "hp-origin-closing", children: [
       /* @__PURE__ */ h.jsxs("p", { children: [

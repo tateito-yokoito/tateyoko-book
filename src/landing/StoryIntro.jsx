@@ -64,7 +64,7 @@ export function StoryOrigin() {
       </div>
       <div className="hp-origin-photo-stack">
         <figure className="hp-origin-cover"><img src={asset + 'family-history-spine-wide-20261023.png'} alt="祖父が用意した「わが家の歴史」の冊子と背表紙" width="2852" height="1534" loading="lazy" /></figure>
-        <figure className="hp-origin-book"><img src={asset + 'origin-family-history-open-20261023.jpg'} alt="家紋が貼られたページと、白紙のままの家系図のページ" width="1024" height="768" loading="lazy" /></figure>
+        <figure className="hp-origin-book"><img src={asset + 'origin-family-history-open-20261023.jpg'} alt="家紋が貼られたページと、白紙のままの家系図のページ" width="1024" height="768" loading="eager" /></figure>
       </div>
       <div className="hp-origin-closing">
         <p>祖父は、どんな想いでこの冊子を用意したのか。<br />何を残したかったのか。</p>
