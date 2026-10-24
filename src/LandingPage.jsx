@@ -160,7 +160,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
       <section className={`hp-hero hp-shell${heroLayout === 'integrated' ? ' hp-hero-integrated' : ''}`} id="top" aria-labelledby="hp-title">
         <div className="hp-hero-title"><h1 id="hp-title">人生を、<br />声でのこす。</h1></div>
         <figure className="hp-hero-art hp-hero-photo"><img src="/site/hp-renewal/hero-woman-remembering.png" alt="窓辺でスマートフォンを手に、アルバムを前に思い出を辿る女性" width="1536" height="1024" fetchPriority="high" /></figure>
-        <div className="hp-hero-body"><p>毎週スマホに届く質問に、語るだけ。<br /><strong>あなたの人生が、家族に残る物語になる。</strong></p></div>
+        <div className="hp-hero-body"><p>スマホに届く質問に、つぶやくだけ。<br /><strong>あなたの人生が、家族に残る物語になる。</strong></p></div>
       </section>
 
       <section className="hp-v4-answer hp-shell" id="experience" aria-labelledby="v4-answer-title">

@@ -1,0 +1,38 @@
+/* Homepage typography refinements; leave mobile hero and price layouts unchanged. */
+@media (min-width: 821px) {
+  .landing-site #origin .hp-origin-vision h3 {
+    font-size: clamp(32px, 3.7vw, 52px) !important;
+    line-height: 1.65;
+  }
+
+  .landing-site .hp-hero-body > p {
+    font-size: clamp(23px, 2vw, 28px);
+    line-height: 1.7;
+  }
+
+  .landing-site #price .hp-price-v2-included-card li {
+    font-size: 18px;
+    line-height: 1.7;
+  }
+  .landing-site #price .hp-price-v2-included-card .hp-price-v2-web-share {
+    font-size: 18px;
+    white-space: normal;
+  }
+  .landing-site #price .hp-price-v2-pace strong { font-size: 20px; }
+  .landing-site #price .hp-price-v2-pace span {
+    font-size: 17px;
+    line-height: 1.55;
+  }
+  .landing-site #price .hp-price-v2-extras-grid h4 { font-size: 20px; }
+  .landing-site #price .hp-price-v2-extras-grid p {
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .landing-site #price .hp-price-v2-extras-grid strong { white-space: normal; }
+}
+
+@media (max-width: 620px) {
+  .landing-site #origin .hp-origin-vision h3 {
+    margin-bottom: 22px !important;
+  }
+}
