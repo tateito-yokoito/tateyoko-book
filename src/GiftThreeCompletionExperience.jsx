@@ -12,6 +12,7 @@ export default function GiftThreeCompletionExperience({
   previewEmailRegistered = true, retentionDays = 10,
 }) {
   const [feedbackResult, setFeedbackResult] = useState(null);
+  const [finished, setFinished] = useState(false);
   const ready = !loading && trialIsReady(stories);
   return <div className={`tc-root tc-fast-flow g3-completion${preview ? ' g3-completion--preview' : ''}`}>
     {preview && <p className="g3-completion-preview-note">画面確認用の架空サンプルです。回答の保存・メール送信は行いません。{!previewEmailRegistered && ' 贈り主メール未登録時の表示です。'}</p>}
@@ -35,7 +36,7 @@ export default function GiftThreeCompletionExperience({
 
       <section id="gift-three-about" className="g3-completion-about" aria-labelledby="gift-three-about-title">
         <h2 id="gift-three-about-title">縦糸+横糸</h2>
-        <p>本編では、先ほどの3つの語りを引き継ぎ、さらに9つのテーマの問いに語りながら人生を辿っていきます。</p>
+        <p>本編を始めるときに、先ほどの3つの語りを引き継ぐか選べます。9つのテーマの問いに語りながら、人生を辿っていきます。</p>
         <h3 className="g3-completion-products-title">語りは2つの作品に。</h3>
         <div className="tc-fast-products" aria-label="語りから生まれる二つの作品">
           <figure><img src="/site/hp-story-preview/price-book-rose-user.png" alt="縦糸横糸ブックの表紙イメージ" loading="lazy" />
@@ -52,6 +53,13 @@ export default function GiftThreeCompletionExperience({
             : feedbackResult.emailAvailable ? '今はシェアしないことにしました。' : '三つの問いはここまでです。'}</p>
           <p>語った内容・写真・音声は共有されていません。続きについて、今ここで決める必要はありません。</p>
           {!feedbackResult.shared && <p>3つの語りは、最後に語った日から{retentionDays}日間保存され、本編に引き継ぐこともできます。</p>}
+          {!finished ? <div className="g3-completion-followup">
+            <h3>少し気になった方へ</h3>
+            <p>作品や新しいお知らせを、LINEで時々お届けします。友だち追加は任意です。語りや録音はLINEへ送りません。</p>
+            <a className="tc-primary" href="https://line.me/R/ti/p/%40558hxwaz" target="_blank" rel="noopener noreferrer">LINEで案内を受け取る <ChevronRight size={18} aria-hidden="true" /></a>
+            <p className="tc-small">LINEで公式アカウントを開き、友だち追加を選んでください。ログインや購入は不要です。</p>
+            <button type="button" className="tc-text-button" onClick={() => setFinished(true)}>受け取らず、今日は終える</button>
+          </div> : <p>今日はここまで。いつでもまたお越しください。</p>}
         </div> : ready ? <GiftThreeFeedback client={client} projectId={projectId} recipientToken={recipientToken}
           embedded preview={preview} previewEmailRegistered={previewEmailRegistered} retentionDays={retentionDays}
           onDone={setFeedbackResult} /> : <p>3つの語りの保存を確認してから、感想を選べます。</p>}

@@ -41,13 +41,24 @@ export function createFamilyStoryAccess(client, api, projectId) {
       await subject();
       await invoke('family_edit_story',{answer_id:answer.id,style,body,expected:{style:answer.selected_style ?? null,body:answer.transcript_edited ?? null}});
     },
-    async addPhoto(file,answerId,replacing=null){
+    async addPhoto(file,answerId,replacing=null,bookLayout=null){
       await subject();
       // File identity + destination retain the same upload on a lost response.
       let targets=uploads.get(file);if(!targets){targets=new Map();uploads.set(file,targets);}
       const key=`${answerId}:${replacing || 'new'}`;
       if(!targets.has(key))targets.set(key,await api.reserve(projectId,file,'photo'));
       await invoke('family_attach_story_photo',{answer_id:answerId,upload_id:targets.get(key).id,replacing});
+      if(bookLayout){
+        const {data:asset,error}=await client.from('media_assets').select('id')
+          .eq('book_project_id',projectId).eq('answer_id',answerId)
+          .eq('storage_path',targets.get(key).path).single();
+        if(error || !asset?.id)throw Error('写真の配置を保存できませんでした。');
+        await invoke('family_set_story_photo_layout',{photo_id:asset.id,layout:bookLayout});
+      }
+    },
+    async setPhotoLayout(photo,layout){
+      await subject();
+      await invoke('family_set_story_photo_layout',{photo_id:photo.id,layout});
     },
     async removePhoto(photo){await subject();await invoke('family_remove_story_photo',{photo_id:photo.id});},
   };

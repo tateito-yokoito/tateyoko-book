@@ -17,7 +17,7 @@ export default function ThemeMorePicker({ theme, options = [], selectedIds = [],
   return <main className="theme-more">
     <header className="tm-nav"><button type="button" onClick={onBack} disabled={busy} aria-label="テーマ完了に戻る"><ChevronLeft size={20}/></button><span>{theme?.label || '幼い頃'} · 問いを追加</span></header>
     <div className="tm-scroll">
-      <div className="tm-intro"><h1 className="tm-picker-title">追加でしゃべってみたい問いを選んでください。</h1></div>
+      <div className="tm-intro"><h1 className="tm-picker-title">追加の質問を選んでください。</h1><p className="tm-count">ホームからも追加できます。</p></div>
       {[['skipped', 'スキップした質問'], ['extra', '追加の質問'], ['free', '問いにとらわれず']].map(([kind, title]) => {
         const items = options.filter(option => option.kind === kind);
         if (theme && !items.length) return null;

@@ -4,6 +4,22 @@
 @media(prefers-reduced-motion:reduce){.tc-root{scroll-behavior:auto}}
 .app-container.app-container--trial-conversion{padding:0;max-width:none;height:100dvh;min-height:0;overflow:hidden}
 
+.tc-reflection-next{grid-column:1/-1;max-width:440px;width:100%;margin:0 auto;text-align:center}
+.tc-reflection-next .tc-primary{text-decoration:none}
+.tc-root a.tc-primary{color:#fffdf6;text-decoration:none}
+.tc-reflection-next .tc-text-button{margin-top:14px}
+.tc-later-link{display:flex;margin:16px auto 0}
+.tc-pause-choice{width:min(100%,680px);margin:0 auto;padding:30px 32px 100px;min-height:calc(100% - 83px)}
+.tc-pause-choice>.tc-eyebrow{margin-top:70px}
+.tc-pause-choice>p:not(.tc-eyebrow){margin-top:22px;color:var(--tc-muted)}
+.tc-pause-line{margin-top:64px;padding-top:32px;border-top:1px solid var(--tc-line)}
+.tc-pause-line h2{font-size:1.5rem}
+.tc-pause-line>p:not(.tc-small){margin-top:13px;color:var(--tc-muted)}
+.tc-pause-line .tc-primary{margin-top:28px;text-decoration:none}
+.tc-pause-line .tc-small{display:block;margin-top:12px}
+.tc-pause-finish{display:block;margin:30px auto 0}
+@media(max-width:700px){.tc-reflection-next{margin-top:8px}.tc-pause-choice{padding:22px 24px 70px}.tc-pause-choice>.tc-eyebrow{margin-top:38px}.tc-pause-line{margin-top:48px}}
+
 /* First review: a shorter opening, then tangible pages, voice and a return home. */
 .tc-opening .tc-section{padding-top:40px;padding-bottom:40px}
 .tc-opening #trial-C02{padding-top:28px;padding-bottom:32px}

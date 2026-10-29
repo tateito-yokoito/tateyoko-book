@@ -1,0 +1,185 @@
+import { paginateBookBody } from "./bookPagination.js";
+import { bookPhotoSlots, photoBookLayout } from "./bookPhotoLayout.js";
+
+export const BOOK_EDITION_SCHEMA_VERSION = 1;
+export const BOOK_PRINT_PROFILE = Object.freeze({
+  widthMm: 182,
+  heightMm: 257,
+  // B5 body copy is set at 16pt. Keep pagination conservative so the
+  // screen preview and generated PDF agree even with paragraph spacing.
+  bodyCharsPerLine: 24,
+  bodyLinesPerPage: 19,
+  openerBodyLines: 7
+});
+
+const text = value => String(value ?? "").trim();
+const named = value => text(value).endsWith("さん") ? text(value) : `${text(value)}さん`;
+
+// Keep authored paragraph breaks. For a single long transcript paragraph,
+// introduce reading breaks only at sentence boundaries without changing words.
+export function bookBodyParagraphs(body) {
+  return text(body).split(/\n+/).flatMap(raw => {
+    const paragraph = raw.trim();
+    if (!paragraph) return [];
+    const sentences = paragraph.match(/[^。！？!?]+[。！？!?]*|[。！？!?]+/gu) || [paragraph];
+    const result = [];
+    let current = "";
+    for (const sentence of sentences) {
+      if (current && current.length + sentence.length > 60) {
+        result.push(current);
+        current = "";
+      }
+      current += sentence;
+    }
+    if (current) result.push(current);
+    return result;
+  });
+}
+
+export function selectedBookText(answer) {
+  if (text(answer?.transcript_edited)) return text(answer.transcript_edited);
+  if (answer?.selected_style === "essay") {
+    return text(answer.transcript_essay || answer.transcript_readable || answer.transcript_clean || answer.transcript_raw);
+  }
+  if (answer?.selected_style === "clean") {
+    return text(answer.transcript_clean || answer.transcript_raw);
+  }
+  return text(answer?.transcript_readable || answer?.transcript_clean || answer?.transcript_raw);
+}
+
+export function createBookEdition({
+  editionId = null,
+  title,
+  subtitle = "",
+  subjectName = "",
+  footerText = "",
+  stories = [],
+  contributions = [],
+  webBookUrl = null,
+  includeWebBookQr = true,
+  mode = "draft"
+}) {
+  if (!["draft", "proof", "final"].includes(mode)) throw new Error("Unknown edition mode");
+  if (mode !== "draft" && includeWebBookQr && !/^https:\/\/(?:www\.tateito-yokoito\.jp|tateyoko-book-test\.vercel\.app)\/\?voice=[a-f0-9]{48}$/.test(webBookUrl || "")) {
+    throw new Error("A final edition requires the permanent first-party Web Book URL");
+  }
+  const normalizedStories = stories.map((story, index) => {
+    const body = text(story.body);
+    if (!body) throw new Error(`Story ${index + 1} has no body`);
+    return {
+      id: text(story.id) || `story-${index + 1}`,
+      sourceUserQuestionId: text(story.sourceUserQuestionId),
+      question: text(story.question),
+      body,
+      photos: (story.photos || []).filter(photo => photo?.url || photo?.path).map((photo, photoIndex) => ({
+        id: text(photo.id) || `photo-${photoIndex + 1}`,
+        url: text(photo.url || photo.path),
+        caption: text(photo.caption),
+        bookLayout: photoBookLayout(photo, photoIndex)
+      }))
+    };
+  });
+  if (!normalizedStories.length) throw new Error("The book needs at least one story");
+  const normalizedContributions = contributions.map((item, index) => ({
+    id: text(item.id) || `contribution-${index + 1}`,
+    responderName: text(item.responderName) || "大切な人",
+    relationship: text(item.relationship),
+    sourceUserQuestionId: text(item.sourceUserQuestionId),
+    question: text(item.question), body: text(item.body),
+    photos: (item.photos || []).filter(photo => photo?.url || photo?.path).map((photo, photoIndex) => ({
+      id: text(photo.id) || `contribution-photo-${photoIndex + 1}`,
+      url: text(photo.url || photo.path), caption: text(photo.caption),
+      bookLayout: photoBookLayout(photo, photoIndex)
+    }))
+  })).filter(item => item.body);
+  return {
+    schemaVersion: BOOK_EDITION_SCHEMA_VERSION,
+    editionId,
+    title: text(title) || "わたしの物語",
+    subtitle: text(subtitle),
+    subjectName: text(subjectName),
+    footerText: text(footerText),
+    stories: normalizedStories,
+    contributions: normalizedContributions,
+    includeWebBookQr: Boolean(includeWebBookQr),
+    webBookUrl: includeWebBookQr ? webBookUrl : null,
+    mode
+  };
+}
+
+export function buildBookPages(edition, profile = BOOK_PRINT_PROFILE) {
+  if (edition?.schemaVersion !== BOOK_EDITION_SCHEMA_VERSION) throw new Error("Unsupported book edition schema");
+  const pages = [];
+  const add = page => pages.push({ ...page, pageNumber: pages.length + 1 });
+  add({ kind: "title", title: edition.title, subtitle: edition.subtitle, subjectName: edition.subjectName });
+  if (edition.includeWebBookQr) add({ kind: "web-entry", webBookUrl: edition.webBookUrl });
+
+  for (let storyIndex = 0; storyIndex < edition.stories.length; storyIndex += 1) {
+    const story = edition.stories[storyIndex];
+    if (pages.length % 2 !== 0) add({ kind: "blank" }); // Story opener is always on a right-hand page.
+    const photoSlots = bookPhotoSlots(story.photos);
+    const hasOpeningPhoto = Boolean(photoSlots.opener);
+    const paragraphs = bookBodyParagraphs(story.body);
+    const bodyPages = paginateBookBody(paragraphs, {
+      charsPerLine: profile.bodyCharsPerLine,
+      linesPerPage: profile.bodyLinesPerPage,
+      firstPageLines: hasOpeningPhoto ? profile.bodyLinesPerPage : profile.openerBodyLines
+    });
+    add({ kind: "story-opener", storyId: story.id, storyIndex: storyIndex + 1,
+      sourceUserQuestionId: story.sourceUserQuestionId,
+      question: story.question, photo: photoSlots.opener,
+      paragraphs: hasOpeningPhoto ? [] : bodyPages.shift() });
+    for (const [partIndex, bodyParagraphs] of bodyPages.entries()) {
+      add({ kind: "story-body", storyId: story.id, partIndex, paragraphs: bodyParagraphs });
+    }
+    for (const photo of photoSlots.afterFull) add({ kind: "photo", storyId: story.id, photo });
+    for (let index = 0; index < photoSlots.afterHalf.length; index += 2) {
+      const photos = photoSlots.afterHalf.slice(index, index + 2);
+      add({ kind: "photo-half", storyId: story.id, photo: photos[0], photos });
+    }
+  }
+  if (edition.contributions?.length) {
+    if (pages.length % 2 !== 0) add({ kind: "blank" });
+    add({ kind: "contribution-divider" });
+    let previousPerson = "";
+    for (const contribution of edition.contributions) {
+      if (contribution.responderName !== previousPerson) {
+        if (pages.length % 2 !== 0) add({ kind: "blank" });
+        add({ kind: "contributor-title", responderName: contribution.responderName,
+          relationship: contribution.relationship });
+        previousPerson = contribution.responderName;
+      }
+      const paragraphs = bookBodyParagraphs(contribution.body);
+      const bodyPages = paginateBookBody(paragraphs, {
+        charsPerLine: profile.bodyCharsPerLine,
+        linesPerPage: profile.bodyLinesPerPage,
+        firstPageLines: profile.openerBodyLines
+      });
+      add({ kind: "contribution-opener", contributionId: contribution.id,
+        responderName: contribution.responderName, relationship: contribution.relationship,
+        sourceUserQuestionId: contribution.sourceUserQuestionId,
+        question: contribution.question, paragraphs: bodyPages.shift() });
+      for (const [partIndex, bodyParagraphs] of bodyPages.entries())
+        add({ kind: "contribution-body", contributionId: contribution.id,
+          partIndex, paragraphs: bodyParagraphs });
+      for (const photo of contribution.photos || [])
+        add({ kind: "photo", contributionId: contribution.id, photo });
+    }
+  }
+  const ownerPages = new Map(pages.filter(page => page.kind === "story-opener" && page.sourceUserQuestionId)
+    .map(page => [page.sourceUserQuestionId, page.pageNumber]));
+  const relatedContributions = new Map();
+  for (const page of pages.filter(page => page.kind === "contribution-opener" && page.sourceUserQuestionId)) {
+    if (!relatedContributions.has(page.sourceUserQuestionId)) relatedContributions.set(page.sourceUserQuestionId, []);
+    relatedContributions.get(page.sourceUserQuestionId).push(page);
+  }
+  for (const page of pages) {
+    if (page.kind === "story-opener") page.crossReferences = (relatedContributions.get(page.sourceUserQuestionId) || [])
+      .map(related => `${named(related.responderName)}の語り → P.${related.pageNumber}`);
+    if (page.kind === "contribution-opener" && ownerPages.has(page.sourceUserQuestionId))
+      page.crossReferences = [`本人の語り → P.${ownerPages.get(page.sourceUserQuestionId)}`];
+  }
+  add({ kind: "colophon", title: edition.title, footerText: edition.footerText });
+  while (pages.length % 4 !== 0) add({ kind: "blank" });
+  return pages;
+}

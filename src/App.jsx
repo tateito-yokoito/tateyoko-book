@@ -1,8 +1,9 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { paidConversationIndex, paidOnboardingApplies, paidOnboardingCheckpoint, resolvePaidOnboardingScene } from './lib/paidOnboarding.js';
 import { getActiveOnboardingRitualScene, onboardingSetupScenes, resolveOnboardingRitualEntryScene } from './lib/onboardingRitualResume.js';
 import { clearOnboardingNotificationDraft, clearOnboardingPreferenceDraft, clearOnboardingSharingDraft, draftTimestamp, readOnboardingNotificationDraft, readOnboardingPreferenceDraft, readOnboardingSharingDraft, writeOnboardingNotificationDraft, writeOnboardingPreferenceDraft, writeOnboardingSharingDraft } from './lib/onboardingPreferenceDraft.js';
 import ApprovedHome from './home/ApprovedHome.jsx';
+import LineNotificationConnection from './LineNotificationConnection.jsx';
 import SupporterContextFrame from './SupporterContextFrame.jsx';
 import StorySkySurface, { PersistentStorySkyBackdrop } from './home/StorySkySurface.jsx';
 import { configureSkyClient } from './home/liveSkies.js';
@@ -14,11 +15,20 @@ import { createClient } from "@supabase/supabase-js";
 import { logActivity } from "./lib/activityLog.js";
 import { createSupportJourney } from './lib/supportJourney.js';
 import { loadBookWork } from "./lib/bookWork.js";
+import { editionFromBookWork } from "./lib/bookEditionAdapter.js";
+import { buildBookPages, selectedBookText } from "./lib/bookEdition.js";
+import { renderBookPrintHtml } from "./lib/bookPrintHtml.js";
+import BookPhotoPlacementFlow from "./BookPhotoPlacementFlow.jsx";
+import BookPaperViewer from "./BookPaperViewer.jsx";
+import { bookPhotoSlots, photoBookLayout } from "./lib/bookPhotoLayout.js";
 import { assertPublicTestEnvironment, TEST_SUPABASE_URL } from "./lib/publicTestSafety.js";
 import { findNextDeliveryQuestionIndex, resolveDeliveryEntry, withoutDeliveryToken } from "./lib/deliveryEntry.js";
+import { completePlaceholderLineProfile, hasLineIdentity, saveLineRegistrationDraft, startLineSignIn, takeLineNotificationReturn, takeLineRegistrationDraft } from "./lib/lineAuth.js";
 import { createRecordingClock, mergeRecordingDuration, RECORDING_LIMIT_SECONDS, RECORDING_WARNING_SECONDS, RECORDING_LIMIT_NOTICE } from "./lib/recordingTime.js";
 import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
+import WrittenAnswerEditor from "./WrittenAnswerEditor.jsx";
+import { deleteAnswerRecordingDraft, listAnswerRecordingDrafts, saveAnswerRecordingDraft } from './lib/answerRecordingDraft.js';
 import BookendInvitation from "./BookendInvitation.jsx";
 import { BOOKEND_PROMPTS, bookendKindForQuestion, bookendKindForVideo } from "./lib/bookends.js";
 import ExperienceContractSettings from "./ExperienceContractSettings.jsx";
@@ -37,6 +47,8 @@ import { themeExtraOptions } from "./lib/themeExtras.js";
 import ThemeMorePicker from "./ThemeMorePicker.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
 import { ThemeMemoryRequestComposer, ThemeMemoryRequestManager } from "./ThemeMemoryRequestFlow.jsx";
+import StoryRequestComposer, { PaperHeartIcon } from "./StoryRequestComposer.jsx";
+import StoryRequestManager from "./StoryRequestManager.jsx";
 import { SupporterIdentityFields, SupporterFamilyCandidates, SupporterRelationshipsSettings } from './SupporterIdentity.jsx';
 import { SupporterSmsComposer } from './SupporterSms.jsx';
 import MicAccessGuide from './MicAccessGuide.jsx';
@@ -58,6 +70,7 @@ const FREE_TRIAL_RETENTION_ENABLED = import.meta.env.VITE_FREE_TRIAL_RETENTION_E
 const EXPERIENCE_ROLLOUT = experienceRollout(import.meta.env);
 const EXPERIENCE_V2_ENABLED = EXPERIENCE_ROLLOUT.contracts;
 const TRIAL_CONVERSION_ENABLED = EXPERIENCE_ROLLOUT.conversion;
+const TRIAL_CARRY_CHOICE_ENABLED = import.meta.env.VITE_TRIAL_CARRY_CHOICE_ENABLED === "true";
 const ALLOW_FAMILY_NOTIFICATIONS = !EXPERIENCE_V2_ENABLED || EXPERIENCE_ROLLOUT.notifications;
 const recordingStorageRoot = (userId, projectId, answerId) => EXPERIENCE_V2_ENABLED
   ? `${userId}/${projectId}/${answerId}` : `${userId}/${answerId}`;
@@ -74,16 +87,22 @@ async function resolveMainExperienceEntryScene(project, question, requestedScene
     ? "hajimari_complete" : requestedScene;
 }
 
-async function confirmExperienceBoundary(projectId, boundary) {
+async function confirmExperienceBoundary(projectId, boundary, trialCarryDecision = null) {
   const { data: access, error } = await supabaseClient.rpc("get_experience_access", { input_project_id: projectId });
   if (error) throw error;
   if (!access?.policy_version || access.policy_version === "legacy") return;
-  if (boundary === "main" && access.main_started_at) return;
+  if (boundary === "main" && access.main_started_at) return access;
   if (boundary === "paid" && access.production_started_at) return;
-  const { error: startError } = await supabaseClient.rpc(boundary === "main" ? "start_main_experience" : "start_paid_starting_chapter", {
-    input_project_id: projectId, input_subject_intent_confirmed: true
+  const useTrialChoice = boundary === "main" && TRIAL_CARRY_CHOICE_ENABLED;
+  const { data: started, error: startError } = await supabaseClient.rpc(useTrialChoice
+    ? "start_main_experience_with_trial_choice"
+    : boundary === "main" ? "start_main_experience" : "start_paid_starting_chapter", {
+    input_project_id: projectId,
+    input_subject_intent_confirmed: true,
+    ...(useTrialChoice ? { input_trial_carry_decision: trialCarryDecision } : {})
   });
   if (startError) throw startError;
+  return started;
 }
 const FAMILY_INVITE_DISCOUNT_PERCENT = 30;
 const FAMILY_INVITE_PLAN_PRICE = 34860;
@@ -438,6 +457,12 @@ function getAuthReturnUrlFromCurrentLocation() {
 
   const entryMode = params.get("entry");
   if (entryMode) url.searchParams.set("entry", entryMode);
+
+  // Preserve a question deep link across the LINE OAuth round-trip.
+  const deliveryToken = params.get("token");
+  if (deliveryToken) url.searchParams.set("token", deliveryToken);
+  const journeyLink = params.get("journey_link");
+  if (journeyLink) url.searchParams.set("journey_link", journeyLink);
 
   const purchaseFor = params.get("purchase_for");
   if (purchaseFor) url.searchParams.set("purchase_for", purchaseFor);
@@ -927,8 +952,16 @@ const DEV_LOGIN_EMAIL = import.meta.env.VITE_DEV_LOGIN_EMAIL || "";
 const DEV_LOGIN_PASSWORD = import.meta.env.VITE_DEV_LOGIN_PASSWORD || "";
 
 async function ensureProfileExists(sessionUser, registrationData = {}) {
+  // LINE does not require an email address. Keep the name entered just before
+  // the OAuth redirect, but never apply that draft to a non-LINE account.
+  if (hasLineIdentity(sessionUser)) {
+    const lineDraft = takeLineRegistrationDraft(window.sessionStorage);
+    if (lineDraft) registrationData = { ...lineDraft, ...registrationData };
+  }
   const userId = sessionUser.id;
-  const email = sessionUser.email || registrationData.email || "";
+  // Email is unique in profiles. Empty strings would make the second
+  // email-less LINE registration collide with the first one.
+  const email = sessionUser.email || registrationData.email || null;
 
   const userMetadata = sessionUser.user_metadata || {};
 
@@ -962,6 +995,10 @@ async function ensureProfileExists(sessionUser, registrationData = {}) {
 
 if (existingProfile) {
   const updatePayload = {};
+
+  if (hasLineIdentity(sessionUser)) {
+    Object.assign(updatePayload, completePlaceholderLineProfile(existingProfile, registrationData));
+  }
 
   if (registrationData.hasSpouse !== undefined) {
     updatePayload.has_spouse = registrationData.hasSpouse;
@@ -1092,6 +1129,12 @@ function isFormalOnboardingQuestion(question) {
     question?.onboarding_group === "voice_intro" ||
     question?.onboarding_group === "life_outline"
   );
+}
+
+// The same answer entry is available throughout the owned story, including
+// the three trial questions. Only voice-specific bookends are excluded.
+export function canWriteStoryQuestion(question) {
+  return Boolean(question?.user_question_id && !bookendKindForQuestion(question));
 }
 
 function isFirstStoryQuestion(question) {
@@ -1279,7 +1322,7 @@ function getNextNotificationOccurrence(preference, now = new Date()) {
   return occurrences[0];
 }
 
-function formatNextNotificationLabel(preference, now = new Date()) {
+function formatNextNotificationLabel(preference, now = new Date(), emailAvailable = true) {
   const occurrence = getNextNotificationOccurrence(preference, now);
   if (!occurrence) return "";
 
@@ -1287,9 +1330,12 @@ function formatNextNotificationLabel(preference, now = new Date()) {
   const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
   const targetHour = String(hour).padStart(2, "0");
   const targetMinute = String(minute).padStart(2, "0");
-  const deliveryLabel = preference?.sms_enabled && preference?.phone_verified_at && preference?.phone_number
-    ? "メール・SMS"
-    : "メール";
+  const channels = [
+    emailAvailable && 'メール',
+    preference?.sms_enabled && preference?.phone_verified_at && preference?.phone_number && 'SMS',
+    preference?.line_enabled && 'LINE',
+  ].filter(Boolean);
+  const deliveryLabel = channels.join('・') || '受け取り方法未設定';
 
   return (
     `次の問い　${targetDate.getUTCMonth() + 1}/${targetDate.getUTCDate()}` +
@@ -1379,7 +1425,7 @@ function isProjectOnboardingComplete(project) {
   return project?.onboarding_status === "completed";
 }
 
-async function ensureUserFoundation(userId, profile) {
+export async function ensureUserFoundation(userId, profile) {
   const displayName =
     profile?.display_name ||
     profile?.name ||
@@ -1633,6 +1679,18 @@ async function ensureUserFoundation(userId, profile) {
     throw speakerParticipantError;
   }
 
+  if (TRIAL_CARRY_CHOICE_ENABLED) {
+    const { data: access, error: accessError } = await supabaseClient.rpc("get_experience_access", {
+      input_project_id: project.id
+    });
+    if (accessError) throw accessError;
+    project = {
+      ...project,
+      trial_carry_decision: access?.trial_carry_decision || null,
+      has_childhood_trial_stories: access?.has_childhood_trial_stories === true
+    };
+  }
+
   return {
     family,
     person,
@@ -1641,7 +1699,7 @@ async function ensureUserFoundation(userId, profile) {
   };
 }
 
-async function ensureUserQuestions(userId, foundationData = null) {
+export async function ensureUserQuestions(userId, foundationData = null) {
   const projectId = foundationData?.project?.id || null;
   const participantId = foundationData?.speakerParticipant?.id || null;
 
@@ -3097,11 +3155,52 @@ if (perspectivePoints) {
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [scene, setScene] = useState(-1);
+  const [writingQuestion, setWritingQuestion] = useState(null);
   const [user, setUser] = useState(null);
   const [questionsDB, setQuestionsDB] = useState([]);
   const [notificationPref, setNotificationPref] = useState(null);
   const [progress, setProgress] = useState({ currentIndex: 0, total: 0 });
   const [foundation, setFoundation] = useState(null);
+  const [recoverableRecordings, setRecoverableRecordings] = useState([]);
+  const [localRecordingDrafts, setLocalRecordingDrafts] = useState([]);
+  const [recordingRecoveryBusy, setRecordingRecoveryBusy] = useState(false);
+  const [recordingRecoveryError, setRecordingRecoveryError] = useState('');
+  const [recordingRecoveryDismissed, setRecordingRecoveryDismissed] = useState(false);
+  useEffect(() => {
+    if (!user?.id || !foundation?.project?.id) {
+      setRecoverableRecordings([]);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabaseClient.from('answer_recording_attempts')
+        .select('id,answer_id,sequence_order,mode,storage_paths,created_at')
+        .eq('user_id', user.id).eq('book_project_id', foundation.project.id)
+        .eq('state', 'planned').order('created_at', { ascending: false }).limit(8);
+      if (error || cancelled) return;
+      const available = await Promise.all((data || []).map(async attempt => {
+        const paths = attempt.storage_paths || [];
+        if (!paths.length) return null;
+        const urls = await Promise.all(paths.map(path => supabaseClient.storage
+          .from('audio').createSignedUrl(path, 60)));
+        return urls.every(result => !result.error && result.data?.signedUrl)
+          ? { ...attempt, previewUrl: urls[0].data.signedUrl } : null;
+      }));
+      if (!cancelled) setRecoverableRecordings(available.filter(Boolean));
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, foundation?.project?.id]);
+  useEffect(() => {
+    if (!user?.id || !foundation?.project?.id) {
+      setLocalRecordingDrafts([]);
+      return undefined;
+    }
+    let cancelled = false;
+    listAnswerRecordingDrafts(user.id, foundation.project.id)
+      .then(drafts => { if (!cancelled) setLocalRecordingDrafts(drafts); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.id, foundation?.project?.id]);
   const journeyRef = useRef(null);
   if (!journeyRef.current) journeyRef.current = createSupportJourney(supabaseClient, {
     enabled: import.meta.env.VITE_SUPPORT_JOURNEY_ENABLED === 'true',
@@ -3213,6 +3312,9 @@ function App() {
   const [purchaseFor, setPurchaseFor] = useState(() => getPurchaseForFromUrl());
   const [purchaseResult, setPurchaseResult] = useState(null);
   const [bookBuilderOrderCompletedAt, setBookBuilderOrderCompletedAt] = useState(null);
+  const [bookBuilderResumeStep, setBookBuilderResumeStep] = useState(0);
+  const [storyPagesReturnScene, setStoryPagesReturnScene] = useState("home");
+  const [storyPagesFocusAnswerId, setStoryPagesFocusAnswerId] = useState(null);
   const [giftClaimPreview, setGiftClaimPreview] = useState(null);
   const [familyInvitePreview, setFamilyInvitePreview] = useState(null);
   const [sentFamilyInvitations, setSentFamilyInvitations] = useState([]);
@@ -3522,7 +3624,8 @@ if (deliveryToken) {
         currentIndex = continuationIndex;
         nextScene = getThemeResumeContext(questionSet, currentIndex)
           ? "theme_resume"
-          : hasRecentMicCheck()
+          : (!isFormalOnboardingQuestion(questionSet[currentIndex])
+              && !bookendKindForQuestion(questionSet[currentIndex])) || hasRecentMicCheck()
             ? 1
             : "daily_mic_check";
       } else {
@@ -3611,6 +3714,12 @@ await logActivity(supabaseClient, {
 nextScene = await resolveMainExperienceEntryScene(
   activeFoundationData?.project, questionSet[currentIndex], nextScene
 );
+const pendingLineNotificationReturn = takeLineNotificationReturn(window.sessionStorage);
+if (pendingLineNotificationReturn && hasLineIdentity(session.user)
+  && activeFoundationData?.project?.onboarding_status === 'completed') {
+  nextScene = 'notification_setup';
+  setNotificationSetupReturnScene('home');
+}
 let sceneAfterInvite = resolveOnboardingRitualEntryScene(nextScene, activeFoundationData?.project);
 if (isFreeTrialExpired(loadedTrialRetention)
   && getCheckoutReturnFromUrl().status !== "success") {
@@ -4227,7 +4336,8 @@ const continueAfterTokenAuth = async () => {
       ? "home"
       : getThemeResumeContext(questionSet, resumeIndex)
         ? "theme_resume"
-        : hasRecentMicCheck()
+        : (!isFormalOnboardingQuestion(questionSet[resumeIndex])
+            && !bookendKindForQuestion(questionSet[resumeIndex])) || hasRecentMicCheck()
           ? 1
           : "daily_mic_check";
     setScene(await resolveMainExperienceEntryScene(
@@ -4297,7 +4407,7 @@ const buildRecordedVoiceData = (prev, txt, dur, url, blob) => {
   };
 };
 
-const handleRecordComplete = (txt, dur, url, blob, details = {}) => {
+const handleRecordComplete = async (txt, dur, url, blob, details = {}) => {
   console.log("recorded blob", {
     type: blob?.type,
     size: blob?.size,
@@ -4317,6 +4427,38 @@ const handleRecordComplete = (txt, dur, url, blob, details = {}) => {
 
   const nextVoiceData = buildRecordedVoiceData(voiceData, txt, dur, url, blob);
   nextVoiceData.recordingStopReason = details.stopReason;
+  const currentQ = questionsDB[progress.currentIndex];
+  const shouldBackUp = Boolean(user?.id && foundation?.project?.id && currentQ?.user_question_id
+    && currentQ.onboarding_group !== 'trial_experience'
+    && !isFormalOnboardingQuestion(currentQ) && !bookendKindForQuestion(currentQ));
+  if (shouldBackUp && hasBlob) {
+    const draftId = crypto.randomUUID();
+    try {
+      const draft = {
+        id: draftId, userId: user.id, projectId: foundation.project.id,
+        sequenceOrder: Number(nextVoiceData.targetSequenceOrder || currentQ.sequence_order),
+        mode: nextVoiceData.editRecordingMode || 'initial',
+        answerId: nextVoiceData.targetAnswerId || null,
+        createdAt: Date.now(),
+        segments: nextVoiceData.audioSegments.map(segment => ({
+          blob: segment.blob, duration: segment.duration || 0,
+          transcript: segment.transcript || '', createdAt: segment.createdAt || Date.now(),
+        })),
+      };
+      await saveAnswerRecordingDraft(draft);
+      if (voiceData.localRecordingDraftId && voiceData.localRecordingDraftId !== draftId) {
+        await deleteAnswerRecordingDraft(voiceData.localRecordingDraftId).catch(error =>
+          console.warn('superseded recording backup cleanup failed', error));
+      }
+      nextVoiceData.localRecordingDraftId = draftId;
+      nextVoiceData.recordingAttemptId = draftId;
+      setLocalRecordingDrafts(previous => [draft, ...previous.filter(item =>
+        item.id !== voiceData.localRecordingDraftId)]);
+    } catch (error) {
+      console.error('local recording backup failed', error);
+      alert('この端末に録音の控えを保存できませんでした。サーバーへの保存が終わるまで画面を閉じないでください。');
+    }
+  }
 
   setVoiceData({
     ...nextVoiceData,
@@ -4326,7 +4468,7 @@ const handleRecordComplete = (txt, dur, url, blob, details = {}) => {
 
   setScene(3.5);
 
-  handleTranscribeForReview(nextVoiceData);
+  void handleTranscribeForReview(nextVoiceData);
 };
 
 
@@ -4391,10 +4533,7 @@ const startEditRecording = (
       return false;
     }
 
-    const ok = window.confirm(
-      "語り足すと、今の本文に追加の語りを加えて文章を再構成します。本文は上書きされます。よろしいですか？"
-    );
-    if (!ok) return false;
+    // The existing body is retained byte-for-byte; only the new speech is polished.
   }
 
   const targetIndex = questionsDB.findIndex(q =>
@@ -4413,7 +4552,8 @@ const startEditRecording = (
     answerId: answer.id,
     sequenceOrder: answer.sequence_order,
     existingAudioPaths: existingAudioPaths || [],
-    baseText: getAnswerTextForEditRecording(answer)
+    baseText: getAnswerTextForEditRecording(answer),
+    baseTextRevision: Number(answer.text_revision || 0)
   };
 
   setVoiceData({
@@ -4448,6 +4588,7 @@ const startEditRecording = (
     targetAnswerId: answer.id,
     targetSequenceOrder: answer.sequence_order,
     editBaseText: target.baseText,
+    editBaseTextRevision: target.baseTextRevision,
     existingAudioPaths: target.existingAudioPaths,
     returnQuestionIndex: progress.currentIndex,
     editReturnScene
@@ -4460,6 +4601,13 @@ const startEditRecording = (
 
 const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
   let failureStage = "upload";
+  let failurePoint = "prepare";
+  let telemetryAnswerId = sourceVoiceData.targetAnswerId || sourceVoiceData.answerId || null;
+  const telemetryQuestion = questionsDB[progress.currentIndex] || null;
+  // A failed upload retries with new immutable paths; a transcription retry
+  // reuses the already uploaded attempt and never uploads the same path twice.
+  const telemetryAttemptId = sourceVoiceData.transcriptionFailureStage === 'upload'
+    ? crypto.randomUUID() : sourceVoiceData.recordingAttemptId || crypto.randomUUID();
   setVoiceData(prev => ({
     ...prev,
     transcriptionStatus: "processing",
@@ -4468,7 +4616,8 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
   }));
 
   try {
-    const currentQ = questionsDB[progress.currentIndex];
+    const currentQ = questionsDB.find(question => Number(question.sequence_order)
+      === Number(sourceVoiceData.targetSequenceOrder)) || questionsDB[progress.currentIndex];
     const currentSeq = sourceVoiceData.targetSequenceOrder || currentQ?.sequence_order;
 
 
@@ -4525,33 +4674,50 @@ const uploadStartIndex =
     ? existingAudioPaths.length
     : 0;
 
-for (let i = 0; i < audioSegments.length; i++) {
-      const segment = audioSegments[i];
+const reuseUploadedAttempt = sourceVoiceData.transcriptionFailureStage === 'transcription'
+  && sourceVoiceData.recordingAttemptId
+  && Array.isArray(sourceVoiceData.newAudioPaths)
+  && sourceVoiceData.newAudioPaths.length > 0;
+const useRecordingAttempt = Boolean(foundation?.project?.id && currentQ?.user_question_id
+  && currentQ?.onboarding_group !== 'trial_experience'
+  && !isFormalOnboardingQuestion(currentQ) && !bookendKindForQuestion(currentQ));
+const plannedUploads = audioSegments.map((segment, i) => {
+  const contentType = segment?.blob?.type || 'audio/mp4';
+  const ext = contentType.includes('mp4') ? 'mp4' : contentType.includes('aac') ? 'aac' : 'webm';
+  const segmentNo = String(uploadStartIndex + i + 1).padStart(2, '0');
+  const uniquePart = `part-${segmentNo}-${crypto.randomUUID()}`;
+  return { segment, contentType,
+    path: `${recordingStorageRoot(user.id, foundation.project.id, targetAnswerId)}/${uniquePart}.${ext}` };
+}).filter(item => item.segment?.blob?.size);
+
+if (useRecordingAttempt && !reuseUploadedAttempt && plannedUploads.length > 0) {
+  const { error: attemptError } = await supabaseClient.from('answer_recording_attempts').insert({
+    id: telemetryAttemptId,
+    user_id: user.id,
+    book_project_id: foundation.project.id,
+    sequence_order: Number(currentSeq),
+    answer_id: targetAnswerId,
+    mode: editMode === 'replace' || editMode === 'append' || editMode === 'voice_only'
+      ? editMode : 'initial',
+    storage_paths: plannedUploads.map(item => item.path),
+  });
+  if (attemptError) throw attemptError;
+}
+
+if (reuseUploadedAttempt) {
+  paths = [...sourceVoiceData.newAudioPaths];
+} else for (let i = 0; i < plannedUploads.length; i++) {
+      failurePoint = "storage";
+      const { segment, contentType, path } = plannedUploads[i];
       const blob = segment?.blob;
 
       if (!blob || !blob.size) continue;
-
-      const contentType = blob.type || "audio/mp4";
-      const ext = contentType.includes("mp4")
-        ? "mp4"
-        : contentType.includes("aac")
-          ? "aac"
-          : "webm";
-
-      const segmentNo = String(uploadStartIndex + i + 1).padStart(2, "0");
-      // A trial restart may queue the previous object for later Storage GC.
-      // Never reuse that object's path for a new recording.
-      const isRetainedTrialAudio = FREE_TRIAL_RETENTION_ENABLED && currentQ?.onboarding_group === "trial_experience";
-      const uniquePart = isRetainedTrialAudio
-        ? `part-${segmentNo}-${crypto.randomUUID()}`
-        : `part-${segmentNo}`;
-      const path = `${recordingStorageRoot(user.id, foundation.project.id, targetAnswerId)}/${uniquePart}.${ext}`;
 
       const { error: uploadError } = await supabaseClient.storage
         .from("audio")
         .upload(path, blob, {
           contentType,
-          upsert: !isRetainedTrialAudio
+          upsert: false
         });
 
       if (uploadError) {
@@ -4571,6 +4737,8 @@ failureStage = "transcription";
 
 setVoiceData(prev => ({
   ...prev,
+  recordingAttemptId: useRecordingAttempt ? telemetryAttemptId : null,
+  newAudioPaths: paths,
   answerId: targetAnswerId,
   storagePath: combinedStoragePaths[combinedStoragePaths.length - 1] || prev.storagePath || null,
   storagePaths: combinedStoragePaths.length > 0 ? combinedStoragePaths : prev.storagePaths
@@ -4592,23 +4760,28 @@ const newTranscriptRaw =
   aiResult.transcript ||
   sourceVoiceData.transcript ||
   "";
+if (!Array.isArray(aiResult.segment_transcripts)
+  || aiResult.segment_transcripts.length !== paths.length) {
+  throw new Error('録音ごとの文字起こしを確認できませんでした');
+}
 
-const transcriptRaw = formatTranscriptForReading(
-  editMode === "append"
-    ? [
-        sourceVoiceData.editBaseText,
-        newTranscriptRaw
-      ].filter(Boolean).join("\n\n")
-    : newTranscriptRaw
-);
+const appendBase = editMode === "append" ? String(sourceVoiceData.editBaseText || "") : "";
+const appendPart = formatTranscriptForReading(newTranscriptRaw);
+const transcriptRaw = appendBase
+  ? `${appendBase}\n\n${appendPart}`
+  : appendPart;
 
 const firstData = {
   ...sourceVoiceData,
+  recordingAttemptId: useRecordingAttempt ? telemetryAttemptId : null,
+  recordingSegmentTranscripts: aiResult.segment_transcripts,
+  newAudioPaths: paths,
   answerId: targetAnswerId,
   storagePath: combinedStoragePaths[combinedStoragePaths.length - 1] || sourceVoiceData.storagePath || null,
   storagePaths: combinedStoragePaths.length > 0 ? combinedStoragePaths : sourceVoiceData.storagePaths,
 
   transcript: transcriptRaw,
+  recordingTranscriptRaw: newTranscriptRaw,
   transcriptClean: transcriptRaw,
   transcriptReadable: transcriptRaw,
   transcriptEssay: "",
@@ -4640,7 +4813,7 @@ try {
   const polishResult = await polishTranscriptOnServer({
     answerId: targetAnswerId,
     userQuestionId: currentQ?.user_question_id,
-    transcriptRaw,
+    transcriptRaw: editMode === "append" ? newTranscriptRaw : transcriptRaw,
     questionText: currentQ?.content || "",
     bookProjectId: foundation?.project?.id || currentQ?.book_project_id || null
   });
@@ -4648,27 +4821,17 @@ try {
      if (prev.answerId !== targetAnswerId) return prev;
       const next = {
       ...prev,
-      transcriptClean:
-        formatTranscriptParagraphs(
-          polishResult.transcript_clean ||
-          prev.transcriptClean ||
-          transcriptRaw
-        ),
+      transcriptClean: appendBase
+        ? `${appendBase}\n\n${formatTranscriptParagraphs(polishResult.transcript_clean || newTranscriptRaw)}`
+        : formatTranscriptParagraphs(polishResult.transcript_clean || prev.transcriptClean || transcriptRaw),
 
-      transcriptReadable:
-        formatTranscriptParagraphs(
-          polishResult.transcript_readable ||
-          polishResult.transcript_clean ||
-          prev.transcriptReadable ||
-          transcriptRaw
-        ),
+      transcriptReadable: appendBase
+        ? `${appendBase}\n\n${formatTranscriptParagraphs(polishResult.transcript_readable || polishResult.transcript_clean || newTranscriptRaw)}`
+        : formatTranscriptParagraphs(polishResult.transcript_readable || polishResult.transcript_clean || prev.transcriptReadable || transcriptRaw),
 
-      transcriptEssay:
-        formatTranscriptParagraphs(
-          polishResult.transcript_essay ||
-          prev.transcriptEssay ||
-          ""
-        ),
+      transcriptEssay: appendBase && polishResult.transcript_essay
+        ? `${appendBase}\n\n${formatTranscriptParagraphs(polishResult.transcript_essay)}`
+        : formatTranscriptParagraphs(polishResult.transcript_essay || prev.transcriptEssay || ""),
 
       extractedSnippet:
         polishResult.extracted_snippet ||
@@ -4731,6 +4894,118 @@ try {
   }));
 
     setScene(3.5);
+  }
+};
+
+const resumeStagedRecording = async attempt => {
+  if (recordingRecoveryBusy) return;
+  try {
+    setRecordingRecoveryBusy(true);
+    setRecordingRecoveryError('');
+    const questionIndex = questionsDB.findIndex(question =>
+      Number(question.sequence_order) === Number(attempt.sequence_order));
+    if (questionIndex < 0) throw new Error('この問いを確認できませんでした');
+    let answer = null;
+    let existingAudioPaths = [];
+    if (attempt.mode !== 'initial') {
+      const { data, error } = await supabaseClient.from('answers')
+        .select('id,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
+        .eq('id', attempt.answer_id).eq('user_id', user.id).single();
+      if (error || !data) throw new Error('元の文章を確認できませんでした');
+      answer = data;
+      if (attempt.mode === 'append') {
+        const { data: media, error: mediaError } = await supabaseClient.from('media_assets')
+          .select('storage_path').eq('answer_id', answer.id).eq('asset_type', 'audio')
+          .order('created_at', { ascending: true });
+        if (mediaError) throw mediaError;
+        existingAudioPaths = (media || []).map(item => item.storage_path).filter(Boolean);
+      }
+    }
+    const source = {
+      audioSegments: [], audioBlob: null, audioUrl: attempt.previewUrl,
+      hasAudio: true, duration: 0, transcript: '', editedText: '',
+      recordingAttemptId: attempt.id, newAudioPaths: attempt.storage_paths,
+      localRecordingDraftId: localRecordingDrafts.find(draft =>
+        Number(draft.sequenceOrder) === Number(attempt.sequence_order)
+        && draft.mode === attempt.mode)?.id || null,
+      transcriptionFailureStage: 'transcription',
+      targetAnswerId: attempt.answer_id, answerId: attempt.answer_id,
+      targetSequenceOrder: attempt.sequence_order,
+      editRecordingMode: attempt.mode === 'initial' ? null : attempt.mode,
+      editBaseText: answer ? getAnswerTextForEditRecording(answer) : '',
+      editBaseTextRevision: Number(answer?.text_revision || 0),
+      existingAudioPaths, returnQuestionIndex: questionIndex,
+      editReturnScene: 'story_pages', storyOrigin: 'question',
+      photoItems: [], selectedStyle: 'readable',
+    };
+    setProgress(previous => ({ ...previous, currentIndex: questionIndex }));
+    setVoiceData(source);
+    setRecordingRecoveryDismissed(true);
+    await handleTranscribeForReview(source);
+  } catch (error) {
+    setRecordingRecoveryError(error?.message || '録音を再開できませんでした。');
+  } finally {
+    setRecordingRecoveryBusy(false);
+  }
+};
+
+const resumeLocalRecording = async draft => {
+  if (recordingRecoveryBusy) return;
+  try {
+    setRecordingRecoveryBusy(true);
+    setRecordingRecoveryError('');
+    const questionIndex = questionsDB.findIndex(question =>
+      Number(question.sequence_order) === Number(draft.sequenceOrder));
+    if (questionIndex < 0) throw new Error('この問いを確認できませんでした');
+    let answer = null;
+    let existingAudioPaths = [];
+    if (draft.mode !== 'initial') {
+      const { data, error } = await supabaseClient.from('answers')
+        .select('id,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
+        .eq('id', draft.answerId).eq('user_id', user.id).single();
+      if (error || !data) throw new Error('元の文章を確認できませんでした');
+      answer = data;
+      if (draft.mode === 'append') {
+        const { data: media, error: mediaError } = await supabaseClient.from('media_assets')
+          .select('storage_path').eq('answer_id', answer.id).eq('asset_type', 'audio')
+          .order('created_at', { ascending: true });
+        if (mediaError) throw mediaError;
+        existingAudioPaths = (media || []).map(item => item.storage_path).filter(Boolean);
+      }
+    } else {
+      const { data, error } = await supabaseClient.from('answers').select('id')
+        .eq('user_id', user.id).eq('sequence_order', draft.sequenceOrder).maybeSingle();
+      if (error) throw error;
+      if (data) throw new Error('この問いの回答はすでに保存されています。録音の控えは端末に残っています。');
+    }
+    const segments = draft.segments.map(segment => ({
+      ...segment, url: URL.createObjectURL(segment.blob),
+    }));
+    const last = segments[segments.length - 1];
+    const source = {
+      audioSegments: segments, audioBlob: last.blob, audioUrl: last.url,
+      hasAudio: true, duration: segments.reduce((sum, segment) => sum + segment.duration, 0),
+      transcript: segments.map(segment => segment.transcript).filter(Boolean).join('\n\n'),
+      editedText: '', recordingAttemptId: crypto.randomUUID(),
+      localRecordingDraftId: draft.id,
+      targetAnswerId: answer?.id || null, answerId: answer?.id || null,
+      targetSequenceOrder: draft.sequenceOrder,
+      editRecordingMode: draft.mode === 'initial' ? null : draft.mode,
+      editBaseText: answer ? getAnswerTextForEditRecording(answer) : '',
+      editBaseTextRevision: Number(answer?.text_revision || 0),
+      existingAudioPaths, returnQuestionIndex: questionIndex,
+      editReturnScene: 'story_pages', storyOrigin: 'question',
+      photoItems: [], selectedStyle: 'readable',
+    };
+    setProgress(previous => ({ ...previous, currentIndex: questionIndex }));
+    setVoiceData(source);
+    setRecordingRecoveryDismissed(true);
+    setScene(3.5);
+    void handleTranscribeForReview(source);
+  } catch (error) {
+    setRecordingRecoveryError(error?.message || '録音を再開できませんでした。');
+  } finally {
+    setRecordingRecoveryBusy(false);
   }
 };
 
@@ -5532,11 +5807,17 @@ const startBookendVideo = async kind => {
   } finally { setBookendBusy(false); }
 };
 
-const openFirstThemeIntroduction = async () => {
+const openFirstThemeIntroduction = async trialCarryDecision => {
   try {
     setIsInitializing(true);
     await confirmExperienceBoundary(foundation.project.id, "paid");
-    await confirmExperienceBoundary(foundation.project.id, "main");
+    const mainStart = await confirmExperienceBoundary(foundation.project.id, "main", trialCarryDecision);
+    if (TRIAL_CARRY_CHOICE_ENABLED) {
+      setFoundation(current => current ? {
+        ...current,
+        project: { ...current.project, trial_carry_decision: mainStart?.trial_carry_decision || null }
+      } : current);
+    }
     await updateOnboardingRitualStep("theme_intro");
     const {data:status,error}=await supabaseClient.rpc("journey_status",{p:foundation.project.id});
     if(error)throw error;
@@ -5863,7 +6144,7 @@ const resumeThemeQuestion = async () => {
     currentIndex: resumeContext.questionIndex
   }));
 
-  const nextScene = hasRecentMicCheck() ? 1 : "daily_mic_check";
+  const nextScene = 1;
   const hasPendingThemeTransition =
     Number(foundation?.project?.theme_experience_state?.pending_transition_order) > 0;
 
@@ -6061,6 +6342,8 @@ const startPurchase = async ({
   familyInvitationId = null,
   expectedAmount = null,
   expectedPolicyVersion = null,
+  subjectConfirmed = false,
+  bookProductionVersion = 1,
   checkoutWindow = null
 } = {}) => {
   if (orderType === "self" && !foundation?.project?.id) {
@@ -6089,6 +6372,8 @@ const startPurchase = async ({
           gift,
           expectedAmount,
           expectedPolicyVersion,
+          subjectConfirmed,
+          bookProductionVersion,
           familyInvitationId
         }
       }
@@ -6224,9 +6509,78 @@ const handleSaveAnswer = async (tag = null) => {
     const currentSeq = voiceData.targetSequenceOrder || currentQ?.sequence_order;
 
       const editMode = voiceData.editRecordingMode || null;
-      const isEditRecording = editMode === "replace" || editMode === "append";
+      const isEditRecording = editMode === "replace" || editMode === "append" || editMode === "voice_only";
       const ansId = voiceData.targetAnswerId || voiceData.answerId || crypto.randomUUID();
 
+      if (isEditRecording && voiceData.recordingAttemptId) {
+        const { data: committed, error: commitError } = await supabaseClient.rpc('commit_answer_recording_with_segments', {
+          input_attempt_id: voiceData.recordingAttemptId,
+          input_base_text_revision: Number(voiceData.editBaseTextRevision || 0),
+          input_body: editMode === 'voice_only' ? null : voiceData.editedText,
+          input_transcript_raw: voiceData.recordingTranscriptRaw || voiceData.transcript || '',
+          input_transcript_clean: voiceData.transcriptClean || '',
+          input_transcript_readable: voiceData.transcriptReadable || '',
+          input_transcript_essay: voiceData.transcriptEssay || '',
+          input_selected_style: voiceData.selectedStyle || 'readable',
+          input_segment_transcripts: voiceData.recordingSegmentTranscripts || [],
+          input_allow_rewrite: editMode === 'append' && voiceData.allowWholeTextRewrite === true,
+        });
+        if (commitError || committed?.status !== 'saved') {
+          throw commitError || new Error(committed?.status || '音声を確定できませんでした');
+        }
+        if (voiceData.localRecordingDraftId) {
+          await deleteAnswerRecordingDraft(voiceData.localRecordingDraftId)
+            .then(() => setLocalRecordingDrafts(previous => previous.filter(item => item.id !== voiceData.localRecordingDraftId)))
+            .catch(error => console.warn('recording backup cleanup failed', error));
+        }
+        const returnQuestionIndex = Number.isInteger(voiceData.returnQuestionIndex)
+          ? voiceData.returnQuestionIndex : progress.currentIndex;
+        const editReturnScene = voiceData.editReturnScene || 'story_pages';
+        resetVoiceData();
+        setProgress(prev => ({ ...prev, currentIndex: Math.min(returnQuestionIndex,
+          Math.max(questionsDB.length - 1, 0)) }));
+        if (editReturnScene === 'life_outline_summary') {
+          setScene('life_outline_summary');
+          setLifeOutlineStatus('generating');
+          try { await generateLifeOutlineIntroduction({
+            existingIntroduction: lifeOutlineIntroduction,
+            editorialBase: lifeOutlineIntroduction?.is_user_edited
+              ? lifeOutlineIntroduction.body_text : ''
+          }); } catch (_error) { /* Summary can be retried. */ }
+        } else {
+          setScene(editReturnScene);
+        }
+        return;
+      }
+
+      const isInitialStagedRecording = !isEditRecording && Boolean(voiceData.recordingAttemptId);
+      let stagedAnswerId = null;
+      if (isInitialStagedRecording) {
+        const { data: committed, error: commitError } = await supabaseClient.rpc('commit_answer_recording_with_segments', {
+          input_attempt_id: voiceData.recordingAttemptId,
+          input_base_text_revision: 0,
+          input_body: voiceData.editedText,
+          input_transcript_raw: voiceData.recordingTranscriptRaw || voiceData.transcript || '',
+          input_transcript_clean: voiceData.transcriptClean || '',
+          input_transcript_readable: voiceData.transcriptReadable || '',
+          input_transcript_essay: voiceData.transcriptEssay || '',
+          input_selected_style: voiceData.selectedStyle || 'readable',
+          input_segment_transcripts: voiceData.recordingSegmentTranscripts || [],
+          input_allow_rewrite: false,
+        });
+        if (commitError || committed?.status !== 'saved') {
+          throw commitError || new Error(committed?.status || '音声を確定できませんでした');
+        }
+        if (voiceData.localRecordingDraftId) {
+          await deleteAnswerRecordingDraft(voiceData.localRecordingDraftId)
+            .then(() => setLocalRecordingDrafts(previous => previous.filter(item => item.id !== voiceData.localRecordingDraftId)))
+            .catch(error => console.warn('recording backup cleanup failed', error));
+        }
+        stagedAnswerId = committed.answer_id;
+      }
+
+      let finalAnswerId = stagedAnswerId || ansId;
+      if (!isInitialStagedRecording) {
       const { data: savedAnswer, error: dbError } = await supabaseClient
         .from("answers")
         .upsert({
@@ -6290,7 +6644,7 @@ const handleSaveAnswer = async (tag = null) => {
         throw new Error("回答の記録に失敗しました");
       }
 
-      const finalAnswerId = savedAnswer?.id || ansId;
+      finalAnswerId = savedAnswer?.id || ansId;
 
 const storagePaths = voiceData.storagePaths && voiceData.storagePaths.length > 0
   ? voiceData.storagePaths
@@ -6395,6 +6749,7 @@ if (oldTrialAudioPaths.length > 0) {
     if (oldTrialStorageError) console.warn('old trial audio retained in Storage', oldTrialStorageError);
   }
 }
+      }
 
       const photoItems = voiceData.photoItems || [];
 
@@ -6841,6 +7196,23 @@ setScene(1);
           </p>
         </div>
       )}
+      {!recordingRecoveryDismissed && (recoverableRecordings.length > 0 || localRecordingDrafts.length > 0)
+        && !writingQuestion && ![-1, 3, 3.5].includes(scene) && (
+        <div role="status" className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-[95] mx-auto max-w-xl rounded-2xl border border-white/20 bg-[#172337] p-5 text-white shadow-2xl">
+          <p className="text-lg">保存途中の声があります</p>
+          <p className="text-sm text-white/65 mt-2">録音の控えから、文字起こしと保存を再開できます。</p>
+          {recordingRecoveryError && <p role="alert" className="mt-2 text-amber-200 text-sm">{recordingRecoveryError}</p>}
+          <button type="button" onClick={() => {
+            if (recoverableRecordings[0]) void resumeStagedRecording(recoverableRecordings[0]);
+            else if (localRecordingDrafts[0]) void resumeLocalRecording(localRecordingDrafts[0]);
+          }}
+            disabled={recordingRecoveryBusy} className="mt-4 w-full min-h-12 rounded-xl bg-white text-slate-900 disabled:opacity-40">
+            {recordingRecoveryBusy ? '準備しています…' : '声の保存を再開する'}
+          </button>
+          <button type="button" onClick={() => setRecordingRecoveryDismissed(true)}
+            className="mt-2 w-full min-h-11 text-white/60">あとで</button>
+        </div>
+      )}
       {scene === -1 && (
         <Scene_Login
           giftPreview={giftClaimPreview}
@@ -7068,12 +7440,12 @@ if (isFreeTrialExpired(loadedTrialRetention)
           <p className="mb-5 text-sm tracking-[0.18em] text-white/50">無料体験</p>
           <h1 className="text-3xl leading-relaxed">前回の語りの保存期間が終わりました。</h1>
           <p className="mt-6 text-base leading-loose text-white/70">
-            もう一度、3つの問いから話してみませんか。新しく語った内容は、最後に語った日から{freeTrialRetentionDays(trialRetention)}日間保存されます。
+            もう一度、3つの問いに答えてみませんか。新しく残した内容は、最後に回答を保存した日から{freeTrialRetentionDays(trialRetention)}日間保存されます。
           </p>
           {trialRestartError && <p role="alert" className="mt-5 text-sm text-rose-200">{trialRestartError}</p>}
           <button type="button" disabled={trialRestarting}
             className="mt-9 min-h-14 rounded-full bg-[#e8e4d8] px-6 text-[#152336] disabled:opacity-50"
-            onClick={() => restartFreeTrial({ confirmReplace: false })}>もう一度、3問を話す</button>
+            onClick={() => restartFreeTrial({ confirmReplace: false })}>もう一度、3問に答える</button>
           <button type="button" className="mt-5 min-h-12 text-sm text-white/65 underline underline-offset-4"
             onClick={() => setScene('purchase_start')}>本編から始める</button>
         </section>
@@ -7109,13 +7481,13 @@ if (isFreeTrialExpired(loadedTrialRetention)
         <>
         {trialRetention?.expires_at && trialRetention.status !== 'handed_off' && (
           <p className="mx-auto w-full max-w-lg px-6 pt-5 text-center text-[0.9375rem] leading-[1.7] text-white/78">
-            語った内容は{freeTrialExpiryLabel(trialRetention)}まで保存されています。
+            残した内容は{freeTrialExpiryLabel(trialRetention)}まで保存されています。
           </p>
         )}
         {FREE_TRIAL_RETENTION_ENABLED && trialRetention?.status === 'active' && (
           <button type="button" className="mx-auto block min-h-11 px-6 text-[0.9375rem] text-white/78 underline underline-offset-4"
             disabled={trialRestarting} onClick={() => restartFreeTrial()}>
-            最初から3問を話し直す
+            最初から3問に答え直す
           </button>
         )}
         {trialRestartError && <p role="alert" className="mx-auto max-w-lg px-6 text-center text-sm text-rose-200">{trialRestartError}</p>}
@@ -7425,6 +7797,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
       {scene === "hajimari_complete" && (
         <Scene_HajimariComplete
           onContinue={openFirstThemeIntroduction}
+          hasTrialStories={TRIAL_CARRY_CHOICE_ENABLED && foundation?.project?.has_childhood_trial_stories === true}
         />
       )}
 
@@ -7432,7 +7805,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
         <Scene_ThemeIntro
           theme={STORY_THEMES[0]}
           isFirstTheme
-          notificationLabel={formatNextNotificationLabel(notificationPref)}
+          notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
           onChangeDelivery={() => {
             setNotificationSetupReturnScene("theme_intro");
             setScene("notification_setup");
@@ -7746,7 +8119,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
 
 {scene === "life_outline_complete" && (
   <Scene_LifeOutlineComplete
-    notificationLabel={formatNextNotificationLabel(notificationPref)}
+    notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
     needsNotificationSetup={!notificationPref}
     needsSharingSetup={!sharingPreference?.initial_setup_completed_at}
     onContinue={() => leaveLifeOutlineMilestone({ continueNow: true })}
@@ -7773,6 +8146,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
        <Scene_Home
          userName={user?.name || "あなた"}
          questionSet={questionsDB}
+         trialCarryDecision={foundation?.project?.trial_carry_decision}
          currentIndex={progress.currentIndex}
          supportedProjects={supportedProjects}
          receivedProjects={receivedProjects}
@@ -7793,16 +8167,20 @@ if (isFreeTrialExpired(loadedTrialRetention)
 
            setScene(themeResumeContext ? "theme_resume" : 0);
          }}
-         onOpenStoryPages={() => setScene("story_pages")}
+         onOpenStoryPages={() => { setStoryPagesReturnScene("home"); setStoryPagesFocusAnswerId(null); setScene("story_pages"); }}
          canOpenThemeMemories={hasCompletedStoryTheme(questionsDB, 1)}
          onOpenThemeMemories={() => {
            setThemeMemoryReturnScene("home");
            setScene("theme_memory_manager");
          }}
          onStartPhotoStory={() => setScene("photo_story_start")}
-         onOpenBookBuilder={() => setScene("book_builder")}
+         onOpenBookBuilder={() => { setBookBuilderResumeStep(0); setScene("book_builder"); }}
          onOpenQuestionLibrary={() => setScene("question_library")}
          onOpenSettings={() => setScene("settings")}
+         onOpenLineDelivery={import.meta.env.VITE_LINE_AUTH_ENABLED === 'true' && user?.email && foundation?.project?.onboarding_status === 'completed' && notificationPref && !notificationPref.line_enabled ? () => {
+           setNotificationSetupReturnScene('home');
+           setScene('notification_setup');
+         } : null}
          onOpenSupportedProject={openSupportedProject}
          onOpenReceivedProject={openReceivedProject}
          onAddFamilyStory={() => setScene("family_story_invite_flow")}
@@ -7999,6 +8377,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
       {scene === "settings" && (
         <Scene_SettingsHome
           notificationPref={notificationPref}
+          emailAvailable={Boolean(user?.email)}
           sharingPreference={sharingPreference}
           onOpenDelivery={() => {
             setNotificationSetupReturnScene("settings");
@@ -8193,7 +8572,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
             getCheckoutReturnFromUrl().status === "cancelled" &&
             getCheckoutReturnFromUrl().context === "book_builder"
               ? 4
-              : 0
+              : bookBuilderResumeStep
           }
           checkoutWasCancelled={
             getCheckoutReturnFromUrl().status === "cancelled" &&
@@ -8201,6 +8580,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
           }
           onPurchase={startPurchase}
           onReopenCheckout={reopenCheckout}
+          onOpenStories={answerId => { setStoryPagesReturnScene("book_builder"); setStoryPagesFocusAnswerId(answerId); setScene("story_pages"); }}
           onBack={() => setScene("home")}
         />
       )}
@@ -8212,13 +8592,13 @@ if (isFreeTrialExpired(loadedTrialRetention)
           onRestart={() => restartFreeTrial()}
           restartError={trialRestartError}
           onStart={() => {
-            if (hasRecentMicCheck()) setScene(1);
+            if (!isFormalOnboardingQuestion(currentQ) || hasRecentMicCheck()) setScene(1);
             else setScene("daily_mic_check");
           }}
         /> : <Scene0_Door
           onHome={foundation?.project?.onboarding_status === "completed" ? returnToHome : null}
           onNext={() => {
-            if (hasRecentMicCheck()) {
+            if (!isFormalOnboardingQuestion(currentQ) || hasRecentMicCheck()) {
               setScene(1);
             } else {
               setScene("daily_mic_check");
@@ -8235,6 +8615,15 @@ if (isFreeTrialExpired(loadedTrialRetention)
           }}
         />
       )}
+      {scene === "recording_mic_check" && (
+        <Scene_DailyMicCheck
+          onComplete={({ verified }) => {
+            if (verified) markMicCheckDone();
+            resetVoiceData();
+            setScene(3);
+          }}
+        />
+      )}
 
       {scene === 1 && (
         <Scene1_MyPage
@@ -8245,12 +8634,123 @@ if (isFreeTrialExpired(loadedTrialRetention)
           onBack={() => setScene(!isFormalOnboardingQuestion(currentQ) && !bookendKindForQuestion(currentQ) && resolvedThemeResumeContext ? "theme_resume" : 0)}
           onNext={() => {
             resetVoiceData();
-            setScene(3);
+            setScene(!isFormalOnboardingQuestion(currentQ) && !hasRecentMicCheck()
+              ? "recording_mic_check" : 3);
           }}
+          onWrite={canWriteStoryQuestion(currentQ)
+            ? () => setWritingQuestion(currentQ) : null}
           onSkip={handleSkipQuestion}
           onEndToday={() => {
             setEndTodayHasSavedAnswer(false);
             setScene("end_today");
+          }}
+        />
+      )}
+      {writingQuestion && user?.id && foundation?.project?.id && (
+        <WrittenAnswerEditor
+          userId={user.id}
+          projectId={foundation.project.id}
+          question={writingQuestion}
+          progressLabel={`${getMainStoryProgress(questionsDB, progress.currentIndex).currentIndex + 1} / ${getMainStoryProgress(questionsDB, progress.currentIndex).total}`}
+          client={supabaseClient}
+          onClose={() => setWritingQuestion(null)}
+          onSaved={async () => {
+            const savedQuestion = writingQuestion;
+            setWritingQuestion(null);
+            setQuestionsDB(current => current.map(question =>
+              question.user_question_id === savedQuestion?.user_question_id
+                ? { ...question, status: 'answered', answered_at: new Date().toISOString() }
+                : question
+            ));
+            const nextIndex = progress.currentIndex + 1;
+            const nextSeq = questionsDB[nextIndex]?.sequence_order || Number(savedQuestion.sequence_order) + 1;
+            const { error } = await supabaseClient.from('profiles')
+              .update({ current_sequence: nextSeq }).eq('id', user.id);
+            if (error) console.warn('text answer progress sync', error);
+            setProgress(previous => ({ ...previous,
+              currentIndex: Math.min(nextIndex, questionsDB.length - 1) }));
+            const nextQuestion = questionsDB[nextIndex] || null;
+            const chapterComplete = savedQuestion?.onboarding_group === "starting_conversation" &&
+              nextQuestion?.onboarding_group !== "starting_conversation";
+            const outlineComplete = savedQuestion?.onboarding_group === "life_outline" &&
+              nextQuestion?.onboarding_group !== "life_outline";
+            if (isFormalOnboardingQuestion(savedQuestion) && foundation?.project?.id &&
+                foundation.project.onboarding_status !== "completed") {
+              const onboardingUpdate = savedQuestion?.onboarding_group === "starting_motivation"
+                ? { onboarding_status: "life_outline_completed",
+                    current_onboarding_user_question_id: nextQuestion?.user_question_id || null,
+                    starting_motivation_completed_at: new Date().toISOString(),
+                    onboarding_ritual_step: "chapter_complete" }
+                : chapterComplete
+                  ? { onboarding_status: "life_outline_completed",
+                      current_onboarding_user_question_id: nextQuestion?.user_question_id || null,
+                      life_outline_completed_at: new Date().toISOString(),
+                      onboarding_ritual_step: "conversation_complete" }
+                  : outlineComplete
+                    ? { onboarding_status: "introduction_review",
+                        current_onboarding_user_question_id: nextQuestion?.user_question_id || null }
+                    : { onboarding_status: "in_progress",
+                        current_onboarding_user_question_id: nextQuestion?.user_question_id || null };
+              const { data: updatedProject, error: onboardingError } = await supabaseClient
+                .from("book_projects").update(onboardingUpdate)
+                .eq("id", foundation.project.id).select().single();
+              if (onboardingError) console.warn("written onboarding progress sync", onboardingError);
+              else if (updatedProject) setFoundation(previous => ({ ...previous, project: updatedProject }));
+            }
+            localStorage.setItem("koe_last_visit", Date.now().toString());
+            if (FREE_TRIAL_RETENTION_ENABLED && savedQuestion?.onboarding_group === "trial_experience") {
+              try { setTrialRetention(await loadFreeTrialRetention(foundation?.project?.id)); }
+              catch (retentionError) { console.warn("written trial retention sync", retentionError); }
+            }
+            if (hasRestrictedProjectAccess(foundation?.project) &&
+                isLastFreeTrialQuestion(questionsDB, savedQuestion)) {
+              if (!TRIAL_CONVERSION_ENABLED && ALLOW_FAMILY_NOTIFICATIONS && !import.meta.env.DEV &&
+                  foundation?.project?.onboarding_preferences?.family_invitation_id) {
+                try {
+                  await supabaseClient.functions.invoke("notify-family-story-inviter", {
+                    body: { projectId: foundation.project.id }
+                  });
+                  setReceivedFamilyInvitation(previous => previous ? {
+                    ...previous, status: "trial_completed",
+                    trial_completed_at: previous.trial_completed_at || new Date().toISOString()
+                  } : previous);
+                } catch (familyMilestoneError) {
+                  console.warn("family trial milestone notification error", familyMilestoneError);
+                }
+              }
+              replaceCommercialEntryUrl("trial");
+              setScene("trial_complete");
+              return;
+            }
+            if (savedQuestion?.onboarding_group === "starting_conversation") {
+              setScene(chapterComplete ? "starting_conversation_complete" : 1);
+              return;
+            }
+            if (savedQuestion?.onboarding_group === "starting_motivation") {
+              setScene("hajimari_complete");
+              return;
+            }
+            if (outlineComplete) {
+              setLifeOutlineReturnScene(null);
+              setScene("life_outline_summary");
+              setIsInitializing(false);
+              try { await generateLifeOutlineIntroduction(); }
+              catch (outlineError) { console.warn("written life outline summary", outlineError); }
+              return;
+            }
+            if (isFormalOnboardingQuestion(savedQuestion)) {
+              setScene(1);
+              return;
+            }
+            if (await finishThemeExtraQuestion(savedQuestion, nextIndex)) return;
+            if (Number(savedQuestion?.theme_order) > 0 &&
+              Number(nextQuestion?.theme_order) !== Number(savedQuestion?.theme_order)) {
+              await savePendingThemeTransition(Number(savedQuestion.theme_order));
+              setScene('theme_complete');
+            } else {
+              setSavedNotice('この文章を残しました');
+              setScene(1);
+            }
           }}
         />
       )}
@@ -8330,7 +8830,9 @@ onRetry={() => {
     setVoiceData(prev => {
       const next = {
         ...prev,
-        selectedStyle: style
+        selectedStyle: style,
+        allowWholeTextRewrite: false,
+        wholeTextCandidate: null,
       };
 
       return {
@@ -8344,7 +8846,9 @@ onRetry={() => {
       const next = {
         ...prev,
         selectedStyle: style,
-        editedText: text
+        editedText: text,
+        allowWholeTextRewrite: prev.editRecordingMode === 'append',
+        wholeTextCandidate: null,
       };
 
       if (style === "clean") {
@@ -8358,6 +8862,28 @@ onRetry={() => {
       return next;
     });
   }}
+  onPolishWhole={async () => {
+    const source = voiceData.editedText || '';
+    if (!source.trim()) return;
+    setVoiceData(prev => ({ ...prev, wholeTextPolishStatus: 'processing', wholeTextPolishError: '' }));
+    try {
+      const { data, error } = await supabaseClient.functions.invoke('polish-written-answer', {
+        body: { projectId: foundation.project.id, sequenceOrder: currentQ.sequence_order,
+          text: source, questionText: currentQ.content || '' },
+      });
+      if (error || !data?.success || !data.candidate) throw error || new Error('文章を整えられませんでした');
+      setVoiceData(prev => prev.editedText === source
+        ? { ...prev, wholeTextCandidate: { original: source, text: data.candidate }, wholeTextPolishStatus: 'done' }
+        : { ...prev, wholeTextPolishStatus: 'idle', wholeTextPolishError: '文章が変わったため、候補を使わずに戻しました。' });
+    } catch {
+      setVoiceData(prev => ({ ...prev, wholeTextPolishStatus: 'error',
+        wholeTextPolishError: '文章を整えられませんでした。元の文章は残っています。' }));
+    }
+  }}
+  onUseWholeCandidate={() => setVoiceData(prev => ({ ...prev,
+    editedText: prev.wholeTextCandidate?.text || prev.editedText,
+    allowWholeTextRewrite: Boolean(prev.wholeTextCandidate), wholeTextCandidate: null }))}
+  onDiscardWholeCandidate={() => setVoiceData(prev => ({ ...prev, wholeTextCandidate: null }))}
   onProceed={() => handleSaveAnswer(
     currentQ?.onboarding_group === "life_outline" ? "人生の輪郭" : null
   )}
@@ -8410,10 +8936,10 @@ onRetry={() => {
             setSelectedThemeExtraIds([]);
             setScene("theme_more");
           }}
-          onRequestFamilyMemory={completedThemeOrder === 1 ? () => {
+          onRequestFamilyMemory={() => {
             setThemeMemoryReturnScene("theme_complete");
-            setScene("theme_memory_request");
-          } : null}
+            setScene("story_request");
+          }}
           onContinue={openNextThemeIntroduction}
           onFinish={() => advanceAfterTheme(STORY_THEMES.length)}
         />
@@ -8450,21 +8976,35 @@ onRetry={() => {
           onSent={() => {}}
         />
       )}
+      {scene === "story_request" && (
+        <StoryRequestComposer
+          client={supabaseClient}
+          bookProjectId={foundation?.project?.id}
+          theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder) || null}
+          questions={questionsDB}
+          onBack={() => setScene(themeMemoryReturnScene || "theme_complete")}
+        />
+      )}
       {scene === "theme_memory_manager" && (
+        <StoryRequestManager
+          client={supabaseClient}
+          bookProjectId={foundation?.project?.id}
+          onBack={() => setScene("home")}
+          onLegacy={() => setScene("theme_memory_legacy_manager")}
+        />
+      )}
+      {scene === "theme_memory_legacy_manager" && (
         <ThemeMemoryRequestManager
           supabaseClient={supabaseClient}
           bookProjectId={foundation?.project?.id}
-          onBack={() => setScene("home")}
-          onStartNew={() => {
-            setThemeMemoryReturnScene("theme_memory_manager");
-            setScene("theme_memory_request");
-          }}
+          onBack={() => setScene("theme_memory_manager")}
+          onStartNew={() => setScene("theme_memory_manager")}
         />
       )}
       {scene === "theme_intro" && foundation?.project?.onboarding_status === "completed" && (
         <Scene_ThemeIntro
           theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1) || null}
-          notificationLabel={formatNextNotificationLabel(notificationPref)}
+          notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
           onChangeDelivery={() => {
             setNotificationSetupReturnScene("theme_intro");
             setScene("notification_setup");
@@ -8483,7 +9023,7 @@ onRetry={() => {
         <Scene_EndToday
           notificationPref={notificationPref}
           hasSavedAnswer={endTodayHasSavedAnswer}
-          onOpenStoryPages={() => setScene("story_pages")}
+          onOpenStoryPages={() => { setStoryPagesReturnScene("home"); setStoryPagesFocusAnswerId(null); setScene("story_pages"); }}
           onResume={() => setScene(themeResumeContext ? "theme_resume" : 1)}
         />
       )}
@@ -8494,6 +9034,7 @@ onRetry={() => {
   user={user}
   foundation={foundation}
   questionSet={questionsDB}
+  initialAnswerId={storyPagesFocusAnswerId}
   onOpenLifeOutline={() => {
     setLifeOutlineStatus("idle");
     setLifeOutlineReturnScene("story_pages");
@@ -8505,7 +9046,7 @@ onRetry={() => {
   }}
   onEditRecord={startEditRecording}
   onOpenBookend={kind => beginBookend(kind, "story_pages")}
-  onBack={() => setScene("home")}
+  onBack={() => { if (storyPagesReturnScene === "book_builder") setBookBuilderResumeStep(1); setScene(storyPagesReturnScene); setStoryPagesReturnScene("home"); setStoryPagesFocusAnswerId(null); }}
 />
 
       )}
@@ -8564,10 +9105,24 @@ function StoryThemeToggle({ label, value, onToggle }) {
 }
 
 function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, onAuthenticated, onInvalid }) {
+  const lineAuthEnabled = import.meta.env.VITE_LINE_AUTH_ENABLED === "true";
   const [step, setStep] = useState("ready");
   const [pin, setPin] = useState("");
   const [maskedEmail, setMaskedEmail] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const continueWithLine = async () => {
+    setLoading(true);
+    try {
+      const { error } = await startLineSignIn(supabaseClient, getAuthReturnUrlFromCurrentLocation());
+      if (error) throw error;
+      // The app resolves the delivery token again after OAuth and compares
+      // its recipient to session.user.id before loading any story data.
+    } catch {
+      alert("LINEで確認できませんでした。少し時間をおいて、もう一度お試しください。");
+      setLoading(false);
+    }
+  };
 
   const sendCode = async () => {
     try {
@@ -8651,9 +9206,9 @@ function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, on
 
         <p className="text-white/62 text-[0.96rem] leading-loose">
           {accountMismatch && <>現在ログインしているアカウントとは、<br />この問いの宛先が異なります。<br /><br /></>}
-          ご本人確認のため、<br />
-          登録済みのメールアドレスに<br />
-          認証コードをお送りします。
+          {lineAuthEnabled
+            ? <>ご本人確認のため、<br />前回と同じログイン方法を選んでください。</>
+            : <>ご本人確認のため、<br />登録済みのメールアドレスに<br />認証コードをお送りします。</>}
         </p>
 
         {(maskedEmail || tokenData.email_masked) && (
@@ -8664,6 +9219,13 @@ function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, on
       </div>
 
       {accountMismatch && <p className="mb-6 text-sm text-white/55">認証が完了すると、問いの宛先のアカウントに切り替わります。</p>}
+      {lineAuthEnabled && step === "ready" && <div className="w-full max-w-[280px] mb-6 space-y-3">
+        <button type="button" onClick={continueWithLine} disabled={loading}
+          className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${loading ? "opacity-40" : ""}`}>
+          LINEで確認して開く
+        </button>
+        <p className="ui-small">LINEで登録・連携した方はこちら</p>
+      </div>}
       {step === "ready" ? (
         <button
           type="button"
@@ -8673,7 +9235,7 @@ function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, on
             loading ? "opacity-40" : ""
           }`}
         >
-          {loading ? "送信中..." : "認証コードを送る"}
+          {loading ? "確認中..." : lineAuthEnabled ? "メールに認証コードを送る" : "認証コードを送る"}
         </button>
       ) : (
         <div className="w-full max-w-[280px] space-y-6">
@@ -8681,17 +9243,19 @@ function Scene_TokenAuthRequired({ token, tokenData, accountMismatch = false, on
             type="text"
             className="quiet-input tracking-widest text-xl text-center"
             value={pin}
-            onChange={e => setPin(e.target.value)}
-            placeholder="000000"
-            maxLength="6"
+            onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="メール記載の数字（6〜8桁）"
+            maxLength="8"
           />
 
           <button
             type="button"
             onClick={verifyCode}
-            disabled={pin.length !== 6 || loading}
+            disabled={!/^\d{6,8}$/.test(pin) || loading}
             className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${
-              pin.length !== 6 || loading ? "opacity-40" : ""
+              !/^\d{6,8}$/.test(pin) || loading ? "opacity-40" : ""
             }`}
           >
             {loading ? "確認中..." : "続きを開く"}
@@ -8749,6 +9313,10 @@ function Scene_Login({ onLogin, giftPreview, familyInvitePreview }) {
   const isFamilyInviteEntry = Boolean(getFamilyInviteTokenFromUrl()) && Boolean(
     familyInvitePreview?.valid || familyInvitePreview?.claimed
   );
+  // Keep trial and invitation identity-claim flows unchanged until their
+  // separate account-linking tests are complete.
+  const lineAuthEnabled = import.meta.env.VITE_LINE_AUTH_ENABLED === "true"
+    && !isTrialEntry && !isGiftEntry && !isFamilyInviteEntry && !isSupporterInviteLogin;
   const [mode, setMode] = useState(
     isSupporterInviteLogin ? "supporter" : "entry"
   ); // entry | new | returning | supporter | pin
@@ -8758,6 +9326,37 @@ function Scene_Login({ onLogin, giftPreview, familyInvitePreview }) {
   const [givenName, setGivenName] = useState("");
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const handleReturningLineLogin = async () => {
+    setLoading(true);
+    try {
+      // Returning sign-in must not reuse an abandoned registration draft.
+      takeLineRegistrationDraft(window.sessionStorage);
+      const { error } = await startLineSignIn(supabaseClient, authReturnUrl);
+      if (error) throw error;
+    } catch {
+      alert("LINEで続けられませんでした。少し時間をおいて、もう一度お試しください。");
+      setLoading(false);
+    }
+  };
+
+  const handleStartLineRegistration = async () => {
+    if (!familyName.trim() || !givenName.trim()) {
+      alert("お名前を入力してください。");
+      return;
+    }
+    setLoading(true);
+    try {
+      saveLineRegistrationDraft(window.sessionStorage, { familyName, givenName });
+      const { error } = await startLineSignIn(supabaseClient, authReturnUrl);
+      if (error) throw error;
+    } catch (error) {
+      console.error("LINE sign-in failed", error);
+      takeLineRegistrationDraft(window.sessionStorage);
+      alert("LINEで続けられませんでした。少し時間をおいて、もう一度お試しください。");
+      setLoading(false);
+    }
+  };
 
 const checkExistingProfileByEmail = async (targetEmail) => {
   const normalizedEmail = String(targetEmail || "").trim().toLowerCase();
@@ -9118,8 +9717,11 @@ if (isNewMode) {
                 )}
 
                 <p className="text-white/55 text-[0.95rem] leading-loose">
-                  お名前とメールアドレスを登録すると、<br />
-                  {giftPreview?.purchaser_name || "ご家族"}からの贈りものを開けます。
+                  {lineAuthEnabled ? (
+                    <>お名前を入力してLINEで進むと、<br />{giftPreview?.purchaser_name || "ご家族"}からの贈りものを開けます。メールも選べます。</>
+                  ) : (
+                    <>お名前とメールアドレスを登録すると、<br />{giftPreview?.purchaser_name || "ご家族"}からの贈りものを開けます。</>
+                  )}
                 </p>
               </>
             ) : isTrialEntry ? (
@@ -9134,8 +9736,8 @@ if (isNewMode) {
                 </p>
 
                 <p className="text-white/55 text-[0.95rem] leading-loose">
-                  声で答えながら、物語づくりを体験できます。<br />
-                  料金はかかりません。語った内容は、<br />
+                  声でも文章でも、物語づくりを体験できます。<br />
+                  料金はかかりません。残した内容は、<br />
                   購入後もそのまま引き継がれます。
                 </p>
               </>
@@ -9146,8 +9748,11 @@ if (isNewMode) {
                 </p>
 
                 <p className="text-white/55 text-[0.95rem] leading-loose">
-                  はじめて利用する方は、お名前とメールアドレスを登録します。<br />
-                  以前に利用した方は、メールアドレスで前回の続きが開けます。
+                  {lineAuthEnabled ? (
+                    <>はじめての方は、お名前を入力してLINEで進めます。<br />前回の続きも、同じ方法で開けます。メールも選べます。</>
+                  ) : (
+                    <>はじめて利用する方は、お名前とメールアドレスを登録します。<br />以前に利用した方は、メールアドレスで前回の続きが開けます。</>
+                  )}
                 </p>
               </>
             )}
@@ -9194,7 +9799,7 @@ if (isNewMode) {
             </p>
 
             <p className="ui-small">
-              お名前とメールアドレスを教えてください。
+              {lineAuthEnabled ? "お名前を入力して、LINEかメールを選んでください。" : "お名前とメールアドレスを教えてください。"}
             </p>
           </div>
 
@@ -9219,6 +9824,17 @@ if (isNewMode) {
               />
             </div>
           </div>
+
+          {lineAuthEnabled && (
+            <button
+              type="button"
+              onClick={handleStartLineRegistration}
+              disabled={!familyName.trim() || !givenName.trim() || loading}
+              className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${!familyName.trim() || !givenName.trim() || loading ? "opacity-40" : ""}`}
+            >
+              {loading ? "LINEを開いています..." : "LINEで続ける"}
+            </button>
+          )}
 
           <div>
             <p className="ui-label mb-2">メールアドレス</p>
@@ -9260,10 +9876,21 @@ if (isNewMode) {
             </p>
 
             <p className="ui-small">
-              登録したメールアドレスを入力してください。<br />
-              同じメールアドレスで、前回の続きが開きます。
+              {lineAuthEnabled
+                ? "前回と同じログイン方法を選んでください。"
+                : <>登録したメールアドレスを入力してください。<br />同じメールアドレスで、前回の続きが開きます。</>}
             </p>
           </div>
+
+          {lineAuthEnabled && (
+            <div className="space-y-3">
+              <button type="button" onClick={handleReturningLineLogin} disabled={loading}
+                className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${loading ? "opacity-40" : ""}`}>
+                {loading ? "LINEを開いています..." : "LINEで続ける"}
+              </button>
+              <p className="ui-small">LINEで登録・連携した方はこちら。メールで登録した方は、下からお進みください。</p>
+            </div>
+          )}
 
           <div>
             <p className="ui-label mb-2">メールアドレス</p>
@@ -9306,8 +9933,8 @@ if (isNewMode) {
 
             <p className="ui-small">
               {authMode === "supporter"
-                ? "お手伝いの依頼メールに記載された6桁コードを入力してください"
-                : "メールのボタンを押すか、記載された6桁コードを入力してください"}
+                ? "お手伝いの依頼メールに記載された認証コードを入力してください"
+                : "メールのボタンを押すか、記載された数字を6〜8桁すべて入力してください"}
             </p>
           </div>
 
@@ -9315,17 +9942,19 @@ if (isNewMode) {
             type="text"
             className="quiet-input tracking-widest text-xl"
             value={pin}
-            onChange={e => setPin(e.target.value)}
-            placeholder="000000"
-            maxLength="6"
+            onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="メール記載の数字（6〜8桁）"
+            maxLength="8"
           />
 
           <button
             type="button"
             onClick={handleVerifyPin}
-            disabled={pin.length !== 6 || loading}
+            disabled={!/^\d{6,8}$/.test(pin) || loading}
             className={`btn-quiet w-full py-4 rounded-full text-sm ${
-              pin.length !== 6 || loading ? "opacity-40" : ""
+              !/^\d{6,8}$/.test(pin) || loading ? "opacity-40" : ""
             }`}
           >
             {loading
@@ -9763,7 +10392,7 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
           3つの問いを終えました
         </p>
         <h1 className="text-narrative mt-6 text-[1.55rem] leading-[1.9] text-white/92">
-          声にした時間が、<br />
+          言葉にした時間が、<br />
           物語のはじまりになりました
         </h1>
 
@@ -9771,7 +10400,7 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
 
         <p className="mx-auto max-w-[350px] text-[0.94rem] leading-[2.1] text-white/56">
           続きでは、幼少期から今までを少しずつたどります。<br />
-          語った声は文章になり、写真とともに一冊へ育っていきます。
+          声でも文章でも、思い出を写真とともに一冊へ育てていきます。
         </p>
 
         {isPaidFamilyGift ? (
@@ -10745,7 +11374,8 @@ function ThemePreview({
   );
 }
 
-export function Scene_HajimariComplete({ onContinue }) {
+export function Scene_HajimariComplete({ onContinue, hasTrialStories = false }) {
+  const [trialCarryDecision, setTrialCarryDecision] = useState(null);
   return (
     <div className="flow-scene-shell fade-enter">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
@@ -10768,7 +11398,17 @@ export function Scene_HajimariComplete({ onContinue }) {
         <p className="mt-9 text-[0.98rem] leading-[2] text-white/58 text-narrative">
           ここからは<br />9つのテーマごとに進めていきます。
         </p>
-        <button type="button" onClick={onContinue} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">
+        {hasTrialStories && <fieldset className="mt-9 rounded-[1.5rem] border border-white/15 p-5 text-left">
+          <legend className="px-2 text-[0.95rem] leading-loose text-white/85">無料の3問で語ったことを、本編に引き継ぎますか？</legend>
+          <p className="mb-4 text-[0.78rem] leading-[1.8] text-white/55">引き継ぐと「幼い頃」の語りに入り、似た問いは繰り返しません。引き継がない場合は本編に表示されません。</p>
+          <div className="grid gap-3">
+            {[['carry', '引き継ぐ'], ['do_not_carry', '引き継がない']].map(([value, label]) => <label key={value} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-white/15 px-4 text-[0.92rem] text-white/85 has-[:checked]:border-white/60 has-[:checked]:bg-white/10">
+              <input type="radio" name="trial-carry-decision" value={value} checked={trialCarryDecision === value} onChange={() => setTrialCarryDecision(value)} className="h-5 w-5 accent-[#eee9dd]" />
+              {label}
+            </label>)}
+          </div>
+        </fieldset>}
+        <button type="button" disabled={hasTrialStories && !trialCarryDecision} onClick={() => onContinue(trialCarryDecision)} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white disabled:cursor-not-allowed disabled:opacity-40">
           {EXPERIENCE_V2_ENABLED ? "本編をはじめる" : "最初のテーマを見る"}
         </button>
       </div>
@@ -10793,36 +11433,22 @@ export function Scene_ThemeComplete({ completedTheme, hasNextTheme, hasExtraQues
           <span className="h-px w-12 bg-gradient-to-l from-transparent to-amber-100/30" />
         </div>
 
-        {onRequestFamilyMemory && (
-          <button type="button" onClick={onRequestFamilyMemory} className="mb-4 w-full rounded-[1.5rem] border border-amber-100/15 bg-amber-50/[0.035] px-5 py-5 text-left">
-            <span className="flex items-center gap-4">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-100/[0.08]"><Users size={20} className="text-amber-50/62" strokeWidth={1.6} /></span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-narrative text-[0.95rem] text-white/82">家族の記憶を添えてみる</span>
-                <span className="mt-1 block text-xs leading-relaxed text-white/34">同じ頃を知る人へ、1〜3問だけ聞けます</span>
-              </span>
-              <ChevronRight size={17} className="text-white/25" />
-            </span>
-          </button>
-        )}
-
         {hasNextTheme ? (
-          <button type="button" onClick={onContinue} className="btn-quiet w-full rounded-full bg-white/10 py-4 text-white">
-            このテーマを終える
+          <button type="button" onClick={onContinue} className="w-full rounded-xl bg-[#f5f3ed] py-4 font-medium text-[#18243a]">
+            次のテーマに進む →
           </button>
         ) : (
           <div>
             <p className="text-[1.35rem] leading-[1.9] text-white/92 text-narrative">九つのテーマを、<br />すべてたどりました</p>
             <p className="mt-6 text-sm leading-[2] text-white/48">重ねてきた声が、あなたの物語の輪郭になりました。</p>
-            <button type="button" onClick={onFinish} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">このテーマを終える</button>
+            <button type="button" onClick={onFinish} className="btn-quiet mt-10 w-full rounded-xl bg-[#f5f3ed] py-4 text-[#18243a]">物語を振り返る →</button>
           </div>
         )}
-        {hasExtraQuestions && onMore && (
-          <button type="button" onClick={onMore} className="mt-5 w-full py-3 text-sm text-white/58 underline underline-offset-4">
-            <span className="block">もう少し語る</span>
-            <span className="block text-xs mt-1">（このテーマの他の質問を追加）</span>
-          </button>
-        )}
+        <p className="mt-6 text-[1rem] font-medium text-white/75">このテーマを、もう少し深める</p>
+        <div className="mt-3 grid gap-2">
+          {onMore && <button type="button" onClick={onMore} className="flex min-h-14 items-center justify-center gap-3 rounded-xl border border-white/25 text-[1rem] text-white/82"><Files size={20} strokeWidth={1.8}/>追加の質問を見る</button>}
+          {onRequestFamilyMemory && <button type="button" onClick={onRequestFamilyMemory} className="flex min-h-14 items-center justify-center gap-3 rounded-xl border border-white/25 text-[1rem] text-white/82"><PaperHeartIcon/>他の人にも質問を送る</button>}
+        </div>
       </div>
     </div>
   );
@@ -12055,209 +12681,6 @@ function HomeMenuButton({ icon: Icon, label, detail, onClick }) {
 
       <ChevronRight size={20} className="text-white/35 shrink-0" strokeWidth={1.8} />
     </button>
-  );
-}
-
-function DummyQrCode() {
-  const cells = [
-    1, 0, 1, 1, 0,
-    0, 1, 0, 1, 1,
-    1, 1, 0, 0, 1,
-    1, 0, 1, 0, 0,
-    0, 1, 1, 1, 0
-  ];
-
-  return (
-    <div className="grid grid-cols-5 gap-[1px] w-7 h-7" aria-hidden="true">
-      {cells.map((cell, index) => (
-        <div
-          key={index}
-          className={cell ? "bg-slate-700" : "bg-slate-200"}
-        />
-      ))}
-    </div>
-  );
-}
-
-function formatBodyForPagePreview(text) {
-  const raw = String(text || "").trim();
-
-  if (!raw) return [];
-
-  const existingParagraphs = raw
-    .split(/\n+/)
-    .map(item => item.trim())
-    .filter(Boolean);
-
-  if (existingParagraphs.length >= 2) {
-    return existingParagraphs;
-  }
-
-  const sentences = raw
-    .split(/(?<=。)/)
-    .map(item => item.trim())
-    .filter(Boolean);
-
-  if (sentences.length <= 1) {
-    return [raw];
-  }
-
-  const paragraphs = [];
-  let buffer = "";
-
-  for (const sentence of sentences) {
-    const next = buffer ? `${buffer}${sentence}` : sentence;
-
-    if (next.length >= 85) {
-      paragraphs.push(next);
-      buffer = "";
-    } else {
-      buffer = next;
-    }
-  }
-
-  if (buffer) {
-    paragraphs.push(buffer);
-  }
-
-  return paragraphs;
-}
-
-function BookPagePreview({
-  type = "left",
-  pageNumber = 1,
-  sequenceOrder = "",
-  questionText = "",
-  bodyParagraphs = [],
-  headingPhoto = null,
-  photo = null,
-  isPhotoStory = false,
-  photoSequence = null,
-  photoCaption = ""
-}) {
-  if (type === "right") {
-    return (
-      <div
-        className="relative mx-auto w-full min-w-0 min-h-0 max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[12%] pt-[11%] pb-[6.5%]"
-        aria-label={`B5 右ページ ${pageNumber}`}
-      >
-        <div className="h-full min-h-0 flex flex-col overflow-hidden">
-          <div className="flex-1 min-h-0 overflow-hidden pt-[3%]">
-            {bodyParagraphs.length > 0 ? (
-              bodyParagraphs.slice(0, 10).map((paragraph, index) => (
-                <p
-                  key={index}
-                  className="text-[0.7rem] leading-[2.05] text-slate-800 mb-4 whitespace-pre-wrap"
-                >
-                  {paragraph}
-                </p>
-              ))
-            ) : (
-              <p className="text-[0.72rem] leading-[2.05] text-slate-400">
-                文章が入ります。
-              </p>
-            )}
-          </div>
-
-          <p className="absolute right-[10.5%] bottom-[4.2%] text-[0.58rem] tabular-nums text-slate-500 text-right">
-            {pageNumber}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (type === "photo") {
-    return (
-      <div
-        className="relative mx-auto w-full min-w-0 min-h-0 max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10.5%] pt-[10%] pb-[6.5%]"
-        aria-label={`B5 写真ページ ${pageNumber}`}
-      >
-        <div className="h-full flex flex-col">
-          <div className="flex-1 min-h-0 flex items-center justify-center pb-[5%]">
-            {photo?.url ? (
-              <img
-                src={photo.url}
-                alt=""
-                className="w-full h-full min-h-0 object-contain"
-              />
-            ) : (
-              <div className="w-full h-[55%]" />
-            )}
-          </div>
-
-          <p className={`absolute bottom-[4.2%] text-[0.58rem] tabular-nums text-slate-500 ${
-            Number(pageNumber) % 2 === 0
-              ? "left-[10.5%] text-left"
-              : "right-[10.5%] text-right"
-          }`}>
-            {pageNumber}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className="relative mx-auto w-full min-w-0 min-h-0 max-w-[360px] aspect-[182/257] overflow-hidden bg-[#f7f4ed] text-slate-900 shadow-2xl rounded-[2px] px-[10.5%] pt-[9.5%] pb-[6.5%]"
-      aria-label={`B5 左ページ ${pageNumber}`}
-    >
-      <div
-        className="h-full grid min-h-0"
-        style={{
-          gridTemplateRows: isPhotoStory
-            ? "17% 19% 56% 8%"
-            : "18% 26% 48% 8%"
-        }}
-      >
-        <div className="self-end text-left">
-          <p className="text-[0.62rem] leading-[1.15] tracking-[0.02em] text-slate-500">
-            {isPhotoStory ? "Photo" : "Story"}<br />
-            {isPhotoStory
-              ? String(photoSequence || 1).padStart(2, "0")
-              : (sequenceOrder || pageNumber)}
-          </p>
-
-          <div className="mt-1.5">
-            <DummyQrCode />
-          </div>
-        </div>
-
-        <div className="flex items-center justify-center text-center px-[5%]">
-          <p className="text-[0.78rem] leading-[1.95] text-slate-700 whitespace-pre-wrap">
-            {questionText || "問い"}
-          </p>
-        </div>
-
-        <figure
-          className="absolute left-[10.5%] right-[10.5%] bottom-[11%] min-h-0 overflow-hidden flex flex-col justify-end"
-          style={{ top: isPhotoStory ? "39%" : "53%" }}
-        >
-          <div className="min-h-0 flex-1 flex items-end justify-center overflow-hidden">
-            {headingPhoto?.url ? (
-              <img
-                src={headingPhoto.url}
-                alt=""
-                className="w-auto h-auto max-w-full max-h-full object-contain object-center"
-              />
-            ) : (
-              <div className="w-full h-full" />
-            )}
-          </div>
-
-          {photoCaption && (
-            <figcaption className="mt-1.5 text-[0.48rem] leading-relaxed text-slate-500 text-left">
-              {photoCaption}
-            </figcaption>
-          )}
-        </figure>
-
-        <p className="absolute left-[10.5%] bottom-[4.2%] text-[0.58rem] tabular-nums text-slate-500 text-left">
-          {pageNumber}
-        </p>
-      </div>
-    </div>
   );
 }
 
@@ -13718,6 +14141,7 @@ function SettingsMenuButton({ icon: Icon, label, detail, onClick }) {
 
 export function Scene_SettingsHome({
   notificationPref,
+  emailAvailable = true,
   sharingPreference,
   onOpenDelivery,
   onOpenPrivacy,
@@ -13754,7 +14178,7 @@ export function Scene_SettingsHome({
         <SettingsMenuButton
           icon={Bell}
           label="問いの届け方"
-          detail={notificationPref ? formatNextNotificationLabel(notificationPref) : "未設定"}
+          detail={notificationPref ? formatNextNotificationLabel(notificationPref, new Date(), emailAvailable) : "未設定"}
           onClick={onOpenDelivery}
         />
         <SettingsMenuButton
@@ -15290,6 +15714,7 @@ export function Scene_BookBuilder({
   questionSet = [],
   initialBookStories = null,
   initialBookMediaByAnswerId = null,
+  onOpenStories = null,
   readOnly = false,
   purchaseStatus = "idle",
   purchaseError = "",
@@ -15337,11 +15762,15 @@ export function Scene_BookBuilder({
   const [bookTitle, setBookTitle] = useState("わたしの物語");
   const [bookSubtitle, setBookSubtitle] = useState("");
   const [bookFooterText, setBookFooterText] = useState("");
+  const [includeWebBookQr, setIncludeWebBookQr] = useState(
+    import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED !== "true"
+  );
   const [coverPhotoCorrectionOpen, setCoverPhotoCorrectionOpen] = useState(false);
   const [coverPhotoCorrectionTarget, setCoverPhotoCorrectionTarget] = useState("standard");
   const [shippingAddress, setShippingAddress] = useState(() => normalizeBookShippingAddress());
   const [showCheckoutCancelled, setShowCheckoutCancelled] = useState(checkoutWasCancelled);
   const [orderCompleted, setOrderCompleted] = useState(false);
+  const [productionJob, setProductionJob] = useState(null);
   const [coverSettingsReady, setCoverSettingsReady] = useState(false);
   const [coverSettingsSaveError, setCoverSettingsSaveError] = useState("");
   const [coverPhotoSaving, setCoverPhotoSaving] = useState(false);
@@ -15354,13 +15783,32 @@ export function Scene_BookBuilder({
   useEffect(() => scheduleScrollReset(), [stepIndex]);
 
   const [bookStories, setBookStories] = useState([]);
+  const [bookContributions, setBookContributions] = useState([]);
   const [bookMediaByAnswerId, setBookMediaByAnswerId] = useState({});
   const [storiesLoading, setStoriesLoading] = useState(false);
   const [includedStoryIds, setIncludedStoryIds] = useState([]);
   const [bookWork, setBookWork] = useState(null);
   const [workSaving, setWorkSaving] = useState(false);
   const [workError, setWorkError] = useState("");
+  const [draftPdfStatus, setDraftPdfStatus] = useState("idle");
+  const [paperPreviewOpen, setPaperPreviewOpen] = useState(false);
+  const [paperPreviewStoryId, setPaperPreviewStoryId] = useState(null);
+  const [draftPdfError, setDraftPdfError] = useState("");
   const workSaveLock = useRef(false);
+  useEffect(() => {
+    if (import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED !== "true" || !bookProjectId
+      || !["paid", "zero_paid"].includes(project?.access_status) && !orderCompleted && !orderCompletedAt) return undefined;
+    let cancelled = false;
+    const refresh = async () => {
+      const { data, error } = await supabaseClient.functions.invoke("book-production-status", {
+        body: { projectId: bookProjectId }
+      });
+      if (!cancelled && !error && data?.success) setProductionJob(data.job);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 15_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [bookProjectId, project?.access_status, orderCompleted, orderCompletedAt]);
   const saveSelection = async ids => {
     const {data,error}=await supabaseClient.rpc("save_book_selection",{
       input_project_id:bookProjectId,input_answer_ids:ids,input_expected_revision:bookWork?.revision ?? 0
@@ -15376,6 +15824,26 @@ export function Scene_BookBuilder({
         ? includedStoryIds.filter(id=>id!==answer.id):[...includedStoryIds,answer.id]);
     }catch(error){setWorkError(error.message || "収録選択を保存できませんでした。再読み込みしてください。");}
     finally {workSaveLock.current=false;setWorkSaving(false);}
+  };
+
+  const moveWorkStory = async (answerId, direction) => {
+    if (readOnly || bookWork?.confirmed_at || workSaveLock.current) return;
+    const from = includedStoryIds.indexOf(answerId);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= includedStoryIds.length) return;
+    const next = [...includedStoryIds];
+    [next[from], next[to]] = [next[to], next[from]];
+    workSaveLock.current = true;
+    setWorkSaving(true);
+    setWorkError("");
+    try {
+      await saveSelection(next);
+    } catch (error) {
+      setWorkError(error.message || "順番を保存できませんでした。再読み込みしてください。");
+    } finally {
+      workSaveLock.current = false;
+      setWorkSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -15426,6 +15894,7 @@ export function Scene_BookBuilder({
       title: Object.prototype.hasOwnProperty.call(overrides, "title") ? overrides.title : bookTitle,
       subtitle: Object.prototype.hasOwnProperty.call(overrides, "subtitle") ? overrides.subtitle : bookSubtitle,
       footer_text: Object.prototype.hasOwnProperty.call(overrides, "footerText") ? overrides.footerText : bookFooterText,
+      include_web_book_qr: Object.prototype.hasOwnProperty.call(overrides, "includeWebBookQr") ? overrides.includeWebBookQr : includeWebBookQr,
       cover_style: Object.prototype.hasOwnProperty.call(overrides, "coverStyle") ? overrides.coverStyle : coverStyle,
       cloth_color: Object.prototype.hasOwnProperty.call(overrides, "clothColor") ? overrides.clothColor : clothCoverColor,
       print_color: Object.prototype.hasOwnProperty.call(overrides, "printColor") ? overrides.printColor : printCoverColor,
@@ -15457,7 +15926,7 @@ export function Scene_BookBuilder({
 
     if(bookWork?.snapshot?.cover) {
       // Reprints/shipping may change; the completed cover may not.
-      for(const key of ["title","subtitle","footer_text","cover_style","cloth_color","print_color","cover_photo_path","cover_photo_transform"]) {
+      for(const key of ["title","subtitle","footer_text","include_web_book_qr","cover_style","cloth_color","print_color","cover_photo_path","cover_photo_transform"]) {
         payload[key]=bookWork.snapshot.cover[key];
       }
     }
@@ -15508,7 +15977,7 @@ export function Scene_BookBuilder({
       try {
         const { data: liveCover, error } = await supabaseClient
           .from("book_cover_settings")
-          .select("title, subtitle, footer_text, cover_style, cloth_color, print_color, cover_photo_path, cover_photo_transform, suggestions, standard_extra_copy_count, premium_copy_count, include_gift_package, premium_title, premium_subtitle, premium_footer_text, premium_cover_style, premium_cloth_color, premium_print_color, premium_cover_photo_mode, premium_cover_photo_path, premium_cover_photo_transform, shipping_address")
+          .select("title, subtitle, footer_text, include_web_book_qr, cover_style, cloth_color, print_color, cover_photo_path, cover_photo_transform, suggestions, standard_extra_copy_count, premium_copy_count, include_gift_package, premium_title, premium_subtitle, premium_footer_text, premium_cover_style, premium_cloth_color, premium_print_color, premium_cover_photo_mode, premium_cover_photo_path, premium_cover_photo_transform, shipping_address")
           .eq("book_project_id", bookProjectId)
           .maybeSingle();
         if (error) throw error;
@@ -15522,6 +15991,7 @@ export function Scene_BookBuilder({
           setBookTitle(data.title || "わたしの物語");
           setBookSubtitle(data.subtitle || "");
           setBookFooterText(data.footer_text || "");
+          setIncludeWebBookQr(Boolean(data.include_web_book_qr));
           setCoverStyle("print");
           setClothCoverColor(data.cloth_color || CLOTH_COVER_COLORS[0].value);
           setPrintCoverColor(data.print_color || PRINT_COVER_COLORS[0].value);
@@ -15610,6 +16080,7 @@ export function Scene_BookBuilder({
     bookTitle,
     bookSubtitle,
     bookFooterText,
+    includeWebBookQr,
     coverStyle,
     clothCoverColor,
     printCoverColor,
@@ -15675,33 +16146,13 @@ export function Scene_BookBuilder({
 
   const getQuestionForAnswer = (answer) => {
     if(bookWork?.snapshot) return bookWork.snapshot.questions.find(q=>q.id===answer.user_question_id)||null;
-    return (questionSet || []).find(q =>
-      Number(q.sequence_order) === Number(answer.sequence_order)
-    ) || null;
+    return questionForStory(answer, questionSet || []);
   };
 
-  const getStoryBody = (answer) => {
-    if (answer.transcript_edited) return answer.transcript_edited;
-
-    if (answer.selected_style === "clean") {
-      return answer.transcript_clean || answer.transcript_raw || "";
-    }
-
-    if (answer.selected_style === "essay") {
-      return (
-        answer.transcript_essay ||
-        answer.transcript_readable ||
-        answer.transcript_clean ||
-        answer.transcript_raw ||
-        ""
-      );
-    }
-
-    return answer.transcript_readable || answer.transcript_clean || answer.transcript_raw || "";
-  };
+  const getStoryBody = selectedBookText;
   useEffect(() => {
     let cancelled=false;
-    setBookWork(null);setBookStories([]);setIncludedStoryIds([]);setBookMediaByAnswerId({});
+    setBookWork(null);setBookStories([]);setBookContributions([]);setIncludedStoryIds([]);setBookMediaByAnswerId({});
     const load=async()=>{
       if(!bookProjectId && initialBookStories) {
         setBookStories(initialBookStories);setIncludedStoryIds(initialBookStories.map(row=>row.id));
@@ -15711,8 +16162,20 @@ export function Scene_BookBuilder({
       setStoriesLoading(true);setWorkError("");
       try {
         const {work,answers,mediaByAnswerId}=await loadBookWork(supabaseClient,bookProjectId);
+        const frozen = work.confirmed_at ? (work.snapshot?.contributions || []).map(item => ({
+          id: item.id, responderName: item.responder_name, relationship: item.relationship,
+          sourceUserQuestionId: item.source_question_id, question: item.question, body: item.body
+        })) : null;
+        let included = frozen;
+        if (!included) {
+          const { data: contributionData, error: contributionError } = await supabaseClient.functions.invoke("story-request", {
+            body: { action: "list_included", bookProjectId }
+          });
+          if (contributionError || !contributionData?.success) throw contributionError || Error("大切な人の語りを読み込めませんでした。");
+          included = contributionData.contributions || [];
+        }
         if(cancelled)return;
-        setBookWork(work);setBookStories(answers);setIncludedStoryIds(work.answer_ids);setBookMediaByAnswerId(mediaByAnswerId);
+        setBookWork(work);setBookStories(answers);setBookContributions(included);setIncludedStoryIds(work.answer_ids);setBookMediaByAnswerId(mediaByAnswerId);
         if(work.snapshot?.cover) {
           setBookTitle(work.snapshot.cover.title||"");setBookSubtitle(work.snapshot.cover.subtitle||"");
           setBookFooterText(work.snapshot.cover.footer_text||"");
@@ -15835,7 +16298,10 @@ export function Scene_BookBuilder({
 
   const submitBookOrder = async () => {
     if (!shippingAddressComplete || !orderQuote || !onPurchase || workSaving || workError || !bookWork) return;
-    if(!bookWork.confirmed_at && !window.confirm("選択した語りを、この紙ブックとWebブックの共通の収録内容として確定します。確定後は作品の内容を変更できません。ご本人が紙面を確認済みですか？"))return;
+    const productionV2 = import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED === "true";
+    if(!bookWork.confirmed_at && !window.confirm(productionV2
+      ? "現在の紙面を確認済みですか？決済を開始すると、この時点の内容を注文用に保存します。注文が成立した後、その内容で紙の本とWebブックを制作します。"
+      : "選択した語りを、この紙ブックとWebブックの共通の収録内容として確定します。確定後は作品の内容を変更できません。ご本人が紙面を確認済みですか？"))return;
     setWorkSaving(true);
     setShowCheckoutCancelled(false);
     const noPaymentRequired = Number(orderQuote.amount_total || 0) === 0;
@@ -15844,18 +16310,23 @@ export function Scene_BookBuilder({
       setCoverSettingsSaveError("");
       await persistCoverSettings();
       if(!bookWork.confirmed_at) {
-        const selection=await saveSelection(includedStoryIds);
-        const {data:confirmed,error}=await supabaseClient.rpc("confirm_book_work",{
-          input_project_id:bookProjectId,input_expected_revision:selection.revision,input_subject_confirmed:true
-        });
-        if(error)throw error;
-        setBookWork(confirmed);
+        const selection = await saveSelection(includedStoryIds);
+        if (!productionV2) {
+          const { data: confirmed, error } = await supabaseClient.rpc("confirm_book_work", {
+            input_project_id: bookProjectId,
+            input_expected_revision: selection.revision,
+            input_subject_confirmed: true
+          });
+          if (error) throw error;
+          setBookWork(confirmed);
+        }
       }
-      const {data:publication,error:publishError}=await supabaseClient.functions.invoke("publish-voice-edition",{
-        // Fix the work without implicitly enabling anonymous QR access.
-        body:{action:"prepare",bookProjectId}
-      });
-      if(publishError || !publication?.success)throw publishError || Error(publication?.error||"Webブックを固定できませんでした");
+      if (!productionV2) {
+        const { data: publication, error: publishError } = await supabaseClient.functions.invoke("publish-voice-edition", {
+          body: { action: "prepare", bookProjectId }
+        });
+        if (publishError || !publication?.success) throw publishError || Error(publication?.error || "Webブックを固定できませんでした");
+      }
       const started = await onPurchase({
         orderType: "self",
         discountCode: orderDiscountCode,
@@ -15863,6 +16334,8 @@ export function Scene_BookBuilder({
         premiumCopyCount,
         includeGiftPackage,
         shippingAddress,
+        subjectConfirmed: true,
+        bookProductionVersion: productionV2 ? 2 : 1,
         returnContext: "book_builder",
         checkoutWindow
       });
@@ -15880,61 +16353,69 @@ export function Scene_BookBuilder({
     }
   };
 
-  const includedStories = [...bookStories]
+  const includedStories = useMemo(() => [...bookStories]
     .filter(answer => includedStoryIds.includes(answer.id))
-    .sort((a, b) => includedStoryIds.indexOf(a.id) - includedStoryIds.indexOf(b.id));
+    .sort((a, b) => includedStoryIds.indexOf(a.id) - includedStoryIds.indexOf(b.id)),
+  [bookStories, includedStoryIds]);
 
-  // 横組みの冊子では、右ページを奇数、左ページを偶数にします。
-  // 扉を1ページ目とし、最初の見開きは左2・右3から始めます。
-  let previewPageNumber = 2;
+  const previewEdition = useMemo(() => includedStories.some(answer => getStoryBody(answer).trim())
+    ? editionFromBookWork({
+        title: bookTitle,
+        subtitle: bookSubtitle,
+        subjectName: project?.subject_name || project?.person_name || "",
+        footerText: bookFooterText,
+        includeWebBookQr,
+        answers: includedStories,
+        contributions: bookContributions,
+        questionForAnswer: getQuestionForAnswer,
+        mediaByAnswerId: bookMediaByAnswerId
+      })
+    : null,
+  [includedStories, bookContributions, bookTitle, bookSubtitle, bookFooterText, includeWebBookQr,
+    project?.subject_name, project?.person_name, bookMediaByAnswerId, bookWork?.snapshot, questionSet]);
+  const previewPages = useMemo(() => previewEdition ? buildBookPages(previewEdition) : [], [previewEdition]);
+  // Page count stays live in the header. Build the heavier full-page HTML only
+  // while a paper preview is actually visible, then follow edits automatically.
+  const previewPrintHtml = useMemo(() =>
+    previewEdition && (paperPreviewOpen || stepIndex === 2)
+      ? renderBookPrintHtml(previewEdition)
+      : "",
+  [previewEdition, paperPreviewOpen, stepIndex]);
 
-  let photoStoryCounter = 0;
-  const previewPageGroups = includedStories.map(answer => {
-    const question = getQuestionForAnswer(answer);
-    const media = bookMediaByAnswerId[answer.id] || [];
-    const photos = media.filter(item => item.asset_type === "photo" && item.url);
-    const headingPhoto = photos[0] || null;
-    const additionalPhotos = photos.slice(1);
-    const body = getStoryBody(answer);
-    const bodyParagraphs = formatBodyForPagePreview(body);
-    const isPhotoStory = answer.meta_json?.story_origin === "photo";
-    const photoSequence = isPhotoStory ? ++photoStoryCounter : null;
-
-    const leftPageNumber = previewPageNumber;
-    const rightPageNumber = previewPageNumber + 1;
-
-    previewPageNumber += 2;
-
-    const photoPages = additionalPhotos.map(photo => {
-      const pageNumber = previewPageNumber;
-      previewPageNumber += 1;
-
-      return {
-        photo,
-        pageNumber
-      };
-    });
-
-    // 写真ページが奇数枚増えた場合は、次の語りが左（偶数）ページから
-    // 始まるよう、右ページ分を空けます。
-    if (previewPageNumber % 2 !== 0) {
-      previewPageNumber += 1;
+  const downloadDraftPdf = async () => {
+    if (!previewEdition || !bookProjectId || draftPdfStatus === "loading") return;
+    setDraftPdfStatus("loading");
+    setDraftPdfError("");
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.access_token) throw new Error("ログインし直してください。");
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/book-pdf`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: SUPABASE_ANON_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ projectId: bookProjectId, edition: previewEdition })
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || "PDFを作成できませんでした。");
+      }
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = "縦糸横糸ブック-校正用-入稿不可.pdf";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (error) {
+      setDraftPdfError(error.message || "PDFを作成できませんでした。");
+    } finally {
+      setDraftPdfStatus("idle");
     }
-
-    return {
-      answer,
-      question,
-      headingPhoto,
-      bodyParagraphs,
-      leftPageNumber,
-      rightPageNumber,
-      photoPages,
-      isPhotoStory,
-      photoSequence,
-      photoTitle: answer.meta_json?.print_title || "この一枚のこと",
-      photoCaption: answer.meta_json?.photo_caption || ""
-    };
-  });
+  };
 
   return (
     <div className="fixed inset-0 max-w-[760px] mx-auto min-h-0 bg-[#0f172a] flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
@@ -15999,7 +16480,24 @@ export function Scene_BookBuilder({
             ))}
           </div>
         </div>
+        <button type="button" onClick={() => { setPaperPreviewStoryId(null); setPaperPreviewOpen(true); }}
+          className="mt-2 flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-left text-xs text-white/72"
+          aria-label="現在の紙面プレビューを開く">
+          <span>紙面プレビュー　{previewEdition ? `B5・${previewPages.length}ページ` : "収録する語りを選択してください"}</span>
+          <span className="text-white/45">開く ›</span>
+        </button>
       </div>
+
+      {previewEdition && <BookPaperViewer
+        open={paperPreviewOpen}
+        printHtml={previewPrintHtml}
+        pages={previewPages}
+        initialStoryId={paperPreviewStoryId}
+        onClose={() => setPaperPreviewOpen(false)}
+        onDownload={!readOnly && import.meta.env.VITE_BOOK_PDF_ENABLED === "true" ? downloadDraftPdf : null}
+        downloading={draftPdfStatus === "loading"}
+        downloadError={draftPdfError}
+      />}
 
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pb-6">
         {stepIndex === 0 && (
@@ -16152,7 +16650,7 @@ export function Scene_BookBuilder({
               </p>
 
               <p className="text-white/40 text-xs tracking-widest">
-                {includedStoryIds.length} / {bookStories.length} ページ
+                {includedStoryIds.length} / {bookStories.length} 件の語りを収録
               </p>
             </div>
 
@@ -16170,7 +16668,14 @@ export function Scene_BookBuilder({
               </div>
             ) : (
                             [...bookStories]
-                .sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0))
+                .sort((a, b) => {
+                  const ai = includedStoryIds.indexOf(a.id);
+                  const bi = includedStoryIds.indexOf(b.id);
+                  if (ai >= 0 && bi >= 0) return ai - bi;
+                  if (ai >= 0) return -1;
+                  if (bi >= 0) return 1;
+                  return Number(a.sequence_order || 0) - Number(b.sequence_order || 0);
+                })
                 .map((answer, index) => {
 
                   const included = includedStoryIds.includes(answer.id);
@@ -16178,6 +16683,7 @@ export function Scene_BookBuilder({
                   const body = getStoryBody(answer);
                   const media = bookMediaByAnswerId[answer.id] || [];
                   const photo = media.find(item => item.asset_type === "photo" && item.url);
+                  const photoSlots = bookPhotoSlots(media.filter(item => item.asset_type === "photo" && item.url));
                   const isShort = String(body || "").trim().length < 80;
 
                   return (
@@ -16190,7 +16696,7 @@ export function Scene_BookBuilder({
                       <div className="flex gap-4">
                         <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 overflow-hidden shrink-0 flex items-center justify-center">
                           {photo ? (
-                            <img src={photo.url} alt="" className="w-full h-full object-cover" />
+                            <img src={photo.url} alt="" className="w-full h-full object-cover" loading="lazy" />
                           ) : (
                             <Files size={22} className="text-white/25" strokeWidth={1.7} />
                           )}
@@ -16202,6 +16708,9 @@ export function Scene_BookBuilder({
                           </p>
 
                           <div className="mt-2 space-y-1">
+                            <p className="text-white/45 text-xs">
+                              写真：質問の下 {photoSlots.opener ? "1" : "0"}枚／本文のあと {photoSlots.afterFull.length + photoSlots.afterHalf.length}枚
+                            </p>
                             {!included && (
                               <p className="text-white/35 text-xs">
                                 本には入りません
@@ -16217,6 +16726,13 @@ export function Scene_BookBuilder({
                           </div>
                         </div>
                       </div>
+                      {!readOnly && onOpenStories && !bookWork?.confirmed_at && (
+                        <button type="button" onClick={() => onOpenStories(answer.id)} className="mt-3 text-xs text-white/65 underline underline-offset-4">
+                          語りを見るで写真の配置を編集
+                        </button>
+                      )}
+                      {included && <button type="button" onClick={() => { setPaperPreviewStoryId(answer.id); setPaperPreviewOpen(true); }}
+                        className="ml-4 mt-3 text-xs text-white/65 underline underline-offset-4">この語りの紙面を見る</button>}
 
                       {!readOnly && <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3">
                         <p className={`text-sm ${included ? "text-white/65" : "text-white/35"}`}>
@@ -16241,6 +16757,21 @@ export function Scene_BookBuilder({
                           />
                         </button>
                       </div>}
+                      {!readOnly && included && !bookWork?.confirmed_at && (
+                        <div className="mt-2 flex items-center justify-between px-1 text-xs text-white/45">
+                          <span>本の中の順番 {includedStoryIds.indexOf(answer.id) + 1}</span>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => moveWorkStory(answer.id, -1)}
+                              disabled={workSaving || includedStoryIds.indexOf(answer.id) === 0}
+                              className="rounded-full border border-white/15 px-3 py-1.5 disabled:opacity-30"
+                              aria-label={`語り ${includedStoryIds.indexOf(answer.id) + 1} を前へ`}>前へ</button>
+                            <button type="button" onClick={() => moveWorkStory(answer.id, 1)}
+                              disabled={workSaving || includedStoryIds.indexOf(answer.id) === includedStoryIds.length - 1}
+                              className="rounded-full border border-white/15 px-3 py-1.5 disabled:opacity-30"
+                              aria-label={`語り ${includedStoryIds.indexOf(answer.id) + 1} を後へ`}>後へ</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -16250,62 +16781,54 @@ export function Scene_BookBuilder({
 
         {stepIndex === 2 && (
           <div className="space-y-5">
+            {!readOnly && import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED === "true" && (
+              <label className="glass-card flex gap-3 p-5 text-left cursor-pointer">
+                <input type="checkbox" checked={includeWebBookQr}
+                  onChange={event => setIncludeWebBookQr(event.target.checked)} className="mt-1" />
+                <span>
+                  <span className="block text-sm text-white/80">紙の本にWebブックのQRを載せる</span>
+                  <span className="mt-2 block text-xs leading-relaxed text-white/45">
+                    QRを載せると、リンクを知っている人がWebブックを開けます。載せない場合もWebブックは制作します。
+                  </span>
+                </span>
+              </label>
+            )}
             <div className="glass-card p-5 text-center">
               <p className="text-white/82 text-[1.05rem] text-narrative mb-3">
                 紙面プレビュー
               </p>
 
               <p className="text-white/45 text-sm leading-loose">
-                語った言葉が、このような紙面になります。
+                語った言葉を省略せず、必要なページに分けて表示します。
               </p>
 
-              <p className="mt-4 text-white/32 text-xs leading-loose">
-                ※ 実際の書籍では、読みやすさに合わせて余白や改行を整えます。
-              </p>
+              {previewEdition && <p className="mt-4 text-white/58 text-xs leading-loose">
+                B5・全{previewPages.length}ページ。ここで見える紙面とPDFには同じページ構成を使います。
+              </p>}
+              {previewEdition && !readOnly && import.meta.env.VITE_BOOK_PDF_ENABLED === "true" && (
+                <button type="button" onClick={downloadDraftPdf} disabled={draftPdfStatus === "loading"}
+                  className="btn-quiet mt-5 rounded-full bg-white/10 px-6 py-3 text-sm text-white disabled:opacity-50">
+                  {draftPdfStatus === "loading" ? "PDFを作成しています…" : "校正用PDFをダウンロード（入稿不可）"}
+                </button>
+              )}
+              {draftPdfError && <p role="alert" className="mt-3 text-sm text-rose-200">{draftPdfError}</p>}
             </div>
 
-            {previewPageGroups.length === 0 ? (
+            {!previewEdition ? (
               <div className="glass-card p-6 text-center">
                 <p className="text-white/40 text-sm leading-loose">
                   収録する語りを選ぶと、紙面プレビューが表示されます。
                 </p>
               </div>
             ) : (
-              <div className="space-y-10">
-                {previewPageGroups.map(group => (
-                  <div key={group.answer.id} className="space-y-5">
-                    <div className="rounded-3xl border border-white/[0.07] bg-white/[0.018] p-3 sm:p-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-1 items-start">
-                        <BookPagePreview
-                          type="left"
-                          pageNumber={group.leftPageNumber}
-                          sequenceOrder={group.answer.sequence_order}
-                          questionText={group.question?.content || ""}
-                          headingPhoto={group.headingPhoto}
-                          isPhotoStory={group.isPhotoStory}
-                          photoSequence={group.photoSequence}
-                          photoCaption={group.photoCaption}
-                          {...(group.isPhotoStory ? { questionText: group.photoTitle } : {})}
-                        />
-
-                        <BookPagePreview
-                          type="right"
-                          pageNumber={group.rightPageNumber}
-                          bodyParagraphs={group.bodyParagraphs}
-                        />
-                      </div>
-                    </div>
-
-                    {group.photoPages.map(photoPage => (
-                      <BookPagePreview
-                        key={photoPage.photo.storage_path || photoPage.pageNumber}
-                        type="photo"
-                        pageNumber={photoPage.pageNumber}
-                        photo={photoPage.photo}
-                      />
-                    ))}
-                  </div>
-                ))}
+              <div className="rounded-3xl border border-white/[0.07] bg-white/[0.018] p-2 sm:p-4">
+                <iframe
+                  title="縦糸+横糸ブック B5紙面プレビュー"
+                  srcDoc={previewPrintHtml}
+                  sandbox="allow-scripts"
+                  className="block w-full min-h-[70vh] rounded-xl bg-[#e7e7e4]"
+                />
+                {includeWebBookQr && <p className="px-2 pt-3 text-center text-xs text-white/45">確認用の紙面です。QRは注文完了後に固定します。</p>}
               </div>
             )}
           </div>
@@ -16543,10 +17066,21 @@ export function Scene_BookBuilder({
         )}
 
         {stepIndex === 4 && !readOnly && (
-          orderCompleted ? (
+          orderCompleted || orderCompletedAt ? (
             <div className="glass-card p-7 text-center">
               <p className="text-white/82 text-[1.05rem] text-narrative">注文を受け付けました</p>
               <p className="mt-5 text-sm leading-loose text-white/42">選んだ内容とお届け先を保存しました。</p>
+              {import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED === "true" && (
+                <div className="mt-6 text-sm leading-loose text-white/65">
+                  {productionJob?.state === "ready_review" ? <>
+                    <p>紙の本とWebブックの制作データができました。全{productionJob.pageCount}ページです。</p>
+                    {productionJob.pdfUrl && <a href={productionJob.pdfUrl} target="_blank" rel="noreferrer"
+                      className="mt-3 inline-block underline underline-offset-4">校正用PDFを開く</a>}
+                  </> : productionJob?.state === "error" ? (
+                    <p>制作データを確認しています。再注文は不要です。</p>
+                  ) : <p>注文内容から紙の本とWebブックを制作しています。</p>}
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-5">
@@ -16736,7 +17270,8 @@ function RecordingQuestionPrompt({ question }) {
 
   return (
     <div className="space-y-3 reading-question">
-      <div className="glass-card recording-question-card px-5 py-6 text-center">
+      {!isFormalOnboardingQuestion(question) && <p className="recording-theme-label">{recordingSectionLabel(question)}</p>}
+      <div className="recording-question-card px-5 py-6 text-center">
         <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
           {question.content}
         </p>
@@ -16754,7 +17289,7 @@ function RecordingQuestionPrompt({ question }) {
 
 function RecordingQuestionHeader({ question, userName, storyProgress, sectionLabel, isFormalOnboarding, onBack }) {
   return (
-    <header className="question-flow-header mb-5 pt-2 text-left">
+    <header className="question-flow-header mb-5 pt-2 text-left flex items-start justify-between gap-4">
       <div className="question-flow-back-slot">
         {onBack && <button type="button" onClick={onBack} className="min-h-[44px] text-white/68 text-[1rem]" aria-label="前の画面へ戻る">
           ← 戻る
@@ -16763,21 +17298,11 @@ function RecordingQuestionHeader({ question, userName, storyProgress, sectionLab
       <h1 className="sr-only">
         {withHonorific(userName)}の物語
       </h1>
-      <div className={isFormalOnboarding ? "flex items-center justify-between gap-4" : "space-y-2"}>
-        <p className={`text-white/60 text-[1rem] tracking-widest ${isFormalOnboarding ? "truncate" : ""}`}>
-          {sectionLabel}
-        </p>
-        {!isFormalOnboarding && (
-          <div className="w-full h-[2px] bg-white/10 rounded-full">
-            <div className="h-full bg-white/40" style={{width: `${((storyProgress.currentIndex + 1) / Math.max(storyProgress.total, 1)) * 100}%`}} />
-          </div>
-        )}
-        {isFormalOnboarding && question.progress_label && (
-          <p className="shrink-0 text-white/55 text-[1rem] tracking-widest">
-            {String(question.progress_label).replace(/\s*\/\s*/g, "/")}
-          </p>
-        )}
-      </div>
+      <p className="shrink-0 min-h-11 flex items-center text-white/75 text-[1rem]">
+        {isFormalOnboarding && question.progress_label
+          ? String(question.progress_label).replace(/\s*\/\s*/g, "/")
+          : `${Math.max(1, (storyProgress?.currentIndex ?? 0) + 1)} / ${Math.max(1, storyProgress?.total ?? 30)}`}
+      </p>
     </header>
   );
 }
@@ -16810,6 +17335,7 @@ export function Scene1_MyPage({
   skyOverride,
   onBack,
   onNext,
+  onWrite,
   onSkip,
   onEndToday
 }) {
@@ -16826,6 +17352,11 @@ export function Scene1_MyPage({
 
       <div className="recording-control-dock recording-control-dock--start mt-5">
         <RecordingStartButton onClick={onNext} />
+        {onWrite && <button type="button" onClick={onWrite}
+          className="recording-start-bar recording-start-bar--write" aria-label="書いて答える">
+          <Pencil size={22} strokeWidth={1.7} aria-hidden="true" />
+          <span>書いて答える</span>
+        </button>}
       </div>
 
       {!isTokenMode() && (
@@ -17741,7 +18272,7 @@ return (
             </p>
           )}
           <div className="recording-status-row" aria-live="polite">
-            <span className={`recording-live-dot ${isPaused ? "is-paused" : ""}`} aria-hidden="true" />
+            <span className={`recording-live-dot ${isPaused ? "is-paused" : voiceLevel > 0 ? "" : "is-silent"}`} aria-hidden="true" />
             <span className="recording-state-label">{isPaused ? "一時停止中" : "録音中"}</span>
           </div>
 
@@ -17793,11 +18324,15 @@ export function Scene3_5_VoiceCheck({
   onRetryTranscription,
   onSelectStyle,
   onUpdateText,
+  onPolishWhole,
+  onUseWholeCandidate,
+  onDiscardWholeCandidate,
   onProceed
 }) {
   const [isEditingTranscript, setIsEditingTranscript] = useState(false);
   const [draftTranscript, setDraftTranscript] = useState("");
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const voiceOnly = data.editRecordingMode === 'voice_only';
   const audioPreviewRef = useRef(null);
 
   const isShortAnswer = isRecordingTooShort(data.duration);
@@ -17827,7 +18362,7 @@ export function Scene3_5_VoiceCheck({
   const hasPolishError = data.polishStatus === "error";
   const isProcessing = data.transcriptionStatus === "processing";
   const isPolishing = data.polishStatus === "processing";
-  const canUseStyles = !hasTranscriptionError && !hasPolishError && !isProcessing && !isPolishing && !!displayText;
+  const canUseStyles = !voiceOnly && !data.wholeTextCandidate && !hasTranscriptionError && !hasPolishError && !isProcessing && !isPolishing && !!displayText;
 
   const toggleAudioPreview = async () => {
     const audio = audioPreviewRef.current;
@@ -17896,11 +18431,24 @@ return (
 
     <div className="text-center mb-4">
       <p className="text-white/86 text-[1.02rem] text-narrative">
-        {isLifeOutline ? "声が届きました" : "語りを確認します"}
+        {isLifeOutline ? "声が届きました" : voiceOnly ? "残す声を確認します" : "語りを確認します"}
       </p>
     </div>
 
       <div className="flex-1 overflow-y-auto pb-6">
+        {voiceOnly && <p className="mb-5 text-white/65 text-[1rem] leading-loose">この録音はWebブックに残します。今の文章は変更しません。</p>}
+        {data.wholeTextCandidate && <div className="glass-card p-5 mb-6">
+          <h3 className="text-white text-lg mb-4">文章全体を整えた候補</h3>
+          <p className="whitespace-pre-wrap leading-loose text-white/85">{data.wholeTextCandidate.text}</p>
+          <details className="mt-5 text-white/65"><summary className="min-h-11 underline">元の文章を確認する</summary>
+            <p className="whitespace-pre-wrap leading-loose mt-3">{data.wholeTextCandidate.original}</p></details>
+          <div className="mt-5 space-y-3">
+            <button type="button" onClick={onUseWholeCandidate} className="recording-start-bar">この文章を使う</button>
+            <button type="button" onClick={onDiscardWholeCandidate} className="w-full min-h-12 text-white/70">元の文章で続ける</button>
+          </div>
+          <p className="text-white/50 text-sm mt-3">次の保存操作まで文章は確定しません。</p>
+        </div>}
+        {data.wholeTextPolishError && <p role="status" className="mb-5 text-amber-200">{data.wholeTextPolishError}</p>}
         {data.recordingStopReason === "limit" && <p role="status" className="mb-5 text-white/70 text-[1rem] leading-loose text-center">{RECORDING_LIMIT_NOTICE}</p>}
         {hasTranscriptionError && (
           <div className="glass-card p-5 mb-6">
@@ -17942,7 +18490,7 @@ return (
           />
         )}
 
-        {!isLifeOutline && (
+        {!isLifeOutline && !voiceOnly && (
         <div className="flex gap-2 mb-5">
           <button
             type="button"
@@ -18026,17 +18574,17 @@ return (
       </button>
     )}
 
-    <button
+    {!voiceOnly && <button
       type="button"
       onClick={startTranscriptEdit}
-      disabled={isPolishing}
+      disabled={isPolishing || Boolean(data.wholeTextCandidate)}
       className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-full border border-white/[0.16] bg-white/[0.045] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
-        isPolishing ? "opacity-30" : "opacity-80"
+        isPolishing || data.wholeTextCandidate ? "opacity-30" : "opacity-80"
       }`}
       aria-label="本文を修正する"
     >
       <Pencil size={15} className="text-white/65" strokeWidth={1.7} />
-    </button>
+    </button>}
   </div>
 </div>
             )}
@@ -18095,6 +18643,14 @@ return (
 
       <div className="pt-5 border-t border-white/10 space-y-4">
 
+       {data.editRecordingMode === 'append' && !data.wholeTextCandidate && (
+         <button type="button" onClick={onPolishWhole}
+           disabled={isProcessing || isPolishing || data.wholeTextPolishStatus === 'processing' || !displayText}
+           className="w-full min-h-12 text-white/70 underline disabled:opacity-40">
+           {data.wholeTextPolishStatus === 'processing' ? '文章全体を整えています…' : '文章全体を整えた候補を見る'}
+         </button>
+       )}
+
        {showAddMoreSuggestion && (
          <button
            onClick={onAddMore}
@@ -18115,16 +18671,18 @@ return (
 
         <button
           onClick={onProceed}
-          disabled={hasUploadError || isProcessing || isPolishing || !displayText}
+          disabled={hasUploadError || isProcessing || isPolishing || !displayText
+            || Boolean(data.wholeTextCandidate) || data.wholeTextPolishStatus === 'processing'}
           className={`btn-quiet w-full py-4 rounded-full text-white ${
-            hasUploadError || isProcessing || isPolishing || !displayText ? "opacity-40" : ""
+            hasUploadError || isProcessing || isPolishing || !displayText
+              || data.wholeTextCandidate || data.wholeTextPolishStatus === 'processing' ? "opacity-40" : ""
           }`}
         >
           {isLifeOutline
             ? isLastLifeOutline
               ? "人生の輪郭をまとめる"
               : "次の問いへ"
-            : "この内容で進む"}
+            : voiceOnly ? "この声を残す" : "この内容で進む"}
         </button>
 
         <button
@@ -19323,6 +19881,7 @@ export function PhotoCorrectionFlow({
 export function Scene_StoryPages({
   user,
   foundation,
+  initialAnswerId = null,
   questionSet: suppliedQuestionSet = [],
   onOpenLifeOutline,
   onTalkMore,
@@ -19386,7 +19945,9 @@ export function Scene_StoryPages({
     return question?.content || "";
   };
 
-  const buildChapterSections = answerRows => buildStorySections(questionSet, answerRows);
+  const buildChapterSections = answerRows => buildStorySections(questionSet, answerRows, {
+    trialCarryDecision: foundation?.project?.trial_carry_decision,
+  });
 
   const [answers, setAnswers] = useState([]);
   const [mediaByAnswerId, setMediaByAnswerId] = useState({});
@@ -19396,7 +19957,10 @@ export function Scene_StoryPages({
   const [uploadingPhotoAnswerId, setUploadingPhotoAnswerId] = useState(null);
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
   const [editingAnswer, setEditingAnswer] = useState(null);
+  const [voiceActionAnswer, setVoiceActionAnswer] = useState(null);
   const [photoActionAnswerId, setPhotoActionAnswerId] = useState(null);
+  const [editingLayoutPhoto, setEditingLayoutPhoto] = useState(null);
+  const [photoLayoutSaving, setPhotoLayoutSaving] = useState(false);
   const [editingPhoto, setEditingPhoto] = useState(null);
   const [preparingPhotoPath, setPreparingPhotoPath] = useState(null);
   const [replacingPhotoPath, setReplacingPhotoPath] = useState(null);
@@ -19472,6 +20036,7 @@ const loadAnswers = async (options = {}) => {
           transcript_readable,
           transcript_essay,
           transcript_edited,
+          text_revision,
           selected_style,
           ai_mirror,
           snippet,
@@ -19617,6 +20182,10 @@ const pickAnswerTextByStyle = (answer, style) => {
 };
 
 const openAnswerEditor = (answer) => {
+  if (!storyAccess && !adminPreview) {
+    setEditingAnswer(answer);
+    return;
+  }
   const style =
     answer?.selected_style === "clean" || answer?.selected_style === "essay"
       ? answer.selected_style
@@ -19697,7 +20266,7 @@ const startEditRecordFromModal = async (mode) => {
   const deletePhoto = async (photo) => {
     if (!photo?.storage_path) return;
 
-    const ok = window.confirm("この写真をページから削除しますか？");
+    const ok = window.confirm("この写真を語りから削除しますか？ 本の紙面からも削除されます。");
     if (!ok) return;
 
     try {
@@ -19840,7 +20409,7 @@ const replaceStoryPhoto = async (file, target) => {
   }
 };
 
-const handleStoryPhotoSelect = async (file, answerId) => {
+const handleStoryPhotoSelect = async (file, answerId, bookLayout = null) => {
     const selectedFiles = file?.type?.startsWith("image/") ? [file] : [];
 
     if (!answerId || selectedFiles.length === 0 || !user?.id) {
@@ -19851,7 +20420,7 @@ const handleStoryPhotoSelect = async (file, answerId) => {
       setUploadingPhotoAnswerId(answerId);
 
       if (storyAccess) {
-        await storyAccess.addPhoto(file, answerId);
+        await storyAccess.addPhoto(file, answerId, null, bookLayout);
         await loadAnswers({ showLoading: false });
         return;
       }
@@ -19873,14 +20442,13 @@ const handleStoryPhotoSelect = async (file, answerId) => {
               ? "webp"
               : "jpg";
 
-        const photoNo = String(existingPhotoCount + i + 1).padStart(2, "0");
-        const photoPath = `${recordingStorageRoot(user.id, foundation.project.id, answerId)}/photo-${photoNo}.${ext}`;
+        const photoPath = `${recordingStorageRoot(user.id, foundation.project.id, answerId)}/photo-${crypto.randomUUID()}.${ext}`;
 
         const { error: uploadError } = await supabaseClient.storage
           .from("photos")
           .upload(photoPath, file, {
             contentType,
-            upsert: true
+            upsert: false
           });
 
         if (uploadError) {
@@ -19900,7 +20468,8 @@ const handleStoryPhotoSelect = async (file, answerId) => {
             part: existingPhotoCount + i + 1,
             total_parts: existingPhotoCount + selectedFiles.length,
             file_name: file.name || null,
-            content_type: contentType
+            content_type: contentType,
+            book_layout: bookLayout
           }
         });
       }
@@ -19919,11 +20488,28 @@ const handleStoryPhotoSelect = async (file, answerId) => {
       await loadAnswers({ showLoading: false });
     } catch (e) {
       console.error(e);
-      if (storyAccess) throw e;
-      alert(e.message || "写真の追加に失敗しました。");
+      throw e;
     } finally {
       setUploadingPhotoAnswerId(null);
     }
+  };
+
+  const saveStoryPhotoLayout = async (answerId, { file, photo, layout }) => {
+    setPhotoLayoutSaving(true);
+    try {
+      if (file) {
+        await handleStoryPhotoSelect(file, answerId, layout);
+      } else if (photo?.id) {
+        if (storyAccess) await storyAccess.setPhotoLayout(photo, layout);
+        else {
+          const { error } = await supabaseClient.from("media_assets")
+            .update({ meta_json: { ...(photo.meta_json || {}), book_layout: layout } })
+            .eq("id", photo.id).eq("user_id", user.id);
+          if (error) throw error;
+        }
+        await loadAnswers({ showLoading: false });
+      }
+    } finally { setPhotoLayoutSaving(false); }
   };
 
 useEffect(() => {
@@ -19945,6 +20531,16 @@ useEffect(() => {
 }, [answers, questionSet, selectedChapterIndex]);
 
   const chapterSections = buildChapterSections(answers);
+  useEffect(() => {
+    if (!initialAnswerId || !answers.length) return;
+    const sectionIndex = chapterSections.findIndex(section => section.answers?.some(answer => answer.id === initialAnswerId));
+    if (sectionIndex < 0) return;
+    setSelectedChapterIndex(sectionIndex);
+    const timer = window.setTimeout(() => {
+      document.querySelector(`[data-story-answer-id="${initialAnswerId}"]`)?.scrollIntoView({block:"center",behavior:"smooth"});
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [initialAnswerId, answers, questionSet]);
   const bookendMedia = kind => ({
     voice: chapterSections.find(section => section.bookendKind === kind)?.answers?.length || 0,
     video: videoStories.find(story => bookendKindForVideo(story) === kind) || null
@@ -19987,20 +20583,13 @@ return (
       onReload={() => loadAnswers({ showLoading: false })}
       onClose={() => setVideoFlowOpen(false)}
     />
-    <PhotoCorrectionFlow
+    <BookPhotoPlacementFlow
       open={!!photoActionAnswerId}
-      awaitCompletion={Boolean(storyAccess)}
-      onClose={() => setPhotoActionAnswerId(null)}
-      onComplete={async (file) => {
-        const answerId = photoActionAnswerId;
-        if (storyAccess) {
-          await handleStoryPhotoSelect(file, answerId);
-          setPhotoActionAnswerId(null);
-          return;
-        }
-        setPhotoActionAnswerId(null);
-        handleStoryPhotoSelect(file, answerId);
-      }}
+      photos={(mediaByAnswerId[photoActionAnswerId] || []).filter(item => item.asset_type === "photo" && item.url)}
+      initialPhoto={editingLayoutPhoto}
+      busy={photoLayoutSaving}
+      onClose={() => { setPhotoActionAnswerId(null); setEditingLayoutPhoto(null); }}
+      onSave={selection => saveStoryPhotoLayout(photoActionAnswerId, selection)}
     />
     <PhotoCorrectionFlow
       open={!!editingPhoto}
@@ -20033,7 +20622,21 @@ return (
     </p>
   </div>
 )}
-{editingAnswer && createPortal((
+{editingAnswer && !storyAccess && !adminPreview && (
+  <WrittenAnswerEditor
+    userId={user?.id}
+    projectId={foundation?.project?.id}
+    question={getQuestionForAnswer(editingAnswer)}
+    answer={editingAnswer}
+    client={supabaseClient}
+    onClose={closeAnswerEditor}
+    onSaved={async () => {
+      await loadAnswers({ showLoading: false });
+      closeAnswerEditor();
+    }}
+  />
+)}
+{editingAnswer && (storyAccess || adminPreview) && createPortal((
   <div className="fixed inset-0 z-[9999] w-[100dvw] h-[100dvh] bg-slate-950 px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden">
     <div className="shrink-0 text-center mb-4">
       <p className="text-white/82 text-[1rem] text-narrative">
@@ -20124,6 +20727,29 @@ return (
     </div>
   </div>
 ), document.body)}
+{voiceActionAnswer && createPortal((
+  <div role="dialog" aria-modal="true" className="fixed inset-0 z-[9999] flex items-end justify-center bg-slate-950/90 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+    <div className="w-full max-w-xl rounded-2xl border border-white/15 bg-[#172337] p-5 text-white">
+      <h2 className="text-xl mb-5">声をどう残しますか？</h2>
+      <div className="space-y-3">
+        {[
+          ['replace','語り直す','現在の文章を新しい語りから作り直します。旧版と旧音声は履歴に残ります。'],
+          ['append','語り足す','今の文章は変えず、新しい語りを段落として加えます。'],
+          ['voice_only','声だけ残す','文章は変えず、Webブックで再生できる声を残します。'],
+        ].map(([mode,label,description]) => <button key={mode} type="button"
+          disabled={mode === 'append' && getAudioPathsForAnswer(voiceActionAnswer.id).length >= MAX_AUDIO_PARTS_PER_QUESTION}
+          onClick={async () => {
+            const answer = voiceActionAnswer;
+            const started = await onEditRecord?.(answer,mode,getAudioPathsForAnswer(answer.id));
+            if (started !== false) setVoiceActionAnswer(null);
+          }} className="w-full rounded-xl border border-white/20 bg-white/[0.06] p-4 text-left disabled:opacity-40">
+          <span className="block text-lg">{label}</span>
+          <span className="block mt-1 text-sm text-white/55 leading-relaxed">{description}</span>
+        </button>)}
+      </div>
+      <button type="button" onClick={() => setVoiceActionAnswer(null)} className="w-full min-h-12 mt-4 text-white/60">戻る</button>
+    </div>
+  </div>), document.body)}
 
 
 
@@ -20220,7 +20846,7 @@ return (
             const audios = media.filter(m => m.asset_type === "audio" && (m.url || (renderAudio && m.storage_path)));
 
             return (
-              <article key={answer.id} className="glass-card p-5 text-left">
+              <article key={answer.id} data-story-answer-id={answer.id} className="glass-card p-5 text-left">
                 {isTrialStoryQuestion(getQuestionForAnswer(answer)) && (
                   <p className="mb-3 text-[1rem] text-white/60">無料３問</p>
                 )}
@@ -20246,12 +20872,21 @@ return (
             className="w-full h-auto object-contain bg-black/20"
           />
 
+          <div className="absolute left-3 top-3 rounded-full bg-slate-950/85 px-3 py-1 text-xs text-white">
+            {photoBookLayout(photo, photoIndex).placement === "excluded"
+              ? "配置を選んでください"
+              : `本では：${{ opener: "質問の下", after_full: "本文のあと・大きく", after_half: "本文のあと・小さく" }[photoBookLayout(photo, photoIndex).placement]}`}
+          </div>
+
+          <button type="button" onClick={() => { setEditingLayoutPhoto(photo); setPhotoActionAnswerId(answer.id); }}
+            className="absolute right-12 top-2 rounded-full bg-slate-950/85 px-3 py-2 text-xs text-white">配置を変える</button>
+
           <button
             type="button"
             onClick={() => deletePhoto(photo)}
             disabled={deletingPhotoPath === photo.storage_path || replacingPhotoPath === photo.storage_path}
             className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/55 text-white/85 text-[1rem]"
-            aria-label="写真を削除"
+            aria-label="写真を語りから削除"
           >
             {deletingPhotoPath === photo.storage_path ? "…" : "×"}
           </button>
@@ -20289,8 +20924,13 @@ return (
   onClick={() => openAnswerEditor(answer)}
   className="mt-5 text-white/35 text-[1rem] underline underline-offset-4"
 >
-  文章を整える
+  文章を編集する
 </button>
+{!storyAccess && !adminPreview && <button type="button"
+  onClick={() => setVoiceActionAnswer(answer)}
+  className="mt-5 ml-5 text-white/45 text-[1rem] underline underline-offset-4">
+  語る・声を残す
+</button>}
 
               {renderRecordInfo?.(answer, audios)}
               {audios.length > 0 && (
@@ -20414,7 +21054,7 @@ export function Scene_NotificationSetup({
   adminPreviewClient = null
 }) {
   const supabaseClient = adminPreviewClient || applicationSupabaseClient;
-  const emailUnavailable = Boolean(notificationAccess && !user?.email);
+  const emailUnavailable = !user?.email;
   const weekdayOptions = [
     "日曜日",
     "月曜日",
@@ -20438,6 +21078,7 @@ export function Scene_NotificationSetup({
   });
   const [saveState, setSaveState] = useState("idle");
   const [removedSchedule, setRemovedSchedule] = useState(null);
+  const [scheduleReadyForLine, setScheduleReadyForLine] = useState(Boolean(initialPreference));
   const initialPhoneVerified = Boolean(
     initialPreference?.phone_number && initialPreference?.phone_verified_at
   );
@@ -20525,6 +21166,7 @@ export function Scene_NotificationSetup({
           sort_order: Number(schedule.sort_order || index + 1),
           is_active: schedule.is_active !== false
         }));
+        setScheduleReadyForLine(true);
         const first = savedSchedules[0];
         publishPreference({
           user_id: user?.id,
@@ -20859,6 +21501,9 @@ export function Scene_NotificationSetup({
           <p className="mb-4 text-white/68 text-[1rem] text-narrative">受け取り方法</p>
 
           <div className="space-y-3">
+            {import.meta.env.VITE_LINE_AUTH_ENABLED === 'true' && !adminReadOnly && !notificationAccess && (
+              <LineNotificationConnection client={supabaseClient} initialEnabled={initialPreference?.line_enabled} ready={scheduleReadyForLine} onChanged={patch => publishPreference(patch)} />
+            )}
             <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-4 flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-white/[0.07] flex items-center justify-center shrink-0">
                 <Mail size={17} className="text-white/62" strokeWidth={1.7} />
@@ -21014,7 +21659,7 @@ export function Scene_NotificationSetup({
 
         <div className="notification-setup__status mt-6 text-center min-h-[70px]">
           <p className="text-white/40 text-[1rem] leading-loose">
-            メールは必ず届き、SMSは追加で受け取れます
+            {emailUnavailable ? 'メールの登録は不要です。使いやすい方法で受け取れます。' : '登録済みのメールでもお届けします。SMSも追加できます。'}
           </p>
 
           {saveState === "saving" && <p className="mt-3 text-white/28 text-[1rem]">保存しています...</p>}

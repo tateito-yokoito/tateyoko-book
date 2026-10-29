@@ -5,7 +5,7 @@ import { trialEvent, trialIsReady, yen } from './lib/trialConversion.js';
 import './trial-completion.css';
 import BrandLogo from './BrandLogo.jsx';
 
-const valueItems = ['1〜3ヶ月、人生を辿る体験', '問いに声で語り、文章に整える', '大切な写真と、動画2本まで', '縦糸横糸ブック 1冊・国内送料込み', '声や動画にも触れられるWebブック', 'わたしの本棚／家族の本棚', 'ブックができたあとも、季節の問い'];
+const valueItems = ['1〜3ヶ月、人生を辿る体験', '問いに声でも文章でも答えられる', '大切な写真と、動画2本まで', '縦糸横糸ブック 1冊・国内送料込み', '声や動画にも触れられるWebブック', 'わたしの本棚／家族の本棚', 'ブックができたあとも、季節の問い'];
 const sectionEvents = { C03: 'trial_problem_section_reached', C06: 'trial_journey_preview_reached', C08: 'trial_book_preview_reached', C09: 'trial_webbook_preview_reached', C12: 'trial_price_viewed', C14: 'trial_refund_section_viewed', C15: 'trial_payment_options_viewed' };
 
 function Section({ id, children, className = '' }) {
@@ -44,7 +44,7 @@ export function StoryCard({ story, index, resolveMedia, onReplay, compact = fals
     {story.title && <p className="tc-question">{story.question}</p>}
     {story.text ? <><p className="tc-story-excerpt">{story.text.slice(0, compact ? 76 : 150)}{story.text.length > (compact ? 76 : 150) ? '…' : ''}</p>
       {story.text.length > (compact ? 76 : 150) && <details><summary>語りの全文を読む</summary><p className="tc-preserve">{story.text}</p></details>}</>
-      : <p>{story.state === 'missing_audio' ? '録音の保存を確認できません。保存状態を確認してから進んでください。' : '声は保存されています。文章はまだ準備中です。'}</p>}
+      : <p>{story.state === 'missing_audio' ? '回答の保存を確認できません。保存状態を確認してから進んでください。' : '声は保存されています。文章はまだ準備中です。'}</p>}
     {!!story.audio.length && (!audioUrls.length ? <button className="tc-text-button" onClick={openMedia} disabled={busy}><Play size={16} />{busy ? '音声を準備中…' : 'このときの声を聴く'}</button>
       : audioUrls.map((url, i) => <label className="tc-audio" key={url}>録音 {audioUrls.length > 1 ? `${i + 1} / ${audioUrls.length}` : ''}<audio controls preload="none" src={url} onPlay={onReplay} onError={() => { setAudioUrls([]); setError('音声を開けませんでした。もう一度お試しください。'); }} /></label>))}
     {!!story.photos.length && (photoUrls.length ? photoUrls.map((url, i) => <img key={url} className="tc-record-photo" src={url} alt={`この語りに添えた写真 ${i + 1}`} onError={() => { setPhotoUrls([]); setError('写真を開けませんでした。もう一度お試しください。'); }} />)
@@ -67,13 +67,14 @@ export function TrialOrderConfirmation({ mode, quote, onBack, onSubmit, onApplyD
       const next=await onApplyDiscount(code.trim());
       if(!Number.isInteger(next?.amount_total)||next.amount_total<0)throw Error();
       setDiscountQuote(next);setAppliedCode(code.trim());
-    }catch{setDiscountError('割引コードを確認できませんでした。入力内容・有効期限をご確認ください。');}
+    }catch(error){setDiscountError(error?.message === 'この割引コードは本人確認前には利用できません'
+      ? error.message : '割引コードを確認できませんでした。入力内容・有効期限をご確認ください。');}
     finally{setQuoting(false);}
   }
   return <div className="tc-confirm">
     <button className="tc-text-button" onClick={onBack} disabled={busy}>← ご案内に戻る</button>
     <p className="tc-eyebrow"><BrandLogo /></p><h1 tabIndex={-1}>お申し込み内容の確認</h1>
-    <p>{mode === 'gift' ? '大切な方へ、人生を辿る時間を贈ります。' : '体験の一頁で残した語りは、そのまま引き継がれます。'}</p>
+    <p>{mode === 'gift' ? '大切な方へ、人生を辿る時間を贈ります。' : '3つの問いに答えました。お申し込み内容をご確認ください。'}</p>
     <dl className="tc-order-lines"><div><dt>お申し込み</dt><dd>{mode === 'gift' ? '購入して贈る' : 'ご自身で始める'}</dd></div>
       <div><dt>含まれるブック</dt><dd>B5・ソフトカバー・フルカラー 1冊<br />国内1ヶ所送料込み／Webブック付き</dd></div>
       <div><dt>{appliedCode ? '割引適用後のお支払い総額' : quote.family_price ? 'ご家族向け特別価格' : 'お支払い総額'}</dt><dd className="tc-order-price">{yen(currentQuote.amount_total)}<small>（税込）</small></dd></div></dl>
@@ -99,7 +100,8 @@ export default function TrialCompletionExperience({ stories = [], mode = 'self',
   loading = false, error = '', onRetry, resolveMedia, onPurchase, onInvite, onContinue, onFinish,
   onEvent, onApplyDiscount, reviewOnly = false, fastFlow = false, intent = null, demoContent, demoAudioUrl }) {
   const root = useRef(null), previousFocus = useRef(null);
-  const [confirmation, setConfirmation] = useState(false), [busy, setBusy] = useState(false), [actionError, setActionError] = useState('');
+  const [confirmation, setConfirmation] = useState(false), [pauseChoice, setPauseChoice] = useState(false);
+  const [busy, setBusy] = useState(false), [actionError, setActionError] = useState('');
   const [decision, setDecision] = useState(intent), [theme, setTheme] = useState(0);
   const gift = mode === 'gift', recipient = mode === 'recipient', paid = mode === 'paid', sales = !recipient && !paid;
   const ready = !loading && trialIsReady(stories);
@@ -118,8 +120,9 @@ export default function TrialCompletionExperience({ stories = [], mode = 'self',
   }, [mode, loading, quote]);
   useEffect(() => {
     if (confirmation) root.current?.querySelector('.tc-confirm h1')?.focus();
+    else if (pauseChoice) root.current?.querySelector('.tc-pause-choice h1')?.focus();
     else previousFocus.current?.focus({ preventScroll: true });
-  }, [confirmation]);
+  }, [confirmation, pauseChoice]);
   const pauseOtherMedia = event => {
     root.current?.querySelectorAll('audio,video').forEach(el => { if (el !== event.target) el.pause(); });
   };
@@ -128,31 +131,42 @@ export default function TrialCompletionExperience({ stories = [], mode = 'self',
     emit('trial_story_replayed');
   };
   const openOrder = event => { root.current?.querySelectorAll('audio,video').forEach(el => el.pause()); previousFocus.current = event.currentTarget; emit(gift ? 'trial_gift_cta_clicked' : 'trial_purchase_cta_clicked'); setConfirmation(true); };
+  const openPauseChoice = event => {
+    root.current?.querySelectorAll('audio,video').forEach(el => el.pause());
+    previousFocus.current = event.currentTarget;
+    emit('trial_pause_choice_opened');
+    setPauseChoice(true);
+    root.current?.scrollTo({ top: 0, behavior: 'instant' });
+  };
   const action = async callback => { setBusy(true); setActionError(''); try { await callback(); } catch (e) { setActionError(e?.message || '操作を完了できませんでした。もう一度お試しください。'); } finally { setBusy(false); } };
   const buyButton = <button className="tc-primary" disabled={!canBuy || busy} onClick={openOrder}>{gift ? '購入して贈る' : '購入して物語を続ける'}<ArrowRight size={19} /></button>;
   const storyOwner = subjectName ? `${subjectName}さん` : gift ? '大切な方' : 'あなた';
   const continueAsRecipient = () => action(async () => { await onContinue('continue'); setDecision('continue'); emit('trial_recipient_continue_requested'); });
   return <div className={`tc-root${fastFlow ? ' tc-fast-flow' : ''}`} ref={root}>
     <header className="tc-header"><span className="tc-brand"><BrandLogo>縦糸横糸<small>TATEITO YOKOITO</small></BrandLogo></span>
-      {!confirmation && <a href={fastFlow ? sales ? '#trial-fast-offer' : '#tc-fast-title' : sales ? '#trial-C12' : '#trial-next'}>{sales ? '内容・料金を見る' : 'このあとのこと'}<ArrowDown size={15} /></a>}</header>
-    <main hidden={confirmation}>
+      {!confirmation && !pauseChoice && <a href={fastFlow ? sales ? '#trial-fast-offer' : '#tc-fast-title' : sales ? '#trial-C12' : '#trial-next'}>{sales ? '内容・料金を見る' : 'このあとのこと'}<ArrowDown size={15} /></a>}</header>
+    <main hidden={confirmation || pauseChoice}>
       <Section id="C01" className="tc-reflection">
-        <div><p className="tc-eyebrow">体験の一頁</p><h1>{fastFlow ? <>3つの語りが、<br />物語の始まりに。</> : <>3つの問いを、<br />語り終えました。</>}</h1>
-          {fastFlow ? <><p>{storyOwner}が話した声と文章は、ここに残っています。</p><p>この3つの語りを、もう少し先へつなげてみませんか。</p></>
+        <div><p className="tc-eyebrow">体験の一頁</p><h1>{fastFlow ? <>3つの答えが、<br />物語の始まりに。</> : <>3つの問いに、<br />答えました。</>}</h1>
+          {fastFlow ? <><p>{storyOwner}が残した言葉は、ここにあります。</p><p>この3つの答えを、もう少し先へつなげてみませんか。</p></>
             : <><p>少しだけ、振り返ってみてください。</p><p>話しているうちに、<br />久しぶりに思い出したことはありましたか？</p><p>誰かの顔が浮かんだり、<br />「そういえば」と感じたことはありましたか？</p></>}</div>
         <div className="tc-stories" aria-busy={loading}>
-          <p className="tc-eyebrow">{subjectName ? `${subjectName}さんが残した語り` : 'あなたが残した語り'}</p>
+          <p className="tc-eyebrow">{subjectName ? `${subjectName}さんが残した言葉` : 'あなたが残した言葉'}</p>
           {loading ? <p role="status">保存した語りを開いています…</p> : stories.map((story, i) => fastFlow
-            ? <details className="tc-fast-story-summary" key={story.id}><summary><span className="tc-number">0{i + 1}</span><span><strong>{story.title || story.question}</strong><small>{story.text ? `${story.text.slice(0, 48)}${story.text.length > 48 ? '…' : ''}` : '声の保存状態を確認できます'}</small></span><ChevronRight size={18} aria-hidden="true" /></summary><StoryCard story={story} index={i} resolveMedia={resolveMedia} onReplay={stopOtherMedia} compact /></details>
+            ? <details className="tc-fast-story-summary" key={story.id}><summary><span className="tc-number">0{i + 1}</span><span><strong>{story.title || story.question}</strong><small>{story.text ? `${story.text.slice(0, 48)}${story.text.length > 48 ? '…' : ''}` : '回答の保存状態を確認できます'}</small></span><ChevronRight size={18} aria-hidden="true" /></summary><StoryCard story={story} index={i} resolveMedia={resolveMedia} onReplay={stopOtherMedia} compact /></details>
             : <StoryCard key={story.id} story={story} index={i} resolveMedia={resolveMedia} onReplay={stopOtherMedia} />)}
           {error && <div role="alert"><p className="tc-error">{error}</p>{onRetry && <button className="tc-text-button" onClick={onRetry}>もう一度確認する</button>}</div>}
-          {!loading && !ready && <p className="tc-error">3つの録音の保存を確認してから、お申し込みへ進めます。</p>}
+          {!loading && !ready && <p className="tc-error">3つの回答の保存を確認してから、お申し込みへ進めます。</p>}
         </div>
+        {mode === 'self' && <div className="tc-reflection-next">
+          <a className="tc-primary" href={fastFlow ? '#trial-fast-offer' : '#trial-C02'}>本編でできることを見る<ArrowRight size={18} /></a>
+          <button className="tc-text-button" type="button" onClick={openPauseChoice}>今日はここまで</button>
+        </div>}
       </Section>
       {fastFlow && <section className="tc-fast-decision" aria-labelledby="tc-fast-title">
         <div className="tc-fast-story-bridge">
           <div><p className="tc-eyebrow">この先の物語</p><h2 id="tc-fast-title">{paid ? 'お支払いは済んでいます。' : recipient ? '続けたい気持ちを、伝えられます。' : gift ? '大切な方の声を、一冊の物語へ。' : '今の語りを、そのまま次へ。'}</h2>
-            <p>{paid ? '追加のお支払いはありません。保存した3つの語りを引き継いで、はじまりの章へ進めます。' : recipient ? 'ここで購入を決める必要はありません。続けたいと思ったら、その気持ちだけを贈り主へ届けられます。語りの中身は送りません。' : gift ? 'お支払いする方と、語る方は別でも大丈夫。ご本人が声で語り、あなたは進行や写真をお手伝いできます。' : '無料体験の声と文章は、購入後もそのまま引き継がれます。毎週届く問いに、少しずつ語るところから始められます。'}</p></div>
+            <p>{paid ? '追加のお支払いはありません。保存した3つの答えを引き継いで、はじまりの章へ進めます。' : recipient ? 'ここで購入を決める必要はありません。続けたいと思ったら、その気持ちだけを贈り主へ届けられます。回答の中身は送りません。' : gift ? 'お支払いする方と、答える方は別でも大丈夫。ご本人が声でも文章でも答え、あなたは進行や写真をお手伝いできます。' : '毎週届く問いに、声でも文章でも少しずつ答えられます。'}</p></div>
           <figure><img src="/site/lifestyle.jpg" alt="二人で物語の本を開く利用イメージ" loading="lazy" /><figcaption>一緒に物語を開く時間のイメージ</figcaption></figure>
         </div>
         {sales ? <div id="trial-fast-offer" className="tc-fast-offer">
@@ -164,7 +178,7 @@ export default function TrialCompletionExperience({ stories = [], mode = 'self',
             <figure><img src="/site/hp-story-preview/price-book-rose-user.png" alt="縦糸横糸ブックのダスティローズの表紙と色見本" loading="lazy" /><figcaption><strong>縦糸横糸ブック</strong><span>出版社監修・B5判ソフトカバー1冊、80〜100ページ程度。語った文章と写真を、一冊に。</span></figcaption></figure>
             <figure><img src="/site/hp-story-preview/web-book-user.png" alt="スマートフォンで見るWebブックのイメージ" loading="lazy" /><figcaption><strong>縦糸横糸Webブック</strong><span>文章・写真、声と動画に触れられる作品。動画は任意で2本まで。家族とのシェアも。</span></figcaption></figure>
           </div>
-          <p className="tc-fast-included">問いに声で語り、文章に整え、写真とともに作品へ。完成前に内容を確認できます。</p>
+          <p className="tc-fast-included">問いに声でも文章でも答え、写真とともに作品へ。完成前に内容を確認できます。</p>
           <div className="tc-fast-pacing"><h4>{gift ? '語る方のペースで、無理なく。' : '自分のペースで、無理なく。'}</h4><p>25〜35問程度を少しずつ。完成の目安は1〜3ヶ月、ゆっくりなら最長1年間取り組めます。</p></div>
           <div className="tc-fast-options"><h4>必要なものを、完成時に追加できます</h4><div className="tc-fast-option-list">
             <div><strong>BOOK増刷</strong><span>1〜2冊目 5,000円／冊、3冊目以降 4,000円／冊（税込）</span></div>
@@ -173,6 +187,7 @@ export default function TrialCompletionExperience({ stories = [], mode = 'self',
           </div><p className="tc-small">いずれも基本料金には含まれません。必要な場合だけ、追加前に金額を確認できます。</p></div>
           {gift && <p className="tc-fast-assurance">ギフトは、お支払いから45日以内かつ受取人の本編開始前なら本体代金の全額返金保証。</p>}
           {buyButton}<p className="tc-small">次にお申し込み内容を確認します。このボタンでは決済されません。自動課金もありません。</p>
+          {mode === 'self' && <button className="tc-text-button tc-later-link" type="button" onClick={openPauseChoice}>少し考えてから決める</button>}
           <p className="tc-small">制作の進め方・{gift ? '返金保証・' : ''}お支払い方法は、下の「もっと詳しく見る」で確認できます。</p>
         </div> : <div className="tc-fast-next">
           <p className="tc-eyebrow">次の一歩</p>
@@ -223,7 +238,7 @@ export default function TrialCompletionExperience({ stories = [], mode = 'self',
         <Section id="C13"><h2>最後までできるかな、<br />と思った方へ。</h2><div className="tc-reassurance">{[['書き始めなくて大丈夫', '基本は、届く問いに声で話すことから。'], ['全部答えなくて大丈夫', 'すべての問いに答える必要はありません。'], ['自分のペースで', '目安は1〜3ヶ月。制作期間は1年間。特別な休止手続きは必要ありません。'], ['一人でも。家族と一緒でも。', '写真を手伝ってもらったり、一緒に昔のことを思い出したりすることもできます。']].map(([title, text]) => <div key={title}><h3>{title}</h3><p>{text}</p></div>)}</div></Section>
         {gift && <Section id="C14" className="tc-guarantee"><ShieldCheck size={28} strokeWidth={1.3} /><div><p className="tc-eyebrow">本体代金 全額返金保証</p><h2>はじめてみて、<br />合わなかったら。</h2><p>大切な方に合わなかった場合も、安心して贈れるように。</p><p>お支払いから<strong>45日以内</strong>、かつ受取人の<strong>本編開始前</strong>なら、理由を問わず、お支払いいただいた本体代金を全額返金します。</p><details><summary>返金保証について</summary><p>「はじまりの章」の後、ご本人が「本編をはじめる」と明示した時点で保証は終了します。章を読み終えただけでは終了しません。</p><p>購入して贈る場合は45日。同一語り手につき1回です。一括・分割で条件は変わりません。</p><p>返金確定後は制作を停止し、対象記録は30日間、本人が閲覧・取得できます。本保証とは別に、サービス不備等への対応を行います。</p></details></div></Section>}
         <Section id="C15" className="tc-short"><h2>お支払い方法</h2><p>クレジットカードの一括払い・分割払いに対応しています。</p><p className="tc-small">分割払いの利用可否・回数・手数料は、ご利用のカードによって異なります。Stripeの決済画面でお確かめください。</p></Section>
-        <Section id="C16" className="tc-final tc-ink tc-centered"><p className="tc-eyebrow">まだ、あなたの中にある物語へ。</p><h2>{gift ? <>大切な方にも、<br />こんな時間を贈ってみませんか。</> : <>あなたの物語の、<br />つづきを辿ってみませんか。</>}</h2>{buyButton}<p>{quote && yen(quote.amount_total)}（税込）・一括／対応カードの分割</p>{gift && <button className="tc-secondary" onClick={onInvite}>まず、相手にも3問試してもらう</button>}<button className="tc-text-button" onClick={onFinish}>今はここまでにする</button></Section>
+        <Section id="C16" className="tc-final tc-ink tc-centered"><p className="tc-eyebrow">まだ、あなたの中にある物語へ。</p><h2>{gift ? <>大切な方にも、<br />こんな時間を贈ってみませんか。</> : <>あなたの物語の、<br />つづきを辿ってみませんか。</>}</h2>{buyButton}<p>{quote && yen(quote.amount_total)}（税込）・一括／対応カードの分割</p>{gift && <button className="tc-secondary" onClick={onInvite}>まず、相手にも3問試してもらう</button>}<button className="tc-text-button" onClick={mode === 'self' ? openPauseChoice : onFinish}>今はここまでにする</button></Section>
       </> : <section id="trial-next" className="tc-section tc-centered"><h2>{paid ? 'ここから、はじまりの章へ。' : 'ここから先も、もう少し辿ってみたいですか？'}</h2>
         {paid ? <><p>すでに贈られているため、追加のお支払いはありません。</p><button className="tc-primary" disabled={!ready || busy} onClick={() => action(onPurchase)}>はじまりの章をはじめる<ArrowRight size={18} /></button></>
           : decision === 'continue' ? <p role="status">「続きをやってみたい」というお気持ちを受け付けました。贈り主へのお知らせを準備しています。語りの中身は送りません。</p>
@@ -232,6 +247,19 @@ export default function TrialCompletionExperience({ stories = [], mode = 'self',
       </details>
       <footer className="tc-footer"><BrandLogo align="center" /><span>辿る。再発見する。結晶化する。還る。</span></footer>
     </main>
+    {pauseChoice && <section className="tc-pause-choice" aria-labelledby="tc-pause-title">
+      <button className="tc-text-button" type="button" onClick={() => { emit('trial_pause_returned'); setPauseChoice(false); }}>← 語りに戻る</button>
+      <p className="tc-eyebrow">今日はここまで</p>
+      <h1 id="tc-pause-title" tabIndex={-1}>今、決めなくても<br />大丈夫です。</h1>
+      <p>3つの問いを語ってくれて、ありがとうございました。購入やLINEの友だち追加をしなくても、ここで終えられます。</p>
+      <div className="tc-pause-line">
+        <h2>少し気になった方へ</h2>
+        <p>作品のことや新しいお知らせを、LINEで時々お届けします。友だち追加は任意です。あなたの語りや録音をLINEへ送ることはありません。</p>
+        <a className="tc-primary" href="https://line.me/R/ti/p/%40558hxwaz" target="_blank" rel="noopener noreferrer" onClick={() => emit('trial_line_updates_clicked')}>LINEで案内を受け取る<ArrowRight size={18} /></a>
+        <p className="tc-small">LINEで公式アカウントを開き、友だち追加を選んでください。ここではログインや購入は行いません。</p>
+      </div>
+      <button className="tc-text-button tc-pause-finish" type="button" onClick={() => { emit('trial_pause_ended'); onFinish(); }}>受け取らず、今日は終える</button>
+    </section>}
     {confirmation && <TrialOrderConfirmation mode={mode} quote={quote} onApplyDiscount={onApplyDiscount} reviewOnly={reviewOnly} busy={busy} error={actionError}
       onBack={() => setConfirmation(false)} onSubmit={options => action(() => onPurchase(options))} />}
   </div>;

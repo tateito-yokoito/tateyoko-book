@@ -529,3 +529,11 @@ input.quiet-input:-webkit-autofill:active {
     outline-offset: 3px;
   }
 }
+@keyframes book-paper-enter {
+  from { opacity: .65; transform: translateX(8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.book-paper-turn { animation: book-paper-enter .28s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .book-paper-turn { animation: none; }
+}

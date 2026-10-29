@@ -5,8 +5,9 @@ import { SupporterSmsEntry } from './SupporterSms.jsx';
 import LandingPage from "./LandingPage.jsx";
 import GiftThreeQuestionsPage from "./gift-three-questions.jsx";
 import VoiceLibraryPage from "./VoiceLibraryPage.jsx";
-import VoicePlaybackPage from "./VoicePlaybackPage.jsx";
+import PublishedWebBook from "./PublishedWebBook.jsx";
 import { ThemeMemoryRequestRecipient } from "./ThemeMemoryRequestFlow.jsx";
+import StoryRequestRecipient from "./StoryRequestRecipient.jsx";
 import "./index.css";
 import FamilyConnectionTest from './FamilyConnectionTest.jsx';
 import FamilyRecordingFlow from './FamilyRecordingFlow.jsx';
@@ -21,6 +22,9 @@ import FamilyDeliverySettings from './FamilyDeliverySettings.jsx';
 
 const AdminReview = import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
   ? null : React.lazy(() => import('./admin/AdminReview.jsx'));
+const guestTrialEnabled = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true';
+const GuestTrialFlow = (import.meta.env.DEV || guestTrialEnabled)
+  ? React.lazy(() => import('./GuestTrialFlow.jsx')) : null;
 
 function shouldOpenApplication() {
   const params = new URLSearchParams(window.location.search);
@@ -46,6 +50,11 @@ function shouldOpenApplication() {
 function RootScreen() {
   const params = new URLSearchParams(window.location.search);
 
+  if (GuestTrialFlow && ((import.meta.env.DEV && params.has('guest_trial_preview'))
+    || (guestTrialEnabled && params.has('guest_trial')))) {
+    return <React.Suspense fallback={<p>体験を準備しています…</p>}><GuestTrialFlow /></React.Suspense>;
+  }
+
   if (window.location.pathname === '/gift-three-questions.html' || /^\/g\/[^/]+\/?$/.test(window.location.pathname)) {
     return <GiftThreeQuestionsPage />;
   }
@@ -57,6 +66,11 @@ function RootScreen() {
   }
 
   if (params.has("memory_request")) {
+    if (params.has("request_token")) return <StoryRequestRecipient
+      client={adminSupabaseClient}
+      requestId={params.get("memory_request") || ""}
+      requestToken={params.get("request_token") || ""}
+    />;
     return (
       <ThemeMemoryRequestRecipient
         supabaseClient={adminSupabaseClient}
@@ -67,7 +81,7 @@ function RootScreen() {
 
   if (params.has("voice")) {
     return (
-      <VoicePlaybackPage
+      <PublishedWebBook
         supabaseClient={adminSupabaseClient}
         publicId={params.get("voice") || ""}
       />

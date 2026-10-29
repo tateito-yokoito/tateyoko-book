@@ -22,6 +22,12 @@
 .g3-completion .g3-feedback-embedded .g3-retention{margin-top:20px;text-align:left;line-height:1.8}
 .g3-completion-done{padding:20px 0;font-size:1rem}
 .g3-completion-done p+p{color:var(--tc-muted);font-size:.88rem}
+.g3-completion-followup{margin-top:34px;padding-top:30px;border-top:1px solid var(--tc-line)}
+.g3-completion-followup h3{margin:0 0 12px;font-size:1.15rem;font-weight:500}
+.g3-completion-followup p{line-height:1.8}
+.g3-completion-followup .tc-primary{display:inline-flex;justify-content:center;align-items:center;gap:10px;margin-top:12px}
+.g3-completion-followup .tc-small{margin-top:12px}
+.g3-completion-followup .tc-text-button{display:block;margin:25px auto 0}
 @media(max-width:700px){
   .g3-completion .tc-reflection{padding-top:30px;padding-bottom:20px;gap:24px}
   .g3-completion-about,.g3-completion-response{padding:36px 22px}
