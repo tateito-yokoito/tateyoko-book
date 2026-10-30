@@ -17602,6 +17602,7 @@ export function Scene_Recording({
   const stopReasonRef = useRef("manual");
   const completionSentRef = useRef(false);
   const [voiceLevel, setVoiceLevel] = useState(0);
+  const [micTrackAvailable, setMicTrackAvailable] = useState(true);
   const [waveTick, setWaveTick] = useState(0);
 
 
@@ -17680,6 +17681,9 @@ useEffect(() => {
 
   if (step === 1 && !isPaused) {
     const tick = () => {
+      const track = streamRef.current?.getAudioTracks?.()[0]
+        || streamRef.current?.getTracks?.().find(candidate => candidate.kind === "audio");
+      setMicTrackAvailable(Boolean(track && track.readyState === "live" && track.enabled !== false && !track.muted));
       const seconds = clockRef.current.seconds();
       timeRef.current = seconds;
       setTime(seconds);
@@ -18281,7 +18285,7 @@ return (
             </p>
           )}
           <div className="recording-status-row" aria-live="polite">
-            <span className={`recording-live-dot ${isPaused ? "is-paused" : voiceLevel > 0 ? "" : "is-silent"}`} aria-hidden="true" />
+            <span className={`recording-live-dot${isPaused ? " is-paused" : micTrackAvailable ? "" : " is-mic-unavailable"}`} aria-hidden="true" />
             <span className="recording-state-label">{isPaused ? "一時停止中" : "録音中"}</span>
           </div>
 

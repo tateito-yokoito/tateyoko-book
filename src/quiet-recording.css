@@ -2,9 +2,19 @@
 .reading-question .memory-cue summary{min-height:48px;padding:10px 4px;cursor:pointer;list-style:revert;font-size:1rem}
 .reading-question .memory-cue summary:focus-visible{outline:2px solid #e5d5b5;outline-offset:3px}
 .reading-question .memory-cue p{font-size:1.125rem;line-height:1.85;padding:8px 16px 16px;margin:0;border-left:2px solid #70664f;text-wrap:pretty;overflow-wrap:anywhere}
-.recording-status-row .recording-live-dot{animation:recording-live-pulse 3.2s ease-in-out infinite}
+.recording-status-row .recording-live-dot{
+  box-shadow:0 0 8px rgba(201,135,90,.22);
+  animation:recording-live-soft-pulse 3.6s ease-in-out infinite;
+}
 .recording-status-row .recording-live-dot.is-paused,
-.recording-status-row .recording-live-dot.is-silent{animation:none;box-shadow:none;opacity:.45}
+.recording-status-row .recording-live-dot.is-mic-unavailable{animation:none;box-shadow:none;opacity:.45;transform:none}
+@keyframes recording-live-soft-pulse{
+  0%,100%{opacity:.48;transform:scale(.9)}
+  50%{opacity:.9;transform:scale(1.08)}
+}
+@media(prefers-reduced-motion:reduce){
+  .recording-status-row .recording-live-dot{animation:none;opacity:.75;transform:none}
+}
 .recording-status-row .recording-state-label{font-size:1rem;letter-spacing:.06em;color:#cbd5e1}
 
 /* Keep the story headings in Mincho; prioritize reading clarity for the prompt. */
