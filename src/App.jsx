@@ -41,6 +41,7 @@ import { isFreeTrialExpired, freeTrialRetentionDays, freeTrialExpiryLabel } from
 import { ownProjectHasStarted, ownStoryEntryUrl } from './lib/ownStoryEntry.js';
 import { questionForStory, buildStorySections, isTrialStoryQuestion } from './lib/storyPages.js';
 import { experienceRollout } from "./lib/experienceRollout.js";
+import { answerEntryScene } from "./lib/answerEntryScene.js";
 import { needsMainExperienceIntroduction, requiresMainExperienceStart } from "./lib/mainExperienceEntry.js";
 import { STORY_THEMES } from "./lib/storyThemes.js";
 import { themeExtraOptions } from "./lib/themeExtras.js";
@@ -3645,10 +3646,7 @@ if (deliveryToken) {
         currentIndex = continuationIndex;
         nextScene = getThemeResumeContext(questionSet, currentIndex)
           ? "theme_resume"
-          : (!isFormalOnboardingQuestion(questionSet[currentIndex])
-              && !bookendKindForQuestion(questionSet[currentIndex])) || hasRecentMicCheck()
-            ? 1
-            : "daily_mic_check";
+          : answerEntryScene("question");
       } else {
         nextScene = "home";
       }
@@ -4356,10 +4354,7 @@ const continueAfterTokenAuth = async () => {
       ? "home"
       : getThemeResumeContext(questionSet, resumeIndex)
         ? "theme_resume"
-        : (!isFormalOnboardingQuestion(questionSet[resumeIndex])
-            && !bookendKindForQuestion(questionSet[resumeIndex])) || hasRecentMicCheck()
-          ? 1
-          : "daily_mic_check";
+        : answerEntryScene("question");
     setScene(await resolveMainExperienceEntryScene(
       foundationData?.project, questionSet[resumeIndex], requestedScene
     ));
@@ -8681,19 +8676,10 @@ if (isFreeTrialExpired(loadedTrialRetention)
           retentionEnabled={FREE_TRIAL_RETENTION_ENABLED && trialRetention?.enabled === true}
           onRestart={() => restartFreeTrial()}
           restartError={trialRestartError}
-          onStart={() => {
-            if (!isFormalOnboardingQuestion(currentQ) || hasRecentMicCheck()) setScene(1);
-            else setScene("daily_mic_check");
-          }}
+          onStart={() => setScene(answerEntryScene("question"))}
         /> : <Scene0_Door
           onHome={foundation?.project?.onboarding_status === "completed" ? returnToHome : null}
-          onNext={() => {
-            if (!isFormalOnboardingQuestion(currentQ) || hasRecentMicCheck()) {
-              setScene(1);
-            } else {
-              setScene("daily_mic_check");
-            }
-          }}
+          onNext={() => setScene(answerEntryScene("question"))}
         />
       )}
 
@@ -8724,8 +8710,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
           onBack={() => setScene(!isFormalOnboardingQuestion(currentQ) && !bookendKindForQuestion(currentQ) && resolvedThemeResumeContext ? "theme_resume" : 0)}
           onNext={() => {
             resetVoiceData();
-            setScene(!isFormalOnboardingQuestion(currentQ) && !hasRecentMicCheck()
-              ? "recording_mic_check" : 3);
+            setScene(answerEntryScene("record", hasRecentMicCheck()));
           }}
           onWrite={canWriteStoryQuestion(currentQ)
             ? () => setWritingQuestion(currentQ) : null}

@@ -10,7 +10,7 @@
     "build:postcta": "vite build --config vite.postcta-overlay.config.js && cp postcta-overlay-dist/postcta-overlay.js public/assets/postcta-overlay.js && cp postcta-overlay-dist/style.css public/assets/postcta-overlay.css",
     "preview": "vite preview",
     "deploy": "npm run build && gh-pages -d dist",
-    "test:answer-ui": "node --test scripts/tests/answer-text-draft.test.mjs scripts/tests/trial-written-retention.test.mjs scripts/tests/story-request-composer-progress.test.mjs scripts/tests/story-request-book.test.mjs scripts/tests/theme-extra-selection.test.mjs"
+    "test:answer-ui": "node --test scripts/tests/answer-entry-scene.test.mjs scripts/tests/answer-text-draft.test.mjs scripts/tests/trial-written-retention.test.mjs scripts/tests/story-request-composer-progress.test.mjs scripts/tests/story-request-book.test.mjs scripts/tests/theme-extra-selection.test.mjs"
   },
   "dependencies": {
     "@jsquash/webp": "1.5.0",
