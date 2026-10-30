@@ -4,7 +4,7 @@
 .reading-question .memory-cue p{font-size:1.125rem;line-height:1.85;padding:8px 16px 16px;margin:0;border-left:2px solid #70664f;text-wrap:pretty;overflow-wrap:anywhere}
 .recording-status-row .recording-live-dot{
   box-shadow:0 0 8px rgba(201,135,90,.22);
-  animation:recording-live-soft-pulse 3.6s ease-in-out infinite;
+  animation:recording-live-soft-pulse 4.32s ease-in-out infinite;
 }
 .recording-status-row .recording-live-dot.is-paused,
 .recording-status-row .recording-live-dot.is-mic-unavailable{animation:none;box-shadow:none;opacity:.45;transform:none}
