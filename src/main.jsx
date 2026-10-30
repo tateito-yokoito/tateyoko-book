@@ -7,6 +7,7 @@ import GiftThreeQuestionsPage from "./gift-three-questions.jsx";
 import VoiceLibraryPage from "./VoiceLibraryPage.jsx";
 import PublishedWebBook from "./PublishedWebBook.jsx";
 import { ThemeMemoryRequestRecipient } from "./ThemeMemoryRequestFlow.jsx";
+import StoryRequestRecipient from "./StoryRequestRecipient.jsx";
 import "./index.css";
 import FamilyConnectionTest from './FamilyConnectionTest.jsx';
 import FamilyRecordingFlow from './FamilyRecordingFlow.jsx';
@@ -57,6 +58,11 @@ function RootScreen() {
   }
 
   if (params.has("memory_request")) {
+    if (params.has("request_token")) return <StoryRequestRecipient
+      client={adminSupabaseClient}
+      requestId={params.get("memory_request") || ""}
+      requestToken={params.get("request_token") || ""}
+    />;
     return (
       <ThemeMemoryRequestRecipient
         supabaseClient={adminSupabaseClient}

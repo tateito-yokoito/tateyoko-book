@@ -54,6 +54,7 @@ export function webBookStorySequence(publication) {
   sections.unassignedVideos.filter(v=>!['opening','closing'].includes(v.slot)).forEach(v=>add({order:`video-${v.videoIndex}`,question:v.prompt||v.title||'映像',audio:[],transcript:v.transcript},'theme_story','legacy','残された語り',null,v));
   add(sections.closing,'ending','closing','おわりの章');
   if(!sections.closing)for(const v of sections.unassignedVideos.filter(v=>v.slot==='closing'))add({order:`video-${v.videoIndex}`,question:v.prompt||v.title||'おわりの声',audio:[],transcript:v.transcript},'ending','closing','おわりの章',null,v);
+  sections.contributors.forEach(person=>person.items.forEach(item=>add(item,'contribution',`person-${person.name}`,person.name)));
   return sequence.map((entry,index)=>({...entry,previousId:sequence[index-1]?.id||null,nextId:sequence[index+1]?.id||null,isLast:index===sequence.length-1}));
 }
 
@@ -63,14 +64,23 @@ export const webBookAudioSequence = sequence => sequence.filter(entry=>entry.aud
 
 export function webBookSections(publication) {
   const items = (publication.items || []).filter(i => i.transcript || i.audio?.length || i.photos?.length || (publication.videos || []).some(v => v.sourceAnswerId && v.sourceAnswerId === i.sourceAnswerId));
-  const byId = id => items.find(i => i.questionId === id);
+  const ownerItems = items.filter(i => !i.contributionId);
+  const contributionItems = items.filter(i => i.contributionId);
+  const byId = id => ownerItems.find(i => i.questionId === id);
   const opening = byId('TY_ONB04') || items.find(i => i.slot === 'opening');
   const closing = byId('TY_CLOSING01') || items.find(i => i.slot === 'closing');
   const special = new Set([byId('TY_ONB01'), byId('TY_ONB02'), byId('TY_ONB03'), opening, closing].filter(Boolean));
-  const remaining = items.filter(i => !special.has(i));
+  const remaining = ownerItems.filter(i => !special.has(i));
+  const contributorsByName = new Map();
+  for (const item of contributionItems) {
+    const name = item.contributorName || '大切な人';
+    if (!contributorsByName.has(name)) contributorsByName.set(name, []);
+    contributorsByName.get(name).push(item);
+  }
+  const contributors = [...contributorsByName].map(([name, rows]) => ({name, items: rows}));
   const themes = STORY_THEMES.map(t => ({ ...t, items: remaining.filter(i => i.themeCode === t.code || (!i.themeCode && [t.label, t.order === 1 ? '幼い頃' : ''].filter(Boolean).includes(i.chapterTitle))) })).filter(t => t.items.length);
   const grouped = new Set(themes.flatMap(t => t.items));
-  return { name: byId('TY_ONB01'), now: [byId('TY_ONB02'), byId('TY_ONB03')], opening, closing, themes,
+  return { name: byId('TY_ONB01'), now: [byId('TY_ONB02'), byId('TY_ONB03')], opening, closing, themes, contributors,
     // Legacy publications without identity must remain accessible, not guessed into a theme.
     other: remaining.filter(i => !grouped.has(i)),
     videoFor: item => (publication.videos || []).find(v => (item?.sourceAnswerId && v.sourceAnswerId === item.sourceAnswerId) || (item?.slot && v.slot === item.slot)),

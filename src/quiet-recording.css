@@ -2,12 +2,24 @@
 .reading-question .memory-cue summary{min-height:48px;padding:10px 4px;cursor:pointer;list-style:revert;font-size:1rem}
 .reading-question .memory-cue summary:focus-visible{outline:2px solid #e5d5b5;outline-offset:3px}
 .reading-question .memory-cue p{font-size:1.125rem;line-height:1.85;padding:8px 16px 16px;margin:0;border-left:2px solid #70664f;text-wrap:pretty;overflow-wrap:anywhere}
-.recording-status-row .recording-live-dot{animation:none;box-shadow:none}
+.recording-status-row .recording-live-dot{
+  box-shadow:0 0 8px rgba(201,135,90,.22);
+  animation:recording-live-soft-pulse 4.32s ease-in-out infinite;
+}
+.recording-status-row .recording-live-dot.is-paused,
+.recording-status-row .recording-live-dot.is-mic-unavailable{animation:none;box-shadow:none;opacity:.45;transform:none}
+@keyframes recording-live-soft-pulse{
+  0%,100%{opacity:.48;transform:scale(.9)}
+  50%{opacity:.9;transform:scale(1.08)}
+}
+@media(prefers-reduced-motion:reduce){
+  .recording-status-row .recording-live-dot{animation:none;opacity:.75;transform:none}
+}
 .recording-status-row .recording-state-label{font-size:1rem;letter-spacing:.06em;color:#cbd5e1}
 
 /* Keep the story headings in Mincho; prioritize reading clarity for the prompt. */
-.reading-question .recording-question-card{background:rgba(20,34,55,.94);border:1px solid rgba(186,199,213,.32);box-shadow:0 8px 28px rgba(7,17,36,.27);text-align:center}
-.reading-question .recording-question-card p{font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-weight:600;line-height:1.7;letter-spacing:.005em;color:#fff}
+.reading-question .recording-question-card{background:transparent;border:0;box-shadow:none;text-align:center}
+.reading-question .recording-question-card p{font-family:'Noto Serif JP','Hiragino Mincho ProN','Yu Mincho',serif;font-weight:400;line-height:1.7;letter-spacing:.005em;color:#fff}
 .reading-question .recording-question-hint{margin-top:16px;padding:16px 18px;border:1px solid rgba(186,199,213,.3);border-radius:14px;background:rgba(20,34,55,.94);text-align:left;font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;color:#f4f6f8}
 .reading-question .recording-question-hint-label{margin:0 0 10px;font-size:1rem;font-weight:600;line-height:1.5;color:#f4dba3}
 .reading-question .recording-question-hint p:not(.recording-question-hint-label){margin:0 0 9px;font-size:1rem;line-height:1.8;letter-spacing:0;overflow-wrap:anywhere}
@@ -19,21 +31,29 @@
 .story-sky-surface:has(.question-flow-content) .story-sky-backdrop::after{
   background:rgba(10,21,36,var(--sky-dim, .85));
 }
+
 .story-sky-content.question-flow-content>header.question-flow-header{
-  margin-bottom:56px;
+  margin-bottom:28px;
 }
+/* Keep the chapter and prompt still when Back is unavailable during recording. */
+.question-flow-back-slot{
+  height:44px;
+  display:flex;
+  align-items:flex-start;
+}
+.recording-theme-label{margin:0;text-align:center;color:#d6bb86;font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-size:.875rem;line-height:1.6}
 .story-sky-content .reading-question>.recording-question-card{
   padding:26px 20px;
-  border:1px solid rgba(133,148,167,.3);
-  border-radius:17px;
-  background:#192638;
+  border:0;
+  border-radius:0;
+  background:transparent;
   text-align:center;
   box-shadow:none;
 }
 .story-sky-content .reading-question>.recording-question-card p{
-  font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;
+  font-family:'Noto Serif JP','Hiragino Mincho ProN','Yu Mincho',serif;
   font-size:1.375rem;
-  font-weight:500;
+  font-weight:400;
   line-height:1.8;
   color:#fff;
   text-align:center;
@@ -74,6 +94,10 @@
   font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;
   font-size:1.125rem;
   font-weight:500;
+}
+.recording-start-bar--write{
+  background:#e9e5dc;
+  color:#142337;
 }
 .recording-start-bar:focus-visible,.recording-action-button:focus-visible{
   outline:2px solid #e9e5dc;
@@ -150,4 +174,25 @@
     min-height:0;
     margin-top:32px;
   }
+}
+
+/* Keep the question position consistent in both answer selection and recording;
+   these overrides come after sky-era rules. */
+.story-sky-surface.question-background-navy .story-sky-content.question-flow-content .reading-question>.recording-question-card{
+  padding:12px 0 8px;
+}
+.story-sky-surface.question-background-navy .story-sky-content.question-flow-content .reading-question>.recording-question-card p{
+  font-size:1.5rem;
+  line-height:1.85;
+  text-wrap:balance;
+}
+.story-sky-surface.question-background-navy .story-sky-content.question-flow-content .recording-control-dock--choice{
+  min-height:0;
+  margin-top:clamp(28px,5dvh,48px);
+  gap:12px;
+  align-items:stretch;
+  justify-content:flex-start;
+}
+@media(max-width:359px){
+  .story-sky-surface.question-background-navy>.story-sky-content.question-flow-content{padding-left:16px;padding-right:16px}
 }

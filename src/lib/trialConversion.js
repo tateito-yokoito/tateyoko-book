@@ -19,7 +19,7 @@ export function buildTrialStories({ projectId, personId, questions, answers, med
       question: question.content || question.question_text || '',
       title: answer?.meta_json?.print_title || '', text,
       audio, photos: assets.filter(row => row.asset_type === 'photo' && row.storage_path),
-      state: !answer || !audio.length ? 'missing_audio' : text ? 'ready' : 'text_pending'
+      state: !answer || (!audio.length && !text) ? 'missing_audio' : text ? 'ready' : 'text_pending'
     };
   });
 }
@@ -33,6 +33,7 @@ export function trialEvent(name, mode, onEvent) {
   const allowed = ['trial_conversion_page_viewed', 'trial_story_replayed', 'trial_problem_section_reached',
     'trial_journey_preview_reached', 'trial_book_preview_reached', 'trial_webbook_preview_reached',
     'trial_price_viewed', 'trial_refund_section_viewed', 'trial_payment_options_viewed',
-    'trial_purchase_cta_clicked', 'trial_gift_cta_clicked', 'trial_recipient_continue_requested'];
+    'trial_purchase_cta_clicked', 'trial_gift_cta_clicked', 'trial_recipient_continue_requested',
+    'trial_pause_choice_opened', 'trial_pause_returned', 'trial_line_updates_clicked', 'trial_pause_ended'];
   if (allowed.includes(name)) onEvent?.({ name, version: '1.2', mode: ['self', 'gift', 'recipient', 'paid'].includes(mode) ? mode : 'self' });
 }

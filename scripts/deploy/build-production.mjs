@@ -5,6 +5,13 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {build} from 'vite';
+execFileSync('node',['scripts/deploy/check-production-source.mjs'],{stdio:'inherit'});
+execFileSync('node',['--test',
+ 'scripts/tests/answer-text-draft.test.mjs',
+ 'scripts/tests/trial-written-retention.test.mjs',
+ 'scripts/tests/story-request-composer-progress.test.mjs',
+ 'scripts/tests/story-request-book.test.mjs',
+ 'scripts/tests/theme-extra-selection.test.mjs'],{stdio:'inherit'});
 const ref='wquxjeqkumossjxehdop';
 assert.equal(process.env.RELEASE_PRODUCTION_REF,ref);
 const enableBookProduction=process.env.RELEASE_ENABLE_BOOK_V2==='true';
@@ -26,6 +33,8 @@ const filesUnder=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDi
 const sources=filesUnder(path.join(root,'src')).filter(p=>/\.(jsx?|css)$/.test(p));
 const text=sources.map(p=>fs.readFileSync(p,'utf8')).join('\n')+fs.readFileSync('index.html','utf8');
 await build({envDir:false,build:{outDir,emptyOutDir:true,sourcemap:false},publicDir:false});
+const {verifyAnswerExperienceRelease}=await import('../tests/answer-experience-release.mjs');
+verifyAnswerExperienceRelease(root,outDir);
 const assets=new Set([...text.matchAll(/["'`]\/(?:site\/)?[A-Za-z0-9_.\/-]+\.(?:png|jpe?g|svg|webp|wav|mp3|mp4)["'`]/g)].map(m=>m[0].slice(2,-1)));
 for(const relative of assets){
  const source=path.join(root,'public',relative);assert.ok(fs.existsSync(source),`Missing asset ${relative}`);

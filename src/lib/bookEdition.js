@@ -14,6 +14,7 @@ export const BOOK_PRINT_PROFILE = Object.freeze({
 });
 
 const text = value => String(value ?? "").trim();
+const named = value => text(value).endsWith("さん") ? text(value) : `${text(value)}さん`;
 
 // Keep authored paragraph breaks. For a single long transcript paragraph,
 // introduce reading breaks only at sentence boundaries without changing words.
@@ -54,6 +55,7 @@ export function createBookEdition({
   subjectName = "",
   footerText = "",
   stories = [],
+  contributions = [],
   webBookUrl = null,
   includeWebBookQr = true,
   mode = "draft"
@@ -67,6 +69,7 @@ export function createBookEdition({
     if (!body) throw new Error(`Story ${index + 1} has no body`);
     return {
       id: text(story.id) || `story-${index + 1}`,
+      sourceUserQuestionId: text(story.sourceUserQuestionId),
       question: text(story.question),
       themeCode: text(story.themeCode),
       themeLabel: text(story.themeLabel),
@@ -82,6 +85,19 @@ export function createBookEdition({
     };
   });
   if (!normalizedStories.length) throw new Error("The book needs at least one story");
+  const normalizedContributions = contributions.map((item, index) => ({
+    id: text(item.id) || `contribution-${index + 1}`,
+    responderName: text(item.responderName) || "大切な人",
+    relationship: text(item.relationship),
+    sourceUserQuestionId: text(item.sourceUserQuestionId),
+    question: text(item.question), body: text(item.body),
+    photos: (item.photos || []).filter(photo => photo?.url || photo?.path).map((photo, photoIndex) => ({
+      id: text(photo.id) || `contribution-photo-${photoIndex + 1}`,
+      url: text(photo.url || photo.path), caption: text(photo.caption),
+      bookLayout: photoBookLayout(photo, photoIndex)
+    }))
+  })).filter(item => item.body);
+
   return {
     schemaVersion: BOOK_EDITION_SCHEMA_VERSION,
     editionId,
@@ -90,6 +106,7 @@ export function createBookEdition({
     subjectName: text(subjectName),
     footerText: text(footerText),
     stories: normalizedStories,
+    contributions: normalizedContributions,
     includeWebBookQr: Boolean(includeWebBookQr),
     webBookUrl: includeWebBookQr ? webBookUrl : null,
     mode
@@ -124,7 +141,7 @@ export function buildBookPages(edition, profile = BOOK_PRINT_PROFILE) {
     const theme = { themeCode: story.themeCode, themeLabel: story.themeLabel,
       themeOrder: story.themeOrder };
     add({ kind: "story-opener", storyId: story.id, storyIndex: storyIndex + 1, ...theme,
-      question: story.question, photo: photoSlots.opener,
+      sourceUserQuestionId: story.sourceUserQuestionId, question: story.question, photo: photoSlots.opener,
       paragraphs: hasOpeningPhoto ? [] : bodyPages.shift() });
     for (const [partIndex, bodyParagraphs] of bodyPages.entries()) {
       add({ kind: "story-body", storyId: story.id, partIndex, paragraphs: bodyParagraphs, ...theme });
@@ -134,6 +151,47 @@ export function buildBookPages(edition, profile = BOOK_PRINT_PROFILE) {
       const photos = photoSlots.afterHalf.slice(index, index + 2);
       add({ kind: "photo-half", storyId: story.id, photo: photos[0], photos, ...theme });
     }
+  }
+  if (edition.contributions?.length) {
+    if (pages.length % 2 !== 0) add({ kind: "blank" });
+    add({ kind: "contribution-divider" });
+    let previousPerson = "";
+    for (const contribution of edition.contributions) {
+      if (contribution.responderName !== previousPerson) {
+        if (pages.length % 2 !== 0) add({ kind: "blank" });
+        add({ kind: "contributor-title", responderName: contribution.responderName,
+          relationship: contribution.relationship });
+        previousPerson = contribution.responderName;
+      }
+      const paragraphs = bookBodyParagraphs(contribution.body);
+      const bodyPages = paginateBookBody(paragraphs, {
+        charsPerLine: profile.bodyCharsPerLine,
+        linesPerPage: profile.bodyLinesPerPage,
+        firstPageLines: profile.openerBodyLines
+      });
+      add({ kind: "contribution-opener", contributionId: contribution.id,
+        responderName: contribution.responderName, relationship: contribution.relationship,
+        sourceUserQuestionId: contribution.sourceUserQuestionId,
+        question: contribution.question, paragraphs: bodyPages.shift() });
+      for (const [partIndex, bodyParagraphs] of bodyPages.entries())
+        add({ kind: "contribution-body", contributionId: contribution.id,
+          partIndex, paragraphs: bodyParagraphs });
+      for (const photo of contribution.photos || [])
+        add({ kind: "photo", contributionId: contribution.id, photo });
+    }
+  }
+  const ownerPages = new Map(pages.filter(page => page.kind === "story-opener" && page.sourceUserQuestionId)
+    .map(page => [page.sourceUserQuestionId, page.pageNumber]));
+  const relatedContributions = new Map();
+  for (const page of pages.filter(page => page.kind === "contribution-opener" && page.sourceUserQuestionId)) {
+    if (!relatedContributions.has(page.sourceUserQuestionId)) relatedContributions.set(page.sourceUserQuestionId, []);
+    relatedContributions.get(page.sourceUserQuestionId).push(page);
+  }
+  for (const page of pages) {
+    if (page.kind === "story-opener") page.crossReferences = (relatedContributions.get(page.sourceUserQuestionId) || [])
+      .map(related => `${named(related.responderName)}の語り → P.${related.pageNumber}`);
+    if (page.kind === "contribution-opener" && ownerPages.has(page.sourceUserQuestionId))
+      page.crossReferences = [`本人の語り → P.${ownerPages.get(page.sourceUserQuestionId)}`];
   }
   add({ kind: "colophon", title: edition.title, footerText: edition.footerText });
   while (pages.length % 4 !== 0) add({ kind: "blank" });

@@ -1,0 +1,9 @@
+{
+  "site": "https://www.tateito-yokoito.jp/",
+  "deployedAt": "2026-10-29",
+  "vercelDeploymentId": "dpl_E6S4bUrc2p2tzFEHRer7ANJeVNKS",
+  "sourceBranch": "codex/unified-answer-release-20261029",
+  "sourceCommit": "e190355cc332d9c98b69b69160d2d4dfed4de963",
+  "mainJsAsset": "assets/main-DY1vZf_G.js",
+  "mainJsSha256": "e9dec30d3cbadb299e1d75b843d7d15308bddcfe250b7f0b20f07375033587f8"
+}

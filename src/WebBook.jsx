@@ -34,6 +34,8 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
   const player = useRef(null), videoPlayer=useRef(null), ticket = useRef(0);
   const entryFor=item=>sequence.find(entry=>entry.item===item || (item?.sourceAnswerId && entry.item.sourceAnswerId===item.sourceAnswerId) || entry.item.order===item?.order);
   const storyEntry=story?entryFor(story):null;
+  const relatedStories=story?.sourceUserQuestionId ? (publication.items || []).filter(item => item !== story
+    && item.sourceUserQuestionId === story.sourceUserQuestionId && Boolean(item.contributionId) !== Boolean(story.contributionId)) : [];
   const nextEntry=sequence.find(entry=>entry.id===storyEntry?.nextId);
   const previousEntry=sequence.find(entry=>entry.id===storyEntry?.previousId);
   const storyVideo=storyEntry?.video || (story?sections.videoFor(story):null);
@@ -89,11 +91,12 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
     <header className="wb-header"><img src="/brand-logo-lockup-kyokasho.svg" alt="縦糸横糸"/><span>Webブック</span></header>
     <main>
       {story ? <article className="wb-story"><button className="wb-back" onClick={() => {setStory(null);window.scrollTo?.({top:0});}}><ArrowLeft size={17}/>目次へ戻る</button>
-        <p className="wb-eyebrow">{story.chapterTitle}</p><h1>{story.question}</h1>
+        <p className="wb-eyebrow">{story.contributionId ? `${story.contributorName || '大切な人'}の語り` : story.chapterTitle}</p><h1>{story.question}</h1>
         {photos[0]&&<figure><img src={photos[0].url} alt={photos[0].caption||'語りに添えられた写真'}/>{photos[0].caption&&<figcaption>{photos[0].caption}</figcaption>}</figure>}
         {!!story.audio?.length&&(!primaryVideo||audioInline||story.audio.some(part=>!part.videoId))&&<div className="wb-inline-audio" ref={setInlineHost}>{!audioInline&&<WebBookMediaControls total={audioTotal(story.audio)} onToggle={()=>play(story)}/>}</div>}
         {primaryVideo&&videoView}
         {story.transcript&&<p className="wb-prose">{story.transcript}</p>}
+        {!!relatedStories.length&&<section className="wb-other"><h2>同じ問いの語り</h2>{relatedStories.map(item=><button key={item.order} className="wb-title-button" onClick={()=>openStory(item)}>{item.contributionId ? `${item.contributorName || '大切な人'}さんの語り` : '本人の語り'} →</button>)}</section>}
         {photos.slice(1).map((p,i)=><figure key={i}><img src={p.url} alt={p.caption||'語りに添えられた写真'}/>{p.caption&&<figcaption>{p.caption}</figcaption>}</figure>)}
         {storyVideo&&!primaryVideo&&videoView}
         {nextEntry&&<section className="wb-next-story" aria-label="次の語りへの案内"><p className="wb-eyebrow">{nextEntry.chapterKey===storyEntry?.chapterKey?'次の語り':<>次の章　<span>{nextEntry.chapterLabel}</span></>}</p><button onClick={()=>openStory(nextEntry.item)}><span>{nextEntry.title}</span><span aria-hidden="true">→</span></button></section>}
@@ -104,6 +107,7 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
         {sections.now.some(Boolean)&&<section className="wb-now"><h2>今の私</h2>{sections.now.map((item,i)=>item&&<div className="wb-now-row" key={item.order}><div><button className="wb-title-button" onClick={()=>openStory(item)}>{i===0?'最近の暮らし':'日々の楽しみ'}</button>{item.transcript&&<p>{item.transcript}</p>}</div>{item.audio?.length?button(item,0,null,`${i===0?'最近の暮らし':'日々の楽しみ'}を聴く`):null}</div>)}</section>}
         {milestone(sections.opening)}
         {!!sections.themes.length&&<section className="wb-themes"><h2>人生をたどる</h2>{sections.themes.map(theme=><section key={theme.code}><button className="wb-theme" aria-expanded={opened.has(theme.code)} onClick={()=>setOpened(old=>{const n=new Set(old);n.has(theme.code)?n.delete(theme.code):n.add(theme.code);return n;})}><img src={theme.image} alt=""/><span className="wb-number">{String(theme.order).padStart(2,'0')}</span><span>{theme.label}</span><ChevronDown size={18} style={{transform:opened.has(theme.code)?'rotate(180deg)':undefined}}/></button>{opened.has(theme.code)&&<div className="wb-questions">{theme.items.map(row)}</div>}</section>)}</section>}
+        {!!sections.contributors.length&&<section className="wb-other"><h2>人からたどる</h2>{sections.contributors.map(person=><section className="wb-legacy-chapter" key={person.name}><h3>{person.name}</h3>{person.items.map(row)}</section>)}</section>}
         {!!legacyChapters.length&&<section className="wb-other"><h2>目次</h2>{legacyChapters.map(([title, items]) => <section className="wb-legacy-chapter" key={title}><h3>{title}</h3>{items.map(row)}</section>)}</section>}
         {milestone(sections.closing,true)}
         {sections.unassignedVideos.map(v=><section className="wb-inline" key={v.videoIndex}>{button(null,0,v,'映像を見る')}<span>{v.title||'映像を見る'}</span></section>)}

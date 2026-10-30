@@ -105,6 +105,14 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
       ).join("")}</ol></div>`;
     } else if (page.kind === "story-opener") {
       content = `<div class="story-heading"><h2>${questionMarkup(page.question)}</h2></div>${page.photo ? "" : '<div class="story-divider" aria-hidden="true"></div>'}${imageTag(page.photo, "story-photo", eagerImages, page.pageNumber)}${page.paragraphs?.length ? bodyMarkup(page.paragraphs) : ""}`;
+    } else if (page.kind === "contribution-divider") {
+      content = `<div class="contributor-divider">大切な人たちの語り</div>`;
+    } else if (page.kind === "contributor-title") {
+      content = `<div class="contributor-title"><span>大切な人たちの語り</span><h2>${escapeHtml(page.responderName)}</h2>${page.relationship ? `<p>${escapeHtml(page.relationship)}</p>` : ""}</div>`;
+    } else if (page.kind === "contribution-opener") {
+      content = `<div class="story-heading"><h2>${questionMarkup(page.question)}</h2></div><div class="story-divider" aria-hidden="true"></div>${page.paragraphs?.length ? bodyMarkup(page.paragraphs) : ""}`;
+    } else if (page.kind === "contribution-body") {
+      content = bodyMarkup(page.paragraphs);
     } else if (page.kind === "story-body") {
       content = bodyMarkup(page.paragraphs);
     } else if (page.kind === "photo") {
@@ -115,6 +123,7 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
       content = `<div class="colophon"><h2>${escapeHtml(page.title)}</h2>${page.footerText
         ? `<p>${escapeHtml(page.footerText)}</p>` : ""}<p>縦糸+横糸</p></div>`;
     }
+    const crossReferences = page.crossReferences?.length ? `<div class="cross-references">${page.crossReferences.map(item => `<p>${escapeHtml(item)}</p>`).join("")}</div>` : "";
     const pageNumber = page.kind === "blank" || page.kind === "title" || page.kind === "web-entry"
       ? "" : `<span class="page-number">${page.pageNumber}</span>`;
     const themeHeading = page.themeLabel
@@ -123,7 +132,7 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
     // changing story pagination or the theme heading.
     const themeIndexMark = Number.isInteger(page.themeOrder) && page.themeOrder >= 0 && page.themeOrder <= 9
       ? `<span class="theme-index-mark" style="top:${38 + (page.themeOrder - 1) * 14}mm" aria-hidden="true"></span>` : "";
-    return `<section class="book-page page-${page.pageNumber % 2 === 1 ? "odd" : "even"} kind-${page.kind}" data-page="${page.pageNumber}" data-kind="${page.kind}"><div class="trim-area">${content}${themeHeading}${themeIndexMark}${pageNumber}${edition.mode !== "final"
+    return `<section class="book-page page-${page.pageNumber % 2 === 1 ? "odd" : "even"} kind-${page.kind}" data-page="${page.pageNumber}" data-kind="${page.kind}"><div class="trim-area">${content}${crossReferences}${themeHeading}${themeIndexMark}${pageNumber}${edition.mode !== "final"
       ? `<span class="draft-mark">校正用・入稿不可</span>` : ""}</div></section>`;
   }).join("\n");
 
@@ -187,6 +196,17 @@ export function renderBookPrintHtml(edition, { qrSvg = "", profile = BOOK_PRINT_
     .book-page.page-odd .half-photo-stack { left: 30mm; width: 134mm; }
     .book-page.page-even .half-photo-stack { left: 18mm; width: 134mm; }
     .half-photo { width: 100%; height: 100mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .contributor-divider { position: absolute; top: 105mm; left: 18mm; right: 18mm; text-align: center; font-size: 18pt; letter-spacing: .12em; }
+    .contributor-title { position: absolute; top: 78mm; left: 22mm; right: 22mm; text-align: center; }
+    .contributor-title span { font: 9pt sans-serif; color: #6e8176; letter-spacing: .12em; }
+    .contributor-title h2 { margin: 14mm 0 5mm; font-size: 18pt; font-weight: 400; }
+    .contributor-title p { font: 9pt sans-serif; color: #6e8176; }
+    .kind-contribution-opener .body-copy { top: 132mm; }
+    .cross-references { position: absolute; bottom: 22mm; left: 20mm; right: 20mm; border-top: .35pt solid #b7c0ba; padding-top: 2mm; font: 8pt/1.5 sans-serif; color: #6e8176; }
+    .book-page.page-odd .cross-references { left: 30mm; right: 18mm; }
+    .book-page.page-even .cross-references { left: 18mm; right: 30mm; }
+    .cross-references p { margin: 0; }
+    .kind-story-opener:has(.cross-references) .body-copy, .kind-contribution-opener:has(.cross-references) .body-copy { bottom: 34mm; }
     .colophon { position: absolute; left: 22mm; right: 22mm; bottom: 40mm; font-size: 9pt; line-height: 2; }
     .colophon h2 { font-size: 11pt; font-weight: 400; }
     .page-number { position: absolute; bottom: 12mm; font: 11pt sans-serif; color: #83908a; }
