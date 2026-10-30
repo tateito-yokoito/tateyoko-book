@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildStoryRequestQuestionPayload,
   clearStoryRequestProgress,
   readStoryRequestProgress,
   requestMatchesCreatingDraft,
@@ -46,4 +47,17 @@ test('an interrupted creation only matches the same request and questions', () =
   assert.equal(requestMatchesCreatingDraft(request, draft), true);
   assert.equal(requestMatchesCreatingDraft({ ...request, created_at: '2026-10-29T10:00:00.000Z' }, draft), false);
   assert.equal(requestMatchesCreatingDraft({ ...request, selected_questions: [{ prompt: '違う質問' }] }, draft), false);
+});
+
+
+test('family request sends unchanged source questions alongside extras and a custom question', () => {
+  const available = [
+    { key: 'source:question-a', kind: 'source', id: 'question-a', text: '本人の問い' },
+    { key: 'extra:childhood-food', kind: 'extra', id: 'childhood-food', text: '追加の問い' }
+  ];
+  assert.deepEqual(buildStoryRequestQuestionPayload(
+    ['source:question-a', 'extra:childhood-food'], ' 相手への問い ', available), [
+    { sourceQuestionId: 'question-a' }, { extraId: 'childhood-food' }, { customText: '相手への問い' }
+  ]);
+  assert.throws(() => buildStoryRequestQuestionPayload(['source:unknown'], '', available));
 });

@@ -10,7 +10,8 @@ execFileSync('node',['--test',
  'scripts/tests/answer-text-draft.test.mjs',
  'scripts/tests/trial-written-retention.test.mjs',
  'scripts/tests/story-request-composer-progress.test.mjs',
- 'scripts/tests/story-request-book.test.mjs'],{stdio:'inherit'});
+ 'scripts/tests/story-request-book.test.mjs',
+ 'scripts/tests/theme-extra-selection.test.mjs'],{stdio:'inherit'});
 const ref='wquxjeqkumossjxehdop';
 assert.equal(process.env.RELEASE_PRODUCTION_REF,ref);
 const enableBookProduction=process.env.RELEASE_ENABLE_BOOK_V2==='true';

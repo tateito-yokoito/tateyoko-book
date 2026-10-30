@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, Check, ChevronLeft, Clipboard, List, Plus } from 'lucide-react';
 import { THEME_EXTRA_QUESTIONS } from './lib/themeExtras.js';
-import { clearStoryRequestProgress, readStoryRequestProgress, requestMatchesCreatingDraft, storyRequestProgressKey, writeStoryRequestProgress } from './lib/storyRequestComposerProgress.js';
+import { buildStoryRequestQuestionPayload, clearStoryRequestProgress, readStoryRequestProgress, requestMatchesCreatingDraft, storyRequestProgressKey, writeStoryRequestProgress } from './lib/storyRequestComposerProgress.js';
 
 export async function invokeStoryRequest(client, body) {
   const { data, error } = await client.functions.invoke('story-request', { body });
@@ -117,11 +117,7 @@ export default function StoryRequestComposer({ client, bookProjectId, theme, que
       recipientName, relationship, createStartedAt: new Date().toISOString() };
     writeStoryRequestProgress(progressKey, creatingProgress);
     try {
-      const payload = selected.map(key => {
-        const item = available.find(q => q.key === key);
-        return item?.kind === 'source' ? { sourceQuestionId: item.id } : { extraId: item?.id };
-      });
-      if (custom.trim()) payload.push({ customText: custom.trim() });
+      const payload = buildStoryRequestQuestionPayload(selected, custom, available);
       const result = await invokeStoryRequest(client, { action: 'create', bookProjectId,
         themeCode: theme.code, recipientName: recipientName.trim(), relationship: relationship.trim(), questions: payload });
       writeStoryRequestProgress(progressKey, { status: 'created', requestId: result.requestId });

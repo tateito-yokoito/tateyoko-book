@@ -46,3 +46,13 @@ export function requestMatchesCreatingDraft(request, draft) {
       : `custom:${question.prompt}`);
   return JSON.stringify(expected) === JSON.stringify(actual);
 }
+
+export function buildStoryRequestQuestionPayload(selected, custom, available) {
+  const questions = selected.map(key => {
+    const item = available.find(question => question.key === key);
+    if (!item) throw new Error('選択した質問を確認できませんでした');
+    return item.kind === 'source' ? { sourceQuestionId: item.id } : { extraId: item.id };
+  });
+  if (custom.trim()) questions.push({ customText: custom.trim() });
+  return questions;
+}
