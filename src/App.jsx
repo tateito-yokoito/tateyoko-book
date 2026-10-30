@@ -27,6 +27,8 @@ import { completePlaceholderLineProfile, hasLineIdentity, saveLineRegistrationDr
 import { createRecordingClock, mergeRecordingDuration, RECORDING_LIMIT_SECONDS, RECORDING_WARNING_SECONDS, RECORDING_LIMIT_NOTICE } from "./lib/recordingTime.js";
 import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
+import WrittenAnswerEditor from "./WrittenAnswerEditor.jsx";
+import { deleteAnswerRecordingDraft, listAnswerRecordingDrafts, saveAnswerRecordingDraft } from './lib/answerRecordingDraft.js';
 import BookendInvitation from "./BookendInvitation.jsx";
 import { BOOKEND_PROMPTS, bookendKindForQuestion, bookendKindForVideo } from "./lib/bookends.js";
 import ExperienceContractSettings from "./ExperienceContractSettings.jsx";
@@ -45,6 +47,8 @@ import { themeExtraOptions } from "./lib/themeExtras.js";
 import ThemeMorePicker from "./ThemeMorePicker.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
 import { ThemeMemoryRequestComposer, ThemeMemoryRequestManager } from "./ThemeMemoryRequestFlow.jsx";
+import StoryRequestComposer, { PaperHeartIcon } from "./StoryRequestComposer.jsx";
+import StoryRequestManager from "./StoryRequestManager.jsx";
 import { SupporterIdentityFields, SupporterFamilyCandidates, SupporterRelationshipsSettings } from './SupporterIdentity.jsx';
 import { SupporterSmsComposer } from './SupporterSms.jsx';
 import MicAccessGuide from './MicAccessGuide.jsx';
@@ -66,6 +70,9 @@ const FREE_TRIAL_RETENTION_ENABLED = import.meta.env.VITE_FREE_TRIAL_RETENTION_E
 const EXPERIENCE_ROLLOUT = experienceRollout(import.meta.env);
 const EXPERIENCE_V2_ENABLED = EXPERIENCE_ROLLOUT.contracts;
 const TRIAL_CONVERSION_ENABLED = EXPERIENCE_ROLLOUT.conversion;
+const TRIAL_CARRY_CHOICE_ENABLED = import.meta.env.VITE_TRIAL_CARRY_CHOICE_ENABLED === "true";
+// Keep the previous sky treatment available while the approved question view uses navy.
+const QUESTION_BACKGROUND = import.meta.env.VITE_QUESTION_BACKGROUND === "sky" ? "sky" : "navy";
 const ALLOW_FAMILY_NOTIFICATIONS = !EXPERIENCE_V2_ENABLED || EXPERIENCE_ROLLOUT.notifications;
 const recordingStorageRoot = (userId, projectId, answerId) => EXPERIENCE_V2_ENABLED
   ? `${userId}/${projectId}/${answerId}` : `${userId}/${answerId}`;
@@ -82,16 +89,22 @@ async function resolveMainExperienceEntryScene(project, question, requestedScene
     ? "hajimari_complete" : requestedScene;
 }
 
-async function confirmExperienceBoundary(projectId, boundary) {
+async function confirmExperienceBoundary(projectId, boundary, trialCarryDecision = null) {
   const { data: access, error } = await supabaseClient.rpc("get_experience_access", { input_project_id: projectId });
   if (error) throw error;
   if (!access?.policy_version || access.policy_version === "legacy") return;
-  if (boundary === "main" && access.main_started_at) return;
+  if (boundary === "main" && access.main_started_at) return access;
   if (boundary === "paid" && access.production_started_at) return;
-  const { error: startError } = await supabaseClient.rpc(boundary === "main" ? "start_main_experience" : "start_paid_starting_chapter", {
-    input_project_id: projectId, input_subject_intent_confirmed: true
+  const useTrialChoice = boundary === "main" && TRIAL_CARRY_CHOICE_ENABLED;
+  const { data: started, error: startError } = await supabaseClient.rpc(useTrialChoice
+    ? "start_main_experience_with_trial_choice"
+    : boundary === "main" ? "start_main_experience" : "start_paid_starting_chapter", {
+    input_project_id: projectId,
+    input_subject_intent_confirmed: true,
+    ...(useTrialChoice ? { input_trial_carry_decision: trialCarryDecision } : {})
   });
   if (startError) throw startError;
+  return started;
 }
 const FAMILY_INVITE_DISCOUNT_PERCENT = 30;
 const FAMILY_INVITE_PLAN_PRICE = 34860;
@@ -1120,6 +1133,12 @@ function isFormalOnboardingQuestion(question) {
   );
 }
 
+// The same answer entry is available throughout the owned story, including
+// the three trial questions. Only voice-specific bookends are excluded.
+export function canWriteStoryQuestion(question) {
+  return Boolean(question?.user_question_id && !bookendKindForQuestion(question));
+}
+
 function isFirstStoryQuestion(question) {
   return (
     question?.question_role === "first_story" ||
@@ -1408,7 +1427,7 @@ function isProjectOnboardingComplete(project) {
   return project?.onboarding_status === "completed";
 }
 
-async function ensureUserFoundation(userId, profile) {
+export async function ensureUserFoundation(userId, profile) {
   const displayName =
     profile?.display_name ||
     profile?.name ||
@@ -1662,6 +1681,18 @@ async function ensureUserFoundation(userId, profile) {
     throw speakerParticipantError;
   }
 
+  if (TRIAL_CARRY_CHOICE_ENABLED) {
+    const { data: access, error: accessError } = await supabaseClient.rpc("get_experience_access", {
+      input_project_id: project.id
+    });
+    if (accessError) throw accessError;
+    project = {
+      ...project,
+      trial_carry_decision: access?.trial_carry_decision || null,
+      has_childhood_trial_stories: access?.has_childhood_trial_stories === true
+    };
+  }
+
   return {
     family,
     person,
@@ -1670,7 +1701,7 @@ async function ensureUserFoundation(userId, profile) {
   };
 }
 
-async function ensureUserQuestions(userId, foundationData = null) {
+export async function ensureUserQuestions(userId, foundationData = null) {
   const projectId = foundationData?.project?.id || null;
   const participantId = foundationData?.speakerParticipant?.id || null;
 
@@ -3126,11 +3157,52 @@ if (perspectivePoints) {
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [scene, setScene] = useState(-1);
+  const [writingQuestion, setWritingQuestion] = useState(null);
   const [user, setUser] = useState(null);
   const [questionsDB, setQuestionsDB] = useState([]);
   const [notificationPref, setNotificationPref] = useState(null);
   const [progress, setProgress] = useState({ currentIndex: 0, total: 0 });
   const [foundation, setFoundation] = useState(null);
+  const [recoverableRecordings, setRecoverableRecordings] = useState([]);
+  const [localRecordingDrafts, setLocalRecordingDrafts] = useState([]);
+  const [recordingRecoveryBusy, setRecordingRecoveryBusy] = useState(false);
+  const [recordingRecoveryError, setRecordingRecoveryError] = useState('');
+  const [recordingRecoveryDismissed, setRecordingRecoveryDismissed] = useState(false);
+  useEffect(() => {
+    if (!user?.id || !foundation?.project?.id) {
+      setRecoverableRecordings([]);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabaseClient.from('answer_recording_attempts')
+        .select('id,answer_id,sequence_order,mode,storage_paths,created_at')
+        .eq('user_id', user.id).eq('book_project_id', foundation.project.id)
+        .eq('state', 'planned').order('created_at', { ascending: false }).limit(8);
+      if (error || cancelled) return;
+      const available = await Promise.all((data || []).map(async attempt => {
+        const paths = attempt.storage_paths || [];
+        if (!paths.length) return null;
+        const urls = await Promise.all(paths.map(path => supabaseClient.storage
+          .from('audio').createSignedUrl(path, 60)));
+        return urls.every(result => !result.error && result.data?.signedUrl)
+          ? { ...attempt, previewUrl: urls[0].data.signedUrl } : null;
+      }));
+      if (!cancelled) setRecoverableRecordings(available.filter(Boolean));
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, foundation?.project?.id]);
+  useEffect(() => {
+    if (!user?.id || !foundation?.project?.id) {
+      setLocalRecordingDrafts([]);
+      return undefined;
+    }
+    let cancelled = false;
+    listAnswerRecordingDrafts(user.id, foundation.project.id)
+      .then(drafts => { if (!cancelled) setLocalRecordingDrafts(drafts); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.id, foundation?.project?.id]);
   const journeyRef = useRef(null);
   if (!journeyRef.current) journeyRef.current = createSupportJourney(supabaseClient, {
     enabled: import.meta.env.VITE_SUPPORT_JOURNEY_ENABLED === 'true',
@@ -3167,6 +3239,25 @@ function App() {
   const [notificationSetupReturnScene, setNotificationSetupReturnScene] = useState(null);
   const [completedThemeOrder, setCompletedThemeOrder] = useState(null);
   const [selectedThemeExtraIds, setSelectedThemeExtraIds] = useState([]);
+  const [themeExtrasBusy, setThemeExtrasBusy] = useState(false);
+  const themeExtrasBusyRef = useRef(false);
+  const themeExtraDraftKey = foundation?.project?.id && completedThemeOrder
+    ? `theme-extra-selection:${foundation.project.id}:${completedThemeOrder}` : null;
+  useEffect(() => {
+    if (!themeExtraDraftKey) return;
+    const theme = STORY_THEMES.find(item => item.order === completedThemeOrder);
+    const available = new Set(themeExtraOptions(theme?.code, questionsDB).map(option => option.id));
+    try {
+      const stored = JSON.parse(localStorage.getItem(themeExtraDraftKey) || "[]");
+      setSelectedThemeExtraIds(Array.isArray(stored) ? stored.filter(id => available.has(id)) : []);
+    } catch { setSelectedThemeExtraIds([]); }
+  }, [themeExtraDraftKey, questionsDB]);
+  const changeSelectedThemeExtras = ids => {
+    setSelectedThemeExtraIds(ids);
+    if (themeExtraDraftKey) {
+      try { localStorage.setItem(themeExtraDraftKey, JSON.stringify(ids)); } catch {}
+    }
+  };
   const [bookendBusy, setBookendBusy] = useState(false);
   const [bookendVideoKind, setBookendVideoKind] = useState(null);
   const [bookendVideoStories, setBookendVideoStories] = useState([]);
@@ -3242,6 +3333,9 @@ function App() {
   const [purchaseFor, setPurchaseFor] = useState(() => getPurchaseForFromUrl());
   const [purchaseResult, setPurchaseResult] = useState(null);
   const [bookBuilderOrderCompletedAt, setBookBuilderOrderCompletedAt] = useState(null);
+  const [bookBuilderResumeStep, setBookBuilderResumeStep] = useState(0);
+  const [storyPagesReturnScene, setStoryPagesReturnScene] = useState("home");
+  const [storyPagesFocusAnswerId, setStoryPagesFocusAnswerId] = useState(null);
   const [giftClaimPreview, setGiftClaimPreview] = useState(null);
   const [familyInvitePreview, setFamilyInvitePreview] = useState(null);
   const [sentFamilyInvitations, setSentFamilyInvitations] = useState([]);
@@ -3551,7 +3645,8 @@ if (deliveryToken) {
         currentIndex = continuationIndex;
         nextScene = getThemeResumeContext(questionSet, currentIndex)
           ? "theme_resume"
-          : hasRecentMicCheck()
+          : (!isFormalOnboardingQuestion(questionSet[currentIndex])
+              && !bookendKindForQuestion(questionSet[currentIndex])) || hasRecentMicCheck()
             ? 1
             : "daily_mic_check";
       } else {
@@ -3754,10 +3849,9 @@ const finishThemeExtraQuestion = async (currentQuestion, nextIndex) => {
   if (nextQuestion?.question_role === "theme_extra" &&
       Number(nextQuestion.theme_order) === Number(currentQuestion.theme_order)) {
     setScene(1);
-  } else if (Number(currentQuestion.theme_order) < STORY_THEMES.length) {
-    await advanceAfterTheme(Number(currentQuestion.theme_order));
   } else {
-    await advanceAfterTheme(STORY_THEMES.length);
+    await savePendingThemeTransition(Number(currentQuestion.theme_order), "complete");
+    setScene("theme_complete");
   }
   return true;
 };
@@ -3782,7 +3876,7 @@ const startSelectedThemeExtras = async selected => {
   setFoundation(previous => ({ ...previous, project: refreshedProject.data }));
   setQuestionsDB(refreshedQuestions);
   setProgress({ currentIndex: firstIndex, total: refreshedQuestions.length });
-  setSelectedThemeExtraIds([]);
+  changeSelectedThemeExtras([]);
   resetVoiceData();
   setScene(1);
 };
@@ -4262,7 +4356,8 @@ const continueAfterTokenAuth = async () => {
       ? "home"
       : getThemeResumeContext(questionSet, resumeIndex)
         ? "theme_resume"
-        : hasRecentMicCheck()
+        : (!isFormalOnboardingQuestion(questionSet[resumeIndex])
+            && !bookendKindForQuestion(questionSet[resumeIndex])) || hasRecentMicCheck()
           ? 1
           : "daily_mic_check";
     setScene(await resolveMainExperienceEntryScene(
@@ -4332,7 +4427,7 @@ const buildRecordedVoiceData = (prev, txt, dur, url, blob) => {
   };
 };
 
-const handleRecordComplete = (txt, dur, url, blob, details = {}) => {
+const handleRecordComplete = async (txt, dur, url, blob, details = {}) => {
   console.log("recorded blob", {
     type: blob?.type,
     size: blob?.size,
@@ -4352,6 +4447,38 @@ const handleRecordComplete = (txt, dur, url, blob, details = {}) => {
 
   const nextVoiceData = buildRecordedVoiceData(voiceData, txt, dur, url, blob);
   nextVoiceData.recordingStopReason = details.stopReason;
+  const currentQ = questionsDB[progress.currentIndex];
+  const shouldBackUp = Boolean(user?.id && foundation?.project?.id && currentQ?.user_question_id
+    && currentQ.onboarding_group !== 'trial_experience'
+    && !isFormalOnboardingQuestion(currentQ) && !bookendKindForQuestion(currentQ));
+  if (shouldBackUp && hasBlob) {
+    const draftId = crypto.randomUUID();
+    try {
+      const draft = {
+        id: draftId, userId: user.id, projectId: foundation.project.id,
+        sequenceOrder: Number(nextVoiceData.targetSequenceOrder || currentQ.sequence_order),
+        mode: nextVoiceData.editRecordingMode || 'initial',
+        answerId: nextVoiceData.targetAnswerId || null,
+        createdAt: Date.now(),
+        segments: nextVoiceData.audioSegments.map(segment => ({
+          blob: segment.blob, duration: segment.duration || 0,
+          transcript: segment.transcript || '', createdAt: segment.createdAt || Date.now(),
+        })),
+      };
+      await saveAnswerRecordingDraft(draft);
+      if (voiceData.localRecordingDraftId && voiceData.localRecordingDraftId !== draftId) {
+        await deleteAnswerRecordingDraft(voiceData.localRecordingDraftId).catch(error =>
+          console.warn('superseded recording backup cleanup failed', error));
+      }
+      nextVoiceData.localRecordingDraftId = draftId;
+      nextVoiceData.recordingAttemptId = draftId;
+      setLocalRecordingDrafts(previous => [draft, ...previous.filter(item =>
+        item.id !== voiceData.localRecordingDraftId)]);
+    } catch (error) {
+      console.error('local recording backup failed', error);
+      alert('この端末に録音の控えを保存できませんでした。サーバーへの保存が終わるまで画面を閉じないでください。');
+    }
+  }
 
   setVoiceData({
     ...nextVoiceData,
@@ -4361,7 +4488,7 @@ const handleRecordComplete = (txt, dur, url, blob, details = {}) => {
 
   setScene(3.5);
 
-  handleTranscribeForReview(nextVoiceData);
+  void handleTranscribeForReview(nextVoiceData);
 };
 
 
@@ -4426,10 +4553,7 @@ const startEditRecording = (
       return false;
     }
 
-    const ok = window.confirm(
-      "語り足すと、今の本文に追加の語りを加えて文章を再構成します。本文は上書きされます。よろしいですか？"
-    );
-    if (!ok) return false;
+    // The existing body is retained byte-for-byte; only the new speech is polished.
   }
 
   const targetIndex = questionsDB.findIndex(q =>
@@ -4448,7 +4572,8 @@ const startEditRecording = (
     answerId: answer.id,
     sequenceOrder: answer.sequence_order,
     existingAudioPaths: existingAudioPaths || [],
-    baseText: getAnswerTextForEditRecording(answer)
+    baseText: getAnswerTextForEditRecording(answer),
+    baseTextRevision: Number(answer.text_revision || 0)
   };
 
   setVoiceData({
@@ -4483,6 +4608,7 @@ const startEditRecording = (
     targetAnswerId: answer.id,
     targetSequenceOrder: answer.sequence_order,
     editBaseText: target.baseText,
+    editBaseTextRevision: target.baseTextRevision,
     existingAudioPaths: target.existingAudioPaths,
     returnQuestionIndex: progress.currentIndex,
     editReturnScene
@@ -4498,7 +4624,10 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
   let failurePoint = "prepare";
   let telemetryAnswerId = sourceVoiceData.targetAnswerId || sourceVoiceData.answerId || null;
   const telemetryQuestion = questionsDB[progress.currentIndex] || null;
-  const telemetryAttemptId = crypto.randomUUID();
+  // A failed upload retries with new immutable paths; a transcription retry
+  // reuses the already uploaded attempt and never uploads the same path twice.
+  const telemetryAttemptId = sourceVoiceData.transcriptionFailureStage === 'upload'
+    ? crypto.randomUUID() : sourceVoiceData.recordingAttemptId || crypto.randomUUID();
   setVoiceData(prev => ({
     ...prev,
     transcriptionStatus: "processing",
@@ -4507,7 +4636,8 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
   }));
 
   try {
-    const currentQ = questionsDB[progress.currentIndex];
+    const currentQ = questionsDB.find(question => Number(question.sequence_order)
+      === Number(sourceVoiceData.targetSequenceOrder)) || questionsDB[progress.currentIndex];
     const currentSeq = sourceVoiceData.targetSequenceOrder || currentQ?.sequence_order;
 
 
@@ -4567,34 +4697,50 @@ const uploadStartIndex =
     ? existingAudioPaths.length
     : 0;
 
-for (let i = 0; i < audioSegments.length; i++) {
+const reuseUploadedAttempt = sourceVoiceData.transcriptionFailureStage === 'transcription'
+  && sourceVoiceData.recordingAttemptId
+  && Array.isArray(sourceVoiceData.newAudioPaths)
+  && sourceVoiceData.newAudioPaths.length > 0;
+const useRecordingAttempt = Boolean(foundation?.project?.id && currentQ?.user_question_id
+  && currentQ?.onboarding_group !== 'trial_experience'
+  && !isFormalOnboardingQuestion(currentQ) && !bookendKindForQuestion(currentQ));
+const plannedUploads = audioSegments.map((segment, i) => {
+  const contentType = segment?.blob?.type || 'audio/mp4';
+  const ext = contentType.includes('mp4') ? 'mp4' : contentType.includes('aac') ? 'aac' : 'webm';
+  const segmentNo = String(uploadStartIndex + i + 1).padStart(2, '0');
+  const uniquePart = `part-${segmentNo}-${crypto.randomUUID()}`;
+  return { segment, contentType,
+    path: `${recordingStorageRoot(user.id, foundation.project.id, targetAnswerId)}/${uniquePart}.${ext}` };
+}).filter(item => item.segment?.blob?.size);
+
+if (useRecordingAttempt && !reuseUploadedAttempt && plannedUploads.length > 0) {
+  const { error: attemptError } = await supabaseClient.from('answer_recording_attempts').insert({
+    id: telemetryAttemptId,
+    user_id: user.id,
+    book_project_id: foundation.project.id,
+    sequence_order: Number(currentSeq),
+    answer_id: targetAnswerId,
+    mode: editMode === 'replace' || editMode === 'append' || editMode === 'voice_only'
+      ? editMode : 'initial',
+    storage_paths: plannedUploads.map(item => item.path),
+  });
+  if (attemptError) throw attemptError;
+}
+
+if (reuseUploadedAttempt) {
+  paths = [...sourceVoiceData.newAudioPaths];
+} else for (let i = 0; i < plannedUploads.length; i++) {
       failurePoint = "storage";
-      const segment = audioSegments[i];
+      const { segment, contentType, path } = plannedUploads[i];
       const blob = segment?.blob;
 
       if (!blob || !blob.size) continue;
-
-      const contentType = blob.type || "audio/mp4";
-      const ext = contentType.includes("mp4")
-        ? "mp4"
-        : contentType.includes("aac")
-          ? "aac"
-          : "webm";
-
-      const segmentNo = String(uploadStartIndex + i + 1).padStart(2, "0");
-      // A trial restart may queue the previous object for later Storage GC.
-      // Never reuse that object's path for a new recording.
-      const isRetainedTrialAudio = FREE_TRIAL_RETENTION_ENABLED && currentQ?.onboarding_group === "trial_experience";
-      const uniquePart = isRetainedTrialAudio
-        ? `part-${segmentNo}-${crypto.randomUUID()}`
-        : `part-${segmentNo}`;
-      const path = `${recordingStorageRoot(user.id, foundation.project.id, targetAnswerId)}/${uniquePart}.${ext}`;
 
       const { error: uploadError } = await supabaseClient.storage
         .from("audio")
         .upload(path, blob, {
           contentType,
-          upsert: !isRetainedTrialAudio
+          upsert: false
         });
 
       if (uploadError) {
@@ -4629,6 +4775,8 @@ failurePoint = "transcription";
 
 setVoiceData(prev => ({
   ...prev,
+  recordingAttemptId: useRecordingAttempt ? telemetryAttemptId : null,
+  newAudioPaths: paths,
   answerId: targetAnswerId,
   storagePath: combinedStoragePaths[combinedStoragePaths.length - 1] || prev.storagePath || null,
   storagePaths: combinedStoragePaths.length > 0 ? combinedStoragePaths : prev.storagePaths
@@ -4650,23 +4798,28 @@ const newTranscriptRaw =
   aiResult.transcript ||
   sourceVoiceData.transcript ||
   "";
+if (!Array.isArray(aiResult.segment_transcripts)
+  || aiResult.segment_transcripts.length !== paths.length) {
+  throw new Error('録音ごとの文字起こしを確認できませんでした');
+}
 
-const transcriptRaw = formatTranscriptForReading(
-  editMode === "append"
-    ? [
-        sourceVoiceData.editBaseText,
-        newTranscriptRaw
-      ].filter(Boolean).join("\n\n")
-    : newTranscriptRaw
-);
+const appendBase = editMode === "append" ? String(sourceVoiceData.editBaseText || "") : "";
+const appendPart = formatTranscriptForReading(newTranscriptRaw);
+const transcriptRaw = appendBase
+  ? `${appendBase}\n\n${appendPart}`
+  : appendPart;
 
 const firstData = {
   ...sourceVoiceData,
+  recordingAttemptId: useRecordingAttempt ? telemetryAttemptId : null,
+  recordingSegmentTranscripts: aiResult.segment_transcripts,
+  newAudioPaths: paths,
   answerId: targetAnswerId,
   storagePath: combinedStoragePaths[combinedStoragePaths.length - 1] || sourceVoiceData.storagePath || null,
   storagePaths: combinedStoragePaths.length > 0 ? combinedStoragePaths : sourceVoiceData.storagePaths,
 
   transcript: transcriptRaw,
+  recordingTranscriptRaw: newTranscriptRaw,
   transcriptClean: transcriptRaw,
   transcriptReadable: transcriptRaw,
   transcriptEssay: "",
@@ -4698,7 +4851,7 @@ try {
   const polishResult = await polishTranscriptOnServer({
     answerId: targetAnswerId,
     userQuestionId: currentQ?.user_question_id,
-    transcriptRaw,
+    transcriptRaw: editMode === "append" ? newTranscriptRaw : transcriptRaw,
     questionText: currentQ?.content || "",
     bookProjectId: foundation?.project?.id || currentQ?.book_project_id || null
   });
@@ -4706,27 +4859,17 @@ try {
      if (prev.answerId !== targetAnswerId) return prev;
       const next = {
       ...prev,
-      transcriptClean:
-        formatTranscriptParagraphs(
-          polishResult.transcript_clean ||
-          prev.transcriptClean ||
-          transcriptRaw
-        ),
+      transcriptClean: appendBase
+        ? `${appendBase}\n\n${formatTranscriptParagraphs(polishResult.transcript_clean || newTranscriptRaw)}`
+        : formatTranscriptParagraphs(polishResult.transcript_clean || prev.transcriptClean || transcriptRaw),
 
-      transcriptReadable:
-        formatTranscriptParagraphs(
-          polishResult.transcript_readable ||
-          polishResult.transcript_clean ||
-          prev.transcriptReadable ||
-          transcriptRaw
-        ),
+      transcriptReadable: appendBase
+        ? `${appendBase}\n\n${formatTranscriptParagraphs(polishResult.transcript_readable || polishResult.transcript_clean || newTranscriptRaw)}`
+        : formatTranscriptParagraphs(polishResult.transcript_readable || polishResult.transcript_clean || prev.transcriptReadable || transcriptRaw),
 
-      transcriptEssay:
-        formatTranscriptParagraphs(
-          polishResult.transcript_essay ||
-          prev.transcriptEssay ||
-          ""
-        ),
+      transcriptEssay: appendBase && polishResult.transcript_essay
+        ? `${appendBase}\n\n${formatTranscriptParagraphs(polishResult.transcript_essay)}`
+        : formatTranscriptParagraphs(polishResult.transcript_essay || prev.transcriptEssay || ""),
 
       extractedSnippet:
         polishResult.extracted_snippet ||
@@ -4801,6 +4944,118 @@ try {
   }));
 
     setScene(3.5);
+  }
+};
+
+const resumeStagedRecording = async attempt => {
+  if (recordingRecoveryBusy) return;
+  try {
+    setRecordingRecoveryBusy(true);
+    setRecordingRecoveryError('');
+    const questionIndex = questionsDB.findIndex(question =>
+      Number(question.sequence_order) === Number(attempt.sequence_order));
+    if (questionIndex < 0) throw new Error('この問いを確認できませんでした');
+    let answer = null;
+    let existingAudioPaths = [];
+    if (attempt.mode !== 'initial') {
+      const { data, error } = await supabaseClient.from('answers')
+        .select('id,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
+        .eq('id', attempt.answer_id).eq('user_id', user.id).single();
+      if (error || !data) throw new Error('元の文章を確認できませんでした');
+      answer = data;
+      if (attempt.mode === 'append') {
+        const { data: media, error: mediaError } = await supabaseClient.from('media_assets')
+          .select('storage_path').eq('answer_id', answer.id).eq('asset_type', 'audio')
+          .order('created_at', { ascending: true });
+        if (mediaError) throw mediaError;
+        existingAudioPaths = (media || []).map(item => item.storage_path).filter(Boolean);
+      }
+    }
+    const source = {
+      audioSegments: [], audioBlob: null, audioUrl: attempt.previewUrl,
+      hasAudio: true, duration: 0, transcript: '', editedText: '',
+      recordingAttemptId: attempt.id, newAudioPaths: attempt.storage_paths,
+      localRecordingDraftId: localRecordingDrafts.find(draft =>
+        Number(draft.sequenceOrder) === Number(attempt.sequence_order)
+        && draft.mode === attempt.mode)?.id || null,
+      transcriptionFailureStage: 'transcription',
+      targetAnswerId: attempt.answer_id, answerId: attempt.answer_id,
+      targetSequenceOrder: attempt.sequence_order,
+      editRecordingMode: attempt.mode === 'initial' ? null : attempt.mode,
+      editBaseText: answer ? getAnswerTextForEditRecording(answer) : '',
+      editBaseTextRevision: Number(answer?.text_revision || 0),
+      existingAudioPaths, returnQuestionIndex: questionIndex,
+      editReturnScene: 'story_pages', storyOrigin: 'question',
+      photoItems: [], selectedStyle: 'readable',
+    };
+    setProgress(previous => ({ ...previous, currentIndex: questionIndex }));
+    setVoiceData(source);
+    setRecordingRecoveryDismissed(true);
+    await handleTranscribeForReview(source);
+  } catch (error) {
+    setRecordingRecoveryError(error?.message || '録音を再開できませんでした。');
+  } finally {
+    setRecordingRecoveryBusy(false);
+  }
+};
+
+const resumeLocalRecording = async draft => {
+  if (recordingRecoveryBusy) return;
+  try {
+    setRecordingRecoveryBusy(true);
+    setRecordingRecoveryError('');
+    const questionIndex = questionsDB.findIndex(question =>
+      Number(question.sequence_order) === Number(draft.sequenceOrder));
+    if (questionIndex < 0) throw new Error('この問いを確認できませんでした');
+    let answer = null;
+    let existingAudioPaths = [];
+    if (draft.mode !== 'initial') {
+      const { data, error } = await supabaseClient.from('answers')
+        .select('id,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
+        .eq('id', draft.answerId).eq('user_id', user.id).single();
+      if (error || !data) throw new Error('元の文章を確認できませんでした');
+      answer = data;
+      if (draft.mode === 'append') {
+        const { data: media, error: mediaError } = await supabaseClient.from('media_assets')
+          .select('storage_path').eq('answer_id', answer.id).eq('asset_type', 'audio')
+          .order('created_at', { ascending: true });
+        if (mediaError) throw mediaError;
+        existingAudioPaths = (media || []).map(item => item.storage_path).filter(Boolean);
+      }
+    } else {
+      const { data, error } = await supabaseClient.from('answers').select('id')
+        .eq('user_id', user.id).eq('sequence_order', draft.sequenceOrder).maybeSingle();
+      if (error) throw error;
+      if (data) throw new Error('この問いの回答はすでに保存されています。録音の控えは端末に残っています。');
+    }
+    const segments = draft.segments.map(segment => ({
+      ...segment, url: URL.createObjectURL(segment.blob),
+    }));
+    const last = segments[segments.length - 1];
+    const source = {
+      audioSegments: segments, audioBlob: last.blob, audioUrl: last.url,
+      hasAudio: true, duration: segments.reduce((sum, segment) => sum + segment.duration, 0),
+      transcript: segments.map(segment => segment.transcript).filter(Boolean).join('\n\n'),
+      editedText: '', recordingAttemptId: crypto.randomUUID(),
+      localRecordingDraftId: draft.id,
+      targetAnswerId: answer?.id || null, answerId: answer?.id || null,
+      targetSequenceOrder: draft.sequenceOrder,
+      editRecordingMode: draft.mode === 'initial' ? null : draft.mode,
+      editBaseText: answer ? getAnswerTextForEditRecording(answer) : '',
+      editBaseTextRevision: Number(answer?.text_revision || 0),
+      existingAudioPaths, returnQuestionIndex: questionIndex,
+      editReturnScene: 'story_pages', storyOrigin: 'question',
+      photoItems: [], selectedStyle: 'readable',
+    };
+    setProgress(previous => ({ ...previous, currentIndex: questionIndex }));
+    setVoiceData(source);
+    setRecordingRecoveryDismissed(true);
+    setScene(3.5);
+    void handleTranscribeForReview(source);
+  } catch (error) {
+    setRecordingRecoveryError(error?.message || '録音を再開できませんでした。');
+  } finally {
+    setRecordingRecoveryBusy(false);
   }
 };
 
@@ -5602,11 +5857,17 @@ const startBookendVideo = async kind => {
   } finally { setBookendBusy(false); }
 };
 
-const openFirstThemeIntroduction = async () => {
+const openFirstThemeIntroduction = async trialCarryDecision => {
   try {
     setIsInitializing(true);
     await confirmExperienceBoundary(foundation.project.id, "paid");
-    await confirmExperienceBoundary(foundation.project.id, "main");
+    const mainStart = await confirmExperienceBoundary(foundation.project.id, "main", trialCarryDecision);
+    if (TRIAL_CARRY_CHOICE_ENABLED) {
+      setFoundation(current => current ? {
+        ...current,
+        project: { ...current.project, trial_carry_decision: mainStart?.trial_carry_decision || null }
+      } : current);
+    }
     await updateOnboardingRitualStep("theme_intro");
     const {data:status,error}=await supabaseClient.rpc("journey_status",{p:foundation.project.id});
     if(error)throw error;
@@ -5631,6 +5892,38 @@ const openNextThemeIntroduction = async () => {
     alert("次のテーマを開けませんでした。");
   } finally {
     setIsInitializing(false);
+  }
+};
+
+const returnToCompletedTheme = async () => {
+  if (!completedThemeOrder) return;
+  try {
+    setIsInitializing(true);
+    await savePendingThemeTransition(completedThemeOrder, "complete");
+    setScene("theme_complete");
+  } catch (error) {
+    console.error("return to completed theme error", error);
+    alert("前のテーマへ戻れませんでした。もう一度お試しください。");
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
+const beginSelectedThemeExtras = async () => {
+  if (themeExtrasBusyRef.current) return;
+  const theme = STORY_THEMES.find(item => item.order === completedThemeOrder);
+  const options = themeExtraOptions(theme?.code, questionsDB);
+  const selected = options.filter(option => selectedThemeExtraIds.includes(option.id));
+  if (!selected.length) return;
+  themeExtrasBusyRef.current = true;
+  setThemeExtrasBusy(true);
+  try { await startSelectedThemeExtras(selected); }
+  catch (error) {
+    console.error("selected theme extras start error", error);
+    alert("追加の問いを開けませんでした。選んだ内容は保持しています。もう一度お試しください。");
+  } finally {
+    themeExtrasBusyRef.current = false;
+    setThemeExtrasBusy(false);
   }
 };
 
@@ -5933,7 +6226,7 @@ const resumeThemeQuestion = async () => {
     currentIndex: resumeContext.questionIndex
   }));
 
-  const nextScene = hasRecentMicCheck() ? 1 : "daily_mic_check";
+  const nextScene = 1;
   const hasPendingThemeTransition =
     Number(foundation?.project?.theme_experience_state?.pending_transition_order) > 0;
 
@@ -6299,10 +6592,79 @@ const handleSaveAnswer = async (tag = null) => {
     const currentSeq = voiceData.targetSequenceOrder || currentQ?.sequence_order;
 
       const editMode = voiceData.editRecordingMode || null;
-      const isEditRecording = editMode === "replace" || editMode === "append";
+      const isEditRecording = editMode === "replace" || editMode === "append" || editMode === "voice_only";
       const ansId = voiceData.targetAnswerId || voiceData.answerId || crypto.randomUUID();
       telemetrySaveAnswerId = ansId;
 
+      if (isEditRecording && voiceData.recordingAttemptId) {
+        const { data: committed, error: commitError } = await supabaseClient.rpc('commit_answer_recording_with_segments', {
+          input_attempt_id: voiceData.recordingAttemptId,
+          input_base_text_revision: Number(voiceData.editBaseTextRevision || 0),
+          input_body: editMode === 'voice_only' ? null : voiceData.editedText,
+          input_transcript_raw: voiceData.recordingTranscriptRaw || voiceData.transcript || '',
+          input_transcript_clean: voiceData.transcriptClean || '',
+          input_transcript_readable: voiceData.transcriptReadable || '',
+          input_transcript_essay: voiceData.transcriptEssay || '',
+          input_selected_style: voiceData.selectedStyle || 'readable',
+          input_segment_transcripts: voiceData.recordingSegmentTranscripts || [],
+          input_allow_rewrite: editMode === 'append' && voiceData.allowWholeTextRewrite === true,
+        });
+        if (commitError || committed?.status !== 'saved') {
+          throw commitError || new Error(committed?.status || '音声を確定できませんでした');
+        }
+        if (voiceData.localRecordingDraftId) {
+          await deleteAnswerRecordingDraft(voiceData.localRecordingDraftId)
+            .then(() => setLocalRecordingDrafts(previous => previous.filter(item => item.id !== voiceData.localRecordingDraftId)))
+            .catch(error => console.warn('recording backup cleanup failed', error));
+        }
+        const returnQuestionIndex = Number.isInteger(voiceData.returnQuestionIndex)
+          ? voiceData.returnQuestionIndex : progress.currentIndex;
+        const editReturnScene = voiceData.editReturnScene || 'story_pages';
+        resetVoiceData();
+        setProgress(prev => ({ ...prev, currentIndex: Math.min(returnQuestionIndex,
+          Math.max(questionsDB.length - 1, 0)) }));
+        if (editReturnScene === 'life_outline_summary') {
+          setScene('life_outline_summary');
+          setLifeOutlineStatus('generating');
+          try { await generateLifeOutlineIntroduction({
+            existingIntroduction: lifeOutlineIntroduction,
+            editorialBase: lifeOutlineIntroduction?.is_user_edited
+              ? lifeOutlineIntroduction.body_text : ''
+          }); } catch (_error) { /* Summary can be retried. */ }
+        } else {
+          setScene(editReturnScene);
+        }
+        return;
+      }
+
+      const isInitialStagedRecording = !isEditRecording && Boolean(voiceData.recordingAttemptId);
+      let stagedAnswerId = null;
+      if (isInitialStagedRecording) {
+        const { data: committed, error: commitError } = await supabaseClient.rpc('commit_answer_recording_with_segments', {
+          input_attempt_id: voiceData.recordingAttemptId,
+          input_base_text_revision: 0,
+          input_body: voiceData.editedText,
+          input_transcript_raw: voiceData.recordingTranscriptRaw || voiceData.transcript || '',
+          input_transcript_clean: voiceData.transcriptClean || '',
+          input_transcript_readable: voiceData.transcriptReadable || '',
+          input_transcript_essay: voiceData.transcriptEssay || '',
+          input_selected_style: voiceData.selectedStyle || 'readable',
+          input_segment_transcripts: voiceData.recordingSegmentTranscripts || [],
+          input_allow_rewrite: false,
+        });
+        if (commitError || committed?.status !== 'saved') {
+          throw commitError || new Error(committed?.status || '音声を確定できませんでした');
+        }
+        if (voiceData.localRecordingDraftId) {
+          await deleteAnswerRecordingDraft(voiceData.localRecordingDraftId)
+            .then(() => setLocalRecordingDrafts(previous => previous.filter(item => item.id !== voiceData.localRecordingDraftId)))
+            .catch(error => console.warn('recording backup cleanup failed', error));
+        }
+        stagedAnswerId = committed.answer_id;
+      }
+
+      let finalAnswerId = stagedAnswerId || ansId;
+      if (!isInitialStagedRecording) {
       const { data: savedAnswer, error: dbError } = await supabaseClient
         .from("answers")
         .upsert({
@@ -6366,7 +6728,7 @@ const handleSaveAnswer = async (tag = null) => {
         throw new Error("回答の記録に失敗しました");
       }
 
-      const finalAnswerId = savedAnswer?.id || ansId;
+      finalAnswerId = savedAnswer?.id || ansId;
 
 const storagePaths = voiceData.storagePaths && voiceData.storagePaths.length > 0
   ? voiceData.storagePaths
@@ -6471,6 +6833,7 @@ if (oldTrialAudioPaths.length > 0) {
     if (oldTrialStorageError) console.warn('old trial audio retained in Storage', oldTrialStorageError);
   }
 }
+      }
 
       const photoItems = voiceData.photoItems || [];
 
@@ -6905,7 +7268,7 @@ setScene(1);
 
   return (
     <div className={`app-container ${scene === "family_invite_received" ? "app-container--family-invitation" : ""} ${TRIAL_CONVERSION_ENABLED && scene === "trial_complete" ? "app-container--trial-conversion" : ""} ${["onboarding_preferences", "notification_setup", "sharing_setup"].includes(scene) ? "app-container--desktop-setup" : ""}`}>
-      <PersistentStorySkyBackdrop active={scene === 1 || scene === 3} />
+      <PersistentStorySkyBackdrop active={QUESTION_BACKGROUND === "sky" && (scene === 1 || scene === 3)} />
       {showGlobalHome && (
         <button
           type="button"
@@ -6921,6 +7284,23 @@ setScene(1);
           <p className="rounded-full border border-white/10 bg-slate-950/90 px-5 py-3 text-sm text-white/62 shadow-2xl backdrop-blur-md">
             ✓ {savedNotice}
           </p>
+        </div>
+      )}
+      {!recordingRecoveryDismissed && (recoverableRecordings.length > 0 || localRecordingDrafts.length > 0)
+        && !writingQuestion && ![-1, 3, 3.5].includes(scene) && (
+        <div role="status" className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-[95] mx-auto max-w-xl rounded-2xl border border-white/20 bg-[#172337] p-5 text-white shadow-2xl">
+          <p className="text-lg">保存途中の声があります</p>
+          <p className="text-sm text-white/65 mt-2">録音の控えから、文字起こしと保存を再開できます。</p>
+          {recordingRecoveryError && <p role="alert" className="mt-2 text-amber-200 text-sm">{recordingRecoveryError}</p>}
+          <button type="button" onClick={() => {
+            if (recoverableRecordings[0]) void resumeStagedRecording(recoverableRecordings[0]);
+            else if (localRecordingDrafts[0]) void resumeLocalRecording(localRecordingDrafts[0]);
+          }}
+            disabled={recordingRecoveryBusy} className="mt-4 w-full min-h-12 rounded-xl bg-white text-slate-900 disabled:opacity-40">
+            {recordingRecoveryBusy ? '準備しています…' : '声の保存を再開する'}
+          </button>
+          <button type="button" onClick={() => setRecordingRecoveryDismissed(true)}
+            className="mt-2 w-full min-h-11 text-white/60">あとで</button>
         </div>
       )}
       {scene === -1 && (
@@ -7150,12 +7530,12 @@ if (isFreeTrialExpired(loadedTrialRetention)
           <p className="mb-5 text-sm tracking-[0.18em] text-white/50">無料体験</p>
           <h1 className="text-3xl leading-relaxed">前回の語りの保存期間が終わりました。</h1>
           <p className="mt-6 text-base leading-loose text-white/70">
-            もう一度、3つの問いから話してみませんか。新しく語った内容は、最後に語った日から{freeTrialRetentionDays(trialRetention)}日間保存されます。
+            もう一度、3つの問いに答えてみませんか。新しく残した内容は、最後に回答を保存した日から{freeTrialRetentionDays(trialRetention)}日間保存されます。
           </p>
           {trialRestartError && <p role="alert" className="mt-5 text-sm text-rose-200">{trialRestartError}</p>}
           <button type="button" disabled={trialRestarting}
             className="mt-9 min-h-14 rounded-full bg-[#e8e4d8] px-6 text-[#152336] disabled:opacity-50"
-            onClick={() => restartFreeTrial({ confirmReplace: false })}>もう一度、3問を話す</button>
+            onClick={() => restartFreeTrial({ confirmReplace: false })}>もう一度、3問に答える</button>
           <button type="button" className="mt-5 min-h-12 text-sm text-white/65 underline underline-offset-4"
             onClick={() => setScene('purchase_start')}>本編から始める</button>
         </section>
@@ -7191,13 +7571,13 @@ if (isFreeTrialExpired(loadedTrialRetention)
         <>
         {trialRetention?.expires_at && trialRetention.status !== 'handed_off' && (
           <p className="mx-auto w-full max-w-lg px-6 pt-5 text-center text-[0.9375rem] leading-[1.7] text-white/78">
-            語った内容は{freeTrialExpiryLabel(trialRetention)}まで保存されています。
+            残した内容は{freeTrialExpiryLabel(trialRetention)}まで保存されています。
           </p>
         )}
         {FREE_TRIAL_RETENTION_ENABLED && trialRetention?.status === 'active' && (
           <button type="button" className="mx-auto block min-h-11 px-6 text-[0.9375rem] text-white/78 underline underline-offset-4"
             disabled={trialRestarting} onClick={() => restartFreeTrial()}>
-            最初から3問を話し直す
+            最初から3問に答え直す
           </button>
         )}
         {trialRestartError && <p role="alert" className="mx-auto max-w-lg px-6 text-center text-sm text-rose-200">{trialRestartError}</p>}
@@ -7507,6 +7887,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
       {scene === "hajimari_complete" && (
         <Scene_HajimariComplete
           onContinue={openFirstThemeIntroduction}
+          hasTrialStories={TRIAL_CARRY_CHOICE_ENABLED && foundation?.project?.has_childhood_trial_stories === true}
         />
       )}
 
@@ -7514,7 +7895,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
         <Scene_ThemeIntro
           theme={STORY_THEMES[0]}
           isFirstTheme
-          notificationLabel={formatNextNotificationLabel(notificationPref)}
+          notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
           onChangeDelivery={() => {
             setNotificationSetupReturnScene("theme_intro");
             setScene("notification_setup");
@@ -7828,7 +8209,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
 
 {scene === "life_outline_complete" && (
   <Scene_LifeOutlineComplete
-    notificationLabel={formatNextNotificationLabel(notificationPref)}
+    notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
     needsNotificationSetup={!notificationPref}
     needsSharingSetup={!sharingPreference?.initial_setup_completed_at}
     onContinue={() => leaveLifeOutlineMilestone({ continueNow: true })}
@@ -7855,6 +8236,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
        <Scene_Home
          userName={user?.name || "あなた"}
          questionSet={questionsDB}
+         trialCarryDecision={foundation?.project?.trial_carry_decision}
          currentIndex={progress.currentIndex}
          supportedProjects={supportedProjects}
          receivedProjects={receivedProjects}
@@ -7875,14 +8257,14 @@ if (isFreeTrialExpired(loadedTrialRetention)
 
            setScene(themeResumeContext ? "theme_resume" : 0);
          }}
-         onOpenStoryPages={() => setScene("story_pages")}
+         onOpenStoryPages={() => { setStoryPagesReturnScene("home"); setStoryPagesFocusAnswerId(null); setScene("story_pages"); }}
          canOpenThemeMemories={hasCompletedStoryTheme(questionsDB, 1)}
          onOpenThemeMemories={() => {
            setThemeMemoryReturnScene("home");
            setScene("theme_memory_manager");
          }}
          onStartPhotoStory={() => setScene("photo_story_start")}
-         onOpenBookBuilder={() => setScene("book_builder")}
+         onOpenBookBuilder={() => { setBookBuilderResumeStep(0); setScene("book_builder"); }}
          onOpenQuestionLibrary={() => setScene("question_library")}
          onOpenSettings={() => setScene("settings")}
          onOpenLineDelivery={import.meta.env.VITE_LINE_AUTH_ENABLED === 'true' && user?.email && foundation?.project?.onboarding_status === 'completed' && notificationPref && !notificationPref.line_enabled ? () => {
@@ -8280,7 +8662,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
             getCheckoutReturnFromUrl().status === "cancelled" &&
             getCheckoutReturnFromUrl().context === "book_builder"
               ? 4
-              : 0
+              : bookBuilderResumeStep
           }
           checkoutWasCancelled={
             getCheckoutReturnFromUrl().status === "cancelled" &&
@@ -8288,6 +8670,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
           }
           onPurchase={startPurchase}
           onReopenCheckout={reopenCheckout}
+          onOpenStories={answerId => { setStoryPagesReturnScene("book_builder"); setStoryPagesFocusAnswerId(answerId); setScene("story_pages"); }}
           onBack={() => setScene("home")}
         />
       )}
@@ -8299,13 +8682,13 @@ if (isFreeTrialExpired(loadedTrialRetention)
           onRestart={() => restartFreeTrial()}
           restartError={trialRestartError}
           onStart={() => {
-            if (hasRecentMicCheck()) setScene(1);
+            if (!isFormalOnboardingQuestion(currentQ) || hasRecentMicCheck()) setScene(1);
             else setScene("daily_mic_check");
           }}
         /> : <Scene0_Door
           onHome={foundation?.project?.onboarding_status === "completed" ? returnToHome : null}
           onNext={() => {
-            if (hasRecentMicCheck()) {
+            if (!isFormalOnboardingQuestion(currentQ) || hasRecentMicCheck()) {
               setScene(1);
             } else {
               setScene("daily_mic_check");
@@ -8322,6 +8705,15 @@ if (isFreeTrialExpired(loadedTrialRetention)
           }}
         />
       )}
+      {scene === "recording_mic_check" && (
+        <Scene_DailyMicCheck
+          onComplete={({ verified }) => {
+            if (verified) markMicCheckDone();
+            resetVoiceData();
+            setScene(3);
+          }}
+        />
+      )}
 
       {scene === 1 && (
         <Scene1_MyPage
@@ -8332,12 +8724,123 @@ if (isFreeTrialExpired(loadedTrialRetention)
           onBack={() => setScene(!isFormalOnboardingQuestion(currentQ) && !bookendKindForQuestion(currentQ) && resolvedThemeResumeContext ? "theme_resume" : 0)}
           onNext={() => {
             resetVoiceData();
-            setScene(3);
+            setScene(!isFormalOnboardingQuestion(currentQ) && !hasRecentMicCheck()
+              ? "recording_mic_check" : 3);
           }}
+          onWrite={canWriteStoryQuestion(currentQ)
+            ? () => setWritingQuestion(currentQ) : null}
           onSkip={handleSkipQuestion}
           onEndToday={() => {
             setEndTodayHasSavedAnswer(false);
             setScene("end_today");
+          }}
+        />
+      )}
+      {writingQuestion && user?.id && foundation?.project?.id && (
+        <WrittenAnswerEditor
+          userId={user.id}
+          projectId={foundation.project.id}
+          question={writingQuestion}
+          progressLabel={`${getMainStoryProgress(questionsDB, progress.currentIndex).currentIndex + 1} / ${getMainStoryProgress(questionsDB, progress.currentIndex).total}`}
+          client={supabaseClient}
+          onClose={() => setWritingQuestion(null)}
+          onSaved={async () => {
+            const savedQuestion = writingQuestion;
+            setWritingQuestion(null);
+            setQuestionsDB(current => current.map(question =>
+              question.user_question_id === savedQuestion?.user_question_id
+                ? { ...question, status: 'answered', answered_at: new Date().toISOString() }
+                : question
+            ));
+            const nextIndex = progress.currentIndex + 1;
+            const nextSeq = questionsDB[nextIndex]?.sequence_order || Number(savedQuestion.sequence_order) + 1;
+            const { error } = await supabaseClient.from('profiles')
+              .update({ current_sequence: nextSeq }).eq('id', user.id);
+            if (error) console.warn('text answer progress sync', error);
+            setProgress(previous => ({ ...previous,
+              currentIndex: Math.min(nextIndex, questionsDB.length - 1) }));
+            const nextQuestion = questionsDB[nextIndex] || null;
+            const chapterComplete = savedQuestion?.onboarding_group === "starting_conversation" &&
+              nextQuestion?.onboarding_group !== "starting_conversation";
+            const outlineComplete = savedQuestion?.onboarding_group === "life_outline" &&
+              nextQuestion?.onboarding_group !== "life_outline";
+            if (isFormalOnboardingQuestion(savedQuestion) && foundation?.project?.id &&
+                foundation.project.onboarding_status !== "completed") {
+              const onboardingUpdate = savedQuestion?.onboarding_group === "starting_motivation"
+                ? { onboarding_status: "life_outline_completed",
+                    current_onboarding_user_question_id: nextQuestion?.user_question_id || null,
+                    starting_motivation_completed_at: new Date().toISOString(),
+                    onboarding_ritual_step: "chapter_complete" }
+                : chapterComplete
+                  ? { onboarding_status: "life_outline_completed",
+                      current_onboarding_user_question_id: nextQuestion?.user_question_id || null,
+                      life_outline_completed_at: new Date().toISOString(),
+                      onboarding_ritual_step: "conversation_complete" }
+                  : outlineComplete
+                    ? { onboarding_status: "introduction_review",
+                        current_onboarding_user_question_id: nextQuestion?.user_question_id || null }
+                    : { onboarding_status: "in_progress",
+                        current_onboarding_user_question_id: nextQuestion?.user_question_id || null };
+              const { data: updatedProject, error: onboardingError } = await supabaseClient
+                .from("book_projects").update(onboardingUpdate)
+                .eq("id", foundation.project.id).select().single();
+              if (onboardingError) console.warn("written onboarding progress sync", onboardingError);
+              else if (updatedProject) setFoundation(previous => ({ ...previous, project: updatedProject }));
+            }
+            localStorage.setItem("koe_last_visit", Date.now().toString());
+            if (FREE_TRIAL_RETENTION_ENABLED && savedQuestion?.onboarding_group === "trial_experience") {
+              try { setTrialRetention(await loadFreeTrialRetention(foundation?.project?.id)); }
+              catch (retentionError) { console.warn("written trial retention sync", retentionError); }
+            }
+            if (hasRestrictedProjectAccess(foundation?.project) &&
+                isLastFreeTrialQuestion(questionsDB, savedQuestion)) {
+              if (!TRIAL_CONVERSION_ENABLED && ALLOW_FAMILY_NOTIFICATIONS && !import.meta.env.DEV &&
+                  foundation?.project?.onboarding_preferences?.family_invitation_id) {
+                try {
+                  await supabaseClient.functions.invoke("notify-family-story-inviter", {
+                    body: { projectId: foundation.project.id }
+                  });
+                  setReceivedFamilyInvitation(previous => previous ? {
+                    ...previous, status: "trial_completed",
+                    trial_completed_at: previous.trial_completed_at || new Date().toISOString()
+                  } : previous);
+                } catch (familyMilestoneError) {
+                  console.warn("family trial milestone notification error", familyMilestoneError);
+                }
+              }
+              replaceCommercialEntryUrl("trial");
+              setScene("trial_complete");
+              return;
+            }
+            if (savedQuestion?.onboarding_group === "starting_conversation") {
+              setScene(chapterComplete ? "starting_conversation_complete" : 1);
+              return;
+            }
+            if (savedQuestion?.onboarding_group === "starting_motivation") {
+              setScene("hajimari_complete");
+              return;
+            }
+            if (outlineComplete) {
+              setLifeOutlineReturnScene(null);
+              setScene("life_outline_summary");
+              setIsInitializing(false);
+              try { await generateLifeOutlineIntroduction(); }
+              catch (outlineError) { console.warn("written life outline summary", outlineError); }
+              return;
+            }
+            if (isFormalOnboardingQuestion(savedQuestion)) {
+              setScene(1);
+              return;
+            }
+            if (await finishThemeExtraQuestion(savedQuestion, nextIndex)) return;
+            if (Number(savedQuestion?.theme_order) > 0 &&
+              Number(nextQuestion?.theme_order) !== Number(savedQuestion?.theme_order)) {
+              await savePendingThemeTransition(Number(savedQuestion.theme_order));
+              setScene('theme_complete');
+            } else {
+              setSavedNotice('この文章を残しました');
+              setScene(1);
+            }
           }}
         />
       )}
@@ -8417,7 +8920,9 @@ onRetry={() => {
     setVoiceData(prev => {
       const next = {
         ...prev,
-        selectedStyle: style
+        selectedStyle: style,
+        allowWholeTextRewrite: false,
+        wholeTextCandidate: null,
       };
 
       return {
@@ -8431,7 +8936,9 @@ onRetry={() => {
       const next = {
         ...prev,
         selectedStyle: style,
-        editedText: text
+        editedText: text,
+        allowWholeTextRewrite: prev.editRecordingMode === 'append',
+        wholeTextCandidate: null,
       };
 
       if (style === "clean") {
@@ -8445,6 +8952,28 @@ onRetry={() => {
       return next;
     });
   }}
+  onPolishWhole={async () => {
+    const source = voiceData.editedText || '';
+    if (!source.trim()) return;
+    setVoiceData(prev => ({ ...prev, wholeTextPolishStatus: 'processing', wholeTextPolishError: '' }));
+    try {
+      const { data, error } = await supabaseClient.functions.invoke('polish-written-answer', {
+        body: { projectId: foundation.project.id, sequenceOrder: currentQ.sequence_order,
+          text: source, questionText: currentQ.content || '' },
+      });
+      if (error || !data?.success || !data.candidate) throw error || new Error('文章を整えられませんでした');
+      setVoiceData(prev => prev.editedText === source
+        ? { ...prev, wholeTextCandidate: { original: source, text: data.candidate }, wholeTextPolishStatus: 'done' }
+        : { ...prev, wholeTextPolishStatus: 'idle', wholeTextPolishError: '文章が変わったため、候補を使わずに戻しました。' });
+    } catch {
+      setVoiceData(prev => ({ ...prev, wholeTextPolishStatus: 'error',
+        wholeTextPolishError: '文章を整えられませんでした。元の文章は残っています。' }));
+    }
+  }}
+  onUseWholeCandidate={() => setVoiceData(prev => ({ ...prev,
+    editedText: prev.wholeTextCandidate?.text || prev.editedText,
+    allowWholeTextRewrite: Boolean(prev.wholeTextCandidate), wholeTextCandidate: null }))}
+  onDiscardWholeCandidate={() => setVoiceData(prev => ({ ...prev, wholeTextCandidate: null }))}
   onProceed={() => handleSaveAnswer(
     currentQ?.onboarding_group === "life_outline" ? "人生の輪郭" : null
   )}
@@ -8493,14 +9022,14 @@ onRetry={() => {
           completedTheme={STORY_THEMES.find(theme => theme.order === completedThemeOrder) || null}
           hasNextTheme={Boolean(STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1))}
           hasExtraQuestions={themeExtraOptions(STORY_THEMES.find(theme => theme.order === completedThemeOrder)?.code, questionsDB).length > 0}
-          onMore={() => {
-            setSelectedThemeExtraIds([]);
-            setScene("theme_more");
-          }}
-          onRequestFamilyMemory={completedThemeOrder === 1 ? () => {
+          selectedExtraCount={selectedThemeExtraIds.length}
+          extraStartBusy={themeExtrasBusy}
+          onStartExtras={beginSelectedThemeExtras}
+          onMore={() => setScene("theme_more")}
+          onRequestFamilyMemory={() => {
             setThemeMemoryReturnScene("theme_complete");
-            setScene("theme_memory_request");
-          } : null}
+            setScene("story_request");
+          }}
           onContinue={openNextThemeIntroduction}
           onFinish={() => advanceAfterTheme(STORY_THEMES.length)}
         />
@@ -8522,9 +9051,7 @@ onRetry={() => {
           theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder) || null}
           options={themeExtraOptions(STORY_THEMES.find(theme => theme.order === completedThemeOrder)?.code, questionsDB)}
           selectedIds={selectedThemeExtraIds}
-          onSelectionChange={setSelectedThemeExtraIds}
-          onStart={startSelectedThemeExtras}
-          onNextTheme={completedThemeOrder < STORY_THEMES.length ? openNextThemeIntroduction : () => advanceAfterTheme(STORY_THEMES.length)}
+          onSelectionChange={changeSelectedThemeExtras}
           onBack={() => setScene("theme_complete")}
         />
       )}
@@ -8537,20 +9064,35 @@ onRetry={() => {
           onSent={() => {}}
         />
       )}
+      {scene === "story_request" && (
+        <StoryRequestComposer
+          client={supabaseClient}
+          bookProjectId={foundation?.project?.id}
+          theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder) || null}
+          questions={questionsDB}
+          onBack={() => setScene(themeMemoryReturnScene || "theme_complete")}
+        />
+      )}
       {scene === "theme_memory_manager" && (
+        <StoryRequestManager
+          client={supabaseClient}
+          bookProjectId={foundation?.project?.id}
+          onBack={() => setScene("home")}
+          onLegacy={() => setScene("theme_memory_legacy_manager")}
+        />
+      )}
+      {scene === "theme_memory_legacy_manager" && (
         <ThemeMemoryRequestManager
           supabaseClient={supabaseClient}
           bookProjectId={foundation?.project?.id}
-          onBack={() => setScene("home")}
-          onStartNew={() => {
-            setThemeMemoryReturnScene("theme_memory_manager");
-            setScene("theme_memory_request");
-          }}
+          onBack={() => setScene("theme_memory_manager")}
+          onStartNew={() => setScene("theme_memory_manager")}
         />
       )}
       {scene === "theme_intro" && foundation?.project?.onboarding_status === "completed" && (
         <Scene_ThemeIntro
           theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1) || null}
+          onBack={returnToCompletedTheme}
           notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
           onChangeDelivery={() => {
             setNotificationSetupReturnScene("theme_intro");
@@ -8570,7 +9112,7 @@ onRetry={() => {
         <Scene_EndToday
           notificationPref={notificationPref}
           hasSavedAnswer={endTodayHasSavedAnswer}
-          onOpenStoryPages={() => setScene("story_pages")}
+          onOpenStoryPages={() => { setStoryPagesReturnScene("home"); setStoryPagesFocusAnswerId(null); setScene("story_pages"); }}
           onResume={() => setScene(themeResumeContext ? "theme_resume" : 1)}
         />
       )}
@@ -8581,6 +9123,7 @@ onRetry={() => {
   user={user}
   foundation={foundation}
   questionSet={questionsDB}
+  initialAnswerId={storyPagesFocusAnswerId}
   onOpenLifeOutline={() => {
     setLifeOutlineStatus("idle");
     setLifeOutlineReturnScene("story_pages");
@@ -8592,7 +9135,7 @@ onRetry={() => {
   }}
   onEditRecord={startEditRecording}
   onOpenBookend={kind => beginBookend(kind, "story_pages")}
-  onBack={() => setScene("home")}
+  onBack={() => { if (storyPagesReturnScene === "book_builder") setBookBuilderResumeStep(1); setScene(storyPagesReturnScene); setStoryPagesReturnScene("home"); setStoryPagesFocusAnswerId(null); }}
 />
 
       )}
@@ -9283,8 +9826,8 @@ if (isNewMode) {
                 </p>
 
                 <p className="text-white/55 text-[0.95rem] leading-loose">
-                  声で答えながら、物語づくりを体験できます。<br />
-                  料金はかかりません。語った内容は、<br />
+                  声でも文章でも、物語づくりを体験できます。<br />
+                  料金はかかりません。残した内容は、<br />
                   購入後もそのまま引き継がれます。
                 </p>
               </>
@@ -9939,7 +10482,7 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
           3つの問いを終えました
         </p>
         <h1 className="text-narrative mt-6 text-[1.55rem] leading-[1.9] text-white/92">
-          声にした時間が、<br />
+          言葉にした時間が、<br />
           物語のはじまりになりました
         </h1>
 
@@ -9947,7 +10490,7 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
 
         <p className="mx-auto max-w-[350px] text-[0.94rem] leading-[2.1] text-white/56">
           続きでは、幼少期から今までを少しずつたどります。<br />
-          語った声は文章になり、写真とともに一冊へ育っていきます。
+          声でも文章でも、思い出を写真とともに一冊へ育てていきます。
         </p>
 
         {isPaidFamilyGift ? (
@@ -10921,7 +11464,8 @@ function ThemePreview({
   );
 }
 
-export function Scene_HajimariComplete({ onContinue }) {
+export function Scene_HajimariComplete({ onContinue, hasTrialStories = false }) {
+  const [trialCarryDecision, setTrialCarryDecision] = useState(null);
   return (
     <div className="flow-scene-shell fade-enter">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
@@ -10944,7 +11488,17 @@ export function Scene_HajimariComplete({ onContinue }) {
         <p className="mt-9 text-[0.98rem] leading-[2] text-white/58 text-narrative">
           ここからは<br />9つのテーマごとに進めていきます。
         </p>
-        <button type="button" onClick={onContinue} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">
+        {hasTrialStories && <fieldset className="mt-9 rounded-[1.5rem] border border-white/15 p-5 text-left">
+          <legend className="px-2 text-[0.95rem] leading-loose text-white/85">無料の3問で語ったことを、本編に引き継ぎますか？</legend>
+          <p className="mb-4 text-[0.78rem] leading-[1.8] text-white/55">引き継ぐと「幼い頃」の語りに入り、似た問いは繰り返しません。引き継がない場合は本編に表示されません。</p>
+          <div className="grid gap-3">
+            {[['carry', '引き継ぐ'], ['do_not_carry', '引き継がない']].map(([value, label]) => <label key={value} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-white/15 px-4 text-[0.92rem] text-white/85 has-[:checked]:border-white/60 has-[:checked]:bg-white/10">
+              <input type="radio" name="trial-carry-decision" value={value} checked={trialCarryDecision === value} onChange={() => setTrialCarryDecision(value)} className="h-5 w-5 accent-[#eee9dd]" />
+              {label}
+            </label>)}
+          </div>
+        </fieldset>}
+        <button type="button" disabled={hasTrialStories && !trialCarryDecision} onClick={() => onContinue(trialCarryDecision)} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white disabled:cursor-not-allowed disabled:opacity-40">
           {EXPERIENCE_V2_ENABLED ? "本編をはじめる" : "最初のテーマを見る"}
         </button>
       </div>
@@ -10952,7 +11506,7 @@ export function Scene_HajimariComplete({ onContinue }) {
   );
 }
 
-export function Scene_ThemeComplete({ completedTheme, hasNextTheme, hasExtraQuestions, onMore, onRequestFamilyMemory, onContinue, onFinish }) {
+export function Scene_ThemeComplete({ completedTheme, hasNextTheme, hasExtraQuestions, selectedExtraCount = 0, extraStartBusy = false, onStartExtras, onMore, onRequestFamilyMemory, onContinue, onFinish }) {
   if (!completedTheme) return null;
   return (
     <div className="flow-scene-shell fade-enter">
@@ -10969,46 +11523,35 @@ export function Scene_ThemeComplete({ completedTheme, hasNextTheme, hasExtraQues
           <span className="h-px w-12 bg-gradient-to-l from-transparent to-amber-100/30" />
         </div>
 
-        {onRequestFamilyMemory && (
-          <button type="button" onClick={onRequestFamilyMemory} className="mb-4 w-full rounded-[1.5rem] border border-amber-100/15 bg-amber-50/[0.035] px-5 py-5 text-left">
-            <span className="flex items-center gap-4">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-100/[0.08]"><Users size={20} className="text-amber-50/62" strokeWidth={1.6} /></span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-narrative text-[0.95rem] text-white/82">家族の記憶を添えてみる</span>
-                <span className="mt-1 block text-xs leading-relaxed text-white/34">同じ頃を知る人へ、1〜3問だけ聞けます</span>
-              </span>
-              <ChevronRight size={17} className="text-white/25" />
-            </span>
-          </button>
-        )}
-
         {hasNextTheme ? (
-          <button type="button" onClick={onContinue} className="btn-quiet w-full rounded-full bg-white/10 py-4 text-white">
-            このテーマを終える
+          <button type="button" onClick={onContinue} className="w-full rounded-xl bg-[#f5f3ed] py-4 font-medium text-[#18243a]">
+            次のテーマに進む →
           </button>
         ) : (
           <div>
             <p className="text-[1.35rem] leading-[1.9] text-white/92 text-narrative">九つのテーマを、<br />すべてたどりました</p>
             <p className="mt-6 text-sm leading-[2] text-white/48">重ねてきた声が、あなたの物語の輪郭になりました。</p>
-            <button type="button" onClick={onFinish} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white">このテーマを終える</button>
+            <button type="button" onClick={onFinish} className="btn-quiet mt-10 w-full rounded-xl bg-[#f5f3ed] py-4 text-[#18243a]">物語を振り返る →</button>
           </div>
         )}
-        {hasExtraQuestions && onMore && (
-          <button type="button" onClick={onMore} className="mt-5 w-full py-3 text-sm text-white/58 underline underline-offset-4">
-            <span className="block">もう少し語る</span>
-            <span className="block text-xs mt-1">（このテーマの他の質問を追加）</span>
-          </button>
-        )}
+        {selectedExtraCount > 0 && <p className="mt-3 text-sm text-amber-100/75">追加の質問を{selectedExtraCount}件選択中</p>}
+        <p className="mt-6 text-[1rem] font-medium text-white/75">このテーマを、もう少し深める</p>
+        <div className="mt-3 grid gap-2">
+          {onMore && <button type="button" onClick={onMore} className="flex min-h-14 items-center justify-center gap-3 rounded-xl border border-white/25 text-[1rem] text-white/82"><Files size={20} strokeWidth={1.8}/>追加の質問を見る</button>}
+          {onRequestFamilyMemory && <button type="button" onClick={onRequestFamilyMemory} className="flex min-h-14 items-center justify-center gap-3 rounded-xl border border-white/25 text-[1rem] text-white/82"><PaperHeartIcon/>他の人にも質問を送る</button>}
+        </div>
+        {selectedExtraCount > 0 && <button type="button" disabled={extraStartBusy} onClick={onStartExtras} className="mt-3 w-full rounded-xl bg-[#f5f3ed] py-4 font-medium text-[#18243a] disabled:opacity-50">{extraStartBusy ? "準備しています…" : `選んだ${selectedExtraCount}件に答える →`}</button>}
       </div>
     </div>
   );
 }
 
-export function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onChangeDelivery, onWait, onContinue }) {
+export function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onChangeDelivery, onWait, onContinue, onBack }) {
   if (!theme) return null;
   return (
     <div className="flow-scene-shell fade-enter theme-screen">
       <div className="mx-auto w-full max-w-[520px]">
+        {onBack && <button type="button" onClick={onBack} className="mb-3 flex min-h-11 items-center gap-1 text-sm text-white/70"><ChevronLeft size={18}/>前のテーマの終了画面へ</button>}
         <ThemePreview
           theme={theme}
           eyebrow="テーマ"
@@ -15536,6 +16079,7 @@ export function Scene_BookBuilder({
   useEffect(() => scheduleScrollReset(), [stepIndex]);
 
   const [bookStories, setBookStories] = useState([]);
+  const [bookContributions, setBookContributions] = useState([]);
   const [bookMediaByAnswerId, setBookMediaByAnswerId] = useState({});
   const [storiesLoading, setStoriesLoading] = useState(false);
   const [includedStoryIds, setIncludedStoryIds] = useState([]);
@@ -15904,7 +16448,7 @@ export function Scene_BookBuilder({
   const getStoryBody = selectedBookText;
   useEffect(() => {
     let cancelled=false;
-    setBookWork(null);setBookStories([]);setIncludedStoryIds([]);setBookMediaByAnswerId({});
+    setBookWork(null);setBookStories([]);setBookContributions([]);setIncludedStoryIds([]);setBookMediaByAnswerId({});
     const load=async()=>{
       if(!bookProjectId && initialBookStories) {
         setBookStories(initialBookStories);setIncludedStoryIds(initialBookStories.map(row=>row.id));
@@ -15914,8 +16458,20 @@ export function Scene_BookBuilder({
       setStoriesLoading(true);setWorkError("");
       try {
         const {work,answers,mediaByAnswerId}=await loadBookWork(supabaseClient,bookProjectId);
+        const frozen = work.confirmed_at ? (work.snapshot?.contributions || []).map(item => ({
+          id: item.id, responderName: item.responder_name, relationship: item.relationship,
+          sourceUserQuestionId: item.source_question_id, question: item.question, body: item.body
+        })) : null;
+        let included = frozen;
+        if (!included) {
+          const { data: contributionData, error: contributionError } = await supabaseClient.functions.invoke("story-request", {
+            body: { action: "list_included", bookProjectId }
+          });
+          if (contributionError || !contributionData?.success) throw contributionError || Error("大切な人の語りを読み込めませんでした。");
+          included = contributionData.contributions || [];
+        }
         if(cancelled)return;
-        setBookWork(work);setBookStories(answers);setIncludedStoryIds(work.answer_ids);setBookMediaByAnswerId(mediaByAnswerId);
+        setBookWork(work);setBookStories(answers);setBookContributions(included);setIncludedStoryIds(work.answer_ids);setBookMediaByAnswerId(mediaByAnswerId);
         if(work.snapshot?.cover) {
           setBookTitle(work.snapshot.cover.title||"");setBookSubtitle(work.snapshot.cover.subtitle||"");
           setBookFooterText(work.snapshot.cover.footer_text||"");
@@ -16106,11 +16662,12 @@ export function Scene_BookBuilder({
         footerText: bookFooterText,
         includeWebBookQr,
         answers: includedStories,
+        contributions: bookContributions,
         questionForAnswer: getQuestionForAnswer,
         mediaByAnswerId: bookMediaByAnswerId
       })
     : null,
-  [includedStories, bookTitle, bookSubtitle, bookFooterText, includeWebBookQr,
+  [includedStories, bookContributions, bookTitle, bookSubtitle, bookFooterText, includeWebBookQr,
     project?.subject_name, project?.person_name, bookMediaByAnswerId, bookWork?.snapshot, questionSet]);
   const previewPages = useMemo(() => previewEdition ? buildBookPages(previewEdition) : [], [previewEdition]);
   // Page count stays live in the header. Build the heavier full-page HTML only
@@ -16219,6 +16776,12 @@ export function Scene_BookBuilder({
             ))}
           </div>
         </div>
+        <button type="button" onClick={() => { setPaperPreviewStoryId(null); setPaperPreviewOpen(true); }}
+          className="mt-2 flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-left text-xs text-white/72"
+          aria-label="現在の紙面プレビューを開く">
+          <span>紙面プレビュー　{previewEdition ? `B5・${previewPages.length}ページ` : "収録する語りを選択してください"}</span>
+          <span className="text-white/45">開く ›</span>
+        </button>
       </div>
 
       {previewEdition && <BookPaperViewer
@@ -16995,12 +17558,19 @@ function RecordingQuestionPrompt({ question }) {
     : [question.prompt_hint, question.reassurance_text])
     .filter(Boolean)
     .filter((text, index, all) => all.indexOf(text) === index);
+  const questionText = String(question.content || "");
+  const firstPause = questionText.indexOf("、");
+  const displayQuestion = !questionText.includes("\n") && firstPause > 0 && firstPause <= 8
+    && questionText.length - firstPause > 8
+    ? `${questionText.slice(0, firstPause + 1)}\n${questionText.slice(firstPause + 1)}`
+    : questionText;
 
   return (
     <div className="space-y-3 reading-question">
-      <div className="glass-card recording-question-card px-5 py-6 text-center">
+      {!isFormalOnboardingQuestion(question) && <p className="recording-theme-label">{recordingSectionLabel(question)}</p>}
+      <div className="recording-question-card px-5 py-6 text-center">
         <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
-          {question.content}
+          {displayQuestion}
         </p>
       </div>
 
@@ -17016,7 +17586,7 @@ function RecordingQuestionPrompt({ question }) {
 
 function RecordingQuestionHeader({ question, userName, storyProgress, sectionLabel, isFormalOnboarding, onBack }) {
   return (
-    <header className="question-flow-header mb-5 pt-2 text-left">
+    <header className="question-flow-header mb-5 pt-2 text-left flex items-start justify-between gap-4">
       <div className="question-flow-back-slot">
         {onBack && <button type="button" onClick={onBack} className="min-h-[44px] text-white/68 text-[1rem]" aria-label="前の画面へ戻る">
           ← 戻る
@@ -17025,30 +17595,20 @@ function RecordingQuestionHeader({ question, userName, storyProgress, sectionLab
       <h1 className="sr-only">
         {withHonorific(userName)}の物語
       </h1>
-      <div className={isFormalOnboarding ? "flex items-center justify-between gap-4" : "space-y-2"}>
-        <p className={`text-white/60 text-[1rem] tracking-widest ${isFormalOnboarding ? "truncate" : ""}`}>
-          {sectionLabel}
-        </p>
-        {!isFormalOnboarding && (
-          <div className="w-full h-[2px] bg-white/10 rounded-full">
-            <div className="h-full bg-white/40" style={{width: `${((storyProgress.currentIndex + 1) / Math.max(storyProgress.total, 1)) * 100}%`}} />
-          </div>
-        )}
-        {isFormalOnboarding && question.progress_label && (
-          <p className="shrink-0 text-white/55 text-[1rem] tracking-widest">
-            {String(question.progress_label).replace(/\s*\/\s*/g, "/")}
-          </p>
-        )}
-      </div>
+      <p className="shrink-0 min-h-11 flex items-center text-white/75 text-[1rem]">
+        {isFormalOnboarding && question.progress_label
+          ? String(question.progress_label).replace(/\s*\/\s*/g, "/")
+          : `${Math.max(1, (storyProgress?.currentIndex ?? 0) + 1)} / ${Math.max(1, storyProgress?.total ?? 30)}`}
+      </p>
     </header>
   );
 }
 
-function RecordingStartButton({ onClick }) {
+function RecordingStartButton({ onClick, label = "録音を始める" }) {
   return (
-    <button type="button" onClick={onClick} className="recording-start-bar" aria-label="録音を始める">
+    <button type="button" onClick={onClick} className="recording-start-bar" aria-label={label}>
       <Mic size={22} strokeWidth={1.7} aria-hidden="true" />
-      <span>録音を始める</span>
+      <span>{label}</span>
     </button>
   );
 }
@@ -17072,6 +17632,7 @@ export function Scene1_MyPage({
   skyOverride,
   onBack,
   onNext,
+  onWrite,
   onSkip,
   onEndToday
 }) {
@@ -17081,13 +17642,19 @@ export function Scene1_MyPage({
   const sectionLabel = recordingSectionLabel(question);
 
   return (
-    <StorySkySurface className="question-flow-content h-full flex flex-col overflow-y-auto pb-4" skyOverride={skyOverride}>
+    <StorySkySurface className="question-flow-content h-full flex flex-col overflow-y-auto pb-4" skyOverride={skyOverride} background={QUESTION_BACKGROUND}>
       <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={onBack} />
 
       <RecordingQuestionPrompt question={question} />
 
-      <div className="recording-control-dock recording-control-dock--start mt-5">
-        <RecordingStartButton onClick={onNext} />
+      <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
+        <h2 className="question-answer-label">この問いに答える</h2>
+        <RecordingStartButton onClick={onNext} label="話して答える" />
+        {onWrite && <button type="button" onClick={onWrite}
+          className="recording-start-bar recording-start-bar--write" aria-label="書いて答える">
+          <Pencil size={22} strokeWidth={1.7} aria-hidden="true" />
+          <span>書いて答える</span>
+        </button>}
       </div>
 
       {!isTokenMode() && (
@@ -17324,6 +17891,7 @@ export function Scene_Recording({
   const stopReasonRef = useRef("manual");
   const completionSentRef = useRef(false);
   const [voiceLevel, setVoiceLevel] = useState(0);
+  const [micTrackAvailable, setMicTrackAvailable] = useState(true);
   const [waveTick, setWaveTick] = useState(0);
 
 
@@ -17402,6 +17970,9 @@ useEffect(() => {
 
   if (step === 1 && !isPaused) {
     const tick = () => {
+      const track = streamRef.current?.getAudioTracks?.()[0]
+        || streamRef.current?.getTracks?.().find(candidate => candidate.kind === "audio");
+      setMicTrackAvailable(Boolean(track && track.readyState === "live" && track.enabled !== false && !track.muted));
       const seconds = clockRef.current.seconds();
       timeRef.current = seconds;
       setTime(seconds);
@@ -17964,7 +18535,7 @@ const stop = (reason = "manual") => {
 };
 
 return (
-<StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4">
+<StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4" background={QUESTION_BACKGROUND}>
   <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={step === "checking_mic" || step === "mic_error" ? onBack : null} />
 
   <RecordingQuestionPrompt question={question} />
@@ -18003,7 +18574,7 @@ return (
             </p>
           )}
           <div className="recording-status-row" aria-live="polite">
-            <span className={`recording-live-dot ${isPaused ? "is-paused" : ""}`} aria-hidden="true" />
+            <span className={`recording-live-dot${isPaused ? " is-paused" : micTrackAvailable ? "" : " is-mic-unavailable"}`} aria-hidden="true" />
             <span className="recording-state-label">{isPaused ? "一時停止中" : "録音中"}</span>
           </div>
 
@@ -18055,11 +18626,15 @@ export function Scene3_5_VoiceCheck({
   onRetryTranscription,
   onSelectStyle,
   onUpdateText,
+  onPolishWhole,
+  onUseWholeCandidate,
+  onDiscardWholeCandidate,
   onProceed
 }) {
   const [isEditingTranscript, setIsEditingTranscript] = useState(false);
   const [draftTranscript, setDraftTranscript] = useState("");
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const voiceOnly = data.editRecordingMode === 'voice_only';
   const audioPreviewRef = useRef(null);
 
   const isShortAnswer = isRecordingTooShort(data.duration);
@@ -18089,7 +18664,7 @@ export function Scene3_5_VoiceCheck({
   const hasPolishError = data.polishStatus === "error";
   const isProcessing = data.transcriptionStatus === "processing";
   const isPolishing = data.polishStatus === "processing";
-  const canUseStyles = !hasTranscriptionError && !hasPolishError && !isProcessing && !isPolishing && !!displayText;
+  const canUseStyles = !voiceOnly && !data.wholeTextCandidate && !hasTranscriptionError && !hasPolishError && !isProcessing && !isPolishing && !!displayText;
 
   const toggleAudioPreview = async () => {
     const audio = audioPreviewRef.current;
@@ -18158,11 +18733,24 @@ return (
 
     <div className="text-center mb-4">
       <p className="text-white/86 text-[1.02rem] text-narrative">
-        {isLifeOutline ? "声が届きました" : "語りを確認します"}
+        {isLifeOutline ? "声が届きました" : voiceOnly ? "残す声を確認します" : "語りを確認します"}
       </p>
     </div>
 
       <div className="flex-1 overflow-y-auto pb-6">
+        {voiceOnly && <p className="mb-5 text-white/65 text-[1rem] leading-loose">この録音はWebブックに残します。今の文章は変更しません。</p>}
+        {data.wholeTextCandidate && <div className="glass-card p-5 mb-6">
+          <h3 className="text-white text-lg mb-4">文章全体を整えた候補</h3>
+          <p className="whitespace-pre-wrap leading-loose text-white/85">{data.wholeTextCandidate.text}</p>
+          <details className="mt-5 text-white/65"><summary className="min-h-11 underline">元の文章を確認する</summary>
+            <p className="whitespace-pre-wrap leading-loose mt-3">{data.wholeTextCandidate.original}</p></details>
+          <div className="mt-5 space-y-3">
+            <button type="button" onClick={onUseWholeCandidate} className="recording-start-bar">この文章を使う</button>
+            <button type="button" onClick={onDiscardWholeCandidate} className="w-full min-h-12 text-white/70">元の文章で続ける</button>
+          </div>
+          <p className="text-white/50 text-sm mt-3">次の保存操作まで文章は確定しません。</p>
+        </div>}
+        {data.wholeTextPolishError && <p role="status" className="mb-5 text-amber-200">{data.wholeTextPolishError}</p>}
         {data.recordingStopReason === "limit" && <p role="status" className="mb-5 text-white/70 text-[1rem] leading-loose text-center">{RECORDING_LIMIT_NOTICE}</p>}
         {hasTranscriptionError && (
           <div className="glass-card p-5 mb-6">
@@ -18204,7 +18792,7 @@ return (
           />
         )}
 
-        {!isLifeOutline && (
+        {!isLifeOutline && !voiceOnly && (
         <div className="flex gap-2 mb-5">
           <button
             type="button"
@@ -18288,17 +18876,17 @@ return (
       </button>
     )}
 
-    <button
+    {!voiceOnly && <button
       type="button"
       onClick={startTranscriptEdit}
-      disabled={isPolishing}
+      disabled={isPolishing || Boolean(data.wholeTextCandidate)}
       className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-full border border-white/[0.16] bg-white/[0.045] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
-        isPolishing ? "opacity-30" : "opacity-80"
+        isPolishing || data.wholeTextCandidate ? "opacity-30" : "opacity-80"
       }`}
       aria-label="本文を修正する"
     >
       <Pencil size={15} className="text-white/65" strokeWidth={1.7} />
-    </button>
+    </button>}
   </div>
 </div>
             )}
@@ -18357,6 +18945,14 @@ return (
 
       <div className="pt-5 border-t border-white/10 space-y-4">
 
+       {data.editRecordingMode === 'append' && !data.wholeTextCandidate && (
+         <button type="button" onClick={onPolishWhole}
+           disabled={isProcessing || isPolishing || data.wholeTextPolishStatus === 'processing' || !displayText}
+           className="w-full min-h-12 text-white/70 underline disabled:opacity-40">
+           {data.wholeTextPolishStatus === 'processing' ? '文章全体を整えています…' : '文章全体を整えた候補を見る'}
+         </button>
+       )}
+
        {showAddMoreSuggestion && (
          <button
            onClick={onAddMore}
@@ -18377,16 +18973,18 @@ return (
 
         <button
           onClick={onProceed}
-          disabled={hasUploadError || isProcessing || isPolishing || !displayText}
+          disabled={hasUploadError || isProcessing || isPolishing || !displayText
+            || Boolean(data.wholeTextCandidate) || data.wholeTextPolishStatus === 'processing'}
           className={`btn-quiet w-full py-4 rounded-full text-white ${
-            hasUploadError || isProcessing || isPolishing || !displayText ? "opacity-40" : ""
+            hasUploadError || isProcessing || isPolishing || !displayText
+              || data.wholeTextCandidate || data.wholeTextPolishStatus === 'processing' ? "opacity-40" : ""
           }`}
         >
           {isLifeOutline
             ? isLastLifeOutline
               ? "人生の輪郭をまとめる"
               : "次の問いへ"
-            : "この内容で進む"}
+            : voiceOnly ? "この声を残す" : "この内容で進む"}
         </button>
 
         <button
@@ -19683,6 +20281,7 @@ export function Scene_StoryPages({
   const [uploadingPhotoAnswerId, setUploadingPhotoAnswerId] = useState(null);
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
   const [editingAnswer, setEditingAnswer] = useState(null);
+  const [voiceActionAnswer, setVoiceActionAnswer] = useState(null);
   const [photoActionAnswerId, setPhotoActionAnswerId] = useState(null);
   const [editingLayoutPhoto, setEditingLayoutPhoto] = useState(null);
   const [photoLayoutSaving, setPhotoLayoutSaving] = useState(false);
@@ -19762,6 +20361,7 @@ const loadAnswers = async (options = {}) => {
           transcript_readable,
           transcript_essay,
           transcript_edited,
+          text_revision,
           selected_style,
           ai_mirror,
           snippet,
@@ -19907,6 +20507,10 @@ const pickAnswerTextByStyle = (answer, style) => {
 };
 
 const openAnswerEditor = (answer) => {
+  if (!storyAccess && !adminPreview) {
+    setEditingAnswer(answer);
+    return;
+  }
   const style =
     answer?.selected_style === "clean" || answer?.selected_style === "essay"
       ? answer.selected_style
@@ -20356,7 +20960,21 @@ return (
     </p>
   </div>
 )}
-{editingAnswer && createPortal((
+{editingAnswer && !storyAccess && !adminPreview && (
+  <WrittenAnswerEditor
+    userId={user?.id}
+    projectId={foundation?.project?.id}
+    question={getQuestionForAnswer(editingAnswer)}
+    answer={editingAnswer}
+    client={supabaseClient}
+    onClose={closeAnswerEditor}
+    onSaved={async () => {
+      await loadAnswers({ showLoading: false });
+      closeAnswerEditor();
+    }}
+  />
+)}
+{editingAnswer && (storyAccess || adminPreview) && createPortal((
   <div className="fixed inset-0 z-[9999] w-[100dvw] h-[100dvh] bg-slate-950 px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overflow-hidden">
     <div className="shrink-0 text-center mb-4">
       <p className="text-white/82 text-[1rem] text-narrative">
@@ -20447,6 +21065,29 @@ return (
     </div>
   </div>
 ), document.body)}
+{voiceActionAnswer && createPortal((
+  <div role="dialog" aria-modal="true" className="fixed inset-0 z-[9999] flex items-end justify-center bg-slate-950/90 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+    <div className="w-full max-w-xl rounded-2xl border border-white/15 bg-[#172337] p-5 text-white">
+      <h2 className="text-xl mb-5">声をどう残しますか？</h2>
+      <div className="space-y-3">
+        {[
+          ['replace','語り直す','現在の文章を新しい語りから作り直します。旧版と旧音声は履歴に残ります。'],
+          ['append','語り足す','今の文章は変えず、新しい語りを段落として加えます。'],
+          ['voice_only','声だけ残す','文章は変えず、Webブックで再生できる声を残します。'],
+        ].map(([mode,label,description]) => <button key={mode} type="button"
+          disabled={mode === 'append' && getAudioPathsForAnswer(voiceActionAnswer.id).length >= MAX_AUDIO_PARTS_PER_QUESTION}
+          onClick={async () => {
+            const answer = voiceActionAnswer;
+            const started = await onEditRecord?.(answer,mode,getAudioPathsForAnswer(answer.id));
+            if (started !== false) setVoiceActionAnswer(null);
+          }} className="w-full rounded-xl border border-white/20 bg-white/[0.06] p-4 text-left disabled:opacity-40">
+          <span className="block text-lg">{label}</span>
+          <span className="block mt-1 text-sm text-white/55 leading-relaxed">{description}</span>
+        </button>)}
+      </div>
+      <button type="button" onClick={() => setVoiceActionAnswer(null)} className="w-full min-h-12 mt-4 text-white/60">戻る</button>
+    </div>
+  </div>), document.body)}
 
 
 
@@ -20582,6 +21223,15 @@ return (
           <button type="button" onClick={() => { setEditingLayoutPhoto(photo); setPhotoActionAnswerId(answer.id); }}
             className="absolute right-12 top-2 rounded-full bg-slate-950/85 px-3 py-2 text-xs text-white">配置を変える</button>
 
+          <div className="absolute left-3 top-3 rounded-full bg-slate-950/85 px-3 py-1 text-xs text-white">
+            {photoBookLayout(photo, photoIndex).placement === "excluded"
+              ? "配置を選んでください"
+              : `本では：${{ opener: "質問の下", after_full: "本文のあと・大きく", after_half: "本文のあと・小さく" }[photoBookLayout(photo, photoIndex).placement]}`}
+          </div>
+
+          <button type="button" onClick={() => { setEditingLayoutPhoto(photo); setPhotoActionAnswerId(answer.id); }}
+            className="absolute right-12 top-2 rounded-full bg-slate-950/85 px-3 py-2 text-xs text-white">配置を変える</button>
+
           <button
             type="button"
             onClick={() => deletePhoto(photo)}
@@ -20626,8 +21276,13 @@ return (
   onClick={() => openAnswerEditor(answer)}
   className="mt-5 text-white/35 text-[1rem] underline underline-offset-4"
 >
-  文章を整える
+  文章を編集する
 </button>
+{!storyAccess && !adminPreview && <button type="button"
+  onClick={() => setVoiceActionAnswer(answer)}
+  className="mt-5 ml-5 text-white/45 text-[1rem] underline underline-offset-4">
+  語る・声を残す
+</button>}
 
               {renderRecordInfo?.(answer, audios)}
               {audios.length > 0 && (

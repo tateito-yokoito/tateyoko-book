@@ -7,13 +7,16 @@ export const isChildhoodTrialStory = question => isTrialStoryQuestion(question)
 
 const chapterTitleOf = question => question?.chapter_label || question?.chapter_description || question?.chapter || 'その他';
 
-export function isVisibleStoryQuestion(question) {
+export function isVisibleStoryQuestion(question, { trialCarryDecision = null } = {}) {
+  // An explicit refusal applies to the main story/book views. The free-trial
+  // review uses its own component and remains available during retention.
+  if (trialCarryDecision === 'do_not_carry' && isTrialStoryQuestion(question)) return false;
   if (isTrialStoryQuestion(question)) return question.status === 'answered';
   return question?.include_in_story_list !== false || question?.onboarding_group === 'starting_conversation';
 }
 
-export const countAnsweredStories = questions => (questions || []).filter(
-  question => question.status === 'answered' && isVisibleStoryQuestion(question)
+export const countAnsweredStories = (questions, options) => (questions || []).filter(
+  question => question.status === 'answered' && isVisibleStoryQuestion(question, options)
 ).length;
 
 export function questionForStory(answer, questions = []) {
@@ -27,7 +30,7 @@ export function questionForStory(answer, questions = []) {
   return matches.length === 1 ? matches[0] : null;
 }
 
-export function buildStorySections(questions = [], answers = []) {
+export function buildStorySections(questions = [], answers = [], options = {}) {
   const sections = [];
   const childhoodQuestion = questions.find(question => !isTrialStoryQuestion(question)
     && question.theme_code === 'ty_theme_childhood');
@@ -49,10 +52,10 @@ export function buildStorySections(questions = [], answers = []) {
     }
     return section;
   };
-  questions.filter(isVisibleStoryQuestion).forEach(sectionFor);
+  questions.filter(question => isVisibleStoryQuestion(question, options)).forEach(sectionFor);
   for (const answer of answers) {
     const question = questionForStory(answer, questions);
-    if (isVisibleStoryQuestion(question)) sectionFor(question).answers.push(answer);
+    if (isVisibleStoryQuestion(question, options)) sectionFor(question).answers.push(answer);
   }
   // Legacy trials remain separate; current trials share the existing childhood tab.
   const rank = section => section.bookendKind === 'intro' ? -1
