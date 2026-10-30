@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
-// The emergency 2026-10-29 deployment was built from a branch ahead of main.
-// Its source must be in the ancestry of every later production candidate.
+// Every production candidate must contain the currently recorded deployment.
 const record = JSON.parse(readFileSync(new URL('./production-source.json', import.meta.url), 'utf8'));
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
 const candidate = git('rev-parse', '--verify', process.argv[2] || 'HEAD');
