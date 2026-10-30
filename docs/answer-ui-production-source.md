@@ -8,4 +8,4 @@
 
 回答 UI の機能テストは `node --test scripts/tests/answer-text-draft.test.mjs scripts/tests/story-request-composer-progress.test.mjs scripts/tests/story-request-book.test.mjs scripts/tests/trial-written-retention.test.mjs`、成果物テストは `node scripts/tests/answer-experience-release.mjs dist` です。実録音・LINE 送信・本番保存を伴う動作は、ビルド検査とは別に TEST または承認済み本番操作で確認します。
 
-既存DB定義は `docs/answer-ui-applied-db-snapshot/` に参照用として追跡します。実環境のマイグレーション履歴番号と元ファイル名が異なるため、通常の `supabase/migrations/` へは置きません。
+当時のローカルDB定義は `docs/answer-ui-applied-db-snapshot/` に参照用として追跡します。実環境のマイグレーション履歴番号と元ファイル名が異なるため、通常の `supabase/migrations/` へは置きません。
