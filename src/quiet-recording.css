@@ -166,12 +166,8 @@
   }
 }
 
-/* The approved navy card keeps the question position consistent in both
-   answer selection and recording; these overrides come after sky-era rules. */
-.story-sky-surface.question-background-navy>.story-sky-content.question-flow-content{
-  max-width:430px;
-  padding:calc(20px + env(safe-area-inset-top)) 22px calc(24px + env(safe-area-inset-bottom));
-}
+/* Keep the question position consistent in both answer selection and recording;
+   these overrides come after sky-era rules. */
 .story-sky-surface.question-background-navy .story-sky-content.question-flow-content .reading-question>.recording-question-card{
   padding:12px 0 8px;
 }

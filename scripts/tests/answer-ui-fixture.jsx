@@ -4,7 +4,8 @@ import { Scene1_MyPage, Scene_Recording, Scene_ThemeComplete } from '../../src/A
 import { STORY_THEMES } from '../../src/lib/storyThemes.js';
 import '../../src/index.css';
 const screen = new URLSearchParams(location.search).get('screen') || 'main';
-const base = { user_question_id: 'fixture-question', content: '子どもの頃、どんな遊びが好きでしたか？', chapter: '幼い頃', chapter_label: '幼い頃', sequence_order: 1 };
+const longQuestion = new URLSearchParams(location.search).has('long');
+const base = { user_question_id: 'fixture-question', content: longQuestion ? '仲の良かった友達や、心に残っている先生はどんな方でしたか？' : '子どもの頃、どんな遊びが好きでしたか？', prompt_hint: longQuestion ? 'その方との思い出を一つ添えてみてください。' : undefined, reassurance_text: longQuestion ? '一人に絞れなくても大丈夫です。' : undefined, chapter: '幼い頃', chapter_label: '幼い頃', sequence_order: 1 };
 const question = screen === 'trial' ? { ...base, onboarding_group: 'trial_experience', flow_phase: 'onboarding', progress_label: '1 / 3' }
   : screen === 'beginning' ? { ...base, onboarding_group: 'starting_conversation', flow_phase: 'onboarding', progress_label: '1 / 3' } : base;
 const noop = () => {};
