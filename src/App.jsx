@@ -3239,6 +3239,25 @@ function App() {
   const [notificationSetupReturnScene, setNotificationSetupReturnScene] = useState(null);
   const [completedThemeOrder, setCompletedThemeOrder] = useState(null);
   const [selectedThemeExtraIds, setSelectedThemeExtraIds] = useState([]);
+  const [themeExtrasBusy, setThemeExtrasBusy] = useState(false);
+  const themeExtrasBusyRef = useRef(false);
+  const themeExtraDraftKey = foundation?.project?.id && completedThemeOrder
+    ? `theme-extra-selection:${foundation.project.id}:${completedThemeOrder}` : null;
+  useEffect(() => {
+    if (!themeExtraDraftKey) return;
+    const theme = STORY_THEMES.find(item => item.order === completedThemeOrder);
+    const available = new Set(themeExtraOptions(theme?.code, questionsDB).map(option => option.id));
+    try {
+      const stored = JSON.parse(localStorage.getItem(themeExtraDraftKey) || "[]");
+      setSelectedThemeExtraIds(Array.isArray(stored) ? stored.filter(id => available.has(id)) : []);
+    } catch { setSelectedThemeExtraIds([]); }
+  }, [themeExtraDraftKey, questionsDB]);
+  const changeSelectedThemeExtras = ids => {
+    setSelectedThemeExtraIds(ids);
+    if (themeExtraDraftKey) {
+      try { localStorage.setItem(themeExtraDraftKey, JSON.stringify(ids)); } catch {}
+    }
+  };
   const [bookendBusy, setBookendBusy] = useState(false);
   const [bookendVideoKind, setBookendVideoKind] = useState(null);
   const [bookendVideoStories, setBookendVideoStories] = useState([]);
@@ -3830,10 +3849,9 @@ const finishThemeExtraQuestion = async (currentQuestion, nextIndex) => {
   if (nextQuestion?.question_role === "theme_extra" &&
       Number(nextQuestion.theme_order) === Number(currentQuestion.theme_order)) {
     setScene(1);
-  } else if (Number(currentQuestion.theme_order) < STORY_THEMES.length) {
-    await advanceAfterTheme(Number(currentQuestion.theme_order));
   } else {
-    await advanceAfterTheme(STORY_THEMES.length);
+    await savePendingThemeTransition(Number(currentQuestion.theme_order), "complete");
+    setScene("theme_complete");
   }
   return true;
 };
@@ -3858,7 +3876,7 @@ const startSelectedThemeExtras = async selected => {
   setFoundation(previous => ({ ...previous, project: refreshedProject.data }));
   setQuestionsDB(refreshedQuestions);
   setProgress({ currentIndex: firstIndex, total: refreshedQuestions.length });
-  setSelectedThemeExtraIds([]);
+  changeSelectedThemeExtras([]);
   resetVoiceData();
   setScene(1);
 };
@@ -5844,6 +5862,38 @@ const openNextThemeIntroduction = async () => {
     alert("次のテーマを開けませんでした。");
   } finally {
     setIsInitializing(false);
+  }
+};
+
+const returnToCompletedTheme = async () => {
+  if (!completedThemeOrder) return;
+  try {
+    setIsInitializing(true);
+    await savePendingThemeTransition(completedThemeOrder, "complete");
+    setScene("theme_complete");
+  } catch (error) {
+    console.error("return to completed theme error", error);
+    alert("前のテーマへ戻れませんでした。もう一度お試しください。");
+  } finally {
+    setIsInitializing(false);
+  }
+};
+
+const beginSelectedThemeExtras = async () => {
+  if (themeExtrasBusyRef.current) return;
+  const theme = STORY_THEMES.find(item => item.order === completedThemeOrder);
+  const options = themeExtraOptions(theme?.code, questionsDB);
+  const selected = options.filter(option => selectedThemeExtraIds.includes(option.id));
+  if (!selected.length) return;
+  themeExtrasBusyRef.current = true;
+  setThemeExtrasBusy(true);
+  try { await startSelectedThemeExtras(selected); }
+  catch (error) {
+    console.error("selected theme extras start error", error);
+    alert("追加の問いを開けませんでした。選んだ内容は保持しています。もう一度お試しください。");
+  } finally {
+    themeExtrasBusyRef.current = false;
+    setThemeExtrasBusy(false);
   }
 };
 
@@ -8934,10 +8984,10 @@ onRetry={() => {
           completedTheme={STORY_THEMES.find(theme => theme.order === completedThemeOrder) || null}
           hasNextTheme={Boolean(STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1))}
           hasExtraQuestions={themeExtraOptions(STORY_THEMES.find(theme => theme.order === completedThemeOrder)?.code, questionsDB).length > 0}
-          onMore={() => {
-            setSelectedThemeExtraIds([]);
-            setScene("theme_more");
-          }}
+          selectedExtraCount={selectedThemeExtraIds.length}
+          extraStartBusy={themeExtrasBusy}
+          onStartExtras={beginSelectedThemeExtras}
+          onMore={() => setScene("theme_more")}
           onRequestFamilyMemory={() => {
             setThemeMemoryReturnScene("theme_complete");
             setScene("story_request");
@@ -8963,9 +9013,7 @@ onRetry={() => {
           theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder) || null}
           options={themeExtraOptions(STORY_THEMES.find(theme => theme.order === completedThemeOrder)?.code, questionsDB)}
           selectedIds={selectedThemeExtraIds}
-          onSelectionChange={setSelectedThemeExtraIds}
-          onStart={startSelectedThemeExtras}
-          onNextTheme={completedThemeOrder < STORY_THEMES.length ? openNextThemeIntroduction : () => advanceAfterTheme(STORY_THEMES.length)}
+          onSelectionChange={changeSelectedThemeExtras}
           onBack={() => setScene("theme_complete")}
         />
       )}
@@ -9006,6 +9054,7 @@ onRetry={() => {
       {scene === "theme_intro" && foundation?.project?.onboarding_status === "completed" && (
         <Scene_ThemeIntro
           theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1) || null}
+          onBack={returnToCompletedTheme}
           notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
           onChangeDelivery={() => {
             setNotificationSetupReturnScene("theme_intro");
@@ -11418,7 +11467,7 @@ export function Scene_HajimariComplete({ onContinue, hasTrialStories = false }) 
   );
 }
 
-export function Scene_ThemeComplete({ completedTheme, hasNextTheme, hasExtraQuestions, onMore, onRequestFamilyMemory, onContinue, onFinish }) {
+export function Scene_ThemeComplete({ completedTheme, hasNextTheme, hasExtraQuestions, selectedExtraCount = 0, extraStartBusy = false, onStartExtras, onMore, onRequestFamilyMemory, onContinue, onFinish }) {
   if (!completedTheme) return null;
   return (
     <div className="flow-scene-shell fade-enter">
@@ -11446,21 +11495,24 @@ export function Scene_ThemeComplete({ completedTheme, hasNextTheme, hasExtraQues
             <button type="button" onClick={onFinish} className="btn-quiet mt-10 w-full rounded-xl bg-[#f5f3ed] py-4 text-[#18243a]">物語を振り返る →</button>
           </div>
         )}
+        {selectedExtraCount > 0 && <p className="mt-3 text-sm text-amber-100/75">追加の質問を{selectedExtraCount}件選択中</p>}
         <p className="mt-6 text-[1rem] font-medium text-white/75">このテーマを、もう少し深める</p>
         <div className="mt-3 grid gap-2">
           {onMore && <button type="button" onClick={onMore} className="flex min-h-14 items-center justify-center gap-3 rounded-xl border border-white/25 text-[1rem] text-white/82"><Files size={20} strokeWidth={1.8}/>追加の質問を見る</button>}
           {onRequestFamilyMemory && <button type="button" onClick={onRequestFamilyMemory} className="flex min-h-14 items-center justify-center gap-3 rounded-xl border border-white/25 text-[1rem] text-white/82"><PaperHeartIcon/>他の人にも質問を送る</button>}
         </div>
+        {selectedExtraCount > 0 && <button type="button" disabled={extraStartBusy} onClick={onStartExtras} className="mt-3 w-full rounded-xl bg-[#f5f3ed] py-4 font-medium text-[#18243a] disabled:opacity-50">{extraStartBusy ? "準備しています…" : `選んだ${selectedExtraCount}件に答える →`}</button>}
       </div>
     </div>
   );
 }
 
-export function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onChangeDelivery, onWait, onContinue }) {
+export function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onChangeDelivery, onWait, onContinue, onBack }) {
   if (!theme) return null;
   return (
     <div className="flow-scene-shell fade-enter theme-screen">
       <div className="mx-auto w-full max-w-[520px]">
+        {onBack && <button type="button" onClick={onBack} className="mb-3 flex min-h-11 items-center gap-1 text-sm text-white/70"><ChevronLeft size={18}/>前のテーマの終了画面へ</button>}
         <ThemePreview
           theme={theme}
           eyebrow="テーマ"
