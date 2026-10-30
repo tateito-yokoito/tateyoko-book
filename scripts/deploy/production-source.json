@@ -1,9 +1,11 @@
 {
   "site": "https://www.tateito-yokoito.jp/",
-  "deployedAt": "2026-10-29",
-  "vercelDeploymentId": "dpl_E6S4bUrc2p2tzFEHRer7ANJeVNKS",
-  "sourceBranch": "codex/unified-answer-release-20261029",
-  "sourceCommit": "e190355cc332d9c98b69b69160d2d4dfed4de963",
-  "mainJsAsset": "assets/main-DY1vZf_G.js",
-  "mainJsSha256": "e9dec30d3cbadb299e1d75b843d7d15308bddcfe250b7f0b20f07375033587f8"
+  "deployedAt": "2026-10-30",
+  "vercelDeploymentId": "dpl_DpfwED6ui26A4ViBUJti4w81hwED",
+  "sourceBranch": "main",
+  "sourceCommit": "834d7c4309bb9fdde47e1b9606f64ffdf1186424",
+  "mainJsAsset": "assets/app-BTLl5l8j.js",
+  "mainJsSha256": "086c1f3ef24fcd2c1900d08d6e0316a1892fa7ae506751fc5071e300013560c5",
+  "entryJsAsset": "assets/index-CV_jV79s.js",
+  "entryJsSha256": "a5fd38035e4cf4ea65e0a13e5c8b3d3800409bd8745949980d852793f19457fd"
 }

@@ -1,6 +1,6 @@
 # 採用済み回答UIと本流の対応
 
-2026-10-29 の本番公開ソースは `codex/unified-answer-release-20261029` の `e190355cc332d9c98b69b69160d2d4dfed4de963` です。Vercel deployment ID と主 JavaScript アセットのハッシュは `scripts/deploy/production-source.json` に記録しています。
+現在の本番公開ソースは、2026-10-30 に PR #17 で統合した `main` の `834d7c4309bb9fdde47e1b9606f64ffdf1186424` です。Vercel deployment ID `dpl_DpfwED6ui26A4ViBUJti4w81hwED`、回答アプリと入口 JavaScript アセットの実測 SHA-256 を `scripts/deploy/production-source.json` に記録しています。先行公開は 2026-10-29 の `codex/unified-answer-release-20261029`、`e190355cc332d9c98b69b69160d2d4dfed4de963` でした。
 
 本番ビルド前に `node scripts/deploy/check-production-source.mjs` を実行します。公開コミットが候補コミットの祖先でなければビルドを停止します。通常の `npm run build`（Vercel の Git 連携ビルドを含む）でも回帰テストと成果物の回答 UI を確認します。`build-production.mjs` も同じ検査を行います。別の手順で直接本番にデプロイせず、このビルドを経由してください。
 
