@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { buildTrialStories, trialIsReady } from '../../src/lib/trialConversion.js';
 
 const questions = [1, 2, 3].map(number => ({ user_question_id: `trial-${number}`, content: `問い${number}` }));
@@ -24,4 +25,12 @@ test('a mix of voice and text needs all three saved answers', () => {
   const missing = buildTrialStories({ projectId: 'project-a', personId: 'person-a', questions,
     answers: [answer(1, '文字'), answer(2, '')], media });
   assert.equal(trialIsReady(missing), false);
+});
+
+
+test('written trial retention respects the same disabled switch as audio', () => {
+  const sql = readFileSync(new URL('../../supabase/migrations/202610300001_align_written_trial_retention_feature_flag.sql', import.meta.url), 'utf8');
+  const guard = sql.indexOf('if not coalesce((select enabled');
+  const firstWrite = sql.indexOf('insert into public.free_trial_attempts');
+  assert.ok(guard > 0 && firstWrite > guard, 'disabled retention must return before a deadline is created');
 });
