@@ -71,6 +71,8 @@ const EXPERIENCE_ROLLOUT = experienceRollout(import.meta.env);
 const EXPERIENCE_V2_ENABLED = EXPERIENCE_ROLLOUT.contracts;
 const TRIAL_CONVERSION_ENABLED = EXPERIENCE_ROLLOUT.conversion;
 const TRIAL_CARRY_CHOICE_ENABLED = import.meta.env.VITE_TRIAL_CARRY_CHOICE_ENABLED === "true";
+// Keep the previous sky treatment available while the approved question view uses navy.
+const QUESTION_BACKGROUND = import.meta.env.VITE_QUESTION_BACKGROUND === "sky" ? "sky" : "navy";
 const ALLOW_FAMILY_NOTIFICATIONS = !EXPERIENCE_V2_ENABLED || EXPERIENCE_ROLLOUT.notifications;
 const recordingStorageRoot = (userId, projectId, answerId) => EXPERIENCE_V2_ENABLED
   ? `${userId}/${projectId}/${answerId}` : `${userId}/${answerId}`;
@@ -7178,7 +7180,7 @@ setScene(1);
 
   return (
     <div className={`app-container ${scene === "family_invite_received" ? "app-container--family-invitation" : ""} ${TRIAL_CONVERSION_ENABLED && scene === "trial_complete" ? "app-container--trial-conversion" : ""} ${["onboarding_preferences", "notification_setup", "sharing_setup"].includes(scene) ? "app-container--desktop-setup" : ""}`}>
-      <PersistentStorySkyBackdrop active={scene === 1 || scene === 3} />
+      <PersistentStorySkyBackdrop active={QUESTION_BACKGROUND === "sky" && (scene === 1 || scene === 3)} />
       {showGlobalHome && (
         <button
           type="button"
@@ -17267,13 +17269,19 @@ function RecordingQuestionPrompt({ question }) {
     : [question.prompt_hint, question.reassurance_text])
     .filter(Boolean)
     .filter((text, index, all) => all.indexOf(text) === index);
+  const questionText = String(question.content || "");
+  const firstPause = questionText.indexOf("、");
+  const displayQuestion = !questionText.includes("\n") && firstPause > 0 && firstPause <= 8
+    && questionText.length - firstPause > 8
+    ? `${questionText.slice(0, firstPause + 1)}\n${questionText.slice(firstPause + 1)}`
+    : questionText;
 
   return (
     <div className="space-y-3 reading-question">
       {!isFormalOnboardingQuestion(question) && <p className="recording-theme-label">{recordingSectionLabel(question)}</p>}
       <div className="recording-question-card px-5 py-6 text-center">
         <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
-          {question.content}
+          {displayQuestion}
         </p>
       </div>
 
@@ -17307,11 +17315,11 @@ function RecordingQuestionHeader({ question, userName, storyProgress, sectionLab
   );
 }
 
-function RecordingStartButton({ onClick }) {
+function RecordingStartButton({ onClick, label = "録音を始める" }) {
   return (
-    <button type="button" onClick={onClick} className="recording-start-bar" aria-label="録音を始める">
+    <button type="button" onClick={onClick} className="recording-start-bar" aria-label={label}>
       <Mic size={22} strokeWidth={1.7} aria-hidden="true" />
-      <span>録音を始める</span>
+      <span>{label}</span>
     </button>
   );
 }
@@ -17345,13 +17353,14 @@ export function Scene1_MyPage({
   const sectionLabel = recordingSectionLabel(question);
 
   return (
-    <StorySkySurface className="question-flow-content h-full flex flex-col overflow-y-auto pb-4" skyOverride={skyOverride}>
+    <StorySkySurface className="question-flow-content h-full flex flex-col overflow-y-auto pb-4" skyOverride={skyOverride} background={QUESTION_BACKGROUND}>
       <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={onBack} />
 
       <RecordingQuestionPrompt question={question} />
 
-      <div className="recording-control-dock recording-control-dock--start mt-5">
-        <RecordingStartButton onClick={onNext} />
+      <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
+        <h2 className="question-answer-label">この問いに答える</h2>
+        <RecordingStartButton onClick={onNext} label="話して答える" />
         {onWrite && <button type="button" onClick={onWrite}
           className="recording-start-bar recording-start-bar--write" aria-label="書いて答える">
           <Pencil size={22} strokeWidth={1.7} aria-hidden="true" />
@@ -18233,7 +18242,7 @@ const stop = (reason = "manual") => {
 };
 
 return (
-<StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4">
+<StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4" background={QUESTION_BACKGROUND}>
   <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={step === "checking_mic" || step === "mic_error" ? onBack : null} />
 
   <RecordingQuestionPrompt question={question} />

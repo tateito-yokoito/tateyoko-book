@@ -26,4 +26,37 @@
 .story-sky-content button.underline{color:#e0e7ef}
 .story-sky-content.question-flow-content .recording-control-dock{min-height:150px;margin-top:28px;justify-content:center}
 .story-sky-content.question-flow-content .recording-countdown-slot{min-height:150px;margin-top:28px;display:flex;align-items:center;justify-content:center}
+
+/* Approved question/recording treatment. The sky renderer above remains available
+   for the home scene and the explicit VITE_QUESTION_BACKGROUND=sky fallback. */
+.story-sky-surface.question-background-navy{background:#0e1829}
+.story-sky-surface.question-background-navy>.story-sky-backdrop{display:none}
+.story-sky-surface.question-background-navy>.story-sky-content.question-flow-content{
+  width:min(100%,430px);
+  max-width:none;
+  height:calc(100% - 24px);
+  min-height:calc(100dvh - 24px);
+  margin:12px auto;
+  padding:calc(20px + env(safe-area-inset-top)) 22px calc(24px + env(safe-area-inset-bottom));
+  border:1px solid #455265;
+  border-radius:32px;
+  background:radial-gradient(ellipse at 50% -8%,#2c3d4c,#111c2d 45%,#0e192a 80%);
+  box-shadow:0 28px 80px #0005;
+}
+.question-background-navy .reading-question>.recording-question-card{padding:12px 0 8px}
+.question-background-navy .recording-control-dock--choice{
+  min-height:0;
+  margin-top:clamp(28px,5dvh,48px);
+  gap:12px;
+  align-items:stretch;
+}
+.question-background-navy .question-answer-label{
+  margin:0 0 6px;
+  color:#f7f4ef;
+  font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;
+  font-size:1.125rem;
+  font-weight:500;
+  line-height:1.6;
+  text-align:left;
+}
 @media(max-width:359px){.story-sky-surface .story-sky-content{padding-left:24px;padding-right:24px}.story-sky-content .reading-question>.glass-card p{font-size:1.375rem}}
