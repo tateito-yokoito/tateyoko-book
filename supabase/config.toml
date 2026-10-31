@@ -49,6 +49,30 @@ verify_jwt = false
 [functions.sync-checkout-session]
 verify_jwt = false
 
+# Phase 2 handlers verify the signed-in user with auth.getUser, or in the
+# consultation intake's case accept anonymous submissions with server-side
+# consent, validation, and rate limits. Keep preflight requests reachable.
+[functions.create-commerce-v2-checkout]
+verify_jwt = false
+
+[functions.create-commerce-v2-additional-checkout]
+verify_jwt = false
+
+[functions.submit-commerce-v2-consultation]
+verify_jwt = false
+
+[functions.get-commerce-v2-consultation]
+verify_jwt = false
+
+[functions.admin-commerce-v2-consultations]
+verify_jwt = false
+
+[functions.commerce-v2-staff-production]
+verify_jwt = false
+
+[functions.queue-commerce-v2-book-production]
+verify_jwt = false
+
 # 回答する家族はアカウントを持たないため、十分に長い依頼IDを使い、
 # 関数内で公開範囲を最小限に検証する。
 [functions.theme-memory-request-response]

@@ -28,8 +28,9 @@ const MESSAGE_DRAFTS = {
   custom: ""
 };
 
-const FAMILY_PLAN_LIST_PRICE = 49800;
-const FAMILY_PLAN_PRICE = 34860;
+const COMMERCE_V2_ENABLED = import.meta.env.VITE_COMMERCE_V2_ENABLED === "true";
+const FAMILY_PLAN_LIST_PRICE = COMMERCE_V2_ENABLED ? 35000 : 49800;
+const FAMILY_PLAN_PRICE = COMMERCE_V2_ENABLED ? 35000 : 34860;
 const GIFT_PACKAGE_PRICE = 3000;
 
 const formatPrice = value => `${Number(value || 0).toLocaleString("ja-JP")}円`;
@@ -87,7 +88,9 @@ function getOfferPreviewCopy(offerType, inviterName) {
   if (offerType === "full_gift") {
     return {
       subject: `【縦糸横糸】${inviterName}さんから、贈りものが届きました`,
-      lead: "物語を一冊にするスタンダードプランが贈られています。"
+      lead: COMMERCE_V2_ENABLED
+        ? "物語を一冊にする縦糸横糸ブックが贈られています。"
+        : "物語を一冊にするスタンダードプランが贈られています。"
     };
   }
 
@@ -100,7 +103,9 @@ function getOfferPreviewCopy(offerType, inviterName) {
 
   return {
     subject: `【縦糸横糸】${inviterName}さんから、招待が届きました`,
-    lead: "まずは三つの問いを無料で試し、その先は家族招待の特別価格34,860円（30%割引）で続けられます。"
+    lead: COMMERCE_V2_ENABLED
+      ? "まずは三つの問いを無料で試し、その先は冊子の装丁を選んで続けられます。"
+      : "まずは三つの問いを無料で試し、その先は家族招待の特別価格34,860円（30%割引）で続けられます。"
   };
 }
 
@@ -391,6 +396,13 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
   const resolvedMessage = personalMessage.trim() || MESSAGE_DRAFTS[messageTemplate] || "";
   const offerPreviewCopy = getOfferPreviewCopy(offerType, inviterName);
 
+  if (COMMERCE_V2_ENABLED && isPaymentResume && existingInvitation?.delivery_method === "package") {
+    return <div className="mx-auto max-w-lg px-6 py-16 text-center text-white">
+      <p role="alert" className="leading-8">旧ギフトパッケージ付きの未決済招待は、この画面から購入できません。お手数ですがお問い合わせください。</p>
+      <button className="mt-8 underline" onClick={onBack}>戻る</button>
+    </div>;
+  }
+
   if (previewOpen) {
     return (
       <InvitationPreview
@@ -463,7 +475,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
               <OptionCard
                 icon={Gift}
                 title="無料体験を贈る"
-                detail="まずは3問を無料で試せます。続けるかはご本人が決められます。続ける場合は、家族招待だけの特別価格でご案内します。"
+                detail={COMMERCE_V2_ENABLED ? "まずは3問を無料で試せます。続ける場合は冊子の装丁を選べます。" : "まずは3問を無料で試せます。続けるかはご本人が決められます。続ける場合は、家族招待だけの特別価格でご案内します。"}
                 selected={offerType !== "full_gift"}
                 onClick={() => {
                   setOfferType(current => current === "trial_gift" ? "trial_gift" : "referral");
@@ -474,7 +486,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
               <OptionCard
                 icon={Gift}
                 title="基本プランを贈る"
-                detail="家族招待だけの特別価格34,860円（30%OFF）で購入して贈ります。メールかギフトパッケージを選べます。"
+                detail={COMMERCE_V2_ENABLED ? "次の画面でスタンダード／プレミアムを選んで贈ります。メールでお届けします。" : "家族招待だけの特別価格34,860円（30%OFF）で購入して贈ります。メールかギフトパッケージを選べます。"}
                 selected={offerType === "full_gift"}
                 onClick={() => setOfferType("full_gift")}
               />
@@ -483,16 +495,16 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
 
           {step === "trial_offer" && (
             <>
-              <p className="mb-1 text-center text-sm leading-loose text-white/46">3問のあと、特別価格でご案内できます。</p>
+              <p className="mb-1 text-center text-sm leading-loose text-white/46">{COMMERCE_V2_ENABLED ? "3問のあと、冊子の装丁を選んでご購入いただけます。" : "3問のあと、特別価格でご案内できます。"}</p>
               <div className="rounded-2xl border border-amber-100/10 bg-amber-100/[0.035] px-5 py-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-xs tracking-[0.1em] text-amber-50/55">家族招待 特別価格</p>
+                  <p className="text-xs tracking-[0.1em] text-amber-50/55">{COMMERCE_V2_ENABLED ? "スタンダード（Webブック付き）" : "家族招待 特別価格"}</p>
                   <p className="text-sm text-amber-50/76">
-                    <span className="mr-2 text-xs text-white/28 line-through">{formatPrice(FAMILY_PLAN_LIST_PRICE)}</span>
+                    {!COMMERCE_V2_ENABLED && <span className="mr-2 text-xs text-white/28 line-through">{formatPrice(FAMILY_PLAN_LIST_PRICE)}</span>}
                     {formatPrice(FAMILY_PLAN_PRICE)}
                   </p>
                 </div>
-                <p className="mt-2 text-right text-[0.68rem] text-amber-100/40">30% OFF</p>
+                {!COMMERCE_V2_ENABLED && <p className="mt-2 text-right text-[0.68rem] text-amber-100/40">30% OFF</p>}
               </div>
 
               <p className="px-1 pt-3 text-xs text-white/44">ご案内先を選んでください</p>
@@ -519,8 +531,8 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
 
           {step === "delivery" && (
             <>
-              <OptionCard icon={Mail} title="メールで贈る" detail="短いメッセージを添えてメールで招待。すぐ始められます。" note={`お支払い合計 ${formatPrice(FAMILY_PLAN_PRICE)}`} selected={deliveryMethod === "email"} onClick={() => setDeliveryMethod("email")} />
-              <OptionCard icon={Package} title="ギフトとして贈る" detail="詳しいはじめ方も載ったブランドブックと共に、ご指定の住所に届けます。" note={`パッケージ 3,000円・お支払い合計 ${formatPrice(FAMILY_PLAN_PRICE + GIFT_PACKAGE_PRICE)}`} selected={deliveryMethod === "package"} onClick={() => setDeliveryMethod("package")} />
+              <OptionCard icon={Mail} title="メールで贈る" detail="短いメッセージを添えてメールで招待。すぐ始められます。" note={COMMERCE_V2_ENABLED ? "装丁と価格は次の画面で選択" : `お支払い合計 ${formatPrice(FAMILY_PLAN_PRICE)}`} selected={deliveryMethod === "email"} onClick={() => setDeliveryMethod("email")} />
+              {!COMMERCE_V2_ENABLED && <OptionCard icon={Package} title="ギフトとして贈る" detail="詳しいはじめ方も載ったブランドブックと共に、ご指定の住所に届けます。" note={`パッケージ 3,000円・お支払い合計 ${formatPrice(FAMILY_PLAN_PRICE + GIFT_PACKAGE_PRICE)}`} selected={deliveryMethod === "package"} onClick={() => setDeliveryMethod("package")} />}
             </>
           )}
 
@@ -573,6 +585,7 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
                 <p>お手伝い：{assistanceMode === "recipient_led" ? "本人だけで進める" : assistanceMode === "support_requested" ? "私もお手伝いする" : "本人に選んでもらう"}</p>
                 {(includesBasePlanPayment || isTrialPackagePayment) && (
                   <div className="mt-4 space-y-2 border-t border-white/[0.07] pt-4">
+                    {COMMERCE_V2_ENABLED ? <p>装丁・追加冊子・割引コードとお支払い合計は、次の画面で確認します。</p> : <>
                     {includesBasePlanPayment && <>
                       <div className="flex items-center justify-between gap-3 text-white/46">
                         <span>基本プラン</span>
@@ -599,10 +612,11 @@ export default function FamilyStoryInviteFlow({ supabaseClient, inviterName = "�
                       <span>お支払い合計</span>
                       <span className="text-white/92">{formatPrice(paymentTotal)}</span>
                     </div>
+                    </>}
                   </div>
                 )}
               </div>
-              {includesBasePlanPayment && (
+              {includesBasePlanPayment && !COMMERCE_V2_ENABLED && (
                 <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-5 py-5">
                   <label className="text-xs tracking-[0.08em] text-white/42">割引コードをお持ちの方</label>
                   <div className="mt-3 flex gap-2">

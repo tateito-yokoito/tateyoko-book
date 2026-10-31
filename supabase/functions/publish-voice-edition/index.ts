@@ -50,7 +50,13 @@ serve(async (req) => {
       const { data: job, error: jobError } = await serviceClient.from("book_production_jobs")
         .select("order_id").eq("order_id", orderId).maybeSingle();
       if (jobError || !job) throw new HttpError("Production job required", 409);
-      user = { id: order.purchaser_user_id };
+      // A claimed gift may have been paid for by somebody other than the
+      // subject. Internal preparation must use the current project owner for
+      // asset and production access, after verifying the paid order and job.
+      const { data: project, error: projectError } = await serviceClient.from("book_projects")
+        .select("owner_user_id").eq("id", order.book_project_id).single();
+      if (projectError || !project?.owner_user_id) throw new HttpError("Project owner required", 409);
+      user = { id: project.owner_user_id };
       internalBookProjectId = order.book_project_id;
     } else {
       const authClient = createClient(supabaseUrl, serviceRoleKey, {
