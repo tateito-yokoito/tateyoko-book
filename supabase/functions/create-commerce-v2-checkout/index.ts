@@ -5,6 +5,7 @@ import {
   requireStripeEnvironment, stripeRequest,
 } from "../_shared/experience-commerce.ts";
 import { kickBookProduction } from "../_shared/book-production.ts";
+import { requireCommerceV2CheckoutEnabled } from "../_shared/commerce-v2-checkout-gate.ts";
 import {
   assertStripePriceMatchesLine, calculateCommerceV2Quote,
   checkoutSessionDisposition,
@@ -40,6 +41,7 @@ serve(async (request) => {
   if (!url || !key || !stripeKey) return json({ success: false, error: "決済の準備が完了していません" }, 503);
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   try {
+    requireCommerceV2CheckoutEnabled();
     requireStripeEnvironment(stripeKey);
     requireCheckoutEnabled();
     const { error: modeError } = await admin.rpc("require_commerce_mode", { input_mode: commerceMode() });
