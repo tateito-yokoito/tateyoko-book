@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { finalizeExperienceCheckout, applyRefundObject, stripeRequest, requireEventMode } from "../_shared/experience-commerce.ts";
 import { kickBookProduction } from "../_shared/book-production.ts";
+import { shouldKickBookProduction } from "../_shared/commerce-v2-routing.ts";
 
 function hex(bytes: ArrayBuffer) {
   return [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, "0")).join("");
@@ -73,7 +74,7 @@ serve(async request => {
         });
         if (error) throw error;
         }
-        kickBookProduction(supabaseUrl, serviceRoleKey, orderId);
+        if (await shouldKickBookProduction(admin, orderId)) kickBookProduction(supabaseUrl, serviceRoleKey, orderId);
 
         const familyInvitationId = String(checkout?.metadata?.family_invitation_id || "");
         if (Deno.env.get("EXPERIENCE_NOTIFICATIONS_ENABLED") === "true" && familyInvitationId && !["2.0", "2.1"].includes(checkout.metadata?.experience_policy_version)) {

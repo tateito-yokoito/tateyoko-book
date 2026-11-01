@@ -3,6 +3,7 @@ import { kickBookProduction } from "../_shared/book-production.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import {requireFamilyRelease} from '../_shared/family-release.ts';
 import { requireStripeEnvironment, commerceMode, requireCheckoutEnabled, requireEventMode, finalizeExperienceCheckout } from "../_shared/experience-commerce.ts";
+import { assertLegacyCheckoutAllowedForProject } from "../_shared/commerce-v2.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -335,7 +336,7 @@ serve(async request => {
     if (orderType === "self") {
       if (!projectId) return json({ success: false, error: "物語が見つかりません" }, 400);
       const result = await admin.from("book_projects")
-        .select("id, owner_user_id, access_status, product_code, premium_hardcover_status, premium_hardcover_purchased_at")
+        .select("id, owner_user_id, access_status, product_code, purchased_edition_v2, premium_hardcover_status, premium_hardcover_purchased_at")
         .eq("id", projectId).maybeSingle();
       project = result.data;
       const {data:managed,error:managedError}=await admin.rpc('family_managed',{p:projectId});
@@ -344,6 +345,11 @@ serve(async request => {
       if(managedFamily)await requireFamilyRelease(admin,projectId,authData.user.id);
       if (result.error || !project || (!managedFamily && project.owner_user_id !== authData.user.id)) {
         return json({ success: false, error: "この物語の購入手続きを開始できません" }, 403);
+      }
+      try {
+        assertLegacyCheckoutAllowedForProject(project);
+      } catch (error) {
+        return json({ success: false, error: errorMessage(error, "追加冊子の注文方法を確認してください") }, 409);
       }
       if(managedFamily && returnContext!=='family'){
         const {data:producer,error:producerError}=await admin.rpc('family_creator',{p:projectId,u:authData.user.id});

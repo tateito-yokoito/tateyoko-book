@@ -47,6 +47,7 @@ import { STORY_THEMES } from "./lib/storyThemes.js";
 import { themeExtraOptions } from "./lib/themeExtras.js";
 import ThemeMorePicker from "./ThemeMorePicker.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
+import CommerceV2Purchase from "./CommerceV2Purchase.jsx";
 import { ThemeMemoryRequestComposer, ThemeMemoryRequestManager } from "./ThemeMemoryRequestFlow.jsx";
 import StoryRequestComposer, { PaperHeartIcon } from "./StoryRequestComposer.jsx";
 import StoryRequestManager from "./StoryRequestManager.jsx";
@@ -68,6 +69,7 @@ const applicationSupabaseClient = supabaseClient;
 
 const FREE_TRIAL_QUESTION_COUNT = 3;
 const FREE_TRIAL_RETENTION_ENABLED = import.meta.env.VITE_FREE_TRIAL_RETENTION_ENABLED === "true";
+const COMMERCE_V2_ENABLED = import.meta.env.VITE_COMMERCE_V2_ENABLED === "true";
 const EXPERIENCE_ROLLOUT = experienceRollout(import.meta.env);
 const EXPERIENCE_V2_ENABLED = EXPERIENCE_ROLLOUT.contracts;
 const TRIAL_CONVERSION_ENABLED = EXPERIENCE_ROLLOUT.conversion;
@@ -2101,6 +2103,9 @@ function getInitialSceneForProject({
   notificationPref,
   sharingPreference
 }) {
+  if (project?.access_status === "paid" && project?.production_method_v2 === "interview_staff") {
+    return "staff_contact_waiting";
+  }
   const activeRitualScene = getActiveOnboardingRitualScene(project);
   if (activeRitualScene) return activeRitualScene;
 
@@ -3277,6 +3282,11 @@ function App() {
   const [trialRestartError, setTrialRestartError] = useState("");
   useLayoutEffect(() => {
     if (isInitializing || supportContext || receivedContext) return;
+    if (foundation?.project?.access_status === "paid"
+      && foundation.project.production_method_v2 === "interview_staff") {
+      if (scene !== "staff_contact_waiting") setScene("staff_contact_waiting");
+      return;
+    }
     const activeRitualScene = getActiveOnboardingRitualScene(foundation?.project);
     const resolved = activeRitualScene
       ? resolveOnboardingRitualEntryScene(scene, foundation?.project)
@@ -3332,6 +3342,7 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [trialRetention?.status, trialRetention?.expires_at]);
   const [purchaseFor, setPurchaseFor] = useState(() => getPurchaseForFromUrl());
+  const [commerceV2Invitation, setCommerceV2Invitation] = useState(null);
   const [purchaseResult, setPurchaseResult] = useState(null);
   const [bookBuilderOrderCompletedAt, setBookBuilderOrderCompletedAt] = useState(null);
   const [bookBuilderResumeStep, setBookBuilderResumeStep] = useState(0);
@@ -6279,7 +6290,9 @@ useEffect(() => {
       setBookBuilderOrderCompletedAt(Date.now());
     }
     replaceCommercialEntryUrl("purchased");
-    setScene(checkoutReturn.context === "book_builder" ? "book_builder" : "purchase_success");
+    setScene(project?.production_method_v2 === "interview_staff"
+      ? "staff_contact_waiting"
+      : checkoutReturn.context === "book_builder" ? "book_builder" : "purchase_success");
   };
 
   const finishGiftCheckoutAsPaid = data => {
@@ -7496,6 +7509,20 @@ if (isFreeTrialExpired(loadedTrialRetention)
       )}
 
       {scene === "purchase_start" && (
+        COMMERCE_V2_ENABLED ? (
+          <CommerceV2Purchase client={supabaseClient} projectId={foundation?.project?.id}
+            initialOrderType={purchaseFor}
+            familyInvitation={commerceV2Invitation || (
+              receivedFamilyInvitation && ['awaiting_payment', 'continuation_awaiting_payment', 'trial_completed'].includes(receivedFamilyInvitation.status)
+                ? receivedFamilyInvitation : null
+            )}
+            onTryFree={() => {
+              replaceCommercialEntryUrl("trial");
+              setScene(isFreeTrialExpired(trialRetention)
+                ? "trial_expired"
+                : hasCompletedFreeTrial(questionsDB) ? "trial_complete" : 0);
+            }} />
+        ) :
         <Scene_PurchaseStart
           initialOrderType={purchaseFor}
           familyInvitation={receivedFamilyInvitation}
@@ -7651,6 +7678,10 @@ if (isFreeTrialExpired(loadedTrialRetention)
             setScene("onboarding_overview");
           }}
         />
+      )}
+
+      {scene === "staff_contact_waiting" && (
+        <Scene_StaffContactWaiting />
       )}
 
       {scene === "gift_purchase_success" && (
@@ -8313,6 +8344,12 @@ if (isFreeTrialExpired(loadedTrialRetention)
           inviterName={user?.display_name || user?.name || user?.preferred_name || "ご家族"}
           onBack={() => setScene("home")}
           onStartCheckout={async ({ invitation, orderType, discountCode, includeGiftPackage, gift }) => {
+            if (COMMERCE_V2_ENABLED) {
+              setCommerceV2Invitation(invitation);
+              setPurchaseFor(orderType);
+              setScene("purchase_start");
+              return true;
+            }
             const checkoutWindow = openCheckoutWindow();
             const started = await startPurchase({
               orderType,
@@ -8345,6 +8382,9 @@ if (isFreeTrialExpired(loadedTrialRetention)
       )}
 
       {scene === "family_story_payment_review" && familyPaymentInvitation && (
+        COMMERCE_V2_ENABLED ?
+        <CommerceV2Purchase client={supabaseClient} projectId={foundation?.project?.id}
+          initialOrderType="gift" familyInvitation={familyPaymentInvitation} /> :
         TRIAL_CONVERSION_ENABLED && familyPaymentInvitation.pricing_policy_version === '2.0' ?
         <TrialGiftPurchaseReview key={familyPaymentInvitation.id} client={supabaseClient}
           projectId={foundation?.project?.id} invitation={familyPaymentInvitation}
@@ -8361,6 +8401,12 @@ if (isFreeTrialExpired(loadedTrialRetention)
             setScene("home");
           }}
           onStartCheckout={async ({ invitation, orderType, discountCode, includeGiftPackage, gift }) => {
+            if (COMMERCE_V2_ENABLED) {
+              setCommerceV2Invitation(invitation);
+              setPurchaseFor(orderType);
+              setScene("purchase_start");
+              return true;
+            }
             const checkoutWindow = openCheckoutWindow();
             const started = await startPurchase({
               orderType,
@@ -10452,7 +10498,7 @@ function Scene_PurchaseStart({
 }
 
 function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFinish, ...connection }) {
-  if (TRIAL_CONVERSION_ENABLED) return <TrialCompletionConnected {...connection} familyInvitation={familyInvitation}
+  if (TRIAL_CONVERSION_ENABLED && !COMMERCE_V2_ENABLED) return <TrialCompletionConnected {...connection} familyInvitation={familyInvitation}
     onPurchase={onPurchase} onPaidContinue={() => onPurchase({resumePaid:true})} onFinish={onFinish} />;
   const isWorking = status === "starting" || status === "checking";
   const isPaidFamilyGift = familyInvitation?.offer_type === "full_gift";
@@ -10481,7 +10527,7 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
         {isPaidFamilyGift ? (
           <div className="my-8 rounded-[1.7rem] border border-amber-100/12 bg-amber-100/[0.035] px-6 py-5">
             <p className="text-xs tracking-[0.16em] text-amber-50/42">贈られている内容</p>
-            <p className="mt-3 text-[0.95rem] leading-[2] text-amber-50/72">縦糸横糸ブック・スタンダードプラン</p>
+            <p className="mt-3 text-[0.95rem] leading-[2] text-amber-50/72">{COMMERCE_V2_ENABLED ? '縦糸横糸ブック（Webブック付き）' : '縦糸横糸ブック・スタンダードプラン'}</p>
             <p className="mt-3 text-xs leading-loose text-white/34">追加のお支払いなく、そのまま続きを始められます。</p>
           </div>
         ) : waitsForGiftSender ? (
@@ -10492,7 +10538,12 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
         ) : (
           <div className="my-8 rounded-[1.7rem] border border-white/10 bg-white/[0.025] px-6 py-5">
             <p className="text-xs tracking-[0.16em] text-white/34">縦糸横糸（ブック＋Webブック）</p>
-            {hasFamilyPrice ? (
+            {COMMERCE_V2_ENABLED ? (
+              <>
+                <p className="mt-2 text-[1.4rem] tracking-[0.06em] text-white/86">スタンダード 35,000円〜 <span className="text-xs text-white/34">税込</span></p>
+                <p className="mt-2 text-xs leading-relaxed text-white/48">装丁と制作方法は次の画面で選べます。家族招待でも通常価格です。</p>
+              </>
+            ) : hasFamilyPrice ? (
               <>
                 <p className="mt-3 text-[0.9rem] tracking-[0.06em] text-amber-50/72">家族招待 特別価格</p>
                 <p className="mt-2 text-[1.4rem] tracking-[0.06em] text-white/86"><span className="mr-2 text-xs text-white/28 line-through">49,800円</span>{formatYen(FAMILY_INVITE_PLAN_PRICE)} <span className="text-xs text-white/34">税込</span></p>
@@ -10529,6 +10580,21 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
           ここまでの録音と文章は保存されています。
         </p>
       </div>
+    </div>
+  );
+}
+
+function Scene_StaffContactWaiting() {
+  return (
+    <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
+      <p className="text-[0.9375rem] tracking-[0.08em] text-amber-100/78">お申し込みが完了しました</p>
+      <h1 className="text-narrative mt-7 text-[1.55rem] leading-[1.9] text-white/92">
+        スタッフからのご連絡を<br />お待ちください
+      </h1>
+      <p className="mt-7 max-w-[32rem] text-base leading-[1.8] text-white/78">
+        聞き取り制作サポートの内容と日程をご案内します。
+        この画面から録音を始める必要はありません。
+      </p>
     </div>
   );
 }
@@ -14377,7 +14443,7 @@ function FamilyInvitationHomeCard({ invitation, onContinue, onDecline }) {
       </div>
       {canChooseContinuation && (
         <div className="mt-5 grid grid-cols-[1fr_auto] gap-3 border-t border-white/[0.07] pt-4">
-          <button type="button" onClick={onContinue} className="rounded-full bg-white px-4 py-3 text-sm text-slate-900">{TRIAL_CONVERSION_ENABLED ? '購入して続きを贈る' : '続きを贈る（34,860円）'}</button>
+          <button type="button" onClick={onContinue} className="rounded-full bg-white px-4 py-3 text-sm text-slate-900">{COMMERCE_V2_ENABLED || TRIAL_CONVERSION_ENABLED ? '購入して続きを贈る' : '続きを贈る（34,860円）'}</button>
           <button type="button" onClick={onDecline} className="px-3 py-3 text-xs text-white/38 underline underline-offset-4">{TRIAL_CONVERSION_ENABLED ? '本人が購入する方法へ' : '今回はここまで'}</button>
         </div>
       )}
@@ -16008,7 +16074,8 @@ export function Scene_BookBuilder({
   adminPreviewClient = null
 }) {
   const supabaseClient = adminPreviewClient || applicationSupabaseClient;
-  const steps = readOnly || !onPurchase
+  const commerceV2Project = Boolean(project?.purchased_edition_v2);
+  const steps = readOnly || !onPurchase || commerceV2Project
     ? ["表紙", "収録", "紙面"]
     : ["表紙", "収録内容", "紙面確認", "オプション", "注文"];
   const [stepIndex, setStepIndex] = useState(() => Math.max(
@@ -16071,6 +16138,11 @@ export function Scene_BookBuilder({
   const [bookWork, setBookWork] = useState(null);
   const [workSaving, setWorkSaving] = useState(false);
   const [workError, setWorkError] = useState("");
+  const [v2AdditionalCounts, setV2AdditionalCounts] = useState({ standard: 0, premium: 0 });
+  const [v2AdditionalQuote, setV2AdditionalQuote] = useState(null);
+  const [v2AdditionalError, setV2AdditionalError] = useState("");
+  const [v2AdditionalBusy, setV2AdditionalBusy] = useState(false);
+  const [v2AdditionalOpen, setV2AdditionalOpen] = useState(false);
   const [draftPdfStatus, setDraftPdfStatus] = useState("idle");
   const [paperPreviewOpen, setPaperPreviewOpen] = useState(false);
   const [paperPreviewStoryId, setPaperPreviewStoryId] = useState(null);
@@ -16096,6 +16168,87 @@ export function Scene_BookBuilder({
     });
     if(error)throw error;
     setBookWork(data);setIncludedStoryIds(data.answer_ids);return data;
+  };
+  useEffect(() => {
+    if (!commerceV2Project || !bookWork?.confirmed_at || !v2AdditionalOpen
+      || v2AdditionalCounts.standard + v2AdditionalCounts.premium === 0) {
+      setV2AdditionalQuote(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setV2AdditionalQuote(null);
+    setV2AdditionalError("");
+    supabaseClient.functions.invoke("create-commerce-v2-additional-checkout", {
+      body: { action: "quote", projectId: bookProjectId,
+        standardExtraCount: v2AdditionalCounts.standard,
+        premiumExtraCount: v2AdditionalCounts.premium }
+    }).then(async ({ data, error }) => {
+      if (cancelled) return;
+      if (error || !data?.success) {
+        setV2AdditionalError(await getFunctionInvokeErrorMessage(error, data?.error || "見積を取得できませんでした"));
+        return;
+      }
+      setV2AdditionalQuote(data.quote);
+    });
+    return () => { cancelled = true; };
+  }, [commerceV2Project, bookWork?.confirmed_at, bookProjectId,
+    v2AdditionalOpen, v2AdditionalCounts.standard, v2AdditionalCounts.premium]);
+
+  const confirmCommerceV2Work = async () => {
+    if (!commerceV2Project || project?.production_method_v2 === "interview_staff"
+      || !bookProjectId || !bookWork || workSaving || !previewEdition) return;
+    if (!bookWork.confirmed_at && !window.confirm(
+      "紙面を確定すると、紙のBOOKとWebブックはこの内容で制作します。内容を確認済みですか？"
+    )) return;
+    setWorkSaving(true);
+    setWorkError("");
+    try {
+      if (!bookWork.confirmed_at) {
+        await persistCoverSettings();
+        const selection = await saveSelection(includedStoryIds);
+        const { data, error } = await supabaseClient.rpc("confirm_book_work", {
+          input_project_id: bookProjectId,
+          input_expected_revision: selection.revision,
+          input_subject_confirmed: true
+        });
+        if (error) throw error;
+        setBookWork(data);
+      }
+      const { data, error } = await supabaseClient.functions.invoke("queue-commerce-v2-book-production", {
+        body: { projectId: bookProjectId }
+      });
+      if (error || !data?.success) throw error || new Error(data?.error || "制作を開始できませんでした");
+      setOrderCompleted(true);
+    } catch (error) {
+      setWorkError(await getFunctionInvokeErrorMessage(error, error?.message || "作品を確定できませんでした"));
+    } finally {
+      setWorkSaving(false);
+    }
+  };
+
+  const checkoutCommerceV2Additional = async () => {
+    if (!v2AdditionalQuote || !shippingAddressComplete || v2AdditionalBusy) return;
+    const checkoutWindow = prepareCheckoutWindow();
+    setV2AdditionalBusy(true);
+    setV2AdditionalError("");
+    try {
+      const { data, error } = await supabaseClient.functions.invoke("create-commerce-v2-additional-checkout", {
+        body: { action: "checkout", projectId: bookProjectId,
+          standardExtraCount: v2AdditionalCounts.standard,
+          premiumExtraCount: v2AdditionalCounts.premium,
+          expectedQuote: v2AdditionalQuote,
+          shippingAddress, requestKey: crypto.randomUUID() }
+      });
+      if (error || !data?.success) throw error || new Error(data?.error || "決済を開始できませんでした");
+      if (data.retryRequired) throw new Error(data.message || "もう一度お試しください");
+      if (checkoutWindow) checkoutWindow.location.replace(data.url);
+      else window.location.assign(data.url);
+    } catch (error) {
+      closeCheckoutWindow(checkoutWindow);
+      setV2AdditionalError(await getFunctionInvokeErrorMessage(error, error?.message || "決済を開始できませんでした"));
+    } finally {
+      setV2AdditionalBusy(false);
+    }
   };
   const toggleWorkStory = async answer => {
     if(readOnly || bookWork?.confirmed_at || workSaveLock.current)return;
@@ -16734,7 +16887,7 @@ export function Scene_BookBuilder({
         </div>
 
         <div>
-          <div className={`grid ${readOnly ? "grid-cols-3" : "grid-cols-5"} gap-2 pb-2`}>
+          <div className={`grid ${steps.length === 3 ? "grid-cols-3" : "grid-cols-5"} gap-2 pb-2`}>
             {steps.map((step, index) => (
               <button
                 key={step}
@@ -17107,6 +17260,68 @@ export function Scene_BookBuilder({
                 </p>
               </div>
             ) : includeWebBookQr && <p className="px-2 text-center text-xs text-white/45">確認用の紙面です。QRは注文完了後に固定します。</p>}
+            {commerceV2Project && !readOnly && (
+              <div className="glass-card p-5 space-y-4">
+                {bookWork?.confirmed_at ? (
+                  <>
+                    <p className="text-sm text-white/80">作品は確定済みです。紙のBOOKとWebブックを制作しています。</p>
+                    <button type="button" onClick={() => setV2AdditionalOpen(value => !value)}
+                      className="btn-quiet w-full rounded-full bg-white/10 py-3 text-sm text-white">
+                      {v2AdditionalOpen ? "追加冊子の注文を閉じる" : "完成した作品の追加冊子を注文する"}
+                    </button>
+                  </>
+                ) : project?.production_method_v2 !== "interview_staff" ? (
+                  <>
+                    <p className="text-sm leading-relaxed text-white/65">紙面をご確認のうえ、作品を確定してください。購入済みの装丁で制作します。</p>
+                    <button type="button" onClick={confirmCommerceV2Work}
+                      disabled={!previewEdition || !bookWork || workSaving || Boolean(workError)}
+                      className="btn-quiet w-full rounded-full bg-white/10 py-3 text-sm text-white disabled:opacity-40">
+                      {workSaving ? "確定しています…" : "この内容で作品を確定する"}
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-sm leading-relaxed text-white/65">
+                    聞き取り制作の担当者からのご案内をお待ちください。
+                  </p>
+                )}
+                {v2AdditionalOpen && bookWork?.confirmed_at && (
+                  <div className="space-y-4 border-t border-white/10 pt-4">
+                    <p className="text-sm text-white/80">追加冊子（税込・複数冊割引なし）</p>
+                    {[
+                      ["standard", "スタンダード冊子", 5000],
+                      ["premium", "プレミアム冊子", 35000]
+                    ].map(([key, label, price]) => (
+                      <label key={key} className="flex items-center justify-between gap-3 text-sm text-white/70">
+                        <span>{label}　{formatYen(price)}／冊</span>
+                        <input type="number" min="0" max="30" step="1" inputMode="numeric"
+                          value={v2AdditionalCounts[key]}
+                          onChange={event => setV2AdditionalCounts(current => ({
+                            ...current, [key]: Math.max(0, Math.min(30, Number(event.target.value) || 0))
+                          }))}
+                          className="quiet-input w-20 text-center" aria-label={`${label}の冊数`} />
+                      </label>
+                    ))}
+                    <p className="text-xs text-white/50">お届け先</p>
+                    {[
+                      ["recipient_name", "お名前"], ["postal_code", "郵便番号"],
+                      ["prefecture", "都道府県"], ["city", "市区町村"],
+                      ["line1", "番地・建物名"], ["line2", "部屋番号（任意）"]
+                    ].map(([key, label]) => (
+                      <input key={key} type="text" value={shippingAddress[key] || ""}
+                        onChange={event => updateShippingAddress(key, event.target.value)}
+                        placeholder={label} aria-label={label} className="quiet-input w-full" />
+                    ))}
+                    {v2AdditionalQuote && <p className="text-right text-white/85">今回のお支払い　{formatYen(v2AdditionalQuote.amount_total)}</p>}
+                    {v2AdditionalError && <p role="alert" className="text-sm text-rose-200">{v2AdditionalError}</p>}
+                    <button type="button" onClick={checkoutCommerceV2Additional}
+                      disabled={!v2AdditionalQuote || !shippingAddressComplete || v2AdditionalBusy}
+                      className="btn-quiet w-full rounded-full bg-white/10 py-3 text-sm text-white disabled:opacity-40">
+                      {v2AdditionalBusy ? "決済を準備しています…" : "金額を確認して決済へ"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

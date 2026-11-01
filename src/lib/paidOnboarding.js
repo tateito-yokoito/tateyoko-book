@@ -2,6 +2,7 @@
 // Trial answers never satisfy the separate starting_conversation questions.
 export function paidOnboardingApplies(project, questions = []) {
   return project?.access_status === 'paid'
+    && project?.production_method_v2 !== 'interview_staff'
     && !project?.onboarding_preferences?.family_invitation_id
     && questions.some(q => q.onboarding_group === 'starting_conversation');
 }
