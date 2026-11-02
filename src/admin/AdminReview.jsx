@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { buildProjectHistory, deliveryChannelText, deliveryDestinationText } from './projectHistory.js';
-import {DeliverySummary, LoginSmsSummary} from './DeliverySummary.jsx';
+import {DeliverySummary} from './DeliverySummary.jsx';
 import { LineAccountStatus, useAdminLineStatus } from './LineAccountStatus.jsx';
 import SupportJourneyReview from './SupportJourneyReview.jsx';
 import BrandLogo from "../BrandLogo.jsx";
@@ -44,6 +44,7 @@ import OpsErrorHistory from './OpsErrorHistory.jsx';
 import TodaySkyAdmin from './TodaySkyAdmin.jsx';
 import FixedLineTestReset from './FixedLineTestReset.jsx';
 import {normalizeUserQuestions} from '../App.jsx';
+import { AccountOverview, ProjectOverview } from './AdminDetailOverview.jsx';
 
 const TAB_ITEMS = [
   { id: "attention", label: "要対応", icon: AlertCircle },
@@ -1388,14 +1389,10 @@ function AccountDetailPanel({
           <div className="p-8 text-sm text-rose-600">アカウント詳細を読み込めませんでした。</div>
         ) : (
           <div className="space-y-6 p-6">
-            <section className="rounded-2xl border border-slate-200 bg-white p-5">
-              <h3 className="text-xl font-medium">{account.display_name || "名称未登録"}</h3>
-              <p className="mt-1 text-sm text-slate-500">{account.email || "メール未登録"}</p>
-              <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
-                <div><dt className="text-xs text-slate-400">登録日</dt><dd className="mt-1">{formatDate(account.created_at)}</dd></div>
-              </dl>
-            </section>
-
+            <AccountOverview client={supabaseClient} detail={detail} lineStatus={lineStatus} onOpenProject={onOpenProject} />
+            <details className="rounded-2xl border border-slate-200 bg-white p-5 text-sm">
+              <summary className="cursor-pointer font-medium">運営確認用の記録</summary>
+              <div className="mt-5 space-y-6">
             <OrderReview key={`orders-${account.id}`} client={supabaseClient} accountId={account.id} onAccount={onOpenAccount} onProject={onOpenProject} />
             <AccountAuthStatus key={account.id} account={account} client={supabaseClient} />
             <LineAccountStatus state={lineStatus} />
@@ -1416,6 +1413,8 @@ function AccountDetailPanel({
 
             <section><h3 className="mb-3 text-sm font-medium">利用履歴</h3><ActivityTimeline rows={detail.activities || []} /></section>
             <section><h3 className="mb-3 text-sm font-medium">問い・招待の配信履歴</h3><p className="mb-3 text-xs text-slate-500">ログイン用の認証メールは含みません。</p><DeliveryHistoryList rows={detail.deliveries || []} emptyText="問い・招待の配信履歴はまだありません。" /></section>
+              </div>
+            </details>
             {hiddenEntry && (
               <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
                 <button
@@ -1577,14 +1576,6 @@ function DetailPanel({
   onRetryAttention,
   onResolveAttention
 }) {
-  const purchase = detail?.purchase || {};
-  const preference = detail?.notifications?.preference || null;
-  const enabledSchedules = (detail?.notifications?.schedules || []).filter((schedule) => schedule.enabled !== false);
-  const notificationRows = enabledSchedules.length
-    ? enabledSchedules
-    : preference && Number.isFinite(Number(preference.weekday)) && Number.isFinite(Number(preference.hour))
-      ? [preference]
-      : [];
   const lineStatus = useAdminLineStatus(supabaseClient, detail?.project?.owner_user_id);
   const publicationReadiness = voicePublicationReadiness(detail);
 
@@ -1601,40 +1592,9 @@ function DetailPanel({
           <div className="p-8 text-sm text-rose-600">詳細を読み込めませんでした。</div>
         ) : (
           <div className="space-y-6 p-6">
-            <section className="rounded-2xl border border-slate-200 bg-white p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-xl font-medium">物語の主体：{projectDisplayName(detail.project)}</h3>
-                  <p className="mt-2 text-sm text-slate-500">
-                    利用アカウント：{uniqueIdentityLine(withoutHonorific(detail.project?.owner_name), detail.project?.owner_email) || "連絡先未登録"}
-                  </p>
-                </div>
-                <StatusPill tone={accessTone(detail.project?.access_status)}>{accessLabel(detail.project?.access_status)}</StatusPill>
-              </div>
-              <LoginSmsSummary key={detail.project.id} client={supabaseClient} accountId={detail.project.owner_user_id} />
-              <LineAccountStatus state={lineStatus} compact />
-              <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
-                <div><dt className="text-xs text-slate-400">利用パターン</dt><dd className="mt-1">{projectTypeLabel(detail.project?.project_type)}</dd></div>
-                <div><dt className="text-xs text-slate-400">初回体験</dt><dd className="mt-1">{detail.project?.onboarding_status || "未設定"}</dd></div>
-                <div><dt className="text-xs text-slate-400">作成日</dt><dd className="mt-1">{formatDate(detail.project?.created_at)}</dd></div>
-                <div><dt className="text-xs text-slate-400">購入日</dt><dd className="mt-1">{formatDate(purchase.purchased_at || detail.project?.purchased_at)}</dd></div>
-                <div className="sm:col-span-2">
-                  <dt className="text-xs text-slate-400">購入者</dt>
-                  <dd className="mt-1">
-                    {purchase.purchaser_user_id ? (
-                      <button
-                        type="button"
-                        onClick={() => onOpenPurchaser(purchase.purchaser_user_id)}
-                        className="inline-flex items-center gap-1.5 text-left text-slate-700 underline decoration-slate-300 underline-offset-4 transition hover:text-slate-950"
-                      >
-                        {uniqueIdentityLine(withoutHonorific(purchase.purchaser_name), purchase.purchaser_email) || "名称未登録"}
-                        <ChevronRight size={14} className="shrink-0 text-slate-400" />
-                      </button>
-                    ) : "—"}
-                  </dd>
-                </div>
-              </dl>
-              <div className="mt-6 grid gap-3 border-t border-slate-100 pt-5 sm:grid-cols-2">
+            <ProjectOverview client={supabaseClient} detail={detail} lineStatus={lineStatus} onOpenPurchaser={onOpenPurchaser} />
+            <section className="rounded-2xl border border-slate-200 bg-white p-5"><h3 className="text-sm font-medium">物語の操作・履歴</h3>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={onOpenStoryPreview}
@@ -1647,7 +1607,6 @@ function DetailPanel({
                 
               </div>
             </section>
-
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -1767,9 +1726,10 @@ function DetailPanel({
               </section>
             )}
 
-            <DeliverySummary key={detail.project.id} client={supabaseClient} detail={detail} lineStatus={lineStatus} />
-
-            <OrderReview key={`project-orders-${detail.project.id}`} client={supabaseClient} projectId={detail.project.id} onAccount={onOpenPurchaser} onProject={onOpenProject} />
+            <details className="rounded-2xl border border-slate-200 bg-white p-5 text-sm"><summary className="cursor-pointer font-medium">配信・注文の詳しい記録</summary><div className="mt-5 space-y-5">
+              <DeliverySummary key={detail.project.id} client={supabaseClient} detail={detail} lineStatus={lineStatus} />
+              <OrderReview key={`project-orders-${detail.project.id}`} client={supabaseClient} projectId={detail.project.id} onAccount={onOpenPurchaser} onProject={onOpenProject} />
+            </div></details>
 
             <section className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border border-slate-200 bg-white p-5"><h3 className="text-sm font-medium">お手伝いする人</h3><div className="mt-4 space-y-3">{(detail.supporters || []).map((item) => <div key={item.id} className="text-sm"><p>{item.name === 'あなた' ? '氏名未登録' : item.name || item.email || "氏名未登録"}</p><p className="mt-1 text-xs text-slate-500">{relationshipLabel(item.relationship, item.relationship_other)}</p><p className="mt-1 text-xs text-slate-400">{item.status}{item.email ? ` · ${item.email}` : ''}</p>{item.invitee_phone && <p className="mt-1 text-xs text-slate-500">SMS依頼先：{item.invitee_phone}</p>}</div>)}{!detail.supporters?.length && <p className="text-sm text-slate-400">登録なし</p>}</div></div>
@@ -2474,7 +2434,7 @@ export default function AdminReview({ supabaseClient }) {
     setDetailLoading(true);
 
     try {
-      const [detailResult, purchaseResult, activityResult, deliveryResult, publicationResult, videoStoriesResult] = await Promise.all([
+      const [detailResult, purchaseResult, activityResult, deliveryResult, publicationResult, videoStoriesResult, previewResult] = await Promise.all([
         supabaseClient.rpc("get_admin_project_detail", { input_project_id: projectId }),
         supabaseClient.rpc("get_admin_project_purchase", { input_project_id: projectId }),
         supabaseClient.rpc("get_admin_usage_history", { input_project_id: projectId, input_limit: 100 }),
@@ -2485,7 +2445,8 @@ export default function AdminReview({ supabaseClient }) {
         supabaseClient
           .from("video_stories")
           .select("id, status, video_storage_path")
-          .eq("book_project_id", projectId)
+          .eq("book_project_id", projectId),
+        supabaseClient.rpc("get_admin_project_preview", { input_project_id: projectId })
       ]);
       if (detailResult.error) throw detailResult.error;
       if (purchaseResult.error) throw purchaseResult.error;
@@ -2504,6 +2465,7 @@ export default function AdminReview({ supabaseClient }) {
       );
       setDetail({
         ...data,
+        preview: previewResult.error ? null : previewResult.data,
         voice_publication: publicationResult.data?.publication || null,
         video_stories: videoStoriesResult.data || [],
         purchase: purchaseResult.data || {},
