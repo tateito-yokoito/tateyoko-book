@@ -1,4 +1,5 @@
 import {useEffect, useState} from 'react';
+import {lineConnectionLabel,lineDeliveryLabel} from './lineStatus.js';
 
 export function settingDate(detail) {
  const n=detail.notifications||{};
@@ -29,7 +30,7 @@ export function LoginSmsSummary({client,accountId}){
   {known&&a.phone_registered&&a.phone_confirmed_at&&<div>認証日時：{displayDate(a.phone_confirmed_at)}（日本時間）</div>}
  </div>;
 }
-export function DeliverySummary({client,detail}){
+export function DeliverySummary({client,detail,lineStatus}){
  const [reveal,setReveal]=useState(false);
  const owner=detail.project?.owner_user_id;
  const {loading,data,error}=useDetail(client,'admin_review_contacts',{input_account_id:owner,input_project_id:null,input_reveal:reveal});
@@ -46,6 +47,15 @@ export function DeliverySummary({client,detail}){
   <div style={{borderTop:'1px solid #dce3eb',paddingTop:18,marginTop:20}}><div>メール</div><div style={{overflowWrap:'anywhere'}}>{email||'未設定'}</div>{email&&<div style={{fontSize:16}}>{channelState(email,p?.email_enabled,p?.is_active)}</div>}</div>
   <div style={{borderTop:'1px solid #dce3eb',paddingTop:18,marginTop:18}}><div>SMS</div>
    {loading?<p role="status">確認中…</p>:error||!contact?<p role="alert">設定を取得できません。</p>:<><div>{contact.notification_phone||'未設定'}{contact.notification_phone&&<button type="button" onClick={()=>setReveal(!reveal)} aria-expanded={reveal} style={{fontSize:16,border:'1px solid #cbd5e1',borderRadius:10,padding:'6px 12px',marginLeft:12,minHeight:44}}>{reveal?'番号を隠す':'番号を表示'}</button>}</div>{contact.notification_phone&&<div style={{fontSize:16}}>{channelState(contact.notification_phone,contact.sms_enabled,contact.is_active,contact.notification_verified)}</div>}</>}
+  </div>
+  <div style={{borderTop:'1px solid #dce3eb',paddingTop:18,marginTop:18}} aria-label="LINEの届け方">
+   <div>LINE</div>
+   {lineStatus?.loading?<p role="status">確認中…</p>:lineStatus?.error||!lineStatus?.data?<p role="alert">LINEの状態を取得できません。</p>:<>
+    <div style={{fontSize:16}}>ログイン連携：{lineStatus.data.linked?'あり':'なし'}</div>
+    <div style={{fontSize:16}}>公式アカウントの配信先：{lineConnectionLabel(lineStatus.data.connection_status)}</div>
+    <div style={{fontSize:16}}>配信：{lineDeliveryLabel(lineStatus.data)}</div>
+   </>}
+   <p style={{fontSize:13,color:'#64748b',marginTop:8}}>LINEでのログインと問いの配信は別です。実際の送信結果は配信履歴で確認してください。</p>
   </div>
  </section>;
 }

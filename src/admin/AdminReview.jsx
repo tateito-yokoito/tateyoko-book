@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { buildProjectHistory, deliveryChannelText, deliveryDestinationText } from './projectHistory.js';
 import {DeliverySummary, LoginSmsSummary} from './DeliverySummary.jsx';
+import { LineAccountStatus, useAdminLineStatus } from './LineAccountStatus.jsx';
 import SupportJourneyReview from './SupportJourneyReview.jsx';
 import BrandLogo from "../BrandLogo.jsx";
 import { relationshipLabel } from '../lib/supporterIdentity.js';
@@ -1328,7 +1329,7 @@ function DeliveryHistoryList({ rows, emptyText = "配信履歴はまだありま
   );
 }
 
-export function DeliveryTable({ rows, onOpenProject }) {
+export function DeliveryTable({ rows, onOpenProject, onOpenAccount }) {
   if (!rows?.length) return <EmptyState>該当する配信履歴はありません。</EmptyState>;
   return <AdminListTable label="配信" columns={[
     { label: "物語の主体", width: 220 }, { label: "状態", width: 110 }, { label: "配信日時", width: 165 },
@@ -1338,7 +1339,7 @@ export function DeliveryTable({ rows, onOpenProject }) {
     <td><span className="mb-1 block text-sm font-medium">{deliveryChannelText(item.delivery_channel)}</span><StatusPill tone={deliveryStatusTone(item.delivery_status)}>{deliveryStatusLabel(item.delivery_status)}</StatusPill></td>
     <td className="account-date">{formatDate(deliveryEventAt(item))}</td>
     <td><AdminText>{deliverySummary(item)}</AdminText></td>
-    <td><AdminText>{deliveryDestinationText(item)}</AdminText></td>
+    <td><AdminText>{deliveryDestinationText(item)}</AdminText>{item.recipient_user_id && <button type="button" onClick={() => onOpenAccount(item.recipient_user_id)} className="admin-text-link mt-1 block text-xs">利用アカウントを開く ›</button>}</td>
     <td className="text-rose-700"><AdminText>{item.error_message}</AdminText></td>
   </tr>)}</AdminListTable>;
 }
@@ -1372,6 +1373,7 @@ function AccountDetailPanel({
 }) {
   const account = detail?.account || null;
   const projects = detail?.impact?.projects || [];
+  const lineStatus = useAdminLineStatus(supabaseClient, account?.id);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35 backdrop-blur-[2px]" onMouseDown={onClose}>
@@ -1396,6 +1398,7 @@ function AccountDetailPanel({
 
             <OrderReview key={`orders-${account.id}`} client={supabaseClient} accountId={account.id} onAccount={onOpenAccount} onProject={onOpenProject} />
             <AccountAuthStatus key={account.id} account={account} client={supabaseClient} />
+            <LineAccountStatus state={lineStatus} />
             <ContactReview key={`contacts-${account.id}`} client={supabaseClient} accountId={account.id} />
 
             <AccountImpactSummary impact={detail.impact} />
@@ -1582,6 +1585,7 @@ function DetailPanel({
     : preference && Number.isFinite(Number(preference.weekday)) && Number.isFinite(Number(preference.hour))
       ? [preference]
       : [];
+  const lineStatus = useAdminLineStatus(supabaseClient, detail?.project?.owner_user_id);
   const publicationReadiness = voicePublicationReadiness(detail);
 
   return (
@@ -1608,6 +1612,7 @@ function DetailPanel({
                 <StatusPill tone={accessTone(detail.project?.access_status)}>{accessLabel(detail.project?.access_status)}</StatusPill>
               </div>
               <LoginSmsSummary key={detail.project.id} client={supabaseClient} accountId={detail.project.owner_user_id} />
+              <LineAccountStatus state={lineStatus} compact />
               <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
                 <div><dt className="text-xs text-slate-400">利用パターン</dt><dd className="mt-1">{projectTypeLabel(detail.project?.project_type)}</dd></div>
                 <div><dt className="text-xs text-slate-400">初回体験</dt><dd className="mt-1">{detail.project?.onboarding_status || "未設定"}</dd></div>
@@ -1762,7 +1767,7 @@ function DetailPanel({
               </section>
             )}
 
-            <DeliverySummary key={detail.project.id} client={supabaseClient} detail={detail} />
+            <DeliverySummary key={detail.project.id} client={supabaseClient} detail={detail} lineStatus={lineStatus} />
 
             <OrderReview key={`project-orders-${detail.project.id}`} client={supabaseClient} projectId={detail.project.id} onAccount={onOpenPurchaser} onProject={onOpenProject} />
 
@@ -3012,7 +3017,7 @@ export default function AdminReview({ supabaseClient }) {
             {loading && !dashboard ? <div className="flex h-64 items-center justify-center"><LoaderCircle className="animate-spin text-slate-400" /></div> : null}
             {(tab === "attention" || tab === "projects") && (activeRows.length ? <ProjectTable rows={activeRows} onOpen={openDetail} label={tab === "attention" ? "要対応" : "物語"} /> : <EmptyState>{tab === "attention" ? <span className="inline-flex items-center gap-2"><CheckCircle2 size={17} className="text-emerald-600" />現在、要対応の物語はありません。</span> : "該当する物語はありません。"}</EmptyState>)}
             {tab === "accounts" && <AccountTable rows={dashboard?.accounts || []} onOpen={openAccountDetail} />}
-            {tab === "deliveries" && <DeliveryTable rows={deliveryHistory} onOpenProject={openDetail} />}
+            {tab === "deliveries" && <DeliveryTable rows={deliveryHistory} onOpenProject={openDetail} onOpenAccount={openAccountDetail} />}
             {tab === "errors" && <OpsErrorHistory client={supabaseClient} onOpenAccount={openAccountDetail} onOpenProject={openDetail} />}
             {tab === "sky" && <TodaySkyAdmin client={supabaseClient} />}
             {tab === "questions" && <QuestionWorkbench client={supabaseClient} owner={adminRole === "owner"} onOpenCustomerExperience={()=>setTab('projects')} />}

@@ -7,7 +7,10 @@ export function smsPreferenceLabel(row) {
 
 export const deliveryChannelText = channel => ({email:'メール',sms:'SMS',line:'LINE',both:'メール・SMS'}[channel] || '方法未記録');
 export const deliveryDestinationText = (item, fallback = '送信先未登録') => {
-  if (item?.delivery_channel === 'line') return 'LINEの連携先';
+  if (item?.delivery_channel === 'line') {
+    const account = item?.resolved_recipient_email || item?.recipient_email;
+    return account ? `LINE連携先（利用アカウント：${account}）` : 'LINE連携先（利用アカウント未記録）';
+  }
   if (item?.delivery_channel === 'sms') return 'SMS送信先（番号は連絡先で確認）';
   return item?.resolved_recipient_email || item?.recipient_email || fallback;
 };
