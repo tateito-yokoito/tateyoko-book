@@ -41,6 +41,7 @@ import CustomerPreview from './CustomerPreview.jsx';
 import QuestionWorkbench from './QuestionWorkbench.jsx';
 import OpsErrorHistory from './OpsErrorHistory.jsx';
 import TodaySkyAdmin from './TodaySkyAdmin.jsx';
+import FixedLineTestReset from './FixedLineTestReset.jsx';
 import {normalizeUserQuestions} from '../App.jsx';
 
 const TAB_ITEMS = [
@@ -1984,7 +1985,7 @@ export default function AdminReview({ supabaseClient }) {
     if (organizationModeStatus.active && organizationModeStatus.expires_at) {
       setOrganizationModeStatus(current => ({ ...current, active: false, expires_at: null }));
     }
-    if (tab === "hidden") setTab("attention");
+    if (tab === "hidden" || tab === "test-reset") setTab("attention");
     const detailIsHidden = detailId && trashEntries.some(item => item.entity_type === "book_project" && item.entity_id === detailId);
     const accountIsHidden = accountDetailId && trashEntries.some(item => item.entity_type === "account" && item.entity_id === accountDetailId);
     if (detailIsHidden) {
@@ -2936,7 +2937,7 @@ export default function AdminReview({ supabaseClient }) {
   const attention = dashboard?.attention || [];
   const activeRows = tab === "attention" ? attention : projects;
   const navigationItems = organizationModeActive
-    ? [...TAB_ITEMS, { id: "hidden", label: "非表示ゾーン", icon: EyeOff }]
+    ? [...TAB_ITEMS, { id: "hidden", label: "非表示ゾーン", icon: EyeOff }, { id: "test-reset", label: "LINEテスト初期化", icon: RotateCcw }]
     : TAB_ITEMS;
   const pageTitle = navigationItems.find((item) => item.id === tab)?.label || "運営管理";
   const hiddenProjectEntry = detailId
@@ -3000,13 +3001,14 @@ export default function AdminReview({ supabaseClient }) {
                     <option value="failed">失敗</option>
                   </select>
                 )}
-                {tab !== "hidden" && tab !== "questions" && tab !== "errors" && <form onSubmit={(event) => { event.preventDefault(); setAppliedSearch(search.trim()); }} className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-white px-3"><Search size={15} className="shrink-0 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="氏名・メール・ID" className="min-w-0 bg-transparent px-2 py-2.5 text-sm outline-none" /></form>}
+                {tab !== "hidden" && tab !== "questions" && tab !== "errors" && tab !== "test-reset" && <form onSubmit={(event) => { event.preventDefault(); setAppliedSearch(search.trim()); }} className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-white px-3"><Search size={15} className="shrink-0 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="氏名・メール・ID" className="min-w-0 bg-transparent px-2 py-2.5 text-sm outline-none" /></form>}
                 <button onClick={loadDashboard} title="再読み込み" className="rounded-xl border border-slate-200 bg-white p-3 text-slate-500"><RefreshCw size={16} className={loading ? "animate-spin" : ""} /></button>
               </div>
             </div>
 
             {notice && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notice}</div>}
             {error && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+            {tab === "test-reset" && organizationModeActive && adminRole === "owner" && <FixedLineTestReset client={supabaseClient} />}
             {loading && !dashboard ? <div className="flex h-64 items-center justify-center"><LoaderCircle className="animate-spin text-slate-400" /></div> : null}
             {(tab === "attention" || tab === "projects") && (activeRows.length ? <ProjectTable rows={activeRows} onOpen={openDetail} label={tab === "attention" ? "要対応" : "物語"} /> : <EmptyState>{tab === "attention" ? <span className="inline-flex items-center gap-2"><CheckCircle2 size={17} className="text-emerald-600" />現在、要対応の物語はありません。</span> : "該当する物語はありません。"}</EmptyState>)}
             {tab === "accounts" && <AccountTable rows={dashboard?.accounts || []} onOpen={openAccountDetail} />}
