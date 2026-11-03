@@ -22,7 +22,7 @@ serve(async request => {
   const origin = request.headers.get('origin');
   const headers = {
     'Access-Control-Allow-Origin': origin && origins.has(origin) ? origin : liveSite,
-    'Access-Control-Allow-Headers': 'authorization,apikey,content-type',
+    'Access-Control-Allow-Headers': 'authorization,x-client-info,apikey,content-type',
     'Access-Control-Allow-Methods': 'POST,OPTIONS',
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store', 'Vary': 'Origin',

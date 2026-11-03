@@ -30,6 +30,12 @@ export function clearGuestTrialPending(storage = window.localStorage) {
   storage.removeItem(pendingKey);
 }
 
+async function functionErrorMessage(error) {
+  if (!error?.context || typeof error.context.json !== 'function') return null;
+  const details = await error.context.json().catch(() => null);
+  return typeof details?.error === 'string' ? details.error : null;
+}
+
 export async function bindGuestTrialToPurchase(client, projectId, storage = window.localStorage) {
   const saved = readGuestTrialSession(storage, storageKey);
   if (!saved?.token) throw new Error('この端末に無料3問の記録が見つかりません。再開URLから開いてください。');
@@ -37,7 +43,8 @@ export async function bindGuestTrialToPurchase(client, projectId, storage = wind
     body: { action: 'bind', sessionToken: saved.token, projectId },
   });
   if (error || data?.status !== 'bound' || data?.projectId !== projectId)
-    throw new Error(data?.error || '無料3問を購入に接続できませんでした。もう一度お試しください。');
+    throw new Error(data?.error || await functionErrorMessage(error)
+      || '無料3問を購入に接続できませんでした。もう一度お試しください。');
   storage.setItem(pendingKey, projectId);
   return data;
 }
@@ -49,7 +56,8 @@ export async function claimGuestTrialForProject(client, projectId, storage = win
     body: { sessionToken: saved.token, projectId },
   });
   if (error || data?.status !== 'claimed' || data?.projectId !== projectId || data?.count !== 3) {
-    throw new Error(data?.error || '無料3問を物語へ引き継げませんでした。もう一度お試しください。');
+    throw new Error(data?.error || await functionErrorMessage(error)
+      || '無料3問を物語へ引き継げませんでした。もう一度お試しください。');
   }
   clearGuestTrialPending(storage);
   return data;
