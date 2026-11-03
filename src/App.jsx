@@ -48,6 +48,7 @@ import { themeExtraOptions } from "./lib/themeExtras.js";
 import ThemeMorePicker from "./ThemeMorePicker.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
 import CommerceV2Purchase from "./CommerceV2Purchase.jsx";
+import { commercePurchaseReviewRequested, readCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
 import { ThemeMemoryRequestComposer, ThemeMemoryRequestManager } from "./ThemeMemoryRequestFlow.jsx";
 import StoryRequestComposer, { PaperHeartIcon } from "./StoryRequestComposer.jsx";
 import StoryRequestManager from "./StoryRequestManager.jsx";
@@ -462,6 +463,8 @@ function getAuthReturnUrlFromCurrentLocation() {
 
   const entryMode = params.get("entry");
   if (entryMode) url.searchParams.set("entry", entryMode);
+  if (commercePurchaseReviewRequested(params.toString())) url.searchParams.set('purchase_review', '1');
+  if (params.get('guest_trial_claim') === '1') url.searchParams.set('guest_trial_claim', '1');
 
   // Preserve a question deep link across the LINE OAuth round-trip.
   const deliveryToken = params.get("token");
@@ -3163,6 +3166,9 @@ if (perspectivePoints) {
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [scene, setScene] = useState(-1);
+  const purchaseSelection = commercePurchaseReviewRequested()
+    && !new URLSearchParams(window.location.search).has('checkout')
+    ? readCommercePurchaseIntent(window.localStorage) : null;
   const [writingQuestion, setWritingQuestion] = useState(null);
   const [user, setUser] = useState(null);
   const [questionsDB, setQuestionsDB] = useState([]);
@@ -3521,7 +3527,7 @@ if (!session) {
         };
 
 const unstartedConnections = await loadUnstartedConnections(session.user.id);
-if (unstartedConnections) {
+if (unstartedConnections && !purchaseSelection) {
   enterUnstartedConnections(currentUser, unstartedConnections);
   return;
 }
@@ -3755,9 +3761,10 @@ if (isFreeTrialExpired(loadedTrialRetention)
   && getCheckoutReturnFromUrl().status !== "success") {
   sceneAfterInvite = "trial_expired";
 }
+if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite = 'purchase_start';
 
 if (
-  isBetaMode() &&
+  !purchaseSelection && isBetaMode() &&
   !initialFamilyInviteToken &&
   currentUser?.__isNewProfile &&
   session.user?.id &&
@@ -3772,7 +3779,7 @@ if (
 }
 
 if (
-  targetedSupporterInviteId &&
+  !purchaseSelection && targetedSupporterInviteId &&
   !orderedPendingInvites.some(
     invite => invite.invite_id === targetedSupporterInviteId
   ) &&
@@ -3784,13 +3791,13 @@ if (
   return;
 }
 
-if (pendingRelationshipInvites.length > 0 && !deliveryToken && !initialFamilyInviteToken) {
+if (!purchaseSelection && pendingRelationshipInvites.length > 0 && !deliveryToken && !initialFamilyInviteToken) {
   setPostSupporterInviteScene(sceneAfterInvite);
   setScene("story_relationship_invite_received");
   return;
 }
 
-if (orderedPendingInvites.length > 0 && !deliveryToken && !initialFamilyInviteToken) {
+if (!purchaseSelection && orderedPendingInvites.length > 0 && !deliveryToken && !initialFamilyInviteToken) {
   setPostSupporterInviteScene(sceneAfterInvite);
   setHasAcceptedSupporterInvite(false);
   setScene("supporter_invite_received");
@@ -7321,7 +7328,7 @@ setScene(1);
               setUser(u);
 
 const unstartedConnections = await loadUnstartedConnections(u.id);
-if (unstartedConnections) {
+if (unstartedConnections && !purchaseSelection) {
   enterUnstartedConnections(u, unstartedConnections);
   return;
 }
@@ -7465,8 +7472,9 @@ if (isFreeTrialExpired(loadedTrialRetention)
   && getCheckoutReturnFromUrl().status !== "success") {
   sceneAfterInvite = "trial_expired";
 }
+if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite = 'purchase_start';
 
-            if (isBetaMode() && !loginFamilyInviteToken && u?.__isNewProfile && u?.id) {
+            if (!purchaseSelection && isBetaMode() && !loginFamilyInviteToken && u?.__isNewProfile && u?.id) {
               const betaIntroSeenKey = getBetaIntroSeenKey(u.id);
 
               if (localStorage.getItem(betaIntroSeenKey) !== "1") {
@@ -7475,7 +7483,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
             }
 
             if (
-              targetedSupporterInviteId &&
+              !purchaseSelection && targetedSupporterInviteId &&
               !orderedPendingInvites.some(
                 invite => invite.invite_id === targetedSupporterInviteId
               ) &&
@@ -7486,13 +7494,13 @@ if (isFreeTrialExpired(loadedTrialRetention)
               return;
             }
 
-            if (pendingRelationshipInvites.length > 0 && !loginFamilyInviteToken) {
+            if (!purchaseSelection && pendingRelationshipInvites.length > 0 && !loginFamilyInviteToken) {
               setPostSupporterInviteScene(sceneAfterInvite);
               setScene("story_relationship_invite_received");
               return;
             }
 
-            if (orderedPendingInvites.length > 0 && !loginFamilyInviteToken) {
+            if (!purchaseSelection && orderedPendingInvites.length > 0 && !loginFamilyInviteToken) {
               setPostSupporterInviteScene(sceneAfterInvite);
               setHasAcceptedSupporterInvite(false);
               setScene("supporter_invite_received");
@@ -7511,6 +7519,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
       {scene === "purchase_start" && (
         COMMERCE_V2_ENABLED ? (
           <CommerceV2Purchase client={supabaseClient} projectId={foundation?.project?.id}
+            phase={purchaseSelection ? 'review' : 'checkout'} initialSelection={purchaseSelection}
             initialOrderType={purchaseFor}
             familyInvitation={commerceV2Invitation || (
               receivedFamilyInvitation && ['awaiting_payment', 'continuation_awaiting_payment', 'trial_completed'].includes(receivedFamilyInvitation.status)
