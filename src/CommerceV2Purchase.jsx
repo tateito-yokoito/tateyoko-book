@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { provisionalCommerceSubtotal } from './lib/commercePurchaseIntent.js';
 
 const choiceClass = 'rounded-2xl border border-white/20 bg-white/[0.05] px-4 py-4 text-left text-white';
 
@@ -11,12 +12,15 @@ function newRequestKey() {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export default function CommerceV2Purchase({ client, projectId, initialOrderType = 'self', familyInvitation = null, onTryFree }) {
-  const [edition, setEdition] = useState('standard');
-  const [method, setMethod] = useState('self_or_family');
-  const [standardExtraCount, setStandardExtraCount] = useState(0);
-  const [premiumExtraCount, setPremiumExtraCount] = useState(0);
-  const [discountCode, setDiscountCode] = useState('');
+export default function CommerceV2Purchase({ client, projectId, initialOrderType = 'self', familyInvitation = null, onTryFree,
+  phase = 'checkout', initialSelection = null, onProceed }) {
+  const isSelection = phase === 'selection';
+  const isReview = phase === 'review';
+  const [edition, setEdition] = useState(initialSelection?.edition || 'standard');
+  const [method, setMethod] = useState(initialSelection?.productionMethod || 'self_or_family');
+  const [standardExtraCount, setStandardExtraCount] = useState(initialSelection?.standardExtraCount || 0);
+  const [premiumExtraCount, setPremiumExtraCount] = useState(initialSelection?.premiumExtraCount || 0);
+  const [discountCode, setDiscountCode] = useState(initialSelection?.discountCode || '');
   const [gift, setGift] = useState({ recipient_name: familyInvitation?.recipient_name || '',
     recipient_email: familyInvitation?.recipient_email || '', gift_message: '' });
   const [contact, setContact] = useState({ contactName: '', contactEmail: '', contactPhone: '', consultationText: '' });
@@ -32,6 +36,8 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   const consultationKey = useRef(newRequestKey());
   const linkedConsultationId = new URLSearchParams(window.location.search).get('consultation');
   const orderType = approvedConsultation?.orderType || (initialOrderType === 'gift' ? 'gift' : 'self');
+  const selection = { edition, productionMethod: method, standardExtraCount, premiumExtraCount, discountCode };
+  const provisionalSubtotal = provisionalCommerceSubtotal(selection);
 
   useEffect(() => {
     if (!linkedConsultationId) return;
@@ -55,6 +61,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   }, [client, linkedConsultationId]);
 
   useEffect(() => {
+    if (isSelection) return;
     if (method !== 'self_or_family' && !['agreed', 'checkout_pending'].includes(approvedConsultation?.status)) {
       setQuote(null); return;
     }
@@ -73,7 +80,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
       } else setQuote(data.quote);
     });
     return () => { active = false; };
-  }, [client, orderType, projectId, edition, method, standardExtraCount, premiumExtraCount, discountCode, approvedConsultation?.id]);
+  }, [client, orderType, projectId, edition, method, standardExtraCount, premiumExtraCount, discountCode, approvedConsultation?.id, isSelection]);
 
   const checkout = async () => {
     if (!quote || busy) return;
@@ -175,7 +182,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         <label className="mt-3 flex gap-3"><input type="radio" checked={method === 'interview_staff'} disabled={Boolean(approvedConsultation)} onChange={() => { setMethod('interview_staff'); requestKey.current = newRequestKey(); }} />スタッフに聞き取ってもらう（＋20,000円）</label>
         <p className="mt-3 text-sm leading-6 text-white/70">聞き取り制作サポートは無料相談後、合意してから一括決済します。スマホ操作が苦手な方もご相談いただけます。</p>
       </fieldset>
-      {method === 'interview_staff' && !approvedConsultation ? (
+      {method === 'interview_staff' && !approvedConsultation && !isSelection ? (
         <div className="mt-8 space-y-4">
           {orderType === 'gift' && <label className="block">贈る相手のお名前<input className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-slate-900" value={gift.recipient_name} disabled={Boolean(familyInvitation)}
             onChange={event => setGift(current => ({ ...current, recipient_name: event.target.value }))} /></label>}
@@ -200,8 +207,23 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
             onChange={event => setGift(current => ({ ...current, recipient_name: event.target.value }))} /></label>}
           <label className="block">割引コード<input className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-slate-900" value={discountCode}
             onChange={event => { setDiscountCode(event.target.value); requestKey.current = newRequestKey(); }} /></label>
-          <p className="text-xl">お支払い合計：{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : error ? '確認できませんでした' : '確認中'}</p>
-          <button className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote} onClick={checkout}>決済へ進む</button>
+          {isSelection ? <>
+            <p className="text-xl">商品・オプション合計：{provisionalSubtotal?.toLocaleString('ja-JP')}円（税込・割引前）</p>
+            <p className="text-sm leading-6 text-white/70">割引額：ログイン後に確認します。入力したコードは保持されます。確定金額はお支払い前に表示します。</p>
+            <button type="button" className="w-full rounded-full bg-white py-4 text-slate-900" onClick={() => {
+              try { onProceed?.(selection); }
+              catch { setError('選択内容をこのブラウザに保存できません。通常モードで開き直してください。'); }
+            }}>購入手続きへ進む</button>
+            <p className="text-center text-sm text-white/65">購入手続きには、アカウント登録またはログインが必要です。</p>
+          </> : <>
+            {isReview && <h2 className="text-lg">注文内容の最終確認</h2>}
+            {isReview && initialSelection?.provisionalSubtotal != null && quote
+              && Number(quote.amount_subtotal) !== initialSelection.provisionalSubtotal &&
+              <p role="status" className="rounded-xl border border-amber-200/50 p-4 text-sm leading-6 text-amber-100">商品価格が更新されました。選択時の割引前合計は{initialSelection.provisionalSubtotal.toLocaleString('ja-JP')}円、現在は{Number(quote.amount_subtotal).toLocaleString('ja-JP')}円です。新しい金額を確認してからお進みください。</p>}
+            {quote && <p className="text-sm leading-7 text-white/75">商品・オプション：{Number(quote.amount_subtotal).toLocaleString('ja-JP')}円<br />割引：−{Number(quote.discount_amount || 0).toLocaleString('ja-JP')}円{discountCode.trim() && `（${discountCode.trim()}）`}</p>}
+            <p className="text-xl">お支払い合計：{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : error ? '確認できませんでした' : '確認中'}</p>
+            <button className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote} onClick={checkout}>{isReview ? 'お支払いへ進む' : '決済へ進む'}</button>
+          </>}
         </div>
       )}
       {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}

@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import App, { Scene_BookBuilder, Scene_SupporterInviteReceived, supabaseClient as adminSupabaseClient } from "./App.jsx";
 import { SupporterSmsEntry } from './SupporterSms.jsx';
 import LandingPage from "./LandingPage.jsx";
+import CommerceV2Purchase from './CommerceV2Purchase.jsx';
+import { commercePurchaseReviewRequested, readCommercePurchaseIntent, saveCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
 import GiftThreeQuestionsPage from "./gift-three-questions.jsx";
 import VoiceLibraryPage from "./VoiceLibraryPage.jsx";
 import PublishedWebBook from "./PublishedWebBook.jsx";
@@ -51,6 +53,21 @@ function RootScreen() {
 
   if (GuestTrialFlow && params.has('guest_trial')) {
     return <React.Suspense fallback={<p>体験を準備しています…</p>}><GuestTrialFlow /></React.Suspense>;
+  }
+
+  if (import.meta.env.VITE_COMMERCE_V2_ENABLED === 'true'
+    && params.get('entry') === 'purchase' && !params.has('checkout')
+    && !params.has('consultation') && !params.has('family_invite')
+    && !params.has('gift') && !['gift', 'family_trial_package'].includes(params.get('purchase_for'))
+    && (!commercePurchaseReviewRequested() || !readCommercePurchaseIntent(window.localStorage))) {
+    return <CommerceV2Purchase phase="selection" client={adminSupabaseClient}
+      onProceed={selection => {
+        saveCommercePurchaseIntent(window.localStorage, selection);
+        const url = new URL(window.location.href);
+        url.searchParams.set('app', '1');
+        url.searchParams.set('purchase_review', '1');
+        window.location.assign(url.toString());
+      }} />;
   }
 
   if (window.location.pathname === '/gift-three-questions.html' || /^\/g\/[^/]+\/?$/.test(window.location.pathname)) {

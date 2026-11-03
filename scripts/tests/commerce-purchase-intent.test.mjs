@@ -1,0 +1,36 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  normalizeCommercePurchaseSelection,
+  provisionalCommerceSubtotal,
+  readCommercePurchaseIntent,
+  saveCommercePurchaseIntent,
+} from '../../src/lib/commercePurchaseIntent.js';
+
+const selection = {
+  edition: 'premium', productionMethod: 'self_or_family',
+  standardExtraCount: 1, premiumExtraCount: 1, discountCode: ' PHASE2FAKE1000 ',
+};
+
+test('pre-auth selection keeps options and coupon but never calculates a discount', () => {
+  assert.equal(provisionalCommerceSubtotal(selection), 105000);
+  assert.equal(normalizeCommercePurchaseSelection(selection).discountCode, 'PHASE2FAKE1000');
+  assert.equal(provisionalCommerceSubtotal({ ...selection, productionMethod: 'interview_staff' }), 125000);
+});
+
+test('selection survives auth return and expires without extending its lifetime', () => {
+  const items = new Map();
+  const storage = { getItem: key => items.get(key), setItem: (key, value) => items.set(key, value) };
+  const savedAt = Date.UTC(2026, 10, 3);
+  saveCommercePurchaseIntent(storage, selection, savedAt);
+  assert.deepEqual(readCommercePurchaseIntent(storage, savedAt + 1000), {
+    ...normalizeCommercePurchaseSelection(selection), provisionalSubtotal: 105000,
+  });
+  assert.equal(readCommercePurchaseIntent(storage, savedAt + 24 * 60 * 60 * 1000 + 1), null);
+});
+
+test('invalid or corrupted purchase choices cannot be restored', () => {
+  assert.equal(normalizeCommercePurchaseSelection({ ...selection, standardExtraCount: 31 }), null);
+  const storage = { getItem: () => '{invalid' };
+  assert.equal(readCommercePurchaseIntent(storage), null);
+});
