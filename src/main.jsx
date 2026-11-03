@@ -61,6 +61,7 @@ function RootScreen() {
     && !params.has('gift') && !['gift', 'family_trial_package'].includes(params.get('purchase_for'))
     && (!commercePurchaseReviewRequested() || !readCommercePurchaseIntent(window.localStorage))) {
     return <CommerceV2Purchase phase="selection" client={adminSupabaseClient}
+      initialSelection={readCommercePurchaseIntent(window.localStorage)}
       onProceed={selection => {
         saveCommercePurchaseIntent(window.localStorage, selection);
         const url = new URL(window.location.href);
