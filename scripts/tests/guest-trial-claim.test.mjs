@@ -45,6 +45,15 @@ test('a missing local capability never calls the server', async () => {
   assert.equal(called, false);
 });
 
+test('a rejected bind shows the server reason', async () => {
+  const client = { functions: { invoke: async () => ({
+    data: null,
+    error: { context: { json: async () => ({ error: 'この体験を確認できません' }) } },
+  }) } };
+  await assert.rejects(bindGuestTrialToPurchase(client, projectId, storage),
+    /この体験を確認できません/);
+});
+
 test('only the explicitly mapped first prompt becomes the formal childhood answer', () => {
   const questions = [
     { user_question_id: 'formal-1', question_id: 'TY_Q01', chapter: '幼い頃', theme_code: 'ty_theme_childhood', status: 'answered' },
