@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { provisionalCommerceSubtotal } from './lib/commercePurchaseIntent.js';
+import { provisionalCommerceSubtotal, readCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
 
 const choiceClass = 'rounded-2xl border border-white/20 bg-white/[0.05] px-4 py-4 text-left text-white';
 
@@ -38,6 +38,21 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   const orderType = approvedConsultation?.orderType || (initialOrderType === 'gift' ? 'gift' : 'self');
   const selection = { edition, productionMethod: method, standardExtraCount, premiumExtraCount, discountCode };
   const provisionalSubtotal = provisionalCommerceSubtotal(selection);
+
+  useEffect(() => {
+    if (!isSelection) return;
+    const restoreAfterBack = () => {
+      const saved = readCommercePurchaseIntent(window.localStorage);
+      if (!saved) return;
+      setEdition(saved.edition);
+      setMethod(saved.productionMethod);
+      setStandardExtraCount(saved.standardExtraCount);
+      setPremiumExtraCount(saved.premiumExtraCount);
+      setDiscountCode(saved.discountCode);
+    };
+    window.addEventListener('pageshow', restoreAfterBack);
+    return () => window.removeEventListener('pageshow', restoreAfterBack);
+  }, [isSelection]);
 
   useEffect(() => {
     if (!linkedConsultationId) return;
