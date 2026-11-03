@@ -77,3 +77,7 @@ verify_jwt = false
 # 関数内で公開範囲を最小限に検証する。
 [functions.theme-memory-request-response]
 verify_jwt = false
+
+# Guest trial uses a per-session capability checked by its dedicated handler.
+[functions.guest-trial]
+verify_jwt = false
