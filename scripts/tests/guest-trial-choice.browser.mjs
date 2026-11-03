@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { chromium } from '/Users/sugawarahidetoshi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import { createRequire } from 'node:module';
 
-const browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
+const require = createRequire(import.meta.url);
+const { chromium } = require(process.env.QA_PLAYWRIGHT_PATH || 'playwright');
+const browser = await chromium.launch({ headless: true, executablePath: process.env.QA_CHROME_PATH });
 try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
