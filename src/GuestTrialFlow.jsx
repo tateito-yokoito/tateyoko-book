@@ -414,10 +414,11 @@ export default function GuestTrialFlow() {
         <h1 className="text-[1.7rem] leading-[1.8]">三つの問いを、<br />語り終えました。</h1>
         <p className="mt-9 leading-loose text-white/65">この端末で期限まで語りを確認できます。</p>
         <button type="button" onClick={() => setScreen('stories')} className="mt-7 block w-full text-sm text-white/70 underline">3問の語りを見る</button>
-        {!giftToken && <button type="button" disabled={busy} onClick={openConversion}
+        {!giftToken && purchasePreviewEnabled && <button type="button" disabled={busy} onClick={openConversion}
           className="mt-10 w-full rounded-full px-7 py-5 disabled:opacity-50"
           style={{ background: '#e9e5d9', color: '#15243a' }}>{busy ? '確認しています…' : 'この先を見てみる'}</button>}
         {giftToken && <p className="mt-9 text-sm leading-loose text-white/55">語りは贈り主へ自動で共有されません。</p>}
+        {!purchasePreviewEnabled && <button type="button" onClick={() => setScreen('end')} className="mt-10 text-sm text-white/65 underline">今日はここまで</button>}
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
       {screen === 'stories' && <main className="px-7 py-14">
