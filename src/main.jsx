@@ -22,6 +22,8 @@ import FamilyDeliverySettings from './FamilyDeliverySettings.jsx';
 
 const AdminReview = import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
   ? null : React.lazy(() => import('./admin/AdminReview.jsx'));
+const guestTrialEnabled = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true';
+const GuestTrialFlow = guestTrialEnabled ? React.lazy(() => import('./GuestTrialFlow.jsx')) : null;
 
 function shouldOpenApplication() {
   const params = new URLSearchParams(window.location.search);
@@ -46,6 +48,10 @@ function shouldOpenApplication() {
 
 function RootScreen() {
   const params = new URLSearchParams(window.location.search);
+
+  if (GuestTrialFlow && params.has('guest_trial')) {
+    return <React.Suspense fallback={<p>体験を準備しています…</p>}><GuestTrialFlow /></React.Suspense>;
+  }
 
   if (window.location.pathname === '/gift-three-questions.html' || /^\/g\/[^/]+\/?$/.test(window.location.pathname)) {
     return <GiftThreeQuestionsPage />;
