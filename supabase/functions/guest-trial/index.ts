@@ -240,7 +240,7 @@ serve(async request => {
     const sessionToken = form.get('sessionToken');
     if (!isToken(sessionToken)) return respond({ error: '体験を確認できません' }, 401);
     const { data: session, error: sessionError } = await admin.from('guest_trial_sessions')
-      .select('id,status,expires_at,origin_kind').eq('token_hash', await hash(sessionToken)).maybeSingle();
+      .select('id,status,expires_at,origin_kind,purchase_bound_project_id').eq('token_hash', await hash(sessionToken)).maybeSingle();
     if (sessionError) throw sessionError;
     if (!session || Date.parse(session.expires_at) <= Date.now() || session.status === 'claimed' || session.status === 'expired')
       return respond({ error: '体験の有効期限が切れています' }, 401);
@@ -252,6 +252,36 @@ serve(async request => {
         .eq('session_id', session.id).order('question_id');
       if (error) throw error;
       return respond({ status: session.status, expiresAt: session.expires_at, answers: answers || [] });
+    }
+
+    if (action === 'discard') {
+      if (session.origin_kind !== 'self' || !['active', 'completed'].includes(session.status))
+        return respond({ error: 'この体験は削除できません' }, 409);
+      const { data: purchase, error: purchaseError } = await admin.from('guest_trial_purchase_intents')
+        .select('id,status').eq('session_id', session.id).maybeSingle();
+      if (purchaseError) throw purchaseError;
+      if (purchase && ['checkout_pending', 'paid_unclaimed', 'claimed'].includes(purchase.status))
+        return respond({ error: '決済中の体験は削除できません' }, 409);
+      if (session.purchase_bound_project_id) {
+        const { data: orders, error: orderError } = await admin.from('commerce_orders')
+          .select('id').eq('book_project_id', session.purchase_bound_project_id)
+          .in('status', ['checkout_pending','paid','zero_paid']).limit(1);
+        if (orderError) throw orderError;
+        if (orders?.length) return respond({ error: '決済中・購入済みの体験は削除できません' }, 409);
+      }
+      const { data: audio, error: audioError } = await admin.from('guest_trial_answers')
+        .select('audio_path').eq('session_id', session.id).not('audio_path', 'is', null);
+      if (audioError) throw audioError;
+      const paths = (audio || []).map(row => row.audio_path).filter(Boolean);
+      if (paths.length) {
+        const { error: removeError } = await admin.storage.from('guest-trial-audio').remove(paths);
+        if (removeError) throw removeError;
+      }
+      const { data: deleted, error: deleteError } = await admin.from('guest_trial_sessions')
+        .delete().eq('id', session.id).in('status', ['active', 'completed'])
+        .select('id').maybeSingle();
+      if (deleteError || !deleted) throw deleteError || new Error('Trial deletion conflict');
+      return respond({ status: 'discarded' });
     }
 
     if (action === 'event') {

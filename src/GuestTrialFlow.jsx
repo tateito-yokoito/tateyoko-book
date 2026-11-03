@@ -7,8 +7,9 @@ import { hasLineIdentity, linkLineToCurrentAccount, startLineSignIn } from './li
 import {
   guestTrialRequest, guestTrialStorageKey,
   ensureGuestTrialStorage, readGuestTrialSession, storeGuestTrialSession,
+  guestTrialResumeUrl, takeGuestTrialResumeToken,
 } from './lib/guestTrialApi.js';
-import { guestTrialPurchaseUrl } from './lib/guestTrialClaim.js';
+import { clearGuestTrialPending, guestTrialPurchaseUrl } from './lib/guestTrialClaim.js';
 
 // The public entry remains on the established flow until the full purchase,
 // recovery, and handoff gate passes. The API always follows this app's
@@ -44,6 +45,16 @@ export default function GuestTrialFlow() {
   const [quote, setQuote] = useState(null);
   const [familyName, setFamilyName] = useState('');
   const [givenName, setGivenName] = useState('');
+  const [resumeUrl, setResumeUrl] = useState('');
+  const [shareStatus, setShareStatus] = useState('');
+
+  useEffect(() => {
+    const openResume = () => {
+      if (new URLSearchParams(window.location.hash.slice(1)).has('resume')) window.location.reload();
+    };
+    window.addEventListener('hashchange', openResume);
+    return () => window.removeEventListener('hashchange', openResume);
+  }, []);
 
   async function showPaidHandoff() {
     const { data: auth } = await supabaseClient.auth.getSession();
@@ -96,7 +107,15 @@ export default function GuestTrialFlow() {
       if (!live) return;
       setKey(nextKey);
       let saved = null;
-      try { saved = readGuestTrialSession(localStorage, nextKey); }
+      try {
+        const resumeToken = takeGuestTrialResumeToken();
+        if (resumeToken) {
+          const state = await guestTrialRequest(TRIAL_API, 'status', { sessionToken: resumeToken });
+          saved = storeGuestTrialSession(localStorage, nextKey, {
+            sessionToken: resumeToken, expiresAt: state.expiresAt,
+          });
+        } else saved = readGuestTrialSession(localStorage, nextKey);
+      }
       catch { setScreen('intro'); return; }
       if (!saved) { setScreen('intro'); return; }
       setSession(saved);
@@ -268,6 +287,39 @@ export default function GuestTrialFlow() {
     finally { setBusy(false); }
   }
 
+  function openExit() {
+    setError('');
+    setShareStatus('');
+    setScreen('end_choice');
+  }
+
+  function saveAndExit() {
+    setResumeUrl(guestTrialResumeUrl(window.location, session));
+    setScreen('end_saved');
+  }
+
+  async function shareResumeUrl() {
+    try {
+      if (navigator.share) await navigator.share({ title: '無料3問の再開', url: resumeUrl });
+      else { await navigator.clipboard.writeText(resumeUrl); setShareStatus('再開URLをコピーしました'); }
+    } catch (cause) {
+      if (cause?.name !== 'AbortError') setShareStatus('共有できませんでした。下のURLをコピーしてください。');
+    }
+  }
+
+  async function discardAndExit() {
+    setBusy(true); setError('');
+    try {
+      const result = await guestTrialRequest(TRIAL_API, 'discard', { sessionToken: session.token });
+      if (result.status !== 'discarded') throw new Error('削除を確認できませんでした');
+      localStorage.removeItem(key);
+      clearGuestTrialPending(localStorage);
+      setSession(null); setAnswers([]); setResumeUrl('');
+      setScreen('end_discarded');
+    } catch (cause) { setError(cause.message || '削除できませんでした。もう一度お試しください。'); }
+    finally { setBusy(false); }
+  }
+
   async function checkPayment() {
     setBusy(true); setError('');
     try {
@@ -362,7 +414,7 @@ export default function GuestTrialFlow() {
         onBack={() => setScreen('intro')}
         onNext={() => setScreen('record')}
         onWrite={() => { setTranscript(''); setScreen('write'); }}
-        onEndToday={() => setScreen('end')}
+        onEndToday={openExit}
       />}
       {screen === 'write' && <main className="px-7 py-14">
         <button type="button" onClick={() => setScreen('choice')} className="text-white/65">← 戻る</button>
@@ -412,28 +464,52 @@ export default function GuestTrialFlow() {
         <button type="button" disabled={busy || (editing && !transcript.trim())} onClick={next} className="btn-quiet mt-9 w-full rounded-full bg-[#e9e5d9] px-7 py-4 text-[#15243a] disabled:opacity-50">{busy ? '保存しています…' : index === 2 ? '三つの問いを終える' : '次の問いへ'}</button>
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
-      {screen === 'finished' && <main className="px-7 py-24 text-center">
+      {screen === 'finished' && <main className="px-7 py-14 text-center">
         <h1 className="text-[1.7rem] leading-[1.8]">3問の体験が完了しました</h1>
-        <p className="mt-9 leading-loose text-white/65">この端末で期限まで語りを確認できます。</p>
-        <button type="button" onClick={() => setScreen('stories')} className="mt-7 block w-full text-sm text-white/70 underline">自分の語りを確認する</button>
-        {!giftToken && purchasePreviewEnabled && <button type="button" disabled={busy} onClick={openConversion}
-          className="mt-10 w-full rounded-full px-7 py-5 disabled:opacity-50"
-          style={{ background: '#e9e5d9', color: '#15243a' }}>{busy ? '確認しています…' : 'この先を見てみる'}</button>}
-        {giftToken && <p className="mt-9 text-sm leading-loose text-white/55">語りは贈り主へ自動で共有されません。</p>}
-        {!purchasePreviewEnabled && <button type="button" onClick={() => setScreen('end')} className="mt-10 text-sm text-white/65 underline">今日はここまで</button>}
-        {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
-      </main>}
-      {screen === 'stories' && <main className="px-7 py-14">
-        <button type="button" onClick={() => setScreen('finished')} className="text-white/70">← 戻る</button>
-        <h1 className="mt-8 text-center text-2xl">三つの語り</h1>
-        <div className="mt-10 space-y-6">{stories.map((story, storyIndex) => <StoryCard key={story.id} story={story} index={storyIndex}
+        <div className="mt-10 space-y-6 text-left">{stories.map((story, storyIndex) => <StoryCard key={story.id} story={story} index={storyIndex}
           resolveMedia={async asset => {
             const response = await guestTrialRequest(TRIAL_API, 'audio', { sessionToken: session.token, questionId: asset.id });
             return response.url;
           }} />)}</div>
-        {!giftToken && <a href={guestTrialPurchaseUrl()} className="mt-10 block w-full rounded-full px-7 py-5 text-center"
-          style={{ background: '#e9e5d9', color: '#15243a' }}>続きを残す</a>}
+        {!giftToken && <button type="button" onClick={() => setScreen('service')}
+          className="mt-10 w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-[#15243a]">縦糸横糸について詳しく見る</button>}
+        {!giftToken && <button type="button" onClick={openExit}
+          className="mt-5 w-full rounded-full border border-white/35 px-7 py-5">ここで終了する</button>}
+        {giftToken && <p className="mt-9 text-sm leading-loose text-white/55">語りは贈り主へ自動で共有されません。</p>}
+        {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
+      {screen === 'service' && <main className="px-7 py-14">
+        <button type="button" onClick={() => setScreen('finished')} className="text-white/70">← 語りに戻る</button>
+        <h1 className="mt-8 text-2xl leading-relaxed">縦糸横糸ブックについて</h1>
+        <p className="mt-6 leading-loose text-white/75">問いに答えながら人生をたどり、声と文章、写真を一冊のブックとWebブックに残せます。</p>
+        <img src="/site/hp-renewal/book-and-webbook-approved.png" alt="縦糸横糸ブックとWebブック" className="mt-8 w-full rounded-2xl" />
+        <p className="mt-8 leading-loose text-white/75">商品と金額は購入画面で確認できます。無料3問の語りは購入手続き中も保持され、新規購入が確定した物語に引き継ぎます。</p>
+        <a href={guestTrialPurchaseUrl()} className="mt-10 block w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-center text-[#15243a]">商品を選んで購入へ進む</a>
+        <button type="button" onClick={openExit} className="mt-5 w-full rounded-full border border-white/35 px-7 py-5">ここで終了する</button>
+      </main>}
+      {screen === 'end_choice' && <main className="px-7 py-20 text-center">
+        <h1 className="text-2xl">ここで終了する</h1>
+        <p className="mt-6 leading-loose text-white/65">無料3問の開始から10日間、再開できます。</p>
+        <button type="button" onClick={saveAndExit} className="mt-10 w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-[#15243a]">10日間保存する</button>
+        <button type="button" onClick={() => setScreen('end_discard_confirm')} className="mt-5 w-full rounded-full border border-white/35 px-7 py-5">保存せずに終了する</button>
+        <button type="button" onClick={() => setScreen('finished')} className="mt-8 text-sm text-white/65 underline">語りに戻る</button>
+      </main>}
+      {screen === 'end_saved' && <main className="px-7 py-20 text-center">
+        <h1 className="text-2xl">再開URLを保存してください</h1>
+        <p className="mt-6 leading-loose text-white/65">有効期限は無料3問の開始から10日間です。URLを知っている人は語りを見られるため、他の人へ送らないでください。</p>
+        <button type="button" onClick={shareResumeUrl} className="mt-9 w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-[#15243a]">共有・コピーする</button>
+        <input readOnly aria-label="再開URL" value={resumeUrl} onFocus={event => event.target.select()} className="mt-5 w-full rounded-xl border border-white/20 bg-white/5 p-3 text-xs" />
+        {shareStatus && <p role="status" className="mt-4 text-sm">{shareStatus}</p>}
+        <button type="button" onClick={() => setScreen('finished')} className="mt-8 text-sm underline">語りに戻る</button>
+      </main>}
+      {screen === 'end_discard_confirm' && <main className="px-7 py-20 text-center">
+        <h1 className="text-2xl">語りを削除しますか？</h1>
+        <p className="mt-6 leading-loose text-white/65">回答本文・音声・再開URLを削除します。元には戻せません。</p>
+        <button type="button" disabled={busy} onClick={discardAndExit} className="mt-10 w-full rounded-full border border-rose-300/60 px-7 py-5 disabled:opacity-50">{busy ? '削除しています…' : '削除して終了する'}</button>
+        <button type="button" disabled={busy} onClick={() => setScreen('end_choice')} className="mt-5 w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-[#15243a]">戻る</button>
+        {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
+      </main>}
+      {screen === 'end_discarded' && <main className="px-7 py-28 text-center"><h1 className="text-2xl">語りを削除しました</h1><a href="/" className="mt-10 block underline">ホームへ</a></main>}
       {screen === 'conversion' && <>{(developmentPreview || !purchasePreviewEnabled) &&
         <p className="px-7 pt-5 text-center text-xs text-amber-100/75">
           {developmentPreview ? 'テスト用決済の確認画面です' : '接続確認用プレビュー・この画面から決済されません'}
@@ -465,7 +541,7 @@ export default function GuestTrialFlow() {
               throw new Error('安全な決済画面を確認できませんでした');
             window.location.assign(result.url);
           }}
-          onFinish={() => setScreen('end')} /></>}
+          onFinish={openExit} /></>}
       {screen === 'payment_pending' && <main className="px-7 py-24 text-center">
         <h1 className="text-2xl">お支払いを確認しています</h1>
         <p className="mt-7 leading-loose text-white/65">確認後、この端末から本編へ進めます。<br />まだLINEでの本人確認は必要ありません。</p>

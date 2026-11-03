@@ -40,6 +40,7 @@ serve(async request => {
     const input = await request.json().catch(() => ({}));
     const sessionToken = String(input.sessionToken || '');
     const projectId = String(input.projectId || '');
+    const action = input.action === 'bind' ? 'bind' : 'claim';
     if (!tokenPattern.test(sessionToken) || !uuidPattern.test(projectId))
       return respond({ error: '体験または作品を確認できません' }, 400);
     const bearer = (request.headers.get('authorization') || '').match(/^Bearer (\S+)$/i)?.[1];
@@ -50,7 +51,7 @@ serve(async request => {
     const userId = identity.user.id;
     const tokenHash = await sha256(sessionToken);
     const { data: trial, error: trialError } = await admin.from('guest_trial_sessions')
-      .select('id,status,expires_at,origin_kind,claimed_user_id,claimed_project_id')
+      .select('id,status,expires_at,origin_kind,claimed_user_id,claimed_project_id,purchase_bound_user_id,purchase_bound_project_id,purchase_bound_at')
       .eq('token_hash', tokenHash).maybeSingle();
     if (trialError) throw trialError;
     if (!trial || trial.origin_kind !== 'self')
@@ -63,12 +64,41 @@ serve(async request => {
     if (trial.status !== 'completed' || Date.parse(trial.expires_at) <= Date.now())
       return respond({ error: '3問を完了した有効な体験が必要です' }, 409);
     const { data: project, error: projectError } = await admin.from('book_projects')
-      .select('id,owner_user_id,status,project_type,subject_person_id')
+      .select('id,owner_user_id,status,project_type,subject_person_id,access_status')
       .eq('id', projectId).maybeSingle();
     if (projectError) throw projectError;
     if (!project || project.owner_user_id !== userId || project.status !== 'active'
       || project.project_type !== 'koebook' || !project.subject_person_id)
       return respond({ error: '本人の物語を確認できません' }, 403);
+    if (action === 'bind') {
+      if (trial.purchase_bound_user_id || trial.purchase_bound_project_id) {
+        if (trial.purchase_bound_user_id !== userId || trial.purchase_bound_project_id !== projectId)
+          return respond({ error: 'この体験は別の購入に接続されています' }, 403);
+        return respond({ status: 'bound', projectId });
+      }
+      if (['paid','gifted','legacy'].includes(project.access_status))
+        return respond({ error: '購入済みの物語には無料3問を後付けできません' }, 409);
+      const { data: oldOrders, error: ordersError } = await admin.from('commerce_orders')
+        .select('id').eq('book_project_id', projectId).in('status', ['paid','zero_paid']).limit(1);
+      if (ordersError) throw ordersError;
+      if (oldOrders?.length) return respond({ error: '購入済みの物語には無料3問を後付けできません' }, 409);
+      const { data: bound, error: bindError } = await admin.from('guest_trial_sessions')
+        .update({ purchase_bound_user_id: userId, purchase_bound_project_id: projectId,
+          purchase_bound_at: new Date().toISOString() })
+        .eq('id', trial.id).eq('status', 'completed').is('purchase_bound_user_id', null)
+        .select('id').maybeSingle();
+      if (bindError) throw bindError;
+      if (!bound) return respond({ error: '接続状態を確認できません。もう一度お試しください' }, 409);
+      return respond({ status: 'bound', projectId });
+    }
+    if (trial.purchase_bound_user_id !== userId || trial.purchase_bound_project_id !== projectId
+      || !trial.purchase_bound_at) return respond({ error: 'この購入への接続を確認できません' }, 403);
+    const { data: paidOrders, error: paidError } = await admin.from('commerce_orders')
+      .select('id').eq('purchaser_user_id', userId).eq('book_project_id', projectId)
+      .eq('order_type', 'self').in('status', ['paid','zero_paid'])
+      .gte('purchased_at', trial.purchase_bound_at).limit(1);
+    if (paidError) throw paidError;
+    if (!paidOrders?.length) return respond({ error: '新しい購入の確定を確認できません' }, 409);
     const { data: answers, error: answerError } = await admin.from('guest_trial_answers')
       .select('question_id,audio_path,audio_mime,transcription_state')
       .eq('session_id', trial.id).order('question_id');

@@ -36,7 +36,7 @@ import TrialCompletionConnected from "./TrialCompletionConnected.jsx";
 import TrialGiftPurchaseReview from "./TrialGiftPurchaseReview.jsx";
 import ChildhoodTrialIntro from './ChildhoodTrialIntro.jsx';
 import { CHILDHOOD_TRIAL_QUESTIONS, isChildhoodTrial } from './lib/childhoodTrial.js';
-import { claimGuestTrialForProject, clearGuestTrialClaimRequest, guestTrialClaimRequested } from './lib/guestTrialClaim.js';
+import { bindGuestTrialToPurchase, claimGuestTrialForProject, clearGuestTrialClaimRequest, guestTrialClaimRequested, pendingGuestTrialProject } from './lib/guestTrialClaim.js';
 import {loadPublishedQuestionCopy,withPublishedQuestionCopy} from './lib/questionCopy.js';
 import { isFreeTrialExpired, freeTrialRetentionDays, freeTrialExpiryLabel } from './lib/freeTrialRetention.js';
 import { ownProjectHasStarted, ownStoryEntryUrl } from './lib/ownStoryEntry.js';
@@ -263,6 +263,22 @@ function getCheckoutReturnFromUrl() {
 
 function hasFullProjectAccess(project) {
   return ["paid", "gifted", "legacy"].includes(project?.access_status);
+}
+
+async function connectGuestTrialPurchase(project) {
+  const pendingProjectId = pendingGuestTrialProject();
+  if (pendingProjectId && pendingProjectId !== project.id)
+    throw new Error('無料3問を接続した物語と現在の物語が異なります。元のアカウントをご確認ください。');
+  if (pendingProjectId && hasFullProjectAccess(project)) {
+    await claimGuestTrialForProject(supabaseClient, project.id);
+    clearGuestTrialClaimRequest();
+    return true;
+  }
+  if (guestTrialClaimRequested()) {
+    await bindGuestTrialToPurchase(supabaseClient, project.id);
+    clearGuestTrialClaimRequest();
+  }
+  return false;
 }
 
 function isFamilyGiftTrialMode(project) {
@@ -3357,6 +3373,7 @@ function App() {
   const [familyPaymentInvitation, setFamilyPaymentInvitation] = useState(null);
   const [receivedFamilyInvitation, setReceivedFamilyInvitation] = useState(null);
   const checkoutSyncAttemptedRef = useRef(false);
+  const guestPurchaseClaimAttemptedRef = useRef(false);
   const checkoutUrlRef = useRef("");
 
   useEffect(() => {
@@ -3524,7 +3541,7 @@ if (!session) {
         };
 
 const unstartedConnections = await loadUnstartedConnections(session.user.id);
-if (unstartedConnections && !guestTrialClaimRequested()) {
+if (unstartedConnections && !guestTrialClaimRequested() && !pendingGuestTrialProject()) {
   enterUnstartedConnections(currentUser, unstartedConnections);
   return;
 }
@@ -3538,11 +3555,10 @@ let questionSet = await loadUserQuestionSet(
   session.user.id,
   foundationData
 );
-if (guestTrialClaimRequested()) {
+if (guestTrialClaimRequested() || pendingGuestTrialProject()) {
   try {
-    await claimGuestTrialForProject(supabaseClient, foundationData.project.id);
-    questionSet = await loadUserQuestionSet(session.user.id, foundationData);
-    clearGuestTrialClaimRequest();
+    const claimed = await connectGuestTrialPurchase(foundationData.project);
+    if (claimed) questionSet = await loadUserQuestionSet(session.user.id, foundationData);
   } catch (claimError) {
     setUser(currentUser);
     setFoundation(foundationData);
@@ -6283,6 +6299,23 @@ useEffect(() => {
 ]);
 
 useEffect(() => {
+  if (!user?.id || !foundation?.project?.id || !hasFullProjectAccess(foundation.project)
+    || pendingGuestTrialProject() !== foundation.project.id
+    || guestPurchaseClaimAttemptedRef.current) return;
+  guestPurchaseClaimAttemptedRef.current = true;
+  void (async () => {
+    try {
+      await claimGuestTrialForProject(supabaseClient, foundation.project.id);
+      setQuestionsDB(await loadUserQuestionSet(user.id, foundation));
+      clearGuestTrialClaimRequest();
+    } catch (cause) {
+      setGuestClaimError(cause?.message || '無料3問を引き継げませんでした。');
+      setScene('guest_claim_error');
+    }
+  })();
+}, [user?.id, foundation?.project?.id, foundation?.project?.access_status]);
+
+useEffect(() => {
   const checkoutReturn = getCheckoutReturnFromUrl();
 
   if (
@@ -7337,7 +7370,7 @@ setScene(1);
               setUser(u);
 
 const unstartedConnections = await loadUnstartedConnections(u.id);
-if (unstartedConnections && !guestTrialClaimRequested()) {
+if (unstartedConnections && !guestTrialClaimRequested() && !pendingGuestTrialProject()) {
   enterUnstartedConnections(u, unstartedConnections);
   return;
 }
@@ -7348,11 +7381,10 @@ let questionSet = await loadUserQuestionSet(
   u.id,
   foundationData
 );
-if (guestTrialClaimRequested()) {
+if (guestTrialClaimRequested() || pendingGuestTrialProject()) {
   try {
-    await claimGuestTrialForProject(supabaseClient, foundationData.project.id);
-    questionSet = await loadUserQuestionSet(u.id, foundationData);
-    clearGuestTrialClaimRequest();
+    const claimed = await connectGuestTrialPurchase(foundationData.project);
+    if (claimed) questionSet = await loadUserQuestionSet(u.id, foundationData);
   } catch (claimError) {
     setFoundation(foundationData);
     setGuestClaimError(claimError?.message || '無料3問を引き継げませんでした。');

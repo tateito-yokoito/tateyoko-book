@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  claimGuestTrialForProject, guestTrialClaimRequested, guestTrialPurchaseUrl,
+  bindGuestTrialToPurchase, claimGuestTrialForProject, guestTrialClaimRequested, guestTrialPurchaseUrl, pendingGuestTrialProject,
 } from '../../src/lib/guestTrialClaim.js';
 import { buildStorySections } from '../../src/lib/storyPages.js';
 
 const projectId = '11111111-1111-4111-8111-111111111111';
 const token = 'a'.repeat(64);
 const saved = JSON.stringify({ token, expiresAt: new Date(Date.now() + 86400000).toISOString() });
-const storage = { getItem: key => key === 'tateyoko:guest-trial:self:v1' ? saved : null };
+const values = new Map([['tateyoko:guest-trial:self:v1', saved]]);
+const storage = { getItem: key => values.get(key) || null,
+  setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
 
 test('purchase return keeps the guest capability out of the URL', () => {
   const url = guestTrialPurchaseUrl({ origin: 'https://example.test' });
@@ -17,16 +19,22 @@ test('purchase return keeps the guest capability out of the URL', () => {
   assert.equal(url.includes(token), false);
 });
 
-test('the authenticated claim sends the same-device capability once to the claim endpoint', async () => {
+test('the guest is bound before checkout and claimed only after purchase', async () => {
   const calls = [];
   const client = { functions: { invoke: async (name, input) => {
     calls.push({ name, input });
-    return { data: { status: 'claimed', projectId, count: 3 }, error: null };
+    return { data: input.body.action === 'bind'
+      ? { status: 'bound', projectId } : { status: 'claimed', projectId, count: 3 }, error: null };
   } } };
+  await bindGuestTrialToPurchase(client, projectId, storage);
+  assert.equal(pendingGuestTrialProject(storage), projectId);
   const result = await claimGuestTrialForProject(client, projectId, storage);
   assert.equal(result.count, 3);
-  assert.deepEqual(calls, [{ name: 'claim-guest-trial',
-    input: { body: { sessionToken: token, projectId } } }]);
+  assert.deepEqual(calls, [
+    { name: 'claim-guest-trial', input: { body: { action: 'bind', sessionToken: token, projectId } } },
+    { name: 'claim-guest-trial', input: { body: { sessionToken: token, projectId } } },
+  ]);
+  assert.equal(pendingGuestTrialProject(storage), null);
 });
 
 test('a missing local capability never calls the server', async () => {

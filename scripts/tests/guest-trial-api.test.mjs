@@ -3,6 +3,7 @@ import { webcrypto } from 'node:crypto';
 import {
   guestTrialEndpoint, guestTrialStorageKey,
   ensureGuestTrialStorage, readGuestTrialSession, storeGuestTrialSession, guestTrialRequest,
+  guestTrialResumeUrl, takeGuestTrialResumeToken,
 } from '../../src/lib/guestTrialApi.js';
 
 globalThis.crypto ||= webcrypto;
@@ -30,6 +31,15 @@ const session = storeGuestTrialSession(storage, selfKey, {
 });
 assert.equal(readGuestTrialSession(storage, selfKey)?.token, token);
 assert.equal(session.sessionId, 'test-session');
+const resumeUrl = guestTrialResumeUrl({ origin: 'https://example.test' }, session);
+assert.equal(new URL(resumeUrl).searchParams.get('resume'), null);
+assert.equal(new URL(resumeUrl).hash, `#resume=${token}`);
+const oldWindow = globalThis.window;
+let cleanedUrl = '';
+globalThis.window = { history: { replaceState: (_state, _title, url) => { cleanedUrl = String(url); } } };
+try { assert.equal(takeGuestTrialResumeToken({ href: resumeUrl }), token); }
+finally { globalThis.window = oldWindow; }
+assert.equal(new URL(cleanedUrl).hash, '');
 assert.throws(() => storeGuestTrialSession(storage, selfKey, {
   sessionToken: token, expiresAt: new Date(Date.now() + 11 * 86400000).toISOString(),
 }), /期限/);

@@ -51,6 +51,23 @@ export function storeGuestTrialSession(storage, key, session) {
   return value;
 }
 
+export function guestTrialResumeUrl(location, session) {
+  if (!/^[a-f0-9]{64}$/.test(session?.token || '')) throw new Error('再開URLを作成できません');
+  const url = new URL('/', location.origin);
+  url.searchParams.set('guest_trial', '1');
+  url.hash = `resume=${session.token}`;
+  return url.toString();
+}
+
+export function takeGuestTrialResumeToken(location = window.location) {
+  const url = new URL(location.href);
+  const token = new URLSearchParams(url.hash.slice(1)).get('resume');
+  if (!token) return null;
+  url.hash = '';
+  window.history.replaceState(null, '', url);
+  return /^[a-f0-9]{64}$/.test(token) ? token : null;
+}
+
 export async function guestTrialRequest(supabaseUrl, action, { sessionToken, giftToken, questionId, audio, text, discountCode, eventName } = {}) {
   const endpoint = guestTrialEndpoint(supabaseUrl);
   const url = `${endpoint}?action=${encodeURIComponent(action)}`;
