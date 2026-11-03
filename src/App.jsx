@@ -35,7 +35,8 @@ import ExperienceContractSettings from "./ExperienceContractSettings.jsx";
 import TrialCompletionConnected from "./TrialCompletionConnected.jsx";
 import TrialGiftPurchaseReview from "./TrialGiftPurchaseReview.jsx";
 import ChildhoodTrialIntro from './ChildhoodTrialIntro.jsx';
-import { isChildhoodTrial } from './lib/childhoodTrial.js';
+import { CHILDHOOD_TRIAL_QUESTIONS, isChildhoodTrial } from './lib/childhoodTrial.js';
+import { bindGuestTrialToPurchase, claimGuestTrialForProject, clearGuestTrialClaimRequest, guestTrialClaimRequested, pendingGuestTrialProject } from './lib/guestTrialClaim.js';
 import {loadPublishedQuestionCopy,withPublishedQuestionCopy} from './lib/questionCopy.js';
 import { isFreeTrialExpired, freeTrialRetentionDays, freeTrialExpiryLabel } from './lib/freeTrialRetention.js';
 import { ownProjectHasStarted, ownStoryEntryUrl } from './lib/ownStoryEntry.js';
@@ -48,6 +49,7 @@ import { themeExtraOptions } from "./lib/themeExtras.js";
 import ThemeMorePicker from "./ThemeMorePicker.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
 import CommerceV2Purchase from "./CommerceV2Purchase.jsx";
+import { commercePurchaseReviewRequested, readCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
 import { ThemeMemoryRequestComposer, ThemeMemoryRequestManager } from "./ThemeMemoryRequestFlow.jsx";
 import StoryRequestComposer, { PaperHeartIcon } from "./StoryRequestComposer.jsx";
 import StoryRequestManager from "./StoryRequestManager.jsx";
@@ -264,6 +266,22 @@ function hasFullProjectAccess(project) {
   return ["paid", "gifted", "legacy"].includes(project?.access_status);
 }
 
+async function connectGuestTrialPurchase(project) {
+  const pendingProjectId = pendingGuestTrialProject();
+  if (pendingProjectId && pendingProjectId !== project.id)
+    throw new Error('無料3問を接続した物語と現在の物語が異なります。元のアカウントをご確認ください。');
+  if (pendingProjectId && hasFullProjectAccess(project)) {
+    await claimGuestTrialForProject(supabaseClient, project.id);
+    clearGuestTrialClaimRequest();
+    return true;
+  }
+  if (guestTrialClaimRequested()) {
+    await bindGuestTrialToPurchase(supabaseClient, project.id);
+    clearGuestTrialClaimRequest();
+  }
+  return false;
+}
+
 function isFamilyGiftTrialMode(project) {
   return project?.onboarding_preferences?.family_start_mode === "trial";
 }
@@ -462,6 +480,8 @@ function getAuthReturnUrlFromCurrentLocation() {
 
   const entryMode = params.get("entry");
   if (entryMode) url.searchParams.set("entry", entryMode);
+  if (guestTrialClaimRequested(params.toString())) url.searchParams.set('guest_trial_claim', '1');
+  if (commercePurchaseReviewRequested(params.toString())) url.searchParams.set('purchase_review', '1');
 
   // Preserve a question deep link across the LINE OAuth round-trip.
   const deliveryToken = params.get("token");
@@ -3163,6 +3183,10 @@ if (perspectivePoints) {
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [scene, setScene] = useState(-1);
+  const [guestClaimError, setGuestClaimError] = useState('');
+  const purchaseSelection = commercePurchaseReviewRequested()
+    && !new URLSearchParams(window.location.search).has('checkout')
+    ? readCommercePurchaseIntent(window.localStorage) : null;
   const [writingQuestion, setWritingQuestion] = useState(null);
   const [user, setUser] = useState(null);
   const [questionsDB, setQuestionsDB] = useState([]);
@@ -3354,6 +3378,7 @@ function App() {
   const [familyPaymentInvitation, setFamilyPaymentInvitation] = useState(null);
   const [receivedFamilyInvitation, setReceivedFamilyInvitation] = useState(null);
   const checkoutSyncAttemptedRef = useRef(false);
+  const guestPurchaseClaimAttemptedRef = useRef(false);
   const checkoutUrlRef = useRef("");
 
   useEffect(() => {
@@ -3521,7 +3546,7 @@ if (!session) {
         };
 
 const unstartedConnections = await loadUnstartedConnections(session.user.id);
-if (unstartedConnections) {
+if (unstartedConnections && !purchaseSelection && !guestTrialClaimRequested() && !pendingGuestTrialProject()) {
   enterUnstartedConnections(currentUser, unstartedConnections);
   return;
 }
@@ -3531,10 +3556,22 @@ const foundationData = await ensureUserFoundation(
   currentUser
 );
 
-const questionSet = await loadUserQuestionSet(
+let questionSet = await loadUserQuestionSet(
   session.user.id,
   foundationData
 );
+if (guestTrialClaimRequested() || pendingGuestTrialProject()) {
+  try {
+    const claimed = await connectGuestTrialPurchase(foundationData.project);
+    if (claimed) questionSet = await loadUserQuestionSet(session.user.id, foundationData);
+  } catch (claimError) {
+    setUser(currentUser);
+    setFoundation(foundationData);
+    setGuestClaimError(claimError?.message || '無料3問を引き継げませんでした。');
+    setScene('guest_claim_error');
+    return;
+  }
+}
 
 /*
  * loadUserQuestionSet内でuser_questions作成と
@@ -3755,9 +3792,10 @@ if (isFreeTrialExpired(loadedTrialRetention)
   && getCheckoutReturnFromUrl().status !== "success") {
   sceneAfterInvite = "trial_expired";
 }
+if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite = 'purchase_start';
 
 if (
-  isBetaMode() &&
+  !purchaseSelection && isBetaMode() &&
   !initialFamilyInviteToken &&
   currentUser?.__isNewProfile &&
   session.user?.id &&
@@ -3772,7 +3810,7 @@ if (
 }
 
 if (
-  targetedSupporterInviteId &&
+  !purchaseSelection && targetedSupporterInviteId &&
   !orderedPendingInvites.some(
     invite => invite.invite_id === targetedSupporterInviteId
   ) &&
@@ -3784,13 +3822,13 @@ if (
   return;
 }
 
-if (pendingRelationshipInvites.length > 0 && !deliveryToken && !initialFamilyInviteToken) {
+if (!purchaseSelection && pendingRelationshipInvites.length > 0 && !deliveryToken && !initialFamilyInviteToken) {
   setPostSupporterInviteScene(sceneAfterInvite);
   setScene("story_relationship_invite_received");
   return;
 }
 
-if (orderedPendingInvites.length > 0 && !deliveryToken && !initialFamilyInviteToken) {
+if (!purchaseSelection && orderedPendingInvites.length > 0 && !deliveryToken && !initialFamilyInviteToken) {
   setPostSupporterInviteScene(sceneAfterInvite);
   setHasAcceptedSupporterInvite(false);
   setScene("supporter_invite_received");
@@ -6267,6 +6305,23 @@ useEffect(() => {
 ]);
 
 useEffect(() => {
+  if (!user?.id || !foundation?.project?.id || !hasFullProjectAccess(foundation.project)
+    || pendingGuestTrialProject() !== foundation.project.id
+    || guestPurchaseClaimAttemptedRef.current) return;
+  guestPurchaseClaimAttemptedRef.current = true;
+  void (async () => {
+    try {
+      await claimGuestTrialForProject(supabaseClient, foundation.project.id);
+      setQuestionsDB(await loadUserQuestionSet(user.id, foundation));
+      clearGuestTrialClaimRequest();
+    } catch (cause) {
+      setGuestClaimError(cause?.message || '無料3問を引き継げませんでした。');
+      setScene('guest_claim_error');
+    }
+  })();
+}, [user?.id, foundation?.project?.id, foundation?.project?.access_status]);
+
+useEffect(() => {
   const checkoutReturn = getCheckoutReturnFromUrl();
 
   if (
@@ -7321,17 +7376,28 @@ setScene(1);
               setUser(u);
 
 const unstartedConnections = await loadUnstartedConnections(u.id);
-if (unstartedConnections) {
+if (unstartedConnections && !purchaseSelection && !guestTrialClaimRequested() && !pendingGuestTrialProject()) {
   enterUnstartedConnections(u, unstartedConnections);
   return;
 }
 
 const foundationData = await ensureUserFoundation(u.id, u);
 
-const questionSet = await loadUserQuestionSet(
+let questionSet = await loadUserQuestionSet(
   u.id,
   foundationData
 );
+if (guestTrialClaimRequested() || pendingGuestTrialProject()) {
+  try {
+    const claimed = await connectGuestTrialPurchase(foundationData.project);
+    if (claimed) questionSet = await loadUserQuestionSet(u.id, foundationData);
+  } catch (claimError) {
+    setFoundation(foundationData);
+    setGuestClaimError(claimError?.message || '無料3問を引き継げませんでした。');
+    setScene('guest_claim_error');
+    return;
+  }
+}
 
 let refreshedFoundationData = await ensureUserFoundation(
   u.id,
@@ -7465,8 +7531,9 @@ if (isFreeTrialExpired(loadedTrialRetention)
   && getCheckoutReturnFromUrl().status !== "success") {
   sceneAfterInvite = "trial_expired";
 }
+if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite = 'purchase_start';
 
-            if (isBetaMode() && !loginFamilyInviteToken && u?.__isNewProfile && u?.id) {
+            if (!purchaseSelection && isBetaMode() && !loginFamilyInviteToken && u?.__isNewProfile && u?.id) {
               const betaIntroSeenKey = getBetaIntroSeenKey(u.id);
 
               if (localStorage.getItem(betaIntroSeenKey) !== "1") {
@@ -7475,7 +7542,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
             }
 
             if (
-              targetedSupporterInviteId &&
+              !purchaseSelection && targetedSupporterInviteId &&
               !orderedPendingInvites.some(
                 invite => invite.invite_id === targetedSupporterInviteId
               ) &&
@@ -7486,13 +7553,13 @@ if (isFreeTrialExpired(loadedTrialRetention)
               return;
             }
 
-            if (pendingRelationshipInvites.length > 0 && !loginFamilyInviteToken) {
+            if (!purchaseSelection && pendingRelationshipInvites.length > 0 && !loginFamilyInviteToken) {
               setPostSupporterInviteScene(sceneAfterInvite);
               setScene("story_relationship_invite_received");
               return;
             }
 
-            if (orderedPendingInvites.length > 0 && !loginFamilyInviteToken) {
+            if (!purchaseSelection && orderedPendingInvites.length > 0 && !loginFamilyInviteToken) {
               setPostSupporterInviteScene(sceneAfterInvite);
               setHasAcceptedSupporterInvite(false);
               setScene("supporter_invite_received");
@@ -7511,6 +7578,7 @@ if (isFreeTrialExpired(loadedTrialRetention)
       {scene === "purchase_start" && (
         COMMERCE_V2_ENABLED ? (
           <CommerceV2Purchase client={supabaseClient} projectId={foundation?.project?.id}
+            phase={purchaseSelection ? 'review' : 'checkout'} initialSelection={purchaseSelection}
             initialOrderType={purchaseFor}
             familyInvitation={commerceV2Invitation || (
               receivedFamilyInvitation && ['awaiting_payment', 'continuation_awaiting_payment', 'trial_completed'].includes(receivedFamilyInvitation.status)
@@ -7546,6 +7614,14 @@ if (isFreeTrialExpired(loadedTrialRetention)
           }}
         />
       )}
+
+      {scene === 'guest_claim_error' && <section className="mx-auto flex min-h-[70vh] w-full max-w-lg flex-col justify-center px-7 py-12 text-center text-white">
+        <h1 className="text-2xl">無料3問の引き継ぎを確認しています</h1>
+        <p role="alert" className="mt-7 leading-loose text-white/70">{guestClaimError}</p>
+        <button type="button" className="mt-10 rounded-full bg-[#e8e4d8] px-6 py-4 text-[#152336]"
+          onClick={() => window.location.reload()}>もう一度試す</button>
+        <a href="/?guest_trial=1" className="mt-6 text-sm text-white/65 underline">無料3問の語りに戻る</a>
+      </section>}
 
       {scene === "trial_expired" && (
         <section className="mx-auto flex min-h-[70vh] w-full max-w-lg flex-col justify-center px-7 py-12 text-white">
@@ -7921,6 +7997,8 @@ if (isFreeTrialExpired(loadedTrialRetention)
         <Scene_ThemeIntro
           theme={STORY_THEMES[0]}
           isFirstTheme
+          carriedTrial={{ client: supabaseClient, userId: user?.id, projectId: foundation?.project?.id }}
+          onReviewCarriedTrial={() => { setStoryPagesReturnScene('theme_intro'); setStoryPagesFocusAnswerId(null); setScene('story_pages'); }}
           notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
           onChangeDelivery={() => {
             setNotificationSetupReturnScene("theme_intro");
@@ -7935,6 +8013,8 @@ if (isFreeTrialExpired(loadedTrialRetention)
         <Scene_ThemeResume
           theme={themeResumeContext.theme}
           questionNumber={themeResumeContext.questionNumber}
+          carriedTrial={{ client: supabaseClient, userId: user?.id, projectId: foundation?.project?.id }}
+          onReviewCarriedTrial={() => { setStoryPagesReturnScene('theme_resume'); setStoryPagesFocusAnswerId(null); setScene('story_pages'); }}
           onResume={resumeThemeQuestion}
           onHome={returnToHome}
         />
@@ -9123,6 +9203,8 @@ onRetry={() => {
       {scene === "theme_intro" && foundation?.project?.onboarding_status === "completed" && (
         <Scene_ThemeIntro
           theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1) || null}
+          carriedTrial={{ client: supabaseClient, userId: user?.id, projectId: foundation?.project?.id }}
+          onReviewCarriedTrial={() => { setStoryPagesReturnScene('theme_intro'); setStoryPagesFocusAnswerId(null); setScene('story_pages'); }}
           onBack={returnToCompletedTheme}
           notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
           onChangeDelivery={() => {
@@ -11470,6 +11552,7 @@ function ThemeResumeAction({ questionNumber, onResume }) {
 function ThemePreview({
   theme,
   eyebrow,
+  reviewNotice,
   notificationLabel,
   onChangeDelivery,
   onWait,
@@ -11497,6 +11580,7 @@ function ThemePreview({
         <p className="text-[0.68rem] tracking-[0.16em] text-amber-100/48">💡 ヒント</p>
         <p className="mt-3 text-sm leading-[2] text-white/52">{theme.hint}</p>
       </aside>
+      {reviewNotice}
       {isResume ? (
         <ThemeResumeAction
           questionNumber={resumeQuestionNumber}
@@ -11597,7 +11681,41 @@ export function Scene_ThemeComplete({ completedTheme, hasNextTheme, hasExtraQues
   );
 }
 
-export function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabel, onChangeDelivery, onWait, onContinue, onBack }) {
+function CarriedChildhoodTrialNotice({ theme, carriedTrial, onReview }) {
+  const [answers, setAnswers] = useState([]);
+  useEffect(() => {
+    if (theme?.order !== 1 || !carriedTrial?.userId || !carriedTrial?.projectId) {
+      setAnswers([]);
+      return;
+    }
+    let active = true;
+    carriedTrial.client.from('answers')
+      .select('id,transcript_raw,transcript_readable,transcript_edited,meta_json')
+      .eq('user_id', carriedTrial.userId)
+      .eq('book_project_id', carriedTrial.projectId)
+      .contains('meta_json', { guest_trial_version: 'childhood_v1' })
+      .then(({ data, error }) => {
+        if (active && !error) setAnswers(data || []);
+      });
+    return () => { active = false; };
+  }, [theme?.order, carriedTrial?.client, carriedTrial?.userId, carriedTrial?.projectId]);
+  if (!answers.length) return null;
+  const ordered = CHILDHOOD_TRIAL_QUESTIONS.map(question => ({
+    question,
+    answer: answers.find(row => row.meta_json?.guest_trial_question_id === question.id)
+  })).filter(item => item.answer);
+  return <aside className="mt-5 rounded-2xl border border-amber-100/20 bg-white/[0.035] px-5 py-5 text-left">
+    <p className="text-sm text-white/85">無料3問の語りを{answers.length}件、引き継ぎました</p>
+    <div className="mt-3 space-y-3">{ordered.map(({ question, answer }) => <div key={answer.id} className="border-l border-amber-100/20 pl-3">
+      <p className="text-xs leading-relaxed text-white/60">{question.content}</p>
+      <p className="mt-1 text-sm leading-relaxed text-white/85">{(answer.transcript_edited || answer.transcript_readable || answer.transcript_raw || '').slice(0, 80)}{(answer.transcript_edited || answer.transcript_readable || answer.transcript_raw || '').length > 80 ? '…' : ''}</p>
+    </div>)}</div>
+    <p className="mt-3 text-xs leading-loose text-white/55">このまま進んでも回答は消えません。</p>
+    <button type="button" onClick={onReview} className="mt-3 min-h-11 text-sm text-white/80 underline underline-offset-4">保存済みの語りを見る・編集する</button>
+  </aside>;
+}
+
+export function Scene_ThemeIntro({ theme, isFirstTheme = false, carriedTrial, onReviewCarriedTrial, notificationLabel, onChangeDelivery, onWait, onContinue, onBack }) {
   if (!theme) return null;
   return (
     <div className="flow-scene-shell fade-enter theme-screen">
@@ -11606,6 +11724,7 @@ export function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabe
         <ThemePreview
           theme={theme}
           eyebrow="テーマ"
+          reviewNotice={<CarriedChildhoodTrialNotice theme={theme} carriedTrial={carriedTrial} onReview={onReviewCarriedTrial} />}
           notificationLabel={notificationLabel}
           onChangeDelivery={onChangeDelivery}
           onWait={onWait}
@@ -11616,7 +11735,7 @@ export function Scene_ThemeIntro({ theme, isFirstTheme = false, notificationLabe
   );
 }
 
-function Scene_ThemeResume({ theme, questionNumber, onResume, onHome }) {
+function Scene_ThemeResume({ theme, questionNumber, carriedTrial, onReviewCarriedTrial, onResume, onHome }) {
   if (!theme) return null;
   return (
     <div className="flow-scene-shell fade-enter theme-screen">
@@ -11625,6 +11744,7 @@ function Scene_ThemeResume({ theme, questionNumber, onResume, onHome }) {
         <ThemePreview
           theme={theme}
           eyebrow="テーマ"
+          reviewNotice={<CarriedChildhoodTrialNotice theme={theme} carriedTrial={carriedTrial} onReview={onReviewCarriedTrial} />}
           resumeQuestionNumber={questionNumber}
           onResume={onResume}
         />

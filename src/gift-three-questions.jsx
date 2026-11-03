@@ -91,13 +91,19 @@ function RecipientPage({ recipientToken }) {
   async function start() {
     setBusy(true); setError('');
     try {
-      // A shared device must not silently open the sender's existing account.
+      if (import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true') {
+        // The recipient token starts a separate private trial capability; it
+        // cannot read another person's answers or the sender's login session.
+        location.assign(`/?guest_trial=1&gift_trial_token=${encodeURIComponent(recipientToken)}`);
+        return;
+      }
+      // The established signed-in gift flow stays unchanged until rollout.
       const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
       if (signOutError) throw signOutError;
       location.assign(`/?app=1&entry=trial&gift_three=${recipientToken}`);
-    } catch { setError('別のアカウントへの切り替えを完了できませんでした。もう一度お試しください。'); setBusy(false); }
+    } catch { setError('体験を開けませんでした。もう一度お試しください。'); setBusy(false); }
   }
-  return <><header className="g3-head">縦糸横糸</header><main className="g3-main g3-recipient g3-recipient-entry">{state.loading ? <p>リンクを確認しています…</p> : !state.valid ? <><h1 className="g3-title">このリンクは利用できません。</h1><p>贈り主に新しいリンクを送ってもらってください。</p></> : <><p className="g3-kicker">無料の3問</p><h1 className="g3-title">まずは、<br />幼い頃のことから。</h1><div className="g3-recipient-entry-copy"><p>三つの問いに、自分のペースで<br className="g3-mobile-break" />声で答えてみてください。</p><p>語りの内容は、贈り主にも<br className="g3-mobile-break" />勝手に共有されません。</p></div><p className="g3-small g3-recipient-entry-note">この端末で別の方がログイン中の場合は、<br className="g3-mobile-break" />アカウントを切り替えてから始まります。</p><button className="g3-cta" type="button" disabled={busy} onClick={start}>3問を試す <span aria-hidden="true">→</span></button><a className="g3-about-link" href="/" target="_blank" rel="noopener noreferrer">縦糸＋横糸について</a>{error && <p className="g3-status g3-error" role="alert">{error}</p>}</>}</main></>;
+  return <><header className="g3-head">縦糸横糸</header><main className="g3-main g3-recipient g3-recipient-entry">{state.loading ? <p>リンクを確認しています…</p> : !state.valid ? <><h1 className="g3-title">このリンクは利用できません。</h1><p>贈り主に新しいリンクを送ってもらってください。</p></> : <><p className="g3-kicker">無料の3問</p><h1 className="g3-title">まずは、<br />幼い頃のことから。</h1><div className="g3-recipient-entry-copy"><p>三つの問いに、自分のペースで<br className="g3-mobile-break" />声でも文字でも答えられます。</p><p>語りの内容は、贈り主にも<br className="g3-mobile-break" />勝手に共有されません。</p></div><p className="g3-small g3-recipient-entry-note">この端末で別の方がログイン中の場合は、<br className="g3-mobile-break" />アカウントを切り替えてから始まります。</p><button className="g3-cta" type="button" disabled={busy} onClick={start}>3問を試す <span aria-hidden="true">→</span></button><a className="g3-about-link" href="/" target="_blank" rel="noopener noreferrer">縦糸＋横糸について</a>{error && <p className="g3-status g3-error" role="alert">{error}</p>}</>}</main></>;
 }
 
 function VerifyPage({ verifyToken }) {

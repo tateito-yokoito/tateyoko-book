@@ -5,7 +5,8 @@ import LandingBookEditions from './landing/LandingBookEditions.jsx';
 import StoryIntro from './landing/StoryIntro.jsx';
 
 const LOGIN = "/?app=1&entry=login";
-const TRIAL = "/?app=1&entry=trial";
+const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true'
+  ? '/?guest_trial=1' : '/?app=1&entry=trial';
 const PURCHASE = "/?app=1&entry=purchase";
 const EMAIL = "sugawara@saltlight.co.jp";
 const QUESTIONS = [
