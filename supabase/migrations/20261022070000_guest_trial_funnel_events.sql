@@ -20,3 +20,4 @@ create index guest_trial_funnel_events_name_time_idx
   on public.guest_trial_funnel_events(event_name, occurred_at desc);
 alter table public.guest_trial_funnel_events enable row level security;
 revoke all on public.guest_trial_funnel_events from public, anon, authenticated;
+grant select, insert, update, delete on public.guest_trial_funnel_events to service_role;

@@ -8,6 +8,7 @@ import {
   guestTrialRequest, guestTrialStorageKey,
   ensureGuestTrialStorage, readGuestTrialSession, storeGuestTrialSession,
 } from './lib/guestTrialApi.js';
+import { guestTrialPurchaseUrl } from './lib/guestTrialClaim.js';
 
 // The public entry remains on the established flow until the full purchase,
 // recovery, and handoff gate passes. The API always follows this app's
@@ -15,8 +16,9 @@ import {
 const TRIAL_API = supabaseClient.supabaseUrl.replace(/\/$/, '');
 const developmentPreview = import.meta.env.DEV
   && import.meta.env.VITE_GUEST_TRIAL_PURCHASE_PREVIEW_ENABLED === 'true';
-const purchasePreviewEnabled = developmentPreview
-  || import.meta.env.VITE_GUEST_TRIAL_PURCHASE_ENABLED === 'true';
+// The old pay-before-login proof of concept used the legacy product. Never
+// expose it from the adopted pay-after-login route.
+const purchasePreviewEnabled = false;
 const giftToken = new URLSearchParams(window.location.search).get('gift_trial_token') || null;
 const questions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) => ({
   ...question, question_id: question.id, onboarding_group: 'trial_experience',
@@ -411,9 +413,9 @@ export default function GuestTrialFlow() {
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
       {screen === 'finished' && <main className="px-7 py-24 text-center">
-        <h1 className="text-[1.7rem] leading-[1.8]">三つの問いを、<br />語り終えました。</h1>
+        <h1 className="text-[1.7rem] leading-[1.8]">3問の体験が完了しました</h1>
         <p className="mt-9 leading-loose text-white/65">この端末で期限まで語りを確認できます。</p>
-        <button type="button" onClick={() => setScreen('stories')} className="mt-7 block w-full text-sm text-white/70 underline">3問の語りを見る</button>
+        <button type="button" onClick={() => setScreen('stories')} className="mt-7 block w-full text-sm text-white/70 underline">自分の語りを確認する</button>
         {!giftToken && purchasePreviewEnabled && <button type="button" disabled={busy} onClick={openConversion}
           className="mt-10 w-full rounded-full px-7 py-5 disabled:opacity-50"
           style={{ background: '#e9e5d9', color: '#15243a' }}>{busy ? '確認しています…' : 'この先を見てみる'}</button>}
@@ -429,6 +431,8 @@ export default function GuestTrialFlow() {
             const response = await guestTrialRequest(TRIAL_API, 'audio', { sessionToken: session.token, questionId: asset.id });
             return response.url;
           }} />)}</div>
+        {!giftToken && <a href={guestTrialPurchaseUrl()} className="mt-10 block w-full rounded-full px-7 py-5 text-center"
+          style={{ background: '#e9e5d9', color: '#15243a' }}>続きを残す</a>}
       </main>}
       {screen === 'conversion' && <>{(developmentPreview || !purchasePreviewEnabled) &&
         <p className="px-7 pt-5 text-center text-xs text-amber-100/75">

@@ -7,12 +7,13 @@ try {
   const page = await context.newPage();
   const answers = [];
   const actions = [];
+  let completed = false;
   await page.route('**/functions/v1/guest-trial?action=*', async route => {
     const action = new URL(route.request().url()).searchParams.get('action');
     actions.push(action);
     let body;
     if (action === 'start') body = { sessionToken: 'a'.repeat(64), sessionId: 'guest-test', expiresAt: new Date(Date.now() + 86400000).toISOString() };
-    else if (action === 'status') body = { status: 'active', answers };
+    else if (action === 'status') body = { status: completed ? 'completed' : 'active', answers };
     else if (action === 'write') {
       const post = route.request().postData() || '';
       const field = name => post.match(new RegExp(`name="${name}"\\r?\\n\\r?\\n([^\\r\\n]*)`))?.[1] || '';
@@ -20,7 +21,8 @@ try {
         transcription_state: 'complete', audio_path: null };
       answers.push(row);
       body = { saved: true, transcript: row.transcript };
-    } else body = { error: 'Unexpected action' };
+    } else if (action === 'complete') { completed = true; body = { complete: true }; }
+    else body = { error: 'Unexpected action' };
     await route.fulfill({ status: body.error ? 400 : 200, contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) });
   });
@@ -38,7 +40,24 @@ try {
   await page.reload();
   await page.getByRole('button', { name: '書いて答える' }).waitFor();
   assert.equal(answers[0].transcript, '幼い頃は公園で遊びました。');
-  console.log('PASS guest trial starts without login, offers voice and text, saves text, and resumes after reload');
+  for (let index = 1; index < 3; index++) {
+    await page.getByRole('button', { name: '書いて答える' }).click();
+    await page.getByRole('textbox', { name: '書いて答える' }).fill(`無料3問の回答 ${index + 1}`);
+    await page.getByRole('button', { name: '保存する' }).click();
+    await page.getByText(`無料3問の回答 ${index + 1}`).waitFor();
+    await page.getByRole('button', { name: index === 2 ? '三つの問いを終える' : '次の問いへ' }).click();
+  }
+  await page.getByRole('heading', { name: '3問の体験が完了しました' }).waitFor();
+  await page.reload();
+  await page.getByRole('button', { name: '自分の語りを確認する' }).click();
+  assert.equal(await page.locator('main').getByText('無料3問の回答 2').count(), 1);
+  const continueLink = page.getByRole('link', { name: '続きを残す' });
+  assert.match(await continueLink.getAttribute('href'), /entry=purchase.*guest_trial_claim=1/);
+  await continueLink.click();
+  await page.getByText('この物語を開くために').waitFor();
+  assert.match(page.url(), /guest_trial_claim=1/);
+  assert.equal(answers.length, 3);
+  console.log('PASS guest trial keeps three answers, shows them after reload, and opens existing login for purchase');
 } finally {
   await browser.close();
 }

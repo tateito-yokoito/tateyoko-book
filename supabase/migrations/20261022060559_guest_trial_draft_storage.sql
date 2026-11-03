@@ -23,6 +23,7 @@ create index guest_trial_sessions_expiry_idx
   on public.guest_trial_sessions(expires_at) where status in ('active', 'completed');
 alter table public.guest_trial_sessions enable row level security;
 revoke all on public.guest_trial_sessions from public, anon, authenticated;
+grant select, insert, update, delete on public.guest_trial_sessions to service_role;
 
 create table public.guest_trial_answers (
   session_id uuid not null references public.guest_trial_sessions(id) on delete cascade,
@@ -48,6 +49,7 @@ create table public.guest_trial_answers (
 );
 alter table public.guest_trial_answers enable row level security;
 revoke all on public.guest_trial_answers from public, anon, authenticated;
+grant select, insert, update, delete on public.guest_trial_answers to service_role;
 
 insert into storage.buckets(id, name, public, file_size_limit, allowed_mime_types)
 values ('guest-trial-audio', 'guest-trial-audio', false, 12582912,
