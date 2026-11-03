@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  clearCommercePurchaseIntent,
   normalizeCommercePurchaseSelection,
   provisionalCommerceSubtotal,
   readCommercePurchaseIntent,
@@ -20,13 +21,15 @@ test('pre-auth selection keeps options and coupon but never calculates a discoun
 
 test('selection survives auth return and expires without extending its lifetime', () => {
   const items = new Map();
-  const storage = { getItem: key => items.get(key), setItem: (key, value) => items.set(key, value) };
+  const storage = { getItem: key => items.get(key), setItem: (key, value) => items.set(key, value), removeItem: key => items.delete(key) };
   const savedAt = Date.UTC(2026, 10, 3);
   saveCommercePurchaseIntent(storage, selection, savedAt);
   assert.deepEqual(readCommercePurchaseIntent(storage, savedAt + 1000), {
     ...normalizeCommercePurchaseSelection(selection), provisionalSubtotal: 105000,
   });
   assert.equal(readCommercePurchaseIntent(storage, savedAt + 24 * 60 * 60 * 1000 + 1), null);
+  clearCommercePurchaseIntent(storage);
+  assert.equal(readCommercePurchaseIntent(storage, savedAt + 1000), null);
 });
 
 test('invalid or corrupted purchase choices cannot be restored', () => {

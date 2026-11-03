@@ -42,6 +42,10 @@ export function readCommercePurchaseIntent(storage, now = Date.now()) {
   return { ...value, provisionalSubtotal: provisionalCommerceSubtotal(value) };
 }
 
+export function clearCommercePurchaseIntent(storage) {
+  storage.removeItem(key);
+}
+
 export function commercePurchaseReviewRequested(search = window.location.search) {
   return new URLSearchParams(search).get(PURCHASE_REVIEW_PARAM) === '1';
 }

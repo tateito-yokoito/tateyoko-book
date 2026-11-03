@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { provisionalCommerceSubtotal, readCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
+import { clearCommercePurchaseIntent, provisionalCommerceSubtotal, readCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
 
 const choiceClass = 'rounded-2xl border border-white/20 bg-white/[0.05] px-4 py-4 text-left text-white';
 
@@ -120,7 +120,15 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         setBusy(false);
         return;
       }
-      if (data.completed) { window.location.reload(); return; }
+      if (data.completed) {
+        if (isReview) {
+          clearCommercePurchaseIntent(window.localStorage);
+          const url = new URL(window.location.href);
+          url.searchParams.delete('purchase_review');
+          window.location.replace(url.toString());
+        } else window.location.reload();
+        return;
+      }
       if (!data.url) throw new Error('決済画面を開けませんでした');
       window.location.assign(data.url);
     } catch (cause) {
