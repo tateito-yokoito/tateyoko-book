@@ -172,6 +172,37 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
     <p className="px-6 py-16 text-center text-white">相談内容の確認中です。スタッフからのご案内をお待ちください。</p>
   );
 
+  if (isReview && (method === 'self_or_family' || approvedConsultation)) return (
+    <section className="mx-auto max-w-2xl px-6 py-12 text-white">
+      <h1 className="text-2xl">注文内容の最終確認</h1>
+      <p className="mt-3 text-sm leading-7 text-white/75">お支払いの前に、選んだ内容と認証後の金額をご確認ください。</p>
+      <div className="mt-8 rounded-2xl border border-white/20 bg-white/[0.05] p-5">
+        <dl className="space-y-4">
+          <div className="flex justify-between gap-4"><dt className="text-white/70">商品</dt><dd className="text-right">{edition === 'premium' ? 'プレミアム' : 'スタンダード'}</dd></div>
+          <div className="flex justify-between gap-4"><dt className="text-white/70">制作方法</dt><dd className="text-right">{method === 'interview_staff' ? 'スタッフに聞き取ってもらう' : '自分・家族で制作する'}</dd></div>
+          {standardExtraCount > 0 && <div className="flex justify-between gap-4"><dt className="text-white/70">追加スタンダード冊子</dt><dd>{standardExtraCount}冊</dd></div>}
+          {premiumExtraCount > 0 && <div className="flex justify-between gap-4"><dt className="text-white/70">追加プレミアム冊子</dt><dd>{premiumExtraCount}冊</dd></div>}
+          {discountCode.trim() && <div className="flex justify-between gap-4"><dt className="text-white/70">割引コード</dt><dd className="break-all text-right">{discountCode.trim()}</dd></div>}
+        </dl>
+        <div className="mt-6 space-y-3 border-t border-white/20 pt-5" aria-live="polite">
+          <p className="flex justify-between gap-4"><span className="text-white/70">商品・オプション</span><span>{quote ? Number(quote.amount_subtotal).toLocaleString('ja-JP') + '円' : '確認中'}</span></p>
+          <p className="flex justify-between gap-4"><span className="text-white/70">割引</span><span>{quote ? '−' + Number(quote.discount_amount || 0).toLocaleString('ja-JP') + '円' : '—'}</span></p>
+          <p className="flex justify-between gap-4 border-t border-white/20 pt-4 text-xl"><span>お支払い合計</span><strong>{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : error ? '確認できませんでした' : '確認中'}</strong></p>
+        </div>
+      </div>
+      {initialSelection?.quotedAmountTotal != null && quote
+        && Number(quote.amount_total) !== initialSelection.quotedAmountTotal &&
+        <p role="status" className="mt-5 rounded-xl border border-amber-200/50 p-4 text-sm leading-6 text-amber-100">認証後の割引条件または商品価格が変わりました。選択時のお支払い合計は{initialSelection.quotedAmountTotal.toLocaleString('ja-JP')}円、現在は{Number(quote.amount_total).toLocaleString('ja-JP')}円です。新しい金額を確認してからお進みください。</p>}
+      {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
+      <button type="button" className="mt-8 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote} onClick={checkout}>お支払いへ進む</button>
+      <button type="button" className="mt-5 w-full text-sm text-white/70 underline" onClick={() => {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('purchase_review');
+        window.location.assign(url.toString());
+      }}>選択内容を変更する</button>
+    </section>
+  );
+
   return (
     <section className="mx-auto max-w-2xl px-6 py-12 text-white">
       <h1 className="text-2xl">縦糸横糸ブックを選ぶ</h1>
