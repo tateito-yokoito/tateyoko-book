@@ -38,16 +38,66 @@ serve(async (request) => {
   const url = Deno.env.get("SUPABASE_URL");
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SERVICE_ROLE_KEY");
   const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-  if (!url || !key || !stripeKey) return json({ success: false, error: "決済の準備が完了していません" }, 503);
+  if (!url || !key) return json({ success: false, error: "決済の準備が完了していません" }, 503);
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-  try {
-    requireCommerceV2CheckoutEnabled();
-    requireStripeEnvironment(stripeKey);
-    requireCheckoutEnabled();
-    const { error: modeError } = await admin.rpc("require_commerce_mode", { input_mode: commerceMode() });
-    if (modeError) throw modeError;
-  } catch {
-    return json({ success: false, error: "ただいま新しいお申し込みを停止しています" }, 503);
+  let body: Record<string, unknown>;
+  try { body = await request.json(); }
+  catch { return json({ success: false, error: "入力内容を確認してください" }, 400); }
+
+  // Public, read-only estimate. It cannot create an order or a Stripe session.
+  // Account-specific coupon eligibility is checked again after sign-in.
+  if (body.action === "public_quote") {
+    const edition = body.edition;
+    const standardCount = integer(body.standardExtraCount ?? 0);
+    const premiumCount = integer(body.premiumExtraCount ?? 0);
+    const discountCode = typeof body.discountCode === "string" ? body.discountCode.trim() : "";
+    if (!["standard", "premium"].includes(String(edition))
+      || body.productionMethod !== "self_or_family"
+      || (body.orderType && body.orderType !== "self")
+      || !Number.isInteger(standardCount) || standardCount < 0 || standardCount > 30
+      || !Number.isInteger(premiumCount) || premiumCount < 0 || premiumCount > 30
+      || discountCode.length > 64) {
+      return json({ success: false, error: "商品・割引コードを確認してください" }, 400);
+    }
+    const { data: estimate, error } = await admin.rpc("get_commerce_v2_quote", {
+      input_edition: edition,
+      input_production_method: "self_or_family",
+      input_standard_extra_count: standardCount,
+      input_premium_extra_count: premiumCount,
+      // An unowned sentinel only skips the per-account coupon check here.
+      input_purchaser_user_id: "00000000-0000-0000-0000-000000000001",
+      input_discount_code: discountCode || null,
+      input_consultation_id: null,
+    });
+    if (error && discountCode) {
+      return json({ success: false, error: "この割引コードは現在利用できません" });
+    }
+    if (error || !estimate || !Number.isInteger(estimate.amount_total)
+      || estimate.currency !== "jpy" || estimate.tax_included !== true) {
+      return json({ success: false, error: "割引コードまたは金額を確認できませんでした" }, 400);
+    }
+    return json({ success: true, quote: {
+      amount_subtotal: estimate.amount_subtotal,
+      discount_amount: estimate.discount_amount,
+      amount_total: estimate.amount_total,
+      currency: "jpy", tax_included: true,
+    } });
+  }
+
+  // An authenticated quote is read-only and remains available while new
+  // Checkout sessions are stopped. The payment gate still runs before auth,
+  // order creation or Stripe work for every checkout request.
+  if (body.action !== "quote") {
+    if (!stripeKey) return json({ success: false, error: "決済の準備が完了していません" }, 503);
+    try {
+      requireCommerceV2CheckoutEnabled();
+      requireStripeEnvironment(stripeKey);
+      requireCheckoutEnabled();
+      const { error: modeError } = await admin.rpc("require_commerce_mode", { input_mode: commerceMode() });
+      if (modeError) throw modeError;
+    } catch {
+      return json({ success: false, error: "ただいま新しいお申し込みを停止しています" }, 503);
+    }
   }
   const bearer = (request.headers.get("Authorization") || "").match(/^Bearer\s+(\S+)$/i);
   if (!bearer) return json({ success: false, error: "ログインが必要です" }, 401);
@@ -55,7 +105,6 @@ serve(async (request) => {
   if (authError || !auth.user) return json({ success: false, error: "ログインが必要です" }, 401);
 
   try {
-    const body = await request.json();
     const edition = body.edition;
     const method = body.productionMethod;
     const standardCount = integer(body.standardExtraCount ?? 0);

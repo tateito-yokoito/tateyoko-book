@@ -76,15 +76,14 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   }, [client, linkedConsultationId]);
 
   useEffect(() => {
-    if (isSelection) return;
     if (method !== 'self_or_family' && !['agreed', 'checkout_pending'].includes(approvedConsultation?.status)) {
-      setQuote(null); return;
+      setQuote(null); setError(''); return;
     }
     let active = true;
     setQuote(null);
     setError('');
-    client.functions.invoke('create-commerce-v2-checkout', { body: {
-      action: 'quote', orderType, projectId, edition, productionMethod: method,
+    const load = () => client.functions.invoke('create-commerce-v2-checkout', { body: {
+      action: isSelection ? 'public_quote' : 'quote', orderType, projectId, edition, productionMethod: method,
       standardExtraCount, premiumExtraCount, discountCode,
       consultationId: approvedConsultation?.id || null,
     } }).then(({ data, error: invokeError }) => {
@@ -94,7 +93,9 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         setError(data?.error || '金額を確認できませんでした');
       } else setQuote(data.quote);
     });
-    return () => { active = false; };
+    const timer = isSelection ? window.setTimeout(load, 300) : null;
+    if (!isSelection) void load();
+    return () => { active = false; if (timer) window.clearTimeout(timer); };
   }, [client, orderType, projectId, edition, method, standardExtraCount, premiumExtraCount, discountCode, approvedConsultation?.id, isSelection]);
 
   const checkout = async () => {
@@ -231,18 +232,19 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           <label className="block">割引コード<input className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-slate-900" value={discountCode}
             onChange={event => { setDiscountCode(event.target.value); requestKey.current = newRequestKey(); }} /></label>
           {isSelection ? <>
-            <p className="text-xl">商品・オプション合計：{provisionalSubtotal?.toLocaleString('ja-JP')}円（税込・割引前）</p>
-            <p className="text-sm leading-6 text-white/70">割引額：ログイン後に確認します。入力したコードは保持されます。確定金額はお支払い前に表示します。</p>
-            <button type="button" className="w-full rounded-full bg-white py-4 text-slate-900" onClick={() => {
-              try { onProceed?.(selection); }
+            <p className="text-sm leading-7 text-white/75">商品・オプション：{(quote?.amount_subtotal ?? provisionalSubtotal)?.toLocaleString('ja-JP')}円（税込）<br />割引：−{quote ? Number(quote.discount_amount || 0).toLocaleString('ja-JP') : '—'}円</p>
+            <p className="text-xl">お支払い合計：{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : method === 'interview_staff' ? '無料相談後に確定' : error ? '確認できませんでした' : '確認中'}</p>
+            <p className="text-sm leading-6 text-white/70">{method === 'interview_staff' ? '聞き取り制作サポートは相談・合意後にお支払いとなります。' : '認証後に価格と割引条件を再確認し、変更があればお知らせします。'}</p>
+            <button type="button" className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={method === 'self_or_family' && !quote} onClick={() => {
+              try { onProceed?.({ ...selection, quotedAmountTotal: quote?.amount_total, quotedDiscountAmount: quote?.discount_amount }); }
               catch { setError('選択内容をこのブラウザに保存できません。通常モードで開き直してください。'); }
             }}>購入手続きへ進む</button>
             <p className="text-center text-sm text-white/65">購入手続きには、アカウント登録またはログインが必要です。</p>
           </> : <>
             {isReview && <h2 className="text-lg">注文内容の最終確認</h2>}
-            {isReview && initialSelection?.provisionalSubtotal != null && quote
-              && Number(quote.amount_subtotal) !== initialSelection.provisionalSubtotal &&
-              <p role="status" className="rounded-xl border border-amber-200/50 p-4 text-sm leading-6 text-amber-100">商品価格が更新されました。選択時の割引前合計は{initialSelection.provisionalSubtotal.toLocaleString('ja-JP')}円、現在は{Number(quote.amount_subtotal).toLocaleString('ja-JP')}円です。新しい金額を確認してからお進みください。</p>}
+            {isReview && initialSelection?.quotedAmountTotal != null && quote
+              && Number(quote.amount_total) !== initialSelection.quotedAmountTotal &&
+              <p role="status" className="rounded-xl border border-amber-200/50 p-4 text-sm leading-6 text-amber-100">認証後の割引条件または商品価格が変わりました。選択時のお支払い合計は{initialSelection.quotedAmountTotal.toLocaleString('ja-JP')}円、現在は{Number(quote.amount_total).toLocaleString('ja-JP')}円です。新しい金額を確認してからお進みください。</p>}
             {quote && <p className="text-sm leading-7 text-white/75">商品・オプション：{Number(quote.amount_subtotal).toLocaleString('ja-JP')}円<br />割引：−{Number(quote.discount_amount || 0).toLocaleString('ja-JP')}円{discountCode.trim() && `（${discountCode.trim()}）`}</p>}
             <p className="text-xl">お支払い合計：{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : error ? '確認できませんでした' : '確認中'}</p>
             <button className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote} onClick={checkout}>{isReview ? 'お支払いへ進む' : '決済へ進む'}</button>

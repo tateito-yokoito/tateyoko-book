@@ -13,7 +13,7 @@ const selection = {
   standardExtraCount: 1, premiumExtraCount: 1, discountCode: ' PHASE2FAKE1000 ',
 };
 
-test('pre-auth selection keeps options and coupon but never calculates a discount', () => {
+test('pre-auth selection keeps options and coupon without trusting local prices for payment', () => {
   assert.equal(provisionalCommerceSubtotal(selection), 105000);
   assert.equal(normalizeCommercePurchaseSelection(selection).discountCode, 'PHASE2FAKE1000');
   assert.equal(provisionalCommerceSubtotal({ ...selection, productionMethod: 'interview_staff' }), 125000);
@@ -23,9 +23,10 @@ test('selection survives auth return and expires without extending its lifetime'
   const items = new Map();
   const storage = { getItem: key => items.get(key), setItem: (key, value) => items.set(key, value), removeItem: key => items.delete(key) };
   const savedAt = Date.UTC(2026, 10, 3);
-  saveCommercePurchaseIntent(storage, selection, savedAt);
+  saveCommercePurchaseIntent(storage, { ...selection, quotedAmountTotal: 104000, quotedDiscountAmount: 1000 }, savedAt);
   assert.deepEqual(readCommercePurchaseIntent(storage, savedAt + 1000), {
     ...normalizeCommercePurchaseSelection(selection), provisionalSubtotal: 105000,
+    quotedAmountTotal: 104000, quotedDiscountAmount: 1000,
   });
   assert.equal(readCommercePurchaseIntent(storage, savedAt + 24 * 60 * 60 * 1000 + 1), null);
   clearCommercePurchaseIntent(storage);

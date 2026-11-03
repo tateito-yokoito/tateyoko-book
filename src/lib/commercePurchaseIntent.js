@@ -29,7 +29,11 @@ export function provisionalCommerceSubtotal(selection) {
 export function saveCommercePurchaseIntent(storage, selection, now = Date.now()) {
   const value = normalizeCommercePurchaseSelection(selection);
   if (!value) throw new Error('商品選択を確認できません');
-  storage.setItem(key, JSON.stringify({ ...value, savedAt: now }));
+  const quotedAmountTotal = Number(selection?.quotedAmountTotal);
+  const quotedDiscountAmount = Number(selection?.quotedDiscountAmount);
+  storage.setItem(key, JSON.stringify({ ...value, savedAt: now,
+    quotedAmountTotal: Number.isInteger(quotedAmountTotal) && quotedAmountTotal >= 0 ? quotedAmountTotal : null,
+    quotedDiscountAmount: Number.isInteger(quotedDiscountAmount) && quotedDiscountAmount >= 0 ? quotedDiscountAmount : null }));
   return value;
 }
 
@@ -39,7 +43,9 @@ export function readCommercePurchaseIntent(storage, now = Date.now()) {
   const value = normalizeCommercePurchaseSelection(raw);
   if (!value || !Number.isFinite(raw.savedAt) || raw.savedAt > now
     || now - raw.savedAt > lifetime) return null;
-  return { ...value, provisionalSubtotal: provisionalCommerceSubtotal(value) };
+  return { ...value, provisionalSubtotal: provisionalCommerceSubtotal(value),
+    quotedAmountTotal: Number.isInteger(raw.quotedAmountTotal) && raw.quotedAmountTotal >= 0 ? raw.quotedAmountTotal : null,
+    quotedDiscountAmount: Number.isInteger(raw.quotedDiscountAmount) && raw.quotedDiscountAmount >= 0 ? raw.quotedDiscountAmount : null };
 }
 
 export function clearCommercePurchaseIntent(storage) {
