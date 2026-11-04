@@ -17,10 +17,10 @@ begin
     raise exception 'このギフトはまだ利用できません' using errcode='22023'; end if;
   if gift_row.claimed_by_user_id is not null then
     if gift_row.claimed_by_user_id<>auth.uid()
-      or gift_row.recipient_project_id is distinct from input_book_project_id then
+      or gift_row.recipient_project_id is null then
       raise exception 'このギフトは受取済みです' using errcode='22023';
     end if;
-    return jsonb_build_object('success',true,'project_id',input_book_project_id,
+    return jsonb_build_object('success',true,'project_id',gift_row.recipient_project_id,
       'order_id',order_row.id);
   end if;
   select * into project_row from public.book_projects

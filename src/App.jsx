@@ -1456,7 +1456,7 @@ function isProjectOnboardingComplete(project) {
   return project?.onboarding_status === "completed";
 }
 
-export async function ensureUserFoundation(userId, profile) {
+export async function ensureUserFoundation(userId, profile, preferredProjectId = null) {
   const displayName =
     profile?.display_name ||
     profile?.name ||
@@ -1553,13 +1553,19 @@ export async function ensureUserFoundation(userId, profile) {
     }
   }
 
-  let { data: project, error: projectSelectError } = await supabaseClient
+  const activeProjectKey = `tateyoko:active-book-project:${userId}`;
+  const storedProjectId = !preferredProjectId && typeof window !== 'undefined'
+    ? window.localStorage.getItem(activeProjectKey) : null;
+  const selectedProjectId = preferredProjectId || storedProjectId;
+  let projectQuery = supabaseClient
     .from("book_projects")
     .select("*")
     .eq("owner_user_id", userId)
     .eq("subject_person_id", person.id)
     .eq("project_type", "koebook")
-    .eq("status", "active")
+    .eq("status", "active");
+  if (selectedProjectId) projectQuery = projectQuery.eq("id", selectedProjectId);
+  let { data: project, error: projectSelectError } = await projectQuery
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -1567,6 +1573,16 @@ export async function ensureUserFoundation(userId, profile) {
   if (projectSelectError) {
     console.error("book_projects select error", projectSelectError);
     throw projectSelectError;
+  }
+  if (preferredProjectId && !project) throw new Error("受け取る物語を確認できませんでした。");
+  if (!project && storedProjectId) {
+    window.localStorage.removeItem(activeProjectKey);
+    const fallback = await supabaseClient.from('book_projects').select('*')
+      .eq('owner_user_id', userId).eq('subject_person_id', person.id)
+      .eq('project_type', 'koebook').eq('status', 'active')
+      .order('created_at', { ascending: true }).limit(1).maybeSingle();
+    if (fallback.error) throw fallback.error;
+    project = fallback.data;
   }
 
   if (!project) {
@@ -7875,9 +7891,39 @@ if (getProjectRoleInviteTokenFromUrl()) {
             if (!giftToken || !foundation?.project?.id || !user?.id) {
               throw new Error("贈りものを確認できませんでした。");
             }
-            await claimGiftForProject(giftToken, foundation.project.id);
-            const refreshedFoundation = await ensureUserFoundation(user.id, user);
+            let targetProjectId = foundation.project.id;
+            if (!giftClaimPreview?.claimed && (foundation.project.access_status !== 'trial' || foundation.project.commerce_order_id)) {
+              const savedKey = `tateyoko:gift-recipient-project:${giftToken.slice(0, 16)}`;
+              const savedProjectId = window.localStorage.getItem(savedKey);
+              if (savedProjectId) {
+                const { data: savedProject } = await supabaseClient.from('book_projects')
+                  .select('id').eq('id', savedProjectId).eq('owner_user_id', user.id)
+                  .eq('access_status', 'trial').is('commerce_order_id', null).maybeSingle();
+                if (savedProject?.id) targetProjectId = savedProject.id;
+              }
+              if (targetProjectId === foundation.project.id) {
+                const defaultQuestionSet = await getDefaultQuestionSet();
+                const { data: newProject, error: newProjectError } = await supabaseClient
+                  .from('book_projects').insert({
+                    family_id: foundation.family.id, owner_user_id: user.id,
+                    subject_person_id: foundation.person.id, project_type: 'koebook',
+                    title: `${foundation.person.display_name}さんの縦糸横糸`,
+                    status: 'active', base_question_set_id: defaultQuestionSet.id,
+                    onboarding_status: 'not_started'
+                  }).select('id').single();
+                if (newProjectError) throw newProjectError;
+                targetProjectId = newProject.id;
+                window.localStorage.setItem(savedKey, targetProjectId);
+              }
+            }
+            const claim = await claimGiftForProject(giftToken, targetProjectId);
+            targetProjectId = claim?.project_id || targetProjectId;
+            const refreshedFoundation = await ensureUserFoundation(user.id, user, targetProjectId);
+            const refreshedQuestions = await loadUserQuestionSet(user.id, refreshedFoundation);
             setFoundation(refreshedFoundation);
+            setQuestionsDB(refreshedQuestions);
+            window.localStorage.setItem(`tateyoko:active-book-project:${user.id}`, targetProjectId);
+            window.localStorage.removeItem(`tateyoko:gift-recipient-project:${giftToken.slice(0, 16)}`);
             const url = new URL(window.location.href);
             url.searchParams.delete("gift");
             url.searchParams.delete("entry");
@@ -7885,7 +7931,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
             window.history.replaceState({}, "", url.toString());
             setScene(
               isProjectOnboardingComplete(refreshedFoundation?.project)
-                ? getFreeTrialResumeQuestionIndex(questionsDB)
+                ? getFreeTrialResumeQuestionIndex(refreshedQuestions)
                 : "onboarding_overview"
             );
           }}
