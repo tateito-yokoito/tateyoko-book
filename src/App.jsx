@@ -11032,11 +11032,11 @@ function Scene_GiftReceived({ preview, onContinue }) {
         )}
 
         <p className="mx-auto mt-8 max-w-[350px] text-[0.92rem] leading-[2.1] text-white/52">
-          最初にお届けするのは、三つの問いです。<br />
+          「はじまりの章」から、物語づくりを始められます。<br />
           声にしても、文章にしても、ご自身のペースでかまいません。
         </p>
         <p className="mt-5 text-xs leading-[1.9] text-white/28">
-          三つの問いのあとに、続きを進めるか、ひと休みするかを選べます。
+          招待する人や制作の進め方は、あとから選べます。
         </p>
 
         {error && (
