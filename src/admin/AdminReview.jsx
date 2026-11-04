@@ -42,6 +42,7 @@ import CustomerPreview from './CustomerPreview.jsx';
 import QuestionWorkbench from './QuestionWorkbench.jsx';
 import OpsErrorHistory from './OpsErrorHistory.jsx';
 import TodaySkyAdmin from './TodaySkyAdmin.jsx';
+import ConsultationReview from './ConsultationReview.jsx';
 import FixedLineTestReset from './FixedLineTestReset.jsx';
 import {normalizeUserQuestions} from '../App.jsx';
 import { AccountOverview, ProjectOverview } from './AdminDetailOverview.jsx';
@@ -55,6 +56,7 @@ const TAB_ITEMS = [
   { id: "errors", label: "エラー履歴", icon: AlertCircle },
   { id: "sky", label: "今日の空", icon: Bell },
   { id: "payments", label: "決済", icon: CreditCard },
+  { id: "consultations", label: "事前相談", icon: Mail },
   { id: "sales", label: "販売", icon: BadgePercent }
 ];
 
@@ -2903,9 +2905,10 @@ export default function AdminReview({ supabaseClient }) {
   const projects = dashboard?.projects || [];
   const attention = dashboard?.attention || [];
   const activeRows = tab === "attention" ? attention : projects;
+  const visibleTabs = TAB_ITEMS.filter(item => item.id !== "consultations" || adminRole === "owner");
   const navigationItems = organizationModeActive
-    ? [...TAB_ITEMS, { id: "hidden", label: "非表示ゾーン", icon: EyeOff }, { id: "test-reset", label: "LINEテスト初期化", icon: RotateCcw }]
-    : TAB_ITEMS;
+    ? [...visibleTabs, { id: "hidden", label: "非表示ゾーン", icon: EyeOff }, { id: "test-reset", label: "LINEテスト初期化", icon: RotateCcw }]
+    : visibleTabs;
   const pageTitle = navigationItems.find((item) => item.id === tab)?.label || "運営管理";
   const hiddenProjectEntry = detailId
     ? trashEntries.find(item => item.entity_type === "book_project" && item.entity_id === detailId)
@@ -2968,7 +2971,7 @@ export default function AdminReview({ supabaseClient }) {
                     <option value="failed">失敗</option>
                   </select>
                 )}
-                {tab !== "hidden" && tab !== "questions" && tab !== "errors" && tab !== "test-reset" && <form onSubmit={(event) => { event.preventDefault(); setAppliedSearch(search.trim()); }} className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-white px-3"><Search size={15} className="shrink-0 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="氏名・メール・ID" className="min-w-0 bg-transparent px-2 py-2.5 text-sm outline-none" /></form>}
+                {tab !== "hidden" && tab !== "questions" && tab !== "errors" && tab !== "test-reset" && tab !== "consultations" && <form onSubmit={(event) => { event.preventDefault(); setAppliedSearch(search.trim()); }} className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-white px-3"><Search size={15} className="shrink-0 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="氏名・メール・ID" className="min-w-0 bg-transparent px-2 py-2.5 text-sm outline-none" /></form>}
                 <button onClick={loadDashboard} title="再読み込み" className="rounded-xl border border-slate-200 bg-white p-3 text-slate-500"><RefreshCw size={16} className={loading ? "animate-spin" : ""} /></button>
               </div>
             </div>
@@ -2984,6 +2987,7 @@ export default function AdminReview({ supabaseClient }) {
             {tab === "sky" && <TodaySkyAdmin client={supabaseClient} />}
             {tab === "questions" && <QuestionWorkbench client={supabaseClient} owner={adminRole === "owner"} onOpenCustomerExperience={()=>setTab('projects')} />}
             {tab === "payments" && <OrderReview key={appliedSearch} client={supabaseClient} search={appliedSearch} onAccount={openAccountDetail} onProject={openDetail} />}
+            {tab === "consultations" && adminRole === "owner" && <ConsultationReview client={supabaseClient} />}
             {tab === "sales" && (
               <CommercePanel
                 data={commerceData}
