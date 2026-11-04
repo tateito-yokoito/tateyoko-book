@@ -3593,7 +3593,7 @@ if (!session) {
         }
 
 const unstartedConnections = await loadUnstartedConnections(session.user.id);
-if (unstartedConnections && !purchaseSelection && !guestTrialClaimRequested() && !pendingGuestTrialProject()) {
+if (unstartedConnections && checkoutReturn.status !== 'success' && !purchaseSelection && !guestTrialClaimRequested() && !pendingGuestTrialProject()) {
   enterUnstartedConnections(currentUser, unstartedConnections);
   return;
 }
@@ -7438,7 +7438,7 @@ setScene(1);
               setUser(u);
 
 const unstartedConnections = await loadUnstartedConnections(u.id);
-if (unstartedConnections && !purchaseSelection && !guestTrialClaimRequested() && !pendingGuestTrialProject()) {
+if (unstartedConnections && getCheckoutReturnFromUrl().status !== 'success' && !purchaseSelection && !guestTrialClaimRequested() && !pendingGuestTrialProject()) {
   enterUnstartedConnections(u, unstartedConnections);
   return;
 }
