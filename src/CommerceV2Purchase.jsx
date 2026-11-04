@@ -21,7 +21,9 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   const [standardExtraCount, setStandardExtraCount] = useState(initialSelection?.standardExtraCount || 0);
   const [premiumExtraCount, setPremiumExtraCount] = useState(initialSelection?.premiumExtraCount || 0);
   const [discountCode, setDiscountCode] = useState(initialSelection?.discountCode || '');
-  const [gift, setGift] = useState({ recipient_name: familyInvitation?.recipient_name || '',
+  const [purchaseFor, setPurchaseFor] = useState(initialSelection?.purchaseFor || (initialOrderType === 'gift' ? 'gift' : 'self'));
+  const [giftMode, setGiftMode] = useState(initialSelection?.giftMode || 'recipient_led');
+  const [gift, setGift] = useState({ recipient_name: familyInvitation?.recipient_name || initialSelection?.recipientName || '',
     recipient_email: familyInvitation?.recipient_email || '', gift_message: '' });
   const [contact, setContact] = useState({ contactName: '', contactEmail: '', contactPhone: '', consultationText: '' });
   const [productPreference, setProductPreference] = useState('standard');
@@ -35,8 +37,9 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   const requestKey = useRef(newRequestKey());
   const consultationKey = useRef(newRequestKey());
   const linkedConsultationId = new URLSearchParams(window.location.search).get('consultation');
-  const orderType = approvedConsultation?.orderType || (initialOrderType === 'gift' ? 'gift' : 'self');
-  const selection = { edition, productionMethod: method, standardExtraCount, premiumExtraCount, discountCode };
+  const orderType = approvedConsultation?.orderType || purchaseFor;
+  const selection = { edition, productionMethod: method, standardExtraCount, premiumExtraCount, discountCode,
+    purchaseFor: orderType, giftMode, recipientName: gift.recipient_name };
   const provisionalSubtotal = provisionalCommerceSubtotal(selection);
 
   useEffect(() => {
@@ -49,6 +52,9 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
       setStandardExtraCount(saved.standardExtraCount);
       setPremiumExtraCount(saved.premiumExtraCount);
       setDiscountCode(saved.discountCode);
+      setPurchaseFor(saved.purchaseFor);
+      setGiftMode(saved.giftMode);
+      setGift(current => ({ ...current, recipient_name: saved.recipientName }));
     };
     window.addEventListener('pageshow', restoreAfterBack);
     return () => window.removeEventListener('pageshow', restoreAfterBack);
@@ -83,7 +89,10 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
     setQuote(null);
     setError('');
     const load = () => client.functions.invoke('create-commerce-v2-checkout', { body: {
-      action: isSelection ? 'public_quote' : 'quote', orderType, projectId, edition, productionMethod: method,
+      // The public estimate has no purchaser or gift context; the authenticated
+      // quote below rechecks the actual order type before Checkout.
+      action: isSelection ? 'public_quote' : 'quote', orderType: isSelection ? 'self' : orderType,
+      projectId, edition, productionMethod: method,
       standardExtraCount, premiumExtraCount, discountCode,
       consultationId: approvedConsultation?.id || null,
     } }).then(({ data, error: invokeError }) => {
@@ -179,6 +188,8 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
       <div className="mt-8 rounded-2xl border border-white/20 bg-white/[0.05] p-5">
         <dl className="space-y-4">
           <div className="flex justify-between gap-4"><dt className="text-white/70">商品</dt><dd className="text-right">{edition === 'premium' ? 'プレミアム' : 'スタンダード'}</dd></div>
+          <div className="flex justify-between gap-4"><dt className="text-white/70">購入対象</dt><dd className="text-right">{orderType === 'gift' ? `贈り物・${giftMode === 'family_managed' ? '家族が制作を管理' : 'ご本人が制作'}` : '自分の人生史'}</dd></div>
+          {orderType === 'gift' && <div className="flex justify-between gap-4"><dt className="text-white/70">物語のご本人</dt><dd className="text-right">{gift.recipient_name}</dd></div>}
           <div className="flex justify-between gap-4"><dt className="text-white/70">制作方法</dt><dd className="text-right">{method === 'interview_staff' ? 'スタッフに聞き取ってもらう' : '自分・家族で制作する'}</dd></div>
           {standardExtraCount > 0 && <div className="flex justify-between gap-4"><dt className="text-white/70">追加スタンダード冊子</dt><dd>{standardExtraCount}冊</dd></div>}
           {premiumExtraCount > 0 && <div className="flex justify-between gap-4"><dt className="text-white/70">追加プレミアム冊子</dt><dd>{premiumExtraCount}冊</dd></div>}
@@ -207,6 +218,16 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
     <section className="mx-auto max-w-2xl px-6 py-12 text-white">
       <h1 className="text-2xl">縦糸横糸ブックを選ぶ</h1>
       <p className="mt-3 leading-7 text-white/75">どちらもWebブック付き。違いは紙のブックの装丁です。</p>
+      {!familyInvitation && !approvedConsultation && <fieldset className="mt-8 space-y-3">
+        <legend className="text-lg">誰の人生史をつくりますか</legend>
+        <label className="flex gap-3"><input type="radio" name="purchase-for" checked={orderType === 'self'} onChange={() => setPurchaseFor('self')} />自分の人生史をつくる</label>
+        <label className="flex gap-3"><input type="radio" name="purchase-for" checked={orderType === 'gift'} onChange={() => setPurchaseFor('gift')} />大切な方の人生史をつくる（贈り物）</label>
+        {orderType === 'gift' && <div className="ml-6 space-y-3 rounded-xl border border-white/20 p-4">
+          <label className="flex gap-3"><input type="radio" name="gift-mode" checked={giftMode === 'recipient_led'} onChange={() => setGiftMode('recipient_led')} />ご本人が制作する</label>
+          <label className="flex gap-3"><input type="radio" name="gift-mode" checked={giftMode === 'family_managed'} onChange={() => setGiftMode('family_managed')} />ご家族が制作を管理する</label>
+        </div>}
+      </fieldset>}
+      {orderType === 'gift' && <p className="mt-4 text-sm leading-7 text-white/65">新規ギフトには、決済日から45日以内かつ本編開始前までの返金保証があります。既存のギフト注文の条件は変わりません。</p>}
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
         {[['standard', 'スタンダード', 'B5ソフトカバー', '35,000円'], ['premium', 'プレミアム', '布貼り上製本', '65,000円']].map(([value, name, cover, price]) => (
           <button key={value} type="button" className={`${choiceClass} ${edition === value ? 'border-amber-200 bg-amber-200/10' : ''}`}
@@ -266,7 +287,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
             <p className="text-sm leading-7 text-white/75">商品・オプション：{(quote?.amount_subtotal ?? provisionalSubtotal)?.toLocaleString('ja-JP')}円（税込）<br />割引：−{quote ? Number(quote.discount_amount || 0).toLocaleString('ja-JP') : '—'}円</p>
             <p className="text-xl">お支払い合計：{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : method === 'interview_staff' ? '無料相談後に確定' : error ? '確認できませんでした' : '確認中'}</p>
             <p className="text-sm leading-6 text-white/70">{method === 'interview_staff' ? '聞き取り制作サポートは相談・合意後にお支払いとなります。' : '認証後に価格と割引条件を再確認し、変更があればお知らせします。'}</p>
-            <button type="button" className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={method === 'self_or_family' && !quote} onClick={() => {
+            <button type="button" className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={(method === 'self_or_family' && !quote) || (orderType === 'gift' && !gift.recipient_name.trim())} onClick={() => {
               try { onProceed?.({ ...selection, quotedAmountTotal: quote?.amount_total, quotedDiscountAmount: quote?.discount_amount }); }
               catch { setError('選択内容をこのブラウザに保存できません。通常モードで開き直してください。'); }
             }}>購入手続きへ進む</button>

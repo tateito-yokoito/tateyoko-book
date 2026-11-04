@@ -58,14 +58,17 @@ function RootScreen() {
   if (import.meta.env.VITE_COMMERCE_V2_ENABLED === 'true'
     && params.get('entry') === 'purchase' && !params.has('checkout')
     && !params.has('consultation') && !params.has('family_invite')
-    && !params.has('gift') && !['gift', 'family_trial_package'].includes(params.get('purchase_for'))
+    && !params.has('gift') && params.get('purchase_for') !== 'family_trial_package'
     && (!commercePurchaseReviewRequested() || !readCommercePurchaseIntent(window.localStorage))) {
     return <CommerceV2Purchase phase="selection" client={adminSupabaseClient}
+      initialOrderType={params.get('purchase_for') === 'gift' ? 'gift' : 'self'}
       initialSelection={readCommercePurchaseIntent(window.localStorage)}
       onProceed={selection => {
         saveCommercePurchaseIntent(window.localStorage, selection);
         const url = new URL(window.location.href);
         url.searchParams.set('app', '1');
+        if (selection.purchaseFor === 'gift') url.searchParams.set('purchase_for', 'gift');
+        else url.searchParams.delete('purchase_for');
         url.searchParams.set('purchase_review', '1');
         window.location.assign(url.toString());
       }} />;

@@ -2897,7 +2897,7 @@ export default function AdminReview({ supabaseClient }) {
       });
       if (actionError) throw actionError;
     }, packageStatus === "delivered"
-      ? "配達完了を記録し、40日保証を開始しました。"
+      ? "配達完了を記録しました。保証期間は購入時の条件に従います。"
       : "ギフト配送状況を更新しました。");
   };
 

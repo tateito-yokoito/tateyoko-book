@@ -49,7 +49,9 @@ import { themeExtraOptions } from "./lib/themeExtras.js";
 import ThemeMorePicker from "./ThemeMorePicker.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
 import CommerceV2Purchase from "./CommerceV2Purchase.jsx";
-import { commercePurchaseReviewRequested, readCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
+import ProjectRoleInvitePanel from './ProjectRoleInvitePanel.jsx';
+import CoManagerSharingPanel from './CoManagerSharingPanel.jsx';
+import { clearCommercePurchaseIntent, commercePurchaseReviewRequested, readCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
 import { ThemeMemoryRequestComposer, ThemeMemoryRequestManager } from "./ThemeMemoryRequestFlow.jsx";
 import StoryRequestComposer, { PaperHeartIcon } from "./StoryRequestComposer.jsx";
 import StoryRequestManager from "./StoryRequestManager.jsx";
@@ -239,6 +241,10 @@ function getPurchaseForFromUrl() {
 function getGiftClaimTokenFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return params.get("gift") || null;
+}
+
+function getProjectRoleInviteTokenFromUrl() {
+  return new URLSearchParams(window.location.search).get('role_invite') || null;
 }
 
 function getFamilyInviteTokenFromUrl() {
@@ -2703,18 +2709,19 @@ async function loadSupporterBookData(supportedProject) {
     supportedProject?.can_edit_book_text || supportedProject?.can_build_book;
   const canReadPhotos =
     supportedProject?.can_manage_photos || canReadStories;
+  const coManager = ['co_manager', 'facilitator'].includes(supportedProject?.support_role);
 
   const [questionsResult, storiesResult, photosResult] = await Promise.all([
     supabaseClient.rpc("get_supporter_questions", {
       input_book_project_id: bookProjectId
     }),
     canReadStories
-      ? supabaseClient.rpc("get_supporter_book_stories", {
+      ? supabaseClient.rpc(coManager ? "get_co_manager_stories" : "get_supporter_book_stories", {
           input_book_project_id: bookProjectId
         })
       : Promise.resolve({ data: [], error: null }),
     canReadPhotos
-      ? supabaseClient.rpc("get_supporter_book_photos", {
+      ? supabaseClient.rpc(coManager ? "get_co_manager_media" : "get_supporter_book_photos", {
           input_book_project_id: bookProjectId
         })
       : Promise.resolve({ data: [], error: null })
@@ -2736,7 +2743,8 @@ async function loadSupporterBookData(supportedProject) {
     selected_style: "readable",
     ai_mirror: "",
     snippet: "",
-    created_at: row.created_at
+    created_at: row.created_at,
+    access_override: row.access_override || 'inherit'
   }));
 
   const questionSet = (questionsResult.data || []).map(row => ({
@@ -2766,8 +2774,10 @@ async function loadSupporterBookData(supportedProject) {
   const groupedMedia = {};
 
   for (const photo of photosResult.data || []) {
+    const assetType = coManager ? photo.asset_type : 'photo';
+    if (!['photo','audio','video'].includes(assetType)) continue;
     const { data: signed } = await supabaseClient.storage
-      .from("photos")
+      .from(assetType === 'photo' ? 'photos' : assetType === 'audio' ? 'audio' : 'videos')
       .createSignedUrl(photo.storage_path, 60 * 60);
 
     if (!groupedMedia[photo.answer_id]) {
@@ -2777,7 +2787,7 @@ async function loadSupporterBookData(supportedProject) {
     groupedMedia[photo.answer_id].push({
       id: photo.media_id,
       answer_id: photo.answer_id,
-      asset_type: "photo",
+      asset_type: assetType,
       storage_path: photo.storage_path,
       meta_json: photo.meta_json || {},
       created_at: photo.created_at,
@@ -3253,6 +3263,8 @@ function App() {
   const [supportedProjects, setSupportedProjects] = useState([]);
   const [receivedProjects, setReceivedProjects] = useState([]);
   const [supportContext, setSupportContext] = useState(null);
+  const [roleInviteProjectId, setRoleInviteProjectId] = useState(null);
+  const [roleInviteReturnScene, setRoleInviteReturnScene] = useState('home');
   const [supportNotificationPref, setSupportNotificationPref] = useState(null);
   const [receivedContext, setReceivedContext] = useState(null);
   const [acceptedConnection, setAcceptedConnection] = useState(null);
@@ -3368,6 +3380,7 @@ function App() {
   const [purchaseFor, setPurchaseFor] = useState(() => getPurchaseForFromUrl());
   const [commerceV2Invitation, setCommerceV2Invitation] = useState(null);
   const [purchaseResult, setPurchaseResult] = useState(null);
+  const pendingManagedGiftKey = 'tateyoko:pending-family-managed-gift:v1';
   const [bookBuilderOrderCompletedAt, setBookBuilderOrderCompletedAt] = useState(null);
   const [bookBuilderResumeStep, setBookBuilderResumeStep] = useState(0);
   const [storyPagesReturnScene, setStoryPagesReturnScene] = useState("home");
@@ -3544,6 +3557,24 @@ if (!session) {
           email: session.user.email || profile?.email || "",
           name: profile?.display_name || profile?.name || "あなた"
         };
+
+        if (getProjectRoleInviteTokenFromUrl()) {
+          setUser(currentUser);
+          setScene('role_invite_received');
+          return;
+        }
+
+        let pendingManagedGift = null;
+        try { pendingManagedGift = JSON.parse(window.localStorage.getItem(pendingManagedGiftKey) || 'null'); }
+        catch { window.localStorage.removeItem(pendingManagedGiftKey); }
+        if (!checkoutReturn.sessionId && pendingManagedGift?.userId === session.user.id && pendingManagedGift?.order?.id
+          && pendingManagedGift?.gift?.claim_token) {
+          setUser(currentUser);
+          setPurchaseResult({ order: pendingManagedGift.order, gift: pendingManagedGift.gift, familyManaged: true });
+          setPurchaseStatus('paid');
+          setScene('gift_purchase_success');
+          return;
+        }
 
 const unstartedConnections = await loadUnstartedConnections(session.user.id);
 if (unstartedConnections && !purchaseSelection && !guestTrialClaimRequested() && !pendingGuestTrialProject()) {
@@ -3793,6 +3824,10 @@ if (isFreeTrialExpired(loadedTrialRetention)
   sceneAfterInvite = "trial_expired";
 }
 if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite = 'purchase_start';
+if (getProjectRoleInviteTokenFromUrl()) {
+  setScene('role_invite_received');
+  return;
+}
 
 if (
   !purchaseSelection && isBetaMode() &&
@@ -6352,7 +6387,18 @@ useEffect(() => {
 
   const finishGiftCheckoutAsPaid = data => {
     setPurchaseFor("gift");
-    setPurchaseResult({ order: data.order, gift: data.gift });
+    const purchaseIntent = readCommercePurchaseIntent(window.localStorage);
+    const familyManaged = purchaseIntent?.purchaseFor === 'gift'
+      && purchaseIntent.giftMode === 'family_managed'
+      && purchaseIntent.recipientName === data.gift?.recipient_name;
+    setPurchaseResult({ order: data.order, gift: data.gift, familyManaged });
+    if (familyManaged && data.order?.id && data.gift?.claim_token) {
+      window.localStorage.setItem(pendingManagedGiftKey, JSON.stringify({
+        userId: user.id,
+        order: { id: data.order.id },
+        gift: { claim_token: data.gift.claim_token, recipient_name: data.gift.recipient_name }
+      }));
+    }
     setPurchaseStatus("paid");
     setPurchaseError("");
     replaceCommercialEntryUrl("purchased");
@@ -6782,7 +6828,7 @@ const handleSaveAnswer = async (tag = null) => {
             audio_segment_count: (voiceData.audioSegments || []).length,
             audio_segment_durations: (voiceData.audioSegments || []).map(s => s.duration || 0)
           }
-        }, { onConflict: "user_id,sequence_order" })
+        }, { onConflict: "book_project_id,sequence_order" })
         .select("id")
         .single();
 
@@ -7532,6 +7578,10 @@ if (isFreeTrialExpired(loadedTrialRetention)
   sceneAfterInvite = "trial_expired";
 }
 if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite = 'purchase_start';
+if (getProjectRoleInviteTokenFromUrl()) {
+  setScene('role_invite_received');
+  return;
+}
 
             if (!purchaseSelection && isBetaMode() && !loginFamilyInviteToken && u?.__isNewProfile && u?.id) {
               const betaIntroSeenKey = getBetaIntroSeenKey(u.id);
@@ -7579,7 +7629,7 @@ if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite 
         COMMERCE_V2_ENABLED ? (
           <CommerceV2Purchase client={supabaseClient} projectId={foundation?.project?.id}
             phase={purchaseSelection ? 'review' : 'checkout'} initialSelection={purchaseSelection}
-            initialOrderType={purchaseFor}
+            initialOrderType={purchaseSelection?.purchaseFor || purchaseFor}
             familyInvitation={commerceV2Invitation || (
               receivedFamilyInvitation && ['awaiting_payment', 'continuation_awaiting_payment', 'trial_completed'].includes(receivedFamilyInvitation.status)
                 ? receivedFamilyInvitation : null
@@ -7764,7 +7814,42 @@ if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite 
         <Scene_GiftPurchaseSuccess
           order={purchaseResult?.order}
           gift={purchaseResult?.gift}
+          familyManaged={purchaseResult?.familyManaged}
+          onStartManaged={async () => {
+            if (!purchaseResult?.gift?.claim_token || !purchaseResult?.order?.id || !user?.id) throw new Error('購入内容を確認できませんでした');
+            const storageKey = `tateyoko:gift-managed-creation:${purchaseResult.order.id}`;
+            let creationKey = window.localStorage.getItem(storageKey);
+            if (!creationKey) {
+              creationKey = crypto.randomUUID();
+              window.localStorage.setItem(storageKey, creationKey);
+            }
+            const created = await createChildLedFamilyStory({
+              subjectName: purchaseResult.gift.recipient_name,
+              relationshipLabel: 'parent', creationKey
+            });
+            if (!created?.book_project_id) throw new Error('作品を作成できませんでした');
+            const { error: claimError } = await supabaseClient.rpc('claim_family_managed_gift', {
+              input_claim_token: purchaseResult.gift.claim_token,
+              input_book_project_id: created.book_project_id,
+              input_subject_consent: true
+            });
+            if (claimError) throw claimError;
+            const projects = await loadSupportedStoryProjects();
+            const selected = projects.find(project => project.book_project_id === created.book_project_id);
+            if (!selected) throw new Error('作品を開けませんでした');
+            const [bookData, notificationData] = await Promise.all([
+              loadSupporterBookData(selected),
+              loadNotificationPreference(user.id, selected.book_project_id)
+            ]);
+            setSupportedProjects(projects);
+            setSupportContext({ project: selected, ...bookData });
+            setSupportNotificationPref(notificationData || null);
+            window.localStorage.removeItem(pendingManagedGiftKey);
+            clearCommercePurchaseIntent(window.localStorage);
+            setScene('support_project_home');
+          }}
           onFinish={() => {
+            if (!purchaseResult?.familyManaged) clearCommercePurchaseIntent(window.localStorage);
             setPurchaseStatus("idle");
             setPurchaseResult(null);
             window.location.assign("/");
@@ -8048,6 +8133,7 @@ if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite 
           user={user}
           foundation={foundation}
           sharingPreference={sharingPreference}
+          onInviteLink={() => { setRoleInviteProjectId(foundation?.project?.id); setRoleInviteReturnScene('supporter_invite'); setScene('project_role_invite_issue'); }}
           onComplete={() => setScene("notification_setup")}
         />
       )}
@@ -8096,6 +8182,7 @@ if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite 
           foundation={foundation}
           sharingPreference={sharingPreference}
           isInitialSetup
+          onInviteLink={() => { setRoleInviteProjectId(foundation?.project?.id); setRoleInviteReturnScene('supporter_invite_initial'); setScene('project_role_invite_issue'); }}
           onSharingPreferenceChange={setSharingPreference}
           onComplete={async () => {
             try {
@@ -8143,6 +8230,28 @@ if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite 
           }
         />
       )}
+
+      {scene === 'project_role_invite_issue' && <ProjectRoleInvitePanel
+        client={supabaseClient} projectId={roleInviteProjectId}
+        onBack={() => setScene(roleInviteReturnScene)} />}
+
+      {scene === 'support_co_manager_sharing' && supportContext && <CoManagerSharingPanel
+        client={supabaseClient} projectId={supportContext.project.book_project_id}
+        onBack={() => setScene('support_project_home')} />}
+
+      {scene === 'role_invite_received' && <ProjectRoleInvitePanel
+        client={supabaseClient} token={getProjectRoleInviteTokenFromUrl() || ''}
+        onAccepted={async projectId => {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('role_invite');
+          window.history.replaceState({}, '', url.toString());
+          const projects = await loadSupportedStoryProjects({ required: true });
+          setSupportedProjects(projects);
+          const selected = projects.find(project => project.book_project_id === projectId);
+          if (!selected) throw new Error('参加した物語を開けませんでした');
+          await openSupportedProject(selected);
+        }}
+        onBack={() => window.location.assign('/?app=1')} />}
 
       {scene === "story_relationship_invite_received" && pendingStoryRelationshipInvites[0] && (
         <Scene_StoryRelationshipInviteReceived
@@ -8648,6 +8757,7 @@ if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite 
           foundation={foundation}
           sharingPreference={sharingPreference}
           onSharingPreferenceChange={setSharingPreference}
+          onIssueLink={() => { setRoleInviteProjectId(foundation?.project?.id); setRoleInviteReturnScene('supporter_management'); setScene('project_role_invite_issue'); }}
           onBack={() => setScene("settings")}
         />
       )}
@@ -8695,6 +8805,8 @@ if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite 
           onOpenQuestions={() => setScene("support_recording_assist")}
           onOpenStories={() => setScene("support_story_pages")}
           onOpenBookBuilder={() => setScene("support_book_builder")}
+          onInviteLink={() => { setRoleInviteProjectId(supportContext.project.book_project_id); setRoleInviteReturnScene('support_project_home'); setScene('project_role_invite_issue'); }}
+          onSharing={() => setScene('support_co_manager_sharing')}
           onBack={() => {
             setSupportContext(null);
             setScene(foundation?.project ? "home" : "connections_home");
@@ -8754,6 +8866,27 @@ if (purchaseSelection && getEntryModeFromUrl() === 'purchase') sceneAfterInvite 
           questionSet={supportContext.questionSet}
           storyRows={supportContext.storyRows}
           mediaByAnswerId={supportContext.mediaByAnswerId}
+          onSaveStory={['co_manager', 'facilitator'].includes(supportContext.project.support_role) ? async (answerId, textValue, isPrivate) => {
+            const { error } = await supabaseClient.rpc('update_co_manager_story', {
+              input_answer_id: answerId, input_book_text: textValue, input_private: isPrivate
+            });
+            if (error) throw error;
+            await refreshSupportedProject();
+          } : null}
+          onAttachMedia={['co_manager', 'facilitator'].includes(supportContext.project.support_role) ? async (answerId, file) => {
+            const type = file.type.startsWith('image/') ? 'photo' : file.type.startsWith('video/') ? 'video' : null;
+            if (!type || file.size > 50 * 1024 * 1024) throw new Error('写真・動画は50MB以下のファイルを選んでください');
+            const extension = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || (type === 'photo' ? 'jpg' : 'mp4');
+            const path = `${user.id}/${supportContext.project.book_project_id}/${answerId}/${crypto.randomUUID()}.${extension}`;
+            const { error: uploadError } = await supabaseClient.storage.from(type === 'photo' ? 'photos' : 'videos')
+              .upload(path, file, { contentType: file.type, upsert: false });
+            if (uploadError) throw uploadError;
+            const { error: attachError } = await supabaseClient.rpc('attach_collaborator_media', {
+              input_answer_id: answerId, input_asset_type: type, input_storage_path: path
+            });
+            if (attachError) throw attachError;
+            await refreshSupportedProject();
+          } : null}
           onBack={() => setScene("support_project_home")}
         />
       )}
@@ -10707,8 +10840,11 @@ function Scene_PurchaseSuccess({ hasTrial, onContinue }) {
   );
 }
 
-function Scene_GiftPurchaseSuccess({ order, gift, onFinish }) {
+function Scene_GiftPurchaseSuccess({ order, gift, familyManaged = false, onStartManaged, onFinish }) {
   const [copied, setCopied] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState('');
   const claimUrl = gift?.claim_token
     ? (() => {
         const url = new URL(window.location.origin + window.location.pathname);
@@ -10740,15 +10876,21 @@ function Scene_GiftPurchaseSuccess({ order, gift, onFinish }) {
           お預かりしました
         </h1>
         <p className="mt-7 text-[0.92rem] leading-[2] text-white/50">
-          {gift?.package_selected
+          {familyManaged ? 'ご本人のスマホ操作なしで、購入者が制作を始められます。' : gift?.package_selected
             ? "パッケージを整え、発送の準備を進めます。"
             : "下の受取リンクから、贈られた方が物語を始められます。"}
         </p>
 
-        {claimUrl && (
+        {claimUrl && !familyManaged && (
           <div className="mt-8 rounded-[1.6rem] border border-white/10 bg-white/[0.025] p-5 text-left">
             <p className="text-xs tracking-[0.12em] text-white/35">受取リンク</p>
             <p className="mt-3 break-all text-xs leading-relaxed text-white/46">{claimUrl}</p>
+            <button type="button" className="mt-4 w-full rounded-full bg-white py-3 text-sm text-slate-900" onClick={async () => {
+              try {
+                if (navigator.share) await navigator.share({ title: '縦糸横糸の贈り物', url: claimUrl });
+                else await copyClaimUrl();
+              } catch (error) { if (error?.name !== 'AbortError') console.error('gift share error', error); }
+            }}>LINEなどで受取リンクを送る</button>
             <button
               type="button"
               onClick={copyClaimUrl}
@@ -10765,12 +10907,25 @@ function Scene_GiftPurchaseSuccess({ order, gift, onFinish }) {
           受取リンクには贈りものを開くための情報が含まれます。大切にお取り扱いください。
         </p>
 
+        {familyManaged && <div className="mt-8 text-left">
+          <label className="flex gap-3 text-sm leading-7 text-white/85">
+            <input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} />
+            <span>人生史を制作するご本人に、サービスの内容を説明し、制作・編集・管理を代わって行うことについて了承を得ています。</span>
+          </label>
+          {startError && <p role="alert" className="mt-4 text-sm text-rose-200">{startError}</p>}
+          <button type="button" disabled={!consent || starting} className="btn-quiet mt-6 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" onClick={async () => {
+            setStarting(true); setStartError('');
+            try { await onStartManaged(); }
+            catch (error) { setStartError(error?.message || '制作を始められませんでした'); setStarting(false); }
+          }}>この物語の制作を始める</button>
+        </div>}
+
         <button
           type="button"
           onClick={onFinish}
           className="btn-quiet mt-10 w-full rounded-full bg-white py-4 text-slate-900"
         >
-          完了
+          {familyManaged ? '後で制作を始める' : '完了'}
         </button>
       </div>
     </div>
@@ -12636,6 +12791,8 @@ export function Scene_SupporterInvite({
   sharingPreference,
   isInitialSetup = false,
   initialEmail = "",
+  onInviteLink,
+  onSharing,
   onSharingPreferenceChange,
   onComplete
 }) {
@@ -12742,6 +12899,8 @@ export function Scene_SupporterInvite({
             </p>
           </div>
         )}
+
+        {onInviteLink && <button type="button" className="btn-quiet bg-white/10 w-full py-4 rounded-full text-sm text-white" onClick={onInviteLink}>LINEなどで招待を送る／リンクをコピー</button>}
 
         <div className="flex gap-4 justify-center" aria-label="依頼の送り方">
           <button type="button" aria-pressed={inviteChannel==='email'} onClick={()=>setInviteChannel('email')} className="text-white/75 text-sm underline">メール</button>
@@ -15191,6 +15350,7 @@ export function Scene_SupporterManagement({
   foundation,
   sharingPreference,
   onSharingPreferenceChange,
+  onIssueLink,
   onBack,
   adminPreviewClient = null
 }) {
@@ -15379,6 +15539,8 @@ export function Scene_SupporterManagement({
           録音の操作、写真の追加、文章の整理、本づくりをお手伝いできます。共有設定の変更や、非公開の語りの閲覧はできません。
         </p>
       </div>
+
+      {onIssueLink && <button type="button" className="btn-quiet bg-white/10 w-full py-4 rounded-full text-sm text-white mb-6" onClick={onIssueLink}>LINEなどで招待を送る／リンクをコピー</button>}
 
       <div className="space-y-3 mb-6">
         {loading && <p className="text-center text-white/35 text-sm py-8">読み込んでいます...</p>}
@@ -15715,6 +15877,8 @@ export function Scene_SupportProjectHome({
   onOpenQuestions,
   onOpenStories,
   onOpenBookBuilder,
+  onInviteLink,
+  onSharing,
   onReadOnlyAction,
   onBack
 }) {
@@ -15727,6 +15891,10 @@ export function Scene_SupportProjectHome({
     book: Boolean(project?.can_build_book),
   };
   return <SupporterContextFrame name={project?.subject_name} onReturn={onBack} embedded={readOnly}>
+    {['co_manager', 'facilitator'].includes(project?.support_role) && <div className="mx-auto my-3 flex flex-wrap justify-center gap-3">
+      {onInviteLink && <button type="button" className="rounded-full border border-white/30 px-5 py-2 text-sm text-white" onClick={onInviteLink}>共同管理者・お手伝いする人を招待</button>}
+      {onSharing && <button type="button" className="rounded-full border border-white/30 px-5 py-2 text-sm text-white" onClick={onSharing}>共有設定</button>}
+    </div>}
     <Scene_Home
       userName={project?.subject_name || "ご家族"}
       questionSet={questionSet}
@@ -15739,11 +15907,53 @@ export function Scene_SupportProjectHome({
   </SupporterContextFrame>;
 }
 
+function CoManagerStoryEditor({ story, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [textValue, setTextValue] = useState(story.transcript_edited || story.transcript_readable || '');
+  const [isPrivate, setIsPrivate] = useState(story.access_override === 'private_forever');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  if (!editing) return <button type="button" className="text-sm text-white/65 underline" onClick={() => setEditing(true)}>文章・共有を編集</button>;
+  return <div className="space-y-3 border-t border-white/15 pt-4">
+    <textarea className="w-full rounded-xl bg-white p-3 text-slate-900" rows="5" value={textValue} onChange={event => setTextValue(event.target.value)} />
+    <label className="flex gap-2 text-sm text-white/75"><input type="checkbox" checked={isPrivate} onChange={event => setIsPrivate(event.target.checked)} />この語りを非公開にする</label>
+    {error && <p role="alert" className="text-sm text-rose-200">{error}</p>}
+    <div className="flex gap-4"><button disabled={busy} className="rounded-full bg-white px-5 py-2 text-slate-900 disabled:opacity-50" onClick={async () => {
+      setBusy(true); setError('');
+      try { await onSave(story.id, textValue, isPrivate); setEditing(false); }
+      catch { setError('保存できませんでした'); }
+      finally { setBusy(false); }
+    }}>保存する</button><button className="text-sm text-white/65 underline" onClick={() => setEditing(false)}>戻る</button></div>
+  </div>;
+}
+
+function CoManagerMediaAdd({ storyId, onAttach }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  return <div className="space-y-2">
+    <label className="inline-block cursor-pointer text-sm text-white/70 underline">
+      {busy ? '保存しています…' : '写真・動画を追加'}
+      <input type="file" accept="image/*,video/*" className="sr-only" disabled={busy} onChange={async event => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        setBusy(true); setError('');
+        try { await onAttach(storyId, file); }
+        catch (cause) { setError(cause?.message || '保存できませんでした'); }
+        finally { setBusy(false); }
+      }} />
+    </label>
+    {error && <p role="alert" className="text-sm text-rose-200">{error}</p>}
+  </div>;
+}
+
 export function Scene_SupportedStoryPages({
   project,
   questionSet = [],
   storyRows = [],
   mediaByAnswerId = {},
+  onSaveStory = null,
+  onAttachMedia = null,
   mode = "supporter",
   onBack
 }) {
@@ -15801,6 +16011,10 @@ export function Scene_SupportedStoryPages({
           const question = questionBySequence.get(Number(story.sequence_order));
           const photos = (mediaByAnswerId?.[story.id] || [])
             .filter(item => item.asset_type === "photo" && item.url);
+          const recordings = (mediaByAnswerId?.[story.id] || [])
+            .filter(item => item.asset_type === 'audio' && item.url);
+          const videos = (mediaByAnswerId?.[story.id] || [])
+            .filter(item => item.asset_type === 'video' && item.url);
 
           return (
             <article key={story.id} className="glass-card p-5 space-y-4">
@@ -15829,6 +16043,10 @@ export function Scene_SupportedStoryPages({
                   ))}
                 </div>
               )}
+              {onSaveStory && recordings.map(item => <audio key={item.id} controls src={item.url} className="w-full" />)}
+              {onSaveStory && videos.map(item => <video key={item.id} controls src={item.url} className="w-full rounded-xl" />)}
+              {onSaveStory && <CoManagerStoryEditor key={`${story.id}:${story.transcript_edited}:${story.access_override}`} story={story} onSave={onSaveStory} />}
+              {onAttachMedia && <CoManagerMediaAdd storyId={story.id} onAttach={onAttachMedia} />}
             </article>
           );
         })}

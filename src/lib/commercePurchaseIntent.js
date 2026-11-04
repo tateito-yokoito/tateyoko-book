@@ -9,12 +9,16 @@ export function normalizeCommercePurchaseSelection(value) {
   const standardExtraCount = Number(value?.standardExtraCount ?? 0);
   const premiumExtraCount = Number(value?.premiumExtraCount ?? 0);
   const discountCode = String(value?.discountCode || '').trim();
+  const purchaseFor = value?.purchaseFor === 'gift' ? 'gift' : 'self';
+  const giftMode = purchaseFor === 'gift' && value?.giftMode === 'family_managed' ? 'family_managed' : 'recipient_led';
+  const recipientName = purchaseFor === 'gift' ? String(value?.recipientName || '').trim() : '';
   if (!['standard', 'premium'].includes(edition)
     || !['self_or_family', 'interview_staff'].includes(productionMethod)
     || !Number.isInteger(standardExtraCount) || standardExtraCount < 0 || standardExtraCount > 30
     || !Number.isInteger(premiumExtraCount) || premiumExtraCount < 0 || premiumExtraCount > 30
-    || discountCode.length > 64) return null;
-  return { edition, productionMethod, standardExtraCount, premiumExtraCount, discountCode };
+    || discountCode.length > 64 || recipientName.length > 80) return null;
+  return { edition, productionMethod, standardExtraCount, premiumExtraCount, discountCode,
+    purchaseFor, giftMode, recipientName };
 }
 
 // A display-only subtotal. The authenticated quote is the sole source of a payable amount.
