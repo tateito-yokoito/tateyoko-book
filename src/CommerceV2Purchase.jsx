@@ -25,17 +25,12 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   const [giftMode, setGiftMode] = useState(initialSelection?.giftMode || 'recipient_led');
   const [gift, setGift] = useState({ recipient_name: familyInvitation?.recipient_name || initialSelection?.recipientName || '',
     recipient_email: familyInvitation?.recipient_email || '', gift_message: '' });
-  const [contact, setContact] = useState({ contactName: '', contactEmail: '', contactPhone: '', consultationText: '' });
-  const [productPreference, setProductPreference] = useState('standard');
   const [quote, setQuote] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [contactConsent, setContactConsent] = useState(false);
-  const [consultationId, setConsultationId] = useState(null);
   const [approvedConsultation, setApprovedConsultation] = useState(null);
   const [consultationLoading, setConsultationLoading] = useState(false);
   const requestKey = useRef(newRequestKey());
-  const consultationKey = useRef(newRequestKey());
   const linkedConsultationId = new URLSearchParams(window.location.search).get('consultation');
   const orderType = approvedConsultation?.orderType || purchaseFor;
   const selection = { edition, productionMethod: method, standardExtraCount, premiumExtraCount, discountCode,
@@ -147,32 +142,25 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
     }
   };
 
-  const submitConsultation = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError('');
+  const openSupportConsultation = () => {
+    if (orderType === 'gift' && !gift.recipient_name.trim()) {
+      setError('贈る相手のお名前を入力してください');
+      return;
+    }
     try {
-      const { data, error: invokeError } = await client.functions.invoke('submit-commerce-v2-consultation', { body: {
-        requestKey: consultationKey.current, productPreference,
-        orderType,
-        standardExtraCount, premiumExtraCount, ...contact,
-        consentToContact: contactConsent,
+      window.sessionStorage.setItem('supportConsultationSelection', JSON.stringify({
+        orderType, edition, standardExtraCount, premiumExtraCount, giftMode, discountCode,
+        giftRecipientName: orderType === 'gift' ? gift.recipient_name.trim() : null,
         familyInvitationId: familyInvitation?.id || null,
-        giftRecipientName: orderType === 'gift' ? gift.recipient_name : null,
-      } });
-      if (invokeError || !data?.success) throw new Error(data?.error || '無料相談を申し込めませんでした');
-      setConsultationId(data.consultationId);
-    } catch (cause) {
-      setError(cause.message || '無料相談を申し込めませんでした');
-    } finally { setBusy(false); }
+      }));
+      const url = new URL('/support-consultation/', window.location.origin);
+      url.searchParams.set('source', 'product-selection');
+      if (['localhost', '127.0.0.1'].includes(window.location.hostname)) url.searchParams.set('test', '1');
+      window.location.assign(url.toString());
+    } catch {
+      setError('相談内容を引き継げません。ブラウザの保存設定を確認してください。');
+    }
   };
-
-  if (consultationId) return (
-    <section className="mx-auto max-w-xl px-6 py-20 text-center text-white">
-      <h1 className="text-2xl">無料相談を受け付けました</h1>
-      <p className="mt-6 leading-8 text-white/75">スタッフから電話またはメールでご連絡します。現時点で有料注文・決済は発生していません。</p>
-    </section>
-  );
   if (linkedConsultationId && consultationLoading) return <p className="px-6 py-16 text-center text-white">相談内容を確認しています…</p>;
   if (approvedConsultation?.status === 'paid') return (
     <p className="px-6 py-16 text-center text-white">お支払いが完了しました。スタッフからのご連絡をお待ちください。</p>
@@ -231,7 +219,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
         {[['standard', 'スタンダード', 'B5ソフトカバー', '35,000円'], ['premium', 'プレミアム', '布貼り上製本', '65,000円']].map(([value, name, cover, price]) => (
           <button key={value} type="button" className={`${choiceClass} ${edition === value ? 'border-amber-200 bg-amber-200/10' : ''}`}
-            aria-pressed={edition === value} disabled={Boolean(approvedConsultation)} onClick={() => { setEdition(value); setProductPreference(value); requestKey.current = newRequestKey(); }}>
+            aria-pressed={edition === value} disabled={Boolean(approvedConsultation)} onClick={() => { setEdition(value); requestKey.current = newRequestKey(); }}>
             <span className="flex items-center justify-between gap-3 text-lg"><span>{name}</span><span className="text-sm text-amber-200">{edition === value ? '✓ 選択中' : '選択する'}</span></span>
             <span className="mt-2 block text-sm text-white/70">{cover}・Webブック</span>
             <span className="mt-3 block">{price}（税込）</span>
@@ -258,24 +246,13 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         <label className="mt-3 flex gap-3"><input type="radio" checked={method === 'interview_staff'} disabled={Boolean(approvedConsultation)} onChange={() => { setMethod('interview_staff'); requestKey.current = newRequestKey(); }} />スタッフに聞き取ってもらう（＋20,000円）</label>
         <p className="mt-3 text-sm leading-6 text-white/70">聞き取り制作サポートは無料相談後、合意してから一括決済します。スマホ操作が苦手な方もご相談いただけます。</p>
       </fieldset>
-      {method === 'interview_staff' && !approvedConsultation && !isSelection ? (
+      {method === 'interview_staff' && !approvedConsultation ? (
         <div className="mt-8 space-y-4">
           {orderType === 'gift' && <label className="block">贈る相手のお名前<input className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-slate-900" value={gift.recipient_name} disabled={Boolean(familyInvitation)}
             onChange={event => setGift(current => ({ ...current, recipient_name: event.target.value }))} /></label>}
-          <label className="block">冊子タイプ
-            <select className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-slate-900" value={productPreference} onChange={event => setProductPreference(event.target.value)}>
-              <option value="standard">スタンダード</option><option value="premium">プレミアム</option><option value="undecided">相談して決めたい</option>
-            </select>
-          </label>
-          {[['contactName', 'お名前'], ['contactEmail', 'メールアドレス'], ['contactPhone', '電話番号']].map(([key, label]) => (
-            <label key={key} className="block">{label}<input className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-slate-900" value={contact[key]}
-              onChange={event => setContact(current => ({ ...current, [key]: event.target.value }))} /></label>
-          ))}
-          <label className="block">ご相談内容<textarea className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-slate-900" rows="4" value={contact.consultationText}
-            onChange={event => setContact(current => ({ ...current, consultationText: event.target.value }))} /></label>
-          <label className="flex gap-3 text-sm leading-6 text-white/70"><input type="checkbox" checked={contactConsent} onChange={event => setContactConsent(event.target.checked)} />ご連絡のために入力内容を利用することに同意します。送信時点で費用はかかりません。</label>
-          <button className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !contactConsent || !contact.contactName.trim() || (orderType === 'gift' && !gift.recipient_name.trim()) || (!contact.contactEmail.trim() && !contact.contactPhone.trim())}
-            onClick={submitConsultation}>無料相談を申し込む</button>
+          <p className="text-sm leading-7 text-white/75">商品・オプション：{provisionalSubtotal?.toLocaleString('ja-JP')}円（税込）。相談後に内容を確認します。</p>
+          <button type="button" className="w-full rounded-full bg-white py-4 text-slate-900" onClick={openSupportConsultation}>事前相談フォームへ進む</button>
+          <p className="text-center text-sm text-white/65">ご相談のみでは購入・決済は発生しません。</p>
         </div>
       ) : (
         <div className="mt-8 space-y-4">
