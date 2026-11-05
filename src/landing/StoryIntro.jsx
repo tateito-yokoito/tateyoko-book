@@ -3,17 +3,38 @@ import React, { useState } from 'react';
 const asset = '/site/hp-story-preview/';
 const waysImage = asset + 'ways-to-preserve-reference.jpg';
 
-export default function StoryIntro() {
+export default function StoryIntro({ nov8Preview = false }) {
   return <>
     <section className="hp-v4-memory" id="memory" aria-labelledby="memory-title">
       <div className="hp-shell hp-v4-memory-heading"><h2 id="memory-title">写真は、こんなに残る。<br />では、想いはどうだろう。</h2></div>
       <figure className="hp-v4-record"><img src={asset + 'records-photos-and-phone.png'} alt="古いアルバム、たくさんの写真、写真一覧を表示するスマートフォン" width="1024" height="1536" loading="lazy" /></figure>
+      {nov8Preview ? <div className="hp-v4-question-cards hp-shell" id="loved-one" aria-label="親と自分の人生への問いかけ">
+        <article className="hp-v4-question-card hp-v4-question-card-parent">
+          <div className="hp-v4-question-card-content">
+            <h3>ご両親のこと、<br />どれだけ知っていますか？</h3>
+            <svg className="hp-v4-question-curve" viewBox="0 0 300 16" preserveAspectRatio="none" aria-hidden="true"><path d="M2 11 C65 1 119 5 169 9 S255 4 298 8" /></svg>
+            <p className="hp-v4-question-voice">「親の若い頃のこと、ほとんど知らない。<br /><span className="hp-v4-question-voice-second">どんなこと考えてきたんだろう。」</span></p>
+            <p className="hp-v4-question-closing">今ならまだ、聞けることがある。</p>
+          </div>
+          <svg className="hp-v4-question-mountains" viewBox="0 0 400 75" preserveAspectRatio="none" aria-hidden="true"><path d="M0 33 Q25 19 52 29 T112 32 T169 39 T229 37 T288 31 T349 22 T400 26 V75 H0Z" /><path d="M0 52 Q37 40 78 49 T148 44 T220 52 T300 42 T400 37 V75 H0Z" /><path d="M0 62 Q60 55 113 59 T221 56 T322 58 T400 51 V75 H0Z" /></svg>
+        </article>
+        <article className="hp-v4-question-card hp-v4-question-card-self">
+          <div className="hp-v4-question-card-content">
+            <h3>子どもたちは、あなたのこと<br />どれだけ知っていますか？</h3>
+            <svg className="hp-v4-question-curve" viewBox="0 0 300 16" preserveAspectRatio="none" aria-hidden="true"><path d="M2 11 C65 1 119 5 169 9 S255 4 298 8" /></svg>
+            <p className="hp-v4-question-voice">「あの頃、何を支えに乗り越えたのか。<br /><span className="hp-v4-question-voice-second">いつか力になれるのかもしれない。」</span></p>
+            <p className="hp-v4-question-closing">今ならまだ、残せることがある。</p>
+          </div>
+          <svg className="hp-v4-question-mountains" viewBox="0 0 400 75" preserveAspectRatio="none" aria-hidden="true"><path d="M0 33 Q25 19 52 29 T112 32 T169 39 T229 37 T288 31 T349 22 T400 26 V75 H0Z" /><path d="M0 52 Q37 40 78 49 T148 44 T220 52 T300 42 T400 37 V75 H0Z" /><path d="M0 62 Q60 55 113 59 T221 56 T322 58 T400 51 V75 H0Z" /></svg>
+        </article>
+      </div> : <>
       <div className="hp-v4-moments-copy hp-shell"><p>どんな気持ち<br className="hp-mobile-break" />だったんだろう。</p><p>何を思って<br className="hp-mobile-break" />いたんだろう。</p></div>
       <div className="hp-v4-moments hp-shell" aria-label="過去と今の、語られなかった想い">
         <figure><img src={asset + 'past-family-photograph.png'} alt="旅先で母と子どもを撮影する父親の後ろ姿" width="1024" height="1536" loading="lazy" /></figure>
         <figure><img src={asset + 'present-mother-daughter.png'} alt="台所で一緒に料理をする母と成人した娘" width="1024" height="1536" loading="lazy" /></figure>
       </div>
       <div className="hp-v4-questions hp-shell" id="loved-one"><h2>いつか聞こう。<br />いつか残そう。</h2><p className="hp-v4-question-end">でも、今日の言葉は、<br />今日しか残せない。</p></div>
+      </>}
     </section>
     <section className="hp-v4-ways hp-shell" id="ways" aria-labelledby="ways-title">
       <h2 id="ways-title">人生を残す方法は、<br />これまでもありました。</h2>
