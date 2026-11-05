@@ -5,7 +5,8 @@ import "./hp-nov8-hero-preview.css";
 import StoryIntro from './landing/StoryIntro.jsx';
 
 const LOGIN = "/?app=1&entry=login";
-const TRIAL = '/?guest_trial=1';
+const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true'
+  ? '/?guest_trial=1' : '/?app=1&entry=trial';
 const GIFT_TRIAL = '/gift-three-questions.html';
 const PURCHASE = "/?app=1&entry=purchase";
 const GIFT_PURCHASE = PURCHASE;

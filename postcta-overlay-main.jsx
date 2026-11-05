@@ -8,7 +8,8 @@ let reactRoot;
 
 function placePostCta() {
   const main = document.getElementById("hp-main");
-  const price = document.getElementById("hp-price-live-mount");
+  const price = document.getElementById("hp-price-live-mount")
+    || document.querySelector("#works iframe[src^='/product-section-nov8-after.html']")?.closest("#works");
   if (!main || !price || price.parentElement !== main) return;
 
   if (!mount) {
