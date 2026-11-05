@@ -5816,18 +5816,8 @@ const updateOnboardingRitualStep = async (step, patch = {}) => {
   return updatedProject;
 };
 
-const savePendingThemeTransition = async (themeOrder, phase = "complete") => {
-  const normalizedOrder = Number(themeOrder) || null;
-  setCompletedThemeOrder(normalizedOrder);
-
-  if (!foundation?.project?.id) return;
-
-  const nextState = {
-    ...(foundation.project.theme_experience_state || {}),
-    pending_transition_order: normalizedOrder,
-    pending_transition_phase: normalizedOrder ? phase : null
-  };
-
+const persistThemeExperienceState = async patch => {
+  const nextState = { ...(foundation.project.theme_experience_state || {}), ...patch };
   const { data: updatedProject, error } = await supabaseClient
     .from("book_projects")
     .update({ theme_experience_state: nextState })
@@ -5835,17 +5825,35 @@ const savePendingThemeTransition = async (themeOrder, phase = "complete") => {
     .select()
     .single();
 
-  if (error) throw error;
+  if (!error) return updatedProject;
+  if (error.code !== "PGRST116") throw error;
+
+  // Self-owned stories with a family subject binding use a restrictive RLS
+  // policy. Keep that policy intact and save only navigation fields by RPC.
+  const { data: savedState, error: rpcError } = await supabaseClient.rpc(
+    "save_self_subject_theme_state",
+    { input_book_project_id: foundation.project.id, input_patch: patch }
+  );
+  if (rpcError) throw rpcError;
+  return { ...foundation.project, theme_experience_state: savedState };
+};
+
+const savePendingThemeTransition = async (themeOrder, phase = "complete") => {
+  const normalizedOrder = Number(themeOrder) || null;
+  setCompletedThemeOrder(normalizedOrder);
+
+  if (!foundation?.project?.id) return;
+
+  const updatedProject = await persistThemeExperienceState({
+    pending_transition_order: normalizedOrder,
+    pending_transition_phase: normalizedOrder ? phase : null
+  });
   setFoundation(previous => ({ ...previous, project: updatedProject }));
 };
 
 const updateBookendState = async patch => {
   if (!foundation?.project?.id) throw new Error("語りの保存先を確認できませんでした。");
-  const nextState = { ...(foundation.project.theme_experience_state || {}), ...patch };
-  const { data, error } = await supabaseClient.from("book_projects")
-    .update({ theme_experience_state: nextState })
-    .eq("id", foundation.project.id).select().single();
-  if (error) throw error;
+  const data = await persistThemeExperienceState(patch);
   setFoundation(previous => ({ ...previous, project: data }));
   return data;
 };
