@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import "./landing-parity.css";
 import "./monitor-launch.css";
-import LandingBookEditions from './landing/LandingBookEditions.jsx';
+import "./hp-nov8-hero-preview.css";
 import StoryIntro from './landing/StoryIntro.jsx';
 
 const LOGIN = "/?app=1&entry=login";
 const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true'
   ? '/?guest_trial=1' : '/?app=1&entry=trial';
+const GIFT_TRIAL = '/gift-three-questions.html';
 const PURCHASE = "/?app=1&entry=purchase";
+const GIFT_PURCHASE = PURCHASE;
 const EMAIL = "sugawara@saltlight.co.jp";
 const QUESTIONS = [
   "幼い頃、どんなところに住んでいましたか？",
@@ -16,7 +18,7 @@ const QUESTIONS = [
 ];
 const FAQS = [
   ["スマートフォンが苦手でも使えますか？", "問いを読み、録音ボタンを押して話すところから始められます。写真や文章の整理、本に仕上げる作業は、信頼する方に手伝ってもらうこともできます。"],
-  ["親の物語を、子どものスマホだけで作れますか？", "ご本人の同意のもと、一緒に思い出を辿り、制作を手伝う使い方を想定しています。ご本人のアカウントがない場合の始め方は、現在ご案内を準備しています。"],
+  ["親の物語を、子どものスマホだけで作れますか？", "ギフトでは、ご本人が制作する方法と、ご家族が制作を管理する方法を選べます。聞き取り制作サポートも事前相談後に追加できます。"],
   ["離れていても手伝えますか？", "信頼する方をサポーターとして招き、離れた場所から制作を手伝ってもらう仕組みです。利用できる範囲と手順は、ご案内時に確認できます。"],
   ["無料体験後に自動課金されますか？", "自動課金はありません。無料の3問にカード登録は不要です。続けたいと思ったときに、ご自身で購入を選べます。"],
   ["どのくらいで完成しますか？", "語る量やペースによって異なります。一度にすべてを話す必要はありません。製本・発送の時期は、内容が確定してからご案内します。"],
@@ -25,8 +27,9 @@ const FAQS = [
   ["途中で休んでも大丈夫ですか？", "一度に語り終える必要はありません。無理のないペースで進められます。利用期間などの条件は、お申し込み時の案内をご確認ください。"]
 ];
 const MORE_FAQS = [
-  ["49,800円には何が含まれますか？", "人生を辿る問い、音声・文章・写真の保存、標準の縦糸横糸ブック（ソフトカバー）1冊、縦糸横糸Webブックが含まれます。税込・国内送料込みです。"],
-  ["プレミアムブックは標準ブックと入れ替わりますか？", "入れ替わりません。標準ブック1冊に加えて、30,000円（税込）でプレミアムブックをもう1冊追加するオプションです。"],
+  ["料金には何が含まれますか？", "スタンダード35,000円、プレミアム65,000円（いずれも税込）。どちらもブック1冊とWebブックを含み、違いは紙のブックの装丁です。聞き取り制作サポートは事前相談後に20,000円（税込）で追加できます。"],
+  ["スタンダードとプレミアムの違いは何ですか？", "違いは紙のブックの装丁です。スタンダードはソフトカバー、プレミアムは布貼り上製本・箔押しです。問い、制作体験、Webブックは共通です。"],
+  ["ギフトの返金保証はありますか？", "新規ギフトには決済日から45日以内、かつ本編開始前までの返金保証があります。詳しい条件は購入画面でご確認ください。"],
   ["本から声を聴けますか？", "縦糸横糸ブックのQRから、縦糸横糸Webブックへ進み、声を聴けます。紙の作品を読む時間と、声に触れる時間のどちらも楽しめます。"]
 ];
 
@@ -98,7 +101,7 @@ function InformationDialog({ panel, close, reviewOnly }) {
       {panel === "privacy" && <><p>本づくりを手伝うサポーターと、完成した物語を見る家族は別の役割です。</p><p>サポーターは制作に必要な情報を扱います。完成した物語の共有範囲とは分けて、ご本人の同意のもとで依頼してください。</p><p>録音、文章、写真、アカウント情報は、サービスの提供とサポートに必要な範囲で取り扱います。ご質問は運営窓口へご連絡ください。</p><p>操作のお困りごとへの対応と不具合の改善のため、配信リンクからのアクセス、ログインや問いの画面表示、録音・保存の操作状況、エラーの種類をアカウント・物語に関連付けて記録します。この操作記録に、お話の内容、入力した文章、録音データは含めません。</p><p>詳細な操作記録は90日を過ぎた後、毎日の削除処理で削除します。配信結果や保存した語りの履歴は別に管理します。操作記録はサポートを担当する管理者が確認し、広告目的には利用しません。</p></>}
       {panel === "commerce" && <dl>{[
         ["販売事業者", "株式会社SaltLight"], ["運営責任者", "菅原 英俊"], ["連絡先", EMAIL],
-        ["販売価格", "縦糸横糸 49,800円（税込・国内送料込み）。プレミアムブックの追加は30,000円（税込）。"],
+        ["販売価格", "スタンダード 35,000円（税込）、プレミアム 65,000円（税込）。聞き取り制作サポートは各プランに20,000円（税込）で追加できます。追加冊子はスタンダード5,000円／冊、プレミアム35,000円／冊（いずれも税込）。"],
         ["支払方法", "クレジットカード決済（Stripe）"],
         ["提供時期", "購入後にご利用を開始できます。冊子は内容確定後に製本し、発送時にご案内します。"],
         ["取消・返金", "適用条件を確認のうえ個別にご案内します。お申し込み前にご相談いただけます。"],
@@ -129,11 +132,15 @@ function ProductImageDialog({ product, close }) {
 }
 
 export default function LandingPage({ reviewOnly = false, heroLayout = 'integrated' }) {
+  const nov8Preview = true;
   const [menu, setMenu] = useState(false);
   const [panel, setPanel] = useState(null);
   const [zoomedProduct, setZoomedProduct] = useState(null);
   const [moreFaq, setMoreFaq] = useState(false);
   const [monitorApplicationOpen, setMonitorApplicationOpen] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('info') === 'privacy') setPanel('privacy');
+  }, []);
   useEffect(() => {
     document.body.classList.add("landing-page-active");
     return () => document.body.classList.remove("landing-page-active");
@@ -147,10 +154,10 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
   return <div className="landing-site">
     <a className="hp-skip" href="#hp-main">本文へ移動</a>
     {reviewOnly && <div id="hp-review-notice" className="hp-preview-note" role="note">HP Preview <span>表示確認専用：登録・購入・ログイン・送信はできません。</span></div>}
-    <div className="hp-monitor-strip" role="note" aria-label="モニター利用のご案内">
+    {!nov8Preview && <div className="hp-monitor-strip" role="note" aria-label="モニター利用のご案内">
       <p><strong>正式リリース前</strong><span aria-hidden="true">｜</span>現在はモニター利用をご案内しています。</p>
       <button type="button" onClick={() => setMonitorApplicationOpen(true)}>モニター利用を申し込む <span aria-hidden="true">↗</span></button>
-    </div>
+    </div>}
     <header className="hp-header">
       <a href="#top" aria-label="縦糸横糸 トップへ"><img src="/brand-logo-official.svg" alt="縦糸横糸" width="200" height="48" /></a>
       <div className="hp-header-actions"><a href={reviewOnly ? "#hp-review-notice" : LOGIN}>ログイン</a><button id="hp-menu-toggle" aria-label={menu ? "メニューを閉じる" : "メニューを開く"} aria-expanded={menu} aria-controls="hp-nav" onClick={() => setMenu(!menu)}>{menu ? "閉じる ×" : "メニュー ☰"}</button></div>
@@ -158,23 +165,44 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
     </header>
 
     <main id="hp-main">
-      <section className={`hp-hero hp-shell${heroLayout === 'integrated' ? ' hp-hero-integrated' : ''}`} id="top" aria-labelledby="hp-title">
-        <div className="hp-hero-title"><h1 id="hp-title">人生を、<br />声でのこす。</h1></div>
+      <section className={`hp-hero hp-shell${heroLayout === 'integrated' ? ' hp-hero-integrated' : ''}${nov8Preview ? ' hp-hero-nov8' : ''}`} id="top" aria-labelledby="hp-title">
+        <div className="hp-hero-title">{nov8Preview ? <>
+          <h1 id="hp-title">誰にだって、<br />まだ語られていない<br />人生がある。</h1>
+          <p className="hp-hero-category">声も残せる。季節とともに育つ。<br />自分史づくりの新しい形。</p>
+        </> : <h1 id="hp-title">人生を、<br />声でのこす。</h1>}</div>
         <figure className="hp-hero-art hp-hero-photo"><img src="/site/hp-renewal/hero-woman-remembering.png" alt="窓辺でスマートフォンを手に、アルバムを前に思い出を辿る女性" width="1536" height="1024" fetchPriority="high" /></figure>
-        <div className="hp-hero-body"><p>スマホに届く質問に、つぶやくだけ。<br /><strong>あなたの人生が、家族に残る物語になる。</strong></p></div>
+        <div className="hp-hero-body">{nov8Preview
+          ? <p className="hp-hero-ease">スマホに届く質問に、つぶやくだけ。<br />人生の物語を、一冊の本とWebブックに。</p>
+          : <p>スマホに届く質問に、つぶやくだけ。<br /><strong>あなたの人生が、家族に残る物語になる。</strong></p>}</div>
       </section>
 
-      <section className="hp-v4-answer hp-shell" id="experience" aria-labelledby="v4-answer-title">
-        <h2 id="v4-answer-title">語りは、二つの作品に。</h2>
+      <section className={`hp-v4-answer hp-shell${nov8Preview ? ' hp-v4-answer-nov8-no-heading' : ''}`} id="experience" {...(nov8Preview ? { 'aria-label': '二つの作品' } : { 'aria-labelledby': 'v4-answer-title' })}>
+        {!nov8Preview && <h2 id="v4-answer-title">語りは、二つの作品に。</h2>}
         <div className="hp-v4-answer-grid">
-          <article><figure><button type="button" className="hp-v4-answer-image" aria-haspopup="dialog" aria-label="縦糸横糸ブックの写真を拡大" onClick={() => setZoomedProduct({ title: '縦糸横糸ブック', src: '/site/hp-story-preview/book-and-spread-user.png', alt: '縦糸横糸ブックの表紙と、写真・文章を収めた見開き' })}><img src="/site/hp-story-preview/book-and-spread-user.png" alt="" width="1536" height="1024" loading="eager" /><span aria-hidden="true">＋</span></button></figure><h3>縦糸横糸ブック</h3><p>ここまでの人生を、一冊に。</p></article>
-          <article><figure><button type="button" className="hp-v4-answer-image" aria-haspopup="dialog" aria-label="縦糸横糸Webブックの写真を拡大" onClick={() => setZoomedProduct({ title: '縦糸横糸Webブック', src: '/site/hp-story-preview/web-book-user.png', alt: '本のQRから声や写真に触れるWebブックのイメージ' })}><img src="/site/hp-story-preview/web-book-user.png" alt="" width="1536" height="1024" loading="eager" /><span aria-hidden="true">＋</span></button></figure><h3>縦糸横糸Webブック</h3><p>声と写真に、いつでも逢える。</p></article>
+          <article><figure><button type="button" className="hp-v4-answer-image" aria-haspopup="dialog" aria-label="縦糸横糸ブックの写真を拡大" onClick={() => setZoomedProduct({ title: '縦糸横糸ブック', src: '/site/hp-story-preview/book-and-spread-user.png', alt: '縦糸横糸ブックの表紙と、写真・文章を収めた見開き' })}><img src="/site/hp-story-preview/book-and-spread-user.png" alt="" width="1536" height="1024" loading="eager" /><span aria-hidden="true">＋</span></button></figure>{!nov8Preview && <><h3>縦糸横糸ブック</h3><p>ここまでの人生を、一冊に。</p></>}</article>
+          <article><figure><button type="button" className="hp-v4-answer-image" aria-haspopup="dialog" aria-label="縦糸横糸Webブックの写真を拡大" onClick={() => setZoomedProduct({ title: '縦糸横糸Webブック', src: '/site/hp-story-preview/web-book-user.png', alt: '本のQRから声や写真に触れるWebブックのイメージ' })}><img src="/site/hp-story-preview/web-book-user.png" alt="" width="1536" height="1024" loading="eager" /><span aria-hidden="true">＋</span></button></figure>{!nov8Preview && <><h3>縦糸横糸Webブック</h3><p>声と写真に、いつでも逢える。</p></>}</article>
         </div>
         <a className="hp-button hp-v4-answer-cta" href={reviewOnly ? "#hp-review-notice" : TRIAL}>無料で3問、話してみる。 <span aria-hidden="true">↗</span></a>
         <p className="hp-note hp-v4-answer-note">カード登録不要。</p>
       </section>
 
-      <StoryIntro />
+      <StoryIntro nov8Preview={nov8Preview} />
+
+      {nov8Preview && <section className="hp-nenrin hp-section hp-shell" id="nenrin" aria-labelledby="hp-nenrin-title">
+        <div className="hp-nenrin-intro">
+          <SectionLabel>縦糸横糸｜年輪 nenrin</SectionLabel>
+          <h2 id="hp-nenrin-title">作って終わらない。<br />年輪を刻むように。</h2>
+          <p>完成後も、1月・4月・7月・10月に、<br className="hp-mobile-break" />新しい記録を1件ずつ。<br className="hp-mobile-break" />追加料金なしで重ねられます。</p>
+        </div>
+        <div className="hp-nenrin-seasons" aria-label="季節ごとに残せる記録の例">
+          <p><span>春</span>新しい挑戦への想い</p>
+          <p><span>夏</span>家族との思い出</p>
+          <p><span>秋</span>あの頃と今の自分</p>
+          <p><span>冬</span>一年を振り返って</p>
+        </div>
+        <p className="hp-nenrin-end">数年後、同じ問いにもう一度答えても、以前の答えは残ります。</p>
+        <p className="hp-nenrin-note">記録はブック完成後に付与。各記録の利用・編集は付与から6か月以内です。</p>
+      </section>}
 
       <section className="hp-v4-scenes hp-section hp-shell" id="scenes" aria-labelledby="scenes-title">
         <h2 id="scenes-title">誰の人生を、残しますか。</h2>
@@ -206,7 +234,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
         <TrialLink reviewOnly={reviewOnly} /><p className="hp-note">約10分・カード登録不要・自動課金なし。</p>
       </div></section>
 
-      <section className="hp-who hp-section hp-shell">
+      {!nov8Preview && <><section className="hp-who hp-section hp-shell">
         <h2>自分でも、<br className="hp-mobile-break" />大切な人とでも。</h2>
         <div className="hp-who-grid">
           <article><Placeholder name="WHO · 自分"><span className="hp-person-circle" aria-hidden="true" /></Placeholder><h3>自分の物語</h3><p>自分のスマホで、<br />自分のペースで。</p></article>
@@ -217,9 +245,9 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
 
       <section className="hp-process hp-section hp-shell"><h2>少しずつ語り、<br className="hp-mobile-break" />一冊に仕上げる。</h2>
         <ol>{["問いが届く", "声で語る", "写真を添える", "一冊に仕上げる"].map((s,i) => <li key={s}><span>0{i+1}</span><h3>{s}</h3></li>)}</ol>
-      </section>
+      </section></>}
 
-      <section className="hp-works" id="works">
+      {!nov8Preview && <section className="hp-works" id="works">
         <div className="hp-shell hp-section hp-works-heading"><SectionLabel>人生が、かたちになる。</SectionLabel><h2>語った人生は、<br />二つの作品として残ります。</h2><p>どちらも「縦糸横糸」に含まれます。</p></div>
         <figure className="hp-works-overview hp-shell"><img src="/site/hp-renewal/book-and-webbook-approved.png" alt="縦糸横糸ブックと、写真・文章・本人の声に触れる縦糸横糸Webブックのイメージ" width="1536" height="1024" loading="lazy" /></figure>
         <article className="hp-paper-work hp-shell">
@@ -235,30 +263,23 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
           <figure className="hp-webbook-visual"><img src="/site/hp-renewal/web-book-qr-voice-screen-v2.png" alt="同じ思い出の写真と文章を載せた本と、声の再生画面を表示するスマートフォンのイメージ" width="1536" height="1024" loading="lazy" /></figure>
           </div>
         </article>
-      </section>
+      </section>}
 
-      <section className="hp-price hp-section hp-shell" id="price">
-        <SectionLabel>体験と、二つの作品。</SectionLabel><h2>縦糸横糸</h2>
-        <p className="hp-price-amount">49,800<span>円（税込）</span></p><p>人生を声で辿る体験から、<br />二つの作品として残すところまで。</p>
-        <ul className="hp-inclusions"><li>人生を辿る問い</li><li>音声・文章・写真の保存</li><li>縦糸横糸ブック 1冊<span>標準のソフトカバー</span></li><li>縦糸横糸Webブック</li></ul>
-        <p className="hp-note">国内送料込み</p><div className="hp-price-actions"><a className="hp-button" href={reviewOnly ? "#hp-review-notice" : PURCHASE}>購入して始める <span aria-hidden="true">↗</span></a><a className="hp-text-link" href={reviewOnly ? "#hp-review-notice" : TRIAL}>先に無料で試す</a></div>
-        <LandingBookEditions />
-      </section>
-
-      <section className="hp-support hp-section hp-shell" id="support">
+      {nov8Preview && <section id="works" aria-label="商品と価格の全体プレビュー"><div id="price"><iframe title="縦糸横糸｜年輪の商品・価格と聞き取り制作サポート" src="/product-section-nov8-after.html?embedded=1" style={{display:'block',width:'100%',height:2600,border:0}} onLoad={event => { const frame=event.currentTarget; const body=frame.contentDocument?.body; if (!body) return; const resize=()=>{frame.style.height=`${Math.ceil(body.scrollHeight)}px`}; resize(); new ResizeObserver(resize).observe(body); for (const [selector, target] of [[".action-trial",TRIAL],[".action-gift-trial",GIFT_TRIAL],[".action-purchase",PURCHASE],[".action-gift-purchase",GIFT_PURCHASE],[".consultation-cta",PURCHASE]]) { const link=body.querySelector(selector); if(link){link.dataset.releaseHref=target;link.href=reviewOnly?"#hp-review-notice":target;} } }} /></div></section>}
+      {!nov8Preview && <section className="hp-support hp-section hp-shell" id="support">
         <div><SectionLabel>ともに、かたちにする。</SectionLabel><h2>一人で、全部<br className="hp-mobile-break" />やらなくていい。</h2><p>写真を選ぶ。文章を整える。本に仕上げる。<br />家族や友人など、信頼する方と進められます。</p>
           <div className="hp-support-staff"><h3>頼める方がいない場合も。</h3><p>スタッフによる制作サポートを、<br />少人数で試験的にご案内する予定です。</p><span className="hp-status">希望受付は準備中</span><p className="hp-note">受付開始後は、ご希望を伺ってからスタッフがご連絡します。<br />希望受付の時点で、利用が確定するものではありません。</p></div></div>
         <Placeholder name="SUPPORT"><div className="hp-support-lines" aria-hidden="true" /><span className="hp-art-caption">一緒に選ぶ。<br />一緒に残す。</span></Placeholder>
-      </section>
+      </section>}
 
       <section className="hp-privacy hp-section hp-shell"><SectionLabel>大切なことだから。</SectionLabel><h2>残すことと、<br className="hp-mobile-break" />見せることは別です。</h2><p>家族に共有するものは、自分たちで選べます。</p><p>本づくりを手伝う「サポーター」と、<br />完成した物語を見る家族は別です。</p><button className="hp-text-link" onClick={() => setPanel("privacy")}>詳しく見る <span aria-hidden="true">＋</span></button></section>
 
-      <section className="hp-life" id="life"><img src="/site/theme-now-future.jpg" alt="広がる空の下、枝葉を重ねて立つ大きな木" loading="lazy" width="1536" height="1024" /><div className="hp-life-copy hp-shell"><SectionLabel>その先の時間へ。</SectionLabel><h2>そして、<br />人生は続いていく。</h2><p className="hp-life-name">縦糸横糸ライフ</p><span className="hp-status">COMING SOON</span><p>今を残し続け、<br />人生の年輪を重ねていく。</p><p className="hp-note">縦糸横糸の完成後に続く、新しいサービスです。</p></div></section>
+      {!nov8Preview && <section className="hp-life" id="life"><img src="/site/theme-now-future.jpg" alt="広がる空の下、枝葉を重ねて立つ大きな木" loading="lazy" width="1536" height="1024" /><div className="hp-life-copy hp-shell"><SectionLabel>その先の時間へ。</SectionLabel><h2>そして、<br />人生は続いていく。</h2><p className="hp-life-name">縦糸横糸ライフ</p><span className="hp-status">COMING SOON</span><p>今を残し続け、<br />人生の年輪を重ねていく。</p><p className="hp-note">縦糸横糸の完成後に続く、新しいサービスです。</p></div></section>}
       <section className="hp-vision hp-shell hp-section"><SectionLabel>辿る。触れる。重ねる。また、辿る。</SectionLabel><h2>いつでも、<br />“家族に還れる”場所を。</h2><div className="hp-vision-ring" aria-hidden="true" /></section>
 
       <section className="hp-faq hp-section hp-shell" id="faq"><SectionLabel>安心して、始めるために。</SectionLabel><h2>よくあるご質問</h2><div>{FAQS.map(([q,a]) => <details key={q}><summary>{q}<span aria-hidden="true">＋</span></summary><p>{a}</p></details>)}</div>
-        <button className="hp-text-link hp-more-faq" aria-expanded={moreFaq} aria-controls="hp-more-faq" onClick={() => setMoreFaq(!moreFaq)}>{moreFaq ? "追加の質問を閉じる −" : "すべての質問を見る ＋"}</button>
-        <div id="hp-more-faq" hidden={!moreFaq}>{MORE_FAQS.map(([q,a]) => <details key={q}><summary>{q}<span aria-hidden="true">＋</span></summary><p>{a}</p></details>)}</div>
+        <><button className="hp-text-link hp-more-faq" aria-expanded={moreFaq} aria-controls="hp-more-faq" onClick={() => setMoreFaq(!moreFaq)}>{moreFaq ? "追加の質問を閉じる −" : "すべての質問を見る ＋"}</button>
+        <div id="hp-more-faq" hidden={!moreFaq}>{MORE_FAQS.map(([q,a]) => <details key={q}><summary>{q}<span aria-hidden="true">＋</span></summary><p>{a}</p></details>)}</div></>
       </section>
       <section className="hp-final hp-dark hp-section"><div className="hp-shell"><img src="/brand-logo-symbol.svg" alt="" width="52" height="52" /><h2>まずは、三つだけ。</h2><p>幼い頃のことを、<br />少し話してみませんか。</p><TrialLink reviewOnly={reviewOnly} /><p className="hp-note">約10分・カード登録不要・自動課金なし。</p></div></section>
     </main>

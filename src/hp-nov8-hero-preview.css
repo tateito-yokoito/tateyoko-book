@@ -1,0 +1,113 @@
+.landing-site .hp-hero-nov8 {
+  padding-bottom: 45px;
+}
+.landing-site .hp-v4-answer-nov8-no-heading {
+  padding-top: 0;
+}
+.landing-site .hp-v4-answer-nov8-no-heading .hp-v4-answer-grid {
+  margin-top: 0;
+}
+.landing-site .hp-hero-nov8 h1 {
+  font-size: clamp(42px, 4vw, 58px);
+  line-height: 1.47;
+  letter-spacing: .025em;
+  white-space: nowrap;
+}
+.landing-site .hp-hero-nov8 .hp-hero-category {
+  margin-top: 22px;
+  color: var(--navy);
+  font-size: clamp(19px, 1.7vw, 23px);
+  line-height: 1.8;
+  letter-spacing: .035em;
+}
+.landing-site .hp-hero-nov8 .hp-hero-body {
+  align-self: end;
+  padding-bottom: 32px;
+}
+.landing-site .hp-hero-nov8 .hp-hero-ease {
+  font-size: 19px;
+  line-height: 1.75;
+  font-weight: 600;
+}
+@media (max-width: 620px) {
+  .landing-site .hp-hero-nov8 {
+    padding-bottom: 16px;
+  }
+  .landing-site .hp-hero-nov8 h1 {
+    font-size: clamp(33px, 9.3vw, 38px);
+    line-height: 1.55;
+  }
+  .landing-site .hp-hero-nov8 .hp-hero-category {
+    margin-top: 18px;
+    font-size: 17px;
+    line-height: 1.8;
+  }
+  .landing-site .hp-hero-nov8 .hp-hero-body {
+    padding-bottom: 0;
+  }
+  .landing-site .hp-hero-nov8 .hp-hero-ease {
+    font-size: 17px;
+    line-height: 1.8;
+  }
+}
+
+/* Preview only: shorten the path from the comparison to the creation steps. */
+.landing-site .hp-v4-ways .hp-v4-way-grid { max-width: 850px; margin: 24px auto 0; gap: 16px; }
+.landing-site .hp-v4-ways .hp-v4-way-card { padding: 16px; }
+.landing-site .hp-v4-ways .hp-v4-way-card h3 { margin-bottom: 10px; }
+.landing-site .hp-v4-ways .hp-v4-way-card > p { margin-top: 10px; }
+.landing-site .hp-v4-ways .hp-v4-ways-note { margin-top: 12px !important; }
+.landing-site .hp-v4-ways .hp-v4-ways-arrow { margin-top: 14px; }
+.landing-site .hp-v4-ways > .hp-v4-ways-bridge { margin-top: 8px; }
+
+.landing-site .hp-nenrin { max-width: 1100px; padding-block: 66px 74px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.landing-site .hp-nenrin-intro h2 { margin-top: 15px; font-size: clamp(34px, 3.4vw, 46px); line-height: 1.55; }
+.landing-site .hp-nenrin-intro > p { margin-top: 21px; font-size: clamp(18px, 1.7vw, 22px); line-height: 1.85; }
+.landing-site .hp-nenrin-seasons { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 36px; }
+.landing-site .hp-nenrin-seasons p { margin: 0; padding: 16px 12px; border: 1px solid var(--line); border-radius: 4px; font-size: 16px; line-height: 1.65; text-align: center; }
+.landing-site .hp-nenrin-seasons span { display: block; margin-bottom: 5px; color: var(--green); font-family: "Noto Serif JP", serif; font-size: 22px; }
+.landing-site .hp-nenrin-end { margin-top: 29px; font-size: 18px; line-height: 1.8; }
+.landing-site .hp-nenrin-note { margin-top: 16px; color: var(--muted); font: 12px/1.6 "Noto Sans JP", sans-serif; }
+@media (max-width: 620px) {
+  .landing-site .hp-v4-ways .hp-v4-way-grid { margin-top: 17px; gap: 8px; }
+  .landing-site .hp-v4-ways .hp-v4-way-card { padding: 10px; }
+  .landing-site .hp-v4-ways .hp-v4-way-card h3 { margin-bottom: 0; }
+  .landing-site .hp-v4-ways .hp-v4-way-card > p { margin-top: 4px; }
+  .landing-site .hp-nenrin { width: calc(100% - 40px); padding-block: 46px 50px; }
+  .landing-site .hp-nenrin-intro h2 { font-size: clamp(28px, 7.1vw, 34px); }
+  .landing-site .hp-nenrin-intro > p { margin-top: 17px; font-size: 17px; line-height: 1.8; }
+  .landing-site .hp-nenrin .hp-desktop-break { display: none; }
+  .landing-site .hp-nenrin-seasons { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 24px; }
+  .landing-site .hp-nenrin-seasons p { padding: 12px 8px; font-size: 13px; line-height: 1.55; }
+  .landing-site .hp-nenrin-seasons span { font-size: 18px; }
+  .landing-site .hp-nenrin-end { margin-top: 23px; font-size: 16px; }
+}
+
+/* Preview-only story cards between the approved collage and the next section. */
+.landing-site .hp-v4-question-cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px; max-width:1060px; padding-block:48px 42px; }
+.landing-site .hp-v4-question-card { --card-accent:var(--green); position:relative; min-width:0; overflow:hidden; padding:31px 27px 76px 46px; border:1px solid color-mix(in srgb,var(--card-accent) 11%,var(--line)); border-radius:12px; background:color-mix(in srgb,var(--paper) 72%,white); box-shadow:0 5px 20px color-mix(in srgb,var(--navy) 6%,transparent); color:var(--card-accent); }
+.landing-site .hp-v4-question-card-self { --card-accent:#a6472d; }
+.landing-site .hp-v4-question-card::before { position:absolute; top:31px; height:81px; left:22px; width:2px; background:var(--card-accent); content:""; }
+.landing-site .hp-v4-question-card-content { position:relative; z-index:1; }
+.landing-site .hp-v4-question-card :is(.hp-v4-question-curve, .hp-v4-question-voice, .hp-v4-question-closing) { margin-left:-10px; width:calc(100% + 10px); }
+.landing-site .hp-v4-question-card h3 { font-size:clamp(22px,2vw,27px); font-weight:500; line-height:1.5; letter-spacing:0; }
+.landing-site .hp-v4-question-curve { display:block; width:100%; height:17px; margin-top:10px; overflow:visible; }
+.landing-site .hp-v4-question-curve path { fill:none; stroke:var(--card-accent); stroke-width:1.4; opacity:.45; }
+.landing-site .hp-v4-question-voice { margin-top:17px; color:var(--navy); font-size:clamp(18px,1.55vw,20px); line-height:1.75; }
+.landing-site .hp-v4-question-closing { margin-top:24px; font-size:clamp(20px,1.8vw,23px); font-weight:600; line-height:1.6; }
+.landing-site .hp-v4-question-voice-second { padding-left:.6em; }
+.landing-site .hp-v4-question-mountains { position:absolute; right:0; bottom:0; left:0; width:100%; height:76px; }
+.landing-site .hp-v4-question-mountains path:nth-child(1) { fill:color-mix(in srgb,var(--card-accent) 7%,var(--paper)); }
+.landing-site .hp-v4-question-mountains path:nth-child(2) { fill:color-mix(in srgb,var(--card-accent) 10%,var(--paper)); }
+.landing-site .hp-v4-question-mountains path:nth-child(3) { fill:color-mix(in srgb,var(--card-accent) 5%,var(--paper)); }
+@media (max-width:700px) {
+  .landing-site .hp-v4-question-cards { width:calc(100% - 32px); grid-template-columns:1fr; gap:15px; padding-block:25px 28px; }
+  .landing-site .hp-v4-question-card { padding:23px 11px 64px 36px; border-radius:9px; }
+  .landing-site .hp-v4-question-card::before { top:25px; height:62px; left:17px; }
+  .landing-site .hp-v4-question-card h3 { font-size:22px; line-height:1.42; }
+  .landing-site .hp-v4-question-card :is(.hp-v4-question-curve, .hp-v4-question-voice, .hp-v4-question-closing) { margin-left:-8px; width:calc(100% + 8px); }
+  .landing-site .hp-v4-question-curve { height:14px; margin-top:8px; }
+  .landing-site .hp-v4-question-card .hp-v4-question-voice { margin-top:13px; margin-left:-16px; width:calc(100% + 16px); font-size:16px; line-height:1.65; }
+  .landing-site .hp-v4-question-closing { margin-top:20px; font-size:18.5px; line-height:1.5; }
+  .landing-site .hp-v4-question-mountains { height:62px; }
+}

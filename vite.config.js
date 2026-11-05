@@ -9,6 +9,7 @@ export default defineConfig({
       input: {
         app: 'index.html',
         giftThreeQuestions: 'gift-three-questions.html',
+        supportConsultation: 'support-consultation/index.html',
       },
     },
   },

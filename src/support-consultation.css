@@ -1,0 +1,69 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Noto+Serif+JP:wght@400;500;600&display=swap');
+:root{font-family:'Noto Serif JP',Yu Mincho,serif;color:#182a35;background:#f5f3ed}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;min-width:320px;background:#f5f3ed;color:#182a35}
+button,input,textarea{font:inherit}
+.sc-page{min-height:100vh}
+.sc-header{height:88px;padding:20px max(24px,calc((100vw - 1120px)/2));border-bottom:1px solid #ced1c6;display:flex;align-items:center}
+.sc-header a,.sc-header img{display:block}
+.sc-header img{width:190px;height:auto}
+.sc-main{width:min(800px,calc(100% - 48px));margin:0 auto;padding:68px 0 96px}
+.sc-eyebrow{margin:0 0 14px;color:#5b685f;font:500 13px/1.5 'Noto Sans JP',sans-serif;letter-spacing:.08em}
+.sc-intro h1,.sc-complete h1{margin:0;font-weight:400;font-size:clamp(30px,3.5vw,42px);line-height:1.55}
+.sc-intro>p:not(.sc-eyebrow){margin:22px 0 0;font-size:17px;line-height:1.9}
+.sc-intro .sc-intro-note{font-family:'Noto Sans JP',sans-serif;color:#28473e;font-weight:600;font-size:15px}
+.sc-preview-note{margin-bottom:30px;padding:10px 14px;background:#e8e4d9;color:#28473e;border:1px solid #ced1c6;font:13px/1.6 'Noto Sans JP',sans-serif}
+.sc-group{margin-top:65px}
+.sc-group h2{margin:0 0 16px;padding-bottom:18px;border-bottom:1px solid #ced1c6;font-size:25px;line-height:1.5;font-weight:400}
+.sc-group h2 span{display:inline-block;margin-right:15px;color:#5b685f;font:500 16px/1.5 'Noto Sans JP',sans-serif}
+.sc-question{display:block;width:100%;min-width:0;margin:0;padding:28px 0;border:0;border-bottom:1px solid #dedfd8}
+.sc-question legend,.sc-field-title{display:block;width:100%;margin:0 0 14px;padding:0;font-size:18px;line-height:1.65;font-weight:500}
+.sc-number{display:inline-block;margin-right:14px;color:#28473e;font:700 15px/1.5 'Noto Sans JP',sans-serif}
+.sc-question small,.sc-field-title small{margin-left:10px;color:#a6472d;font:500 12px/1.5 'Noto Sans JP',sans-serif;white-space:nowrap}
+.sc-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.sc-option{display:flex;align-items:flex-start;gap:10px;min-height:54px;padding:13px 15px;border:1px solid #ced1c6;border-radius:6px;background:#fffefa;cursor:pointer;font:15px/1.65 'Noto Sans JP',sans-serif}
+.sc-option:has(input:checked){border-color:#28473e;background:#e9efe9}
+.sc-option input,.sc-consent input{width:18px;height:18px;margin:2px 0 0;flex:none;accent-color:#28473e}
+.sc-field input,.sc-contact input,.sc-field textarea{display:block;width:100%;margin-top:10px;padding:13px 14px;border:1px solid #bfc7bd;border-radius:5px;background:#fffefa;color:#182a35;font:16px/1.6 'Noto Sans JP',sans-serif}
+.sc-field textarea{resize:vertical;min-height:130px}
+.sc-field textarea::placeholder{color:#68776f}
+.sc-contact-fields{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.sc-contact-fields label{font:14px/1.5 'Noto Sans JP',sans-serif}
+.sc-submit-area{margin-top:48px;padding:30px;background:#ece9de;border-radius:6px}
+.sc-submit-area p{margin:0 0 12px;font:14px/1.75 'Noto Sans JP',sans-serif}
+.sc-submit-area a,.sc-footer a{color:#28473e;text-underline-offset:4px}
+.sc-consent{display:flex;align-items:flex-start;gap:12px;margin:22px 0 24px;font:14px/1.7 'Noto Sans JP',sans-serif}
+.sc-consent strong{margin-left:8px;color:#a6472d;font-size:12px}
+.sc-copy-choice{margin-top:-8px}
+.sc-receipt-number{padding:16px;border:1px solid #ced1c6;background:#fffefa;font-family:'Noto Sans JP',sans-serif;overflow-wrap:anywhere}
+.sc-mail-warning{color:#a6472d}
+.sc-answer-copy{margin-top:34px}
+.sc-answer-copy h2{font-size:21px;font-weight:500}
+.sc-answer-copy pre{padding:20px;border:1px solid #ced1c6;background:#fffefa;white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.9 'Noto Sans JP',sans-serif}
+.sc-answer-copy button{padding:12px 18px;border:1px solid #28473e;border-radius:4px;background:transparent;color:#28473e;cursor:pointer;font:600 14px/1.5 'Noto Sans JP',sans-serif}
+.sc-submit-area button,.sc-home{display:block;width:100%;padding:17px 24px;border:0;border-radius:4px;background:#28473e;color:#fffefa;text-align:center;text-decoration:none;font:600 16px/1.5 'Noto Sans JP',sans-serif;cursor:pointer}
+.sc-submit-area button:disabled{opacity:.55;cursor:default}
+.sc-submit-area .sc-error{color:#a6472d;font-weight:600}
+.sc-submit-area .sc-disabled-note{margin:9px 0 0;color:#5b685f;font-size:12px;text-align:center}
+.sc-honeypot{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.sc-complete{padding:50px 0 80px}
+.sc-complete>p:not(.sc-eyebrow){margin:26px 0 0;font-size:17px;line-height:1.8}
+.sc-complete .sc-assurance{color:#5b685f;font-size:14px}
+.sc-home{width:fit-content;margin-top:40px}
+.sc-footer{display:flex;justify-content:space-between;gap:20px;padding:25px max(24px,calc((100vw - 1120px)/2));border-top:1px solid #ced1c6;font:13px/1.5 'Noto Sans JP',sans-serif;color:#5b685f}
+@media(max-width:700px){
+  .sc-header{height:72px;padding:15px 22px}
+  .sc-header img{width:160px}
+  .sc-main{width:calc(100% - 44px);padding:40px 0 70px}
+  .sc-intro h1,.sc-complete h1{font-size:29px;line-height:1.5}
+  .sc-intro>p:not(.sc-eyebrow){font-size:16px;line-height:1.8}
+  .sc-group{margin-top:52px}
+  .sc-group h2{font-size:21px}
+  .sc-question{padding:24px 0}
+  .sc-question legend,.sc-field-title{font-size:17px}
+  .sc-options,.sc-contact-fields{grid-template-columns:1fr}
+  .sc-option{min-height:50px;font-size:15px}
+  .sc-submit-area{margin-top:40px;padding:23px 18px}
+  .sc-footer{padding:22px;font-size:12px}
+}

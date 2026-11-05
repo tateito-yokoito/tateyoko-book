@@ -2,8 +2,10 @@ import React from "react";
 import { StoryOrigin } from "./landing/StoryIntro.jsx";
 import "./postcta-preview.css";
 
-const TRIAL = "/?app=1&entry=trial";
-const GIFT = "/?app=1&entry=login";
+const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === "true"
+  ? "/?guest_trial=1" : "/?app=1&entry=trial";
+const GIFT = import.meta.env.VITE_GUEST_TRIAL_ENABLED === "true"
+  ? "/gift-three-questions.html" : "/?app=1&entry=login";
 
 const FAQS = [
   ["無料3問の後、勝手に課金されますか？", "自動課金はありません。無料の3問にカード登録は不要です。続けたいと思ったときに、ご自身で購入を選べます。"],
