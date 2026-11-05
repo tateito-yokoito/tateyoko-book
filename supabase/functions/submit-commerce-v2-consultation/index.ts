@@ -16,6 +16,23 @@ async function hashAddress(value: string, secret: string) {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
 }
+function receiptNumber(id: string, createdAt: string) {
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" })
+    .format(new Date(createdAt)).replaceAll("-", "");
+  return `SC-${day}-${id.replaceAll("-", "").slice(0, 12).toUpperCase()}`;
+}
+async function sendMail(to: string, subject: string, text: string) {
+  const key = Deno.env.get("RESEND_API_KEY");
+  if (!key) return false;
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: Deno.env.get("CONSULTATION_MAIL_FROM") || "縦糸横糸 <hello@tateito-yokoito.jp>", to: [to], subject, text }),
+    });
+    return response.ok;
+  } catch { return false; }
+}
 
 serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -36,6 +53,10 @@ serve(async (request) => {
     if (body.website || body.consentToContact !== true) {
       return json({ success: false, error: "同意事項を確認してください" }, 400);
     }
+    if (body.receiveCopy !== undefined && typeof body.receiveCopy !== "boolean")
+      return json({ success: false, error: "控えメールの指定を確認してください" }, 400);
+    if (body.receiveCopy === true && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(body.contactEmail || "").trim()))
+      return json({ success: false, error: "控えメールには有効なメールアドレスが必要です" }, 400);
     let userId: string | null = null;
     const bearer = (request.headers.get("Authorization") || "").match(/^Bearer\s+(\S+)$/i);
     if (bearer) {
@@ -59,9 +80,46 @@ serve(async (request) => {
       input_gift_recipient_name: body.giftRecipientName || null,
     });
     if (error) throw error;
-    return json({ success: true, consultationId: data, message: "無料相談を受け付けました" });
-  } catch (error) {
-    console.error("submit consultation error", error);
+    const { data: claim, error: claimError } = await admin.from("commerce_v2_consultations")
+      .update({ answer_copy_requested: body.receiveCopy === true,
+        customer_email_status: body.receiveCopy === true ? "sending" : "not_requested",
+        admin_notification_status: "sending", notification_attempted_at: new Date().toISOString() })
+      .eq("id", data).is("notification_attempted_at", null)
+      .select("id,created_at,contact_email,contact_name,contact_phone,consultation_text,answer_copy_requested")
+      .maybeSingle();
+    if (claimError) console.error("consultation notification claim failed", claimError.code);
+    if (claim) {
+      const number = receiptNumber(claim.id, claim.created_at);
+      const date = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", dateStyle: "long", timeStyle: "short" })
+        .format(new Date(claim.created_at));
+      const adminSent = await sendMail("sugawara@saltlight.co.jp", `新しい事前相談 ${number}`,
+        `新しい事前相談を受け付けました。\n受付番号：${number}\n運営管理画面の「事前相談」から内容をご確認ください。\n`);
+      let customerSent = false;
+      if (claim.answer_copy_requested && claim.contact_email) {
+        customerSent = await sendMail(claim.contact_email, `事前相談の送信内容控え ${number}`,
+          `聞き取り制作サポートの事前相談を受け付けました。\n受付番号：${number}\n受付日時：${date}\n内容を確認のうえ、ご希望の方法でご連絡いたします。\n\n【質問と回答】\n${claim.consultation_text}\n`);
+      }
+      const { error: statusError } = await admin.from("commerce_v2_consultations").update({
+        customer_email_status: claim.answer_copy_requested ? (customerSent ? "sent" : "failed") : "not_requested",
+        admin_notification_status: adminSent ? "sent" : "failed",
+      }).eq("id", claim.id);
+      if (statusError) console.error("consultation notification status update failed", statusError.code);
+    }
+    const { data: saved, error: readError } = await admin.from("commerce_v2_consultations")
+      .select("id,created_at,customer_email_status").eq("id", data).single();
+    if (readError || !saved) {
+      console.error("consultation receipt read failed", readError?.code || "missing row");
+      const receivedAt = claim?.created_at || new Date().toISOString();
+      return json({ success: true, consultationId: data, receiptNumber: receiptNumber(data, receivedAt),
+        receivedAt, customerEmailStatus: body.receiveCopy ? "failed" : "not_requested",
+        message: "無料相談を受け付けました" });
+    }
+    return json({ success: true, consultationId: saved.id, receiptNumber: receiptNumber(saved.id, saved.created_at),
+      receivedAt: saved.created_at, customerEmailStatus: saved.customer_email_status,
+      message: "無料相談を受け付けました" });
+  } catch {
+    // The request can contain contact details. Keep errors out of function logs.
+    console.error("submit consultation failed");
     return json({ success: false, error: "申込内容を確認してからお試しください" }, 400);
   }
 });
