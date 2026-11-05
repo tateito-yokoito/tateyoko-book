@@ -20,8 +20,14 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/pwa/icon-cream-v1-180.png" />
     <meta name="apple-mobile-web-app-title" content="縦糸横糸" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <script defer src="/assets/price-overlay.js"></script>
     <script defer src="/assets/postcta-overlay.js"></script>
+    <script type="module">
+      if (import.meta.env.VITE_COMMERCE_V2_ENABLED !== 'true') {
+        const legacyPrice = document.createElement('script');
+        legacyPrice.src = '/assets/price-overlay.js';
+        document.head.append(legacyPrice);
+      }
+    </script>
     <script defer src="/gift-three-hp-entry.js"></script>
     <link rel="stylesheet" href="/assets/price-overlay.css" />
     <link rel="stylesheet" href="/assets/hp-chapter-divider-20261004.css" />
