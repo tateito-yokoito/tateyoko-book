@@ -5,11 +5,10 @@ import "./hp-nov8-hero-preview.css";
 import StoryIntro from './landing/StoryIntro.jsx';
 
 const LOGIN = "/?app=1&entry=login";
-const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true'
-  ? '/?guest_trial=1' : '/?app=1&entry=trial';
-const GIFT_PURCHASE = '/?app=1&entry=purchase&purchase_for=gift';
+const TRIAL = '/?guest_trial=1';
 const GIFT_TRIAL = '/gift-three-questions.html';
 const PURCHASE = "/?app=1&entry=purchase";
+const GIFT_PURCHASE = PURCHASE;
 const EMAIL = "sugawara@saltlight.co.jp";
 const QUESTIONS = [
   "幼い頃、どんなところに住んでいましたか？",
@@ -154,10 +153,10 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
   return <div className="landing-site">
     <a className="hp-skip" href="#hp-main">本文へ移動</a>
     {reviewOnly && <div id="hp-review-notice" className="hp-preview-note" role="note">HP Preview <span>表示確認専用：登録・購入・ログイン・送信はできません。</span></div>}
-    <div className="hp-monitor-strip" role="note" aria-label="モニター利用のご案内">
+    {!nov8Preview && <div className="hp-monitor-strip" role="note" aria-label="モニター利用のご案内">
       <p><strong>正式リリース前</strong><span aria-hidden="true">｜</span>現在はモニター利用をご案内しています。</p>
       <button type="button" onClick={() => setMonitorApplicationOpen(true)}>モニター利用を申し込む <span aria-hidden="true">↗</span></button>
-    </div>
+    </div>}
     <header className="hp-header">
       <a href="#top" aria-label="縦糸横糸 トップへ"><img src="/brand-logo-official.svg" alt="縦糸横糸" width="200" height="48" /></a>
       <div className="hp-header-actions"><a href={reviewOnly ? "#hp-review-notice" : LOGIN}>ログイン</a><button id="hp-menu-toggle" aria-label={menu ? "メニューを閉じる" : "メニューを開く"} aria-expanded={menu} aria-controls="hp-nav" onClick={() => setMenu(!menu)}>{menu ? "閉じる ×" : "メニュー ☰"}</button></div>
@@ -265,7 +264,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
         </article>
       </section>}
 
-      {nov8Preview && <section id="works" aria-label="商品と価格の全体プレビュー"><div id="price"><iframe title="縦糸横糸｜年輪の商品・価格と聞き取り制作サポート" src="/product-section-nov8-after.html?embedded=1" style={{display:'block',width:'100%',height:2600,border:0}} onLoad={event => { const frame=event.currentTarget; const body=frame.contentDocument?.body; if (!body) return; const resize=()=>{frame.style.height=`${Math.ceil(body.scrollHeight)}px`}; resize(); new ResizeObserver(resize).observe(body); for (const [selector, target] of [[".action-trial",TRIAL],[".action-gift-trial",GIFT_TRIAL],[".action-purchase",PURCHASE],[".action-gift-purchase",GIFT_PURCHASE]]) { const link=body.querySelector(selector); if(link){link.dataset.releaseHref=target;link.href=reviewOnly?"#hp-review-notice":target;} } }} /></div></section>}
+      {nov8Preview && <section id="works" aria-label="商品と価格の全体プレビュー"><div id="price"><iframe title="縦糸横糸｜年輪の商品・価格と聞き取り制作サポート" src="/product-section-nov8-after.html?embedded=1" style={{display:'block',width:'100%',height:2600,border:0}} onLoad={event => { const frame=event.currentTarget; const body=frame.contentDocument?.body; if (!body) return; const resize=()=>{frame.style.height=`${Math.ceil(body.scrollHeight)}px`}; resize(); new ResizeObserver(resize).observe(body); for (const [selector, target] of [[".action-trial",TRIAL],[".action-gift-trial",GIFT_TRIAL],[".action-purchase",PURCHASE],[".action-gift-purchase",GIFT_PURCHASE],[".consultation-cta",PURCHASE]]) { const link=body.querySelector(selector); if(link){link.dataset.releaseHref=target;link.href=reviewOnly?"#hp-review-notice":target;} } }} /></div></section>}
       {!nov8Preview && <section className="hp-support hp-section hp-shell" id="support">
         <div><SectionLabel>ともに、かたちにする。</SectionLabel><h2>一人で、全部<br className="hp-mobile-break" />やらなくていい。</h2><p>写真を選ぶ。文章を整える。本に仕上げる。<br />家族や友人など、信頼する方と進められます。</p>
           <div className="hp-support-staff"><h3>頼める方がいない場合も。</h3><p>スタッフによる制作サポートを、<br />少人数で試験的にご案内する予定です。</p><span className="hp-status">希望受付は準備中</span><p className="hp-note">受付開始後は、ご希望を伺ってからスタッフがご連絡します。<br />希望受付の時点で、利用が確定するものではありません。</p></div></div>
