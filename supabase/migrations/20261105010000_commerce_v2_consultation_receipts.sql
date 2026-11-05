@@ -6,8 +6,24 @@ alter table public.commerce_v2_consultations
   add column if not exists admin_notification_status text not null default 'pending',
   add column if not exists notification_attempted_at timestamptz;
 
-alter table public.commerce_v2_consultations
-  add constraint commerce_v2_consultations_customer_email_status_check
-    check (customer_email_status in ('not_requested', 'sending', 'sent', 'failed')),
-  add constraint commerce_v2_consultations_admin_notification_status_check
-    check (admin_notification_status in ('pending', 'sending', 'sent', 'failed'));
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.commerce_v2_consultations'::regclass
+      and conname = 'commerce_v2_consultations_customer_email_status_check'
+  ) then
+    alter table public.commerce_v2_consultations
+      add constraint commerce_v2_consultations_customer_email_status_check
+        check (customer_email_status in ('not_requested', 'sending', 'sent', 'failed'));
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.commerce_v2_consultations'::regclass
+      and conname = 'commerce_v2_consultations_admin_notification_status_check'
+  ) then
+    alter table public.commerce_v2_consultations
+      add constraint commerce_v2_consultations_admin_notification_status_check
+        check (admin_notification_status in ('pending', 'sending', 'sent', 'failed'));
+  end if;
+end $$;
