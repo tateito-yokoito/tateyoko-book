@@ -3479,6 +3479,7 @@ function App() {
   useEffect(() => {
     const initApp = async () => {
       try {
+        const checkoutReturn = getCheckoutReturnFromUrl();
         const { data: { session } } = await supabaseClient.auth.getSession();
 
   const initialDeliveryToken = getDeliveryTokenFromUrl();
@@ -16013,7 +16014,8 @@ export function Scene_SupportedStoryPages({
   );
 
   const visibleStories = [...(storyRows || [])]
-    .filter(story => String(story.transcript_edited || story.transcript_readable || "").trim())
+    .filter(story => String(story.transcript_edited || story.transcript_readable || "").trim()
+      || (onSaveStory && (mediaByAnswerId?.[story.id] || []).some(item => item.asset_type === 'audio' && item.url)))
     .sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0));
 
   return (
@@ -16073,9 +16075,9 @@ export function Scene_SupportedStoryPages({
                 </p>
               </div>
 
-              <p className="text-white/86 text-[0.98rem] leading-[2.05] whitespace-pre-wrap text-narrative">
+              {(story.transcript_edited || story.transcript_readable) && <p className="text-white/86 text-[0.98rem] leading-[2.05] whitespace-pre-wrap text-narrative">
                 {story.transcript_edited || story.transcript_readable}
-              </p>
+              </p>}
 
               {photos.length > 0 && (
                 <div className="grid grid-cols-2 gap-3 pt-1">

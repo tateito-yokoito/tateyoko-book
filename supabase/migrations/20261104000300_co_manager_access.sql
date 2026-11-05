@@ -131,13 +131,17 @@ begin
     raise exception '共有設定を変更できません' using errcode='42501'; end if;
   if input_live_scope not in ('private','family','selected') then
     raise exception '共有範囲を確認できません' using errcode='22023'; end if;
-  update public.story_sharing_preferences set
-    live_scope=input_live_scope,
-    family_sharing_enabled=(input_live_scope='family'),
-    selected_sharing_enabled=(input_live_scope='selected'),
-    updated_at=now()
-    where book_project_id=input_book_project_id;
-  return found;
+  insert into public.story_sharing_preferences (
+    book_project_id,live_scope,family_sharing_enabled,selected_sharing_enabled
+  ) values (
+    input_book_project_id,input_live_scope,
+    input_live_scope='family',input_live_scope='selected'
+  ) on conflict (book_project_id) do update set
+    live_scope=excluded.live_scope,
+    family_sharing_enabled=excluded.family_sharing_enabled,
+    selected_sharing_enabled=excluded.selected_sharing_enabled,
+    updated_at=now();
+  return true;
 end;
 $$;
 
