@@ -10325,7 +10325,9 @@ if (isNewMode) {
             <p className="ui-small">
               {authMode === "supporter"
                 ? "お手伝いの依頼メールに記載された認証コードを入力してください"
-                : "メールのボタンを押すか、記載された数字を6〜8桁すべて入力してください"}
+                : commercePurchaseReviewRequested() && getEntryModeFromUrl() === 'purchase'
+                  ? "購入内容と無料3問の語りを引き継ぐため、メールに記載された数字をこの画面に入力してください。メールのURLは開かないでください。"
+                  : "メールのボタンを押すか、記載された数字を6〜8桁すべて入力してください"}
             </p>
           </div>
 

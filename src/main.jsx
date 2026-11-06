@@ -50,19 +50,31 @@ function shouldOpenApplication() {
 
 function RootScreen() {
   const params = new URLSearchParams(window.location.search);
+  const purchaseIntent = params.get('entry') === 'purchase'
+    ? readCommercePurchaseIntent(window.localStorage) : null;
 
   if (GuestTrialFlow && params.has('guest_trial')) {
     return <React.Suspense fallback={<p>体験を準備しています…</p>}><GuestTrialFlow /></React.Suspense>;
   }
 
   if (import.meta.env.VITE_COMMERCE_V2_ENABLED === 'true'
+    && params.get('entry') === 'purchase' && commercePurchaseReviewRequested()
+    && !params.has('checkout') && !purchaseIntent) {
+    return <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-7 py-16 text-center text-white">
+      <h1 className="text-2xl leading-relaxed">購入内容を引き継げませんでした</h1>
+      <p className="mt-7 leading-8 text-white/75">メールのURLが別のタブで開いた場合は、元の認証画面に戻り、メールに記載された数字を入力してください。無料3問の語りも元のタブに残っています。</p>
+      <p className="mt-5 text-sm leading-7 text-white/60">元のタブがない場合は、無料3問の再開URLから開き直してください。</p>
+    </main>;
+  }
+
+  if (import.meta.env.VITE_COMMERCE_V2_ENABLED === 'true'
     && params.get('entry') === 'purchase' && !params.has('checkout')
     && !params.has('consultation') && !params.has('family_invite')
     && !params.has('gift') && params.get('purchase_for') !== 'family_trial_package'
-    && (!commercePurchaseReviewRequested() || !readCommercePurchaseIntent(window.localStorage))) {
+    && !commercePurchaseReviewRequested()) {
     return <CommerceV2Purchase phase="selection" client={adminSupabaseClient}
       initialOrderType={params.get('purchase_for') === 'gift' ? 'gift' : 'self'}
-      initialSelection={readCommercePurchaseIntent(window.localStorage)}
+      initialSelection={purchaseIntent}
       onProceed={selection => {
         saveCommercePurchaseIntent(window.localStorage, selection);
         const url = new URL(window.location.href);
