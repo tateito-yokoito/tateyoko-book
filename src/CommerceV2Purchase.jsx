@@ -215,7 +215,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           <label className="flex gap-3"><input type="radio" name="gift-mode" checked={giftMode === 'family_managed'} onChange={() => setGiftMode('family_managed')} />ご家族が制作を管理する</label>
         </div>}
       </fieldset>}
-      {orderType === 'gift' && <p className="mt-4 text-sm leading-7 text-white/65">新規ギフトには、決済日から45日以内かつ本編開始前までの返金保証があります。既存のギフト注文の条件は変わりません。</p>}
+      {orderType === 'gift' && <p className="mt-4 text-sm leading-7 text-white/65">新規ギフトには、決済日から45日以内かつ本編開始前まで、お支払い総額の返金保証があります。追加冊子・聞き取り制作サポートも対象です。既存のギフト注文の条件は変わりません。</p>}
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
         {[['standard', 'スタンダード', 'B5ソフトカバー', '35,000円'], ['premium', 'プレミアム', '布貼り上製本', '65,000円']].map(([value, name, cover, price]) => (
           <button key={value} type="button" className={`${choiceClass} ${edition === value ? 'border-amber-200 bg-amber-200/10' : ''}`}

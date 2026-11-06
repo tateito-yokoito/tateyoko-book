@@ -85,9 +85,9 @@ export function TrialOrderConfirmation({ mode, quote, onBack, onSubmit, onApplyD
       {discountError&&<p className="tc-error" role="alert">{discountError}</p>}
     </details>}
     {mode === 'gift' && <label className="tc-field">贈る相手のお名前<input required readOnly={!!recipientName} value={recipient} onChange={e => setRecipient(e.target.value)} autoComplete="off" /><small>購入後にお渡しする案内をご用意します。物理ギフトパッケージは含みません。</small></label>}
-    {mode === 'gift' && <p>贈り主への本体代金 全額返金保証：お支払い確定から45日以内、かつ受取人の本編開始前まで。受取人が「本編をはじめる」を選ぶと保証は終了します。同一語り手につき1回。</p>}
+    {mode === 'gift' && <p>贈り主へのお支払い総額 全額返金保証：お支払い確定から45日以内、かつ受取人の本編開始前まで。受取人が「本編をはじめる」を選ぶと保証は終了します。同一語り手につき1回。</p>}
     <p className="tc-small">制作期間：{mode === 'gift' ? '購入から6ヶ月以内に有料の「はじまりの章」を開始し、開始から1年間。' : 'お支払いから1年間。'}目安は1〜3ヶ月です。</p>
-    <p className="tc-small">{currentQuote.amount_total===0?mode==='gift'?'お支払いは発生しません。返金対象は実際にお支払いいただいた本体代金です。':'お支払いは発生しません。':'クレジットカードの一括払い・分割払い。利用可否・回数・手数料は、Stripeの決済画面でご確認ください。'}</p>
+    <p className="tc-small">{currentQuote.amount_total===0?'お支払いは発生しないため、返金対象額はありません。':'クレジットカードの一括払い・分割払い。利用可否・回数・手数料は、Stripeの決済画面でご確認ください。'}</p>
     <label className="tc-agreement"><input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} />{mode==='gift'?'金額と返金保証・制作期間を確認しました。':'金額と制作期間を確認しました。'}</label>
     {error && <p className="tc-error" role="alert">{error}</p>}
     <button className="tc-primary" disabled={busy || quoting || unapplied || !!discountError || !agreed || (mode === 'gift' && !recipient.trim())} onClick={() => onSubmit({ orderType: mode, includeGiftPackage: false, gift: { recipient_name: recipient.trim() }, discountCode:appliedCode, expectedAmount: currentQuote.amount_total })}>{busy ? '確認しています…' : reviewOnly ? '確認を完了する（テスト・決済なし）' : currentQuote.amount_total===0?'0円で申し込みを確定する':'Stripeの決済画面へ進む'}<ArrowRight size={18} /></button>
@@ -171,7 +171,7 @@ export default function TrialCompletionExperience({ stories = [], mode = 'self',
             <div><strong>Premium BOOK</strong><span>30,000円／冊（税込）。ハードカバー・上製本・布貼り・箔押し</span></div>
             <div><strong>ギフトパッケージ</strong><span>大切な方への贈りものに。完成時に追加できます。</span></div>
           </div><p className="tc-small">いずれも基本料金には含まれません。必要な場合だけ、追加前に金額を確認できます。</p></div>
-          {gift && <p className="tc-fast-assurance">ギフトは、お支払いから45日以内かつ受取人の本編開始前なら本体代金の全額返金保証。</p>}
+          {gift && <p className="tc-fast-assurance">ギフトは、お支払いから45日以内かつ受取人の本編開始前なら、お支払い総額の全額返金保証。</p>}
           {buyButton}<p className="tc-small">次にお申し込み内容を確認します。このボタンでは決済されません。自動課金もありません。</p>
           <p className="tc-small">制作の進め方・{gift ? '返金保証・' : ''}お支払い方法は、下の「もっと詳しく見る」で確認できます。</p>
         </div> : <div className="tc-fast-next">
@@ -218,10 +218,10 @@ export default function TrialCompletionExperience({ stories = [], mode = 'self',
         <Section id="C12" className="tc-price-section"><div className="tc-price-card"><p className="tc-eyebrow">人生を辿り、未来へ手渡す。</p><h2><BrandLogo /></h2>{quote?.family_price && <p>ご家族向け特別価格</p>}<p className="tc-price">{quote ? yen(quote.amount_total) : '金額を確認中…'}<small>（税込）</small></p>{quote?.family_price && <p className="tc-small">縦糸横糸をご利用のご家族へ広げるための特別価格です。</p>}
           <ul>{valueItems.map(value => <li key={value}><Check size={17} />{value}</li>)}</ul>{buyButton}
           {gift && <button className="tc-secondary" onClick={onInvite}>まず、相手にも3問試してもらう</button>}
-          {gift && <p className="tc-small">本体代金 全額返金保証・45日以内／受取人の本編開始前</p>}<a href="#trial-C13">まだ少し不安な方へ ↓</a></div>
+          {gift && <p className="tc-small">お支払い総額 全額返金保証・45日以内／受取人の本編開始前</p>}<a href="#trial-C13">まだ少し不安な方へ ↓</a></div>
           <div className="tc-price-meaning"><h2>本一冊の<br />価格ではありません。</h2><p>人生を辿り、再発見し、<br />大切なものを一度結晶化する。</p><p>そして未来の自分や家族が、<br />そこへ還れるようにする。</p><p>そこまでが、縦糸横糸です。</p></div></Section>
         <Section id="C13"><h2>最後までできるかな、<br />と思った方へ。</h2><div className="tc-reassurance">{[['書き始めなくて大丈夫', '基本は、届く問いに声で話すことから。'], ['全部答えなくて大丈夫', 'すべての問いに答える必要はありません。'], ['自分のペースで', '目安は1〜3ヶ月。制作期間は1年間。特別な休止手続きは必要ありません。'], ['一人でも。家族と一緒でも。', '写真を手伝ってもらったり、一緒に昔のことを思い出したりすることもできます。']].map(([title, text]) => <div key={title}><h3>{title}</h3><p>{text}</p></div>)}</div></Section>
-        {gift && <Section id="C14" className="tc-guarantee"><ShieldCheck size={28} strokeWidth={1.3} /><div><p className="tc-eyebrow">本体代金 全額返金保証</p><h2>はじめてみて、<br />合わなかったら。</h2><p>大切な方に合わなかった場合も、安心して贈れるように。</p><p>お支払いから<strong>45日以内</strong>、かつ受取人の<strong>本編開始前</strong>なら、理由を問わず、お支払いいただいた本体代金を全額返金します。</p><details><summary>返金保証について</summary><p>「はじまりの章」の後、ご本人が「本編をはじめる」と明示した時点で保証は終了します。章を読み終えただけでは終了しません。</p><p>購入して贈る場合は45日。同一語り手につき1回です。一括・分割で条件は変わりません。</p><p>返金確定後は制作を停止し、対象記録は30日間、本人が閲覧・取得できます。本保証とは別に、サービス不備等への対応を行います。</p></details></div></Section>}
+        {gift && <Section id="C14" className="tc-guarantee"><ShieldCheck size={28} strokeWidth={1.3} /><div><p className="tc-eyebrow">お支払い総額 全額返金保証</p><h2>はじめてみて、<br />合わなかったら。</h2><p>大切な方に合わなかった場合も、安心して贈れるように。</p><p>お支払いから<strong>45日以内</strong>、かつ受取人の<strong>本編開始前</strong>なら、理由を問わず、この注文でお支払いいただいた全額を返金します。</p><details><summary>返金保証について</summary><p>「はじまりの章」の後、ご本人が「本編をはじめる」と明示した時点で保証は終了します。章を読み終えただけでは終了しません。</p><p>購入して贈る場合は45日。追加冊子・制作オプションも対象です。同一語り手につき1回で、一括・分割で条件は変わりません。</p><p>返金確定後は制作を停止し、対象記録は30日間、本人が閲覧・取得できます。本保証とは別に、サービス不備等への対応を行います。</p></details></div></Section>}
         <Section id="C15" className="tc-short"><h2>お支払い方法</h2><p>クレジットカードの一括払い・分割払いに対応しています。</p><p className="tc-small">分割払いの利用可否・回数・手数料は、ご利用のカードによって異なります。Stripeの決済画面でお確かめください。</p></Section>
         <Section id="C16" className="tc-final tc-ink tc-centered"><p className="tc-eyebrow">まだ、あなたの中にある物語へ。</p><h2>{gift ? <>大切な方にも、<br />こんな時間を贈ってみませんか。</> : <>あなたの物語の、<br />つづきを辿ってみませんか。</>}</h2>{buyButton}<p>{quote && yen(quote.amount_total)}（税込）・一括／対応カードの分割</p>{gift && <button className="tc-secondary" onClick={onInvite}>まず、相手にも3問試してもらう</button>}<button className="tc-text-button" onClick={onFinish}>今はここまでにする</button></Section>
       </> : <section id="trial-next" className="tc-section tc-centered"><h2>{paid ? 'ここから、はじまりの章へ。' : 'ここから先も、もう少し辿ってみたいですか？'}</h2>

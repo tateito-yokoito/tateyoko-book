@@ -10717,9 +10717,9 @@ function Scene_PurchaseStart({
 
         {orderType === "gift" && (
           <div className="mt-6 rounded-2xl border border-amber-100/20 bg-amber-100/[0.055] px-5 py-4 text-sm leading-[1.8] text-amber-50/85">
-            <p className="font-medium">贈り主への本体代金 全額返金保証</p>
+            <p className="font-medium">贈り主へのお支払い総額 全額返金保証</p>
             <p className="mt-2">決済確定から45日以内、かつ受取人が「本編をはじめる」を選ぶ前まで申請できます。受取人が本編へ進むと保証は終了します。</p>
-            <p className="mt-2 text-[0.82rem] text-amber-50/72">同一語り手につき1回。発送済みギフトパッケージ代は対象外です。</p>
+            <p className="mt-2 text-[0.82rem] text-amber-50/72">同一語り手につき1回。追加冊子・制作オプションも含め、この注文でお支払いいただいた全額が対象です。</p>
           </div>
         )}
 

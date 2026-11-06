@@ -6,7 +6,7 @@ export default function ExperienceContractSettings({client,onBack}) {
  useEffect(()=>{load().catch(()=>setMessage('契約情報を読み込めませんでした。'));},[]);
  const run=async(action)=>{setBusy(true);setMessage('');try{await action();}catch(error){setMessage(error.message||'処理を確認できませんでした。');}finally{setBusy(false);}};
  const refund=c=>run(async()=>{
-  if(!c.refund_status && !window.confirm('本体代金の返金を申請します。申請中は制作を停止し、返金確定後は30日間、対象の記録を取得できます。申請しますか？'))return;
+  if(!c.refund_status && !window.confirm(`${c.full_order_guarantee ? 'この注文でお支払いいただいた全額' : '本体代金'}の返金を申請します。申請中は制作を停止し、返金確定後は30日間、対象の記録を取得できます。申請しますか？`))return;
   const {data,error}=await client.functions.invoke('request-experience-refund',{body:{orderId:c.order_id}});
   if(error || !data?.success)throw new Error(data?.error||'申請状況を確認できませんでした。同じ申請から再確認できます。');
   setMessage(data.message || (data.reviewRequired?'申請を受け付けました。運営が語り手の確認を行います。':'返金状況を更新しました。'));await load();
@@ -27,7 +27,7 @@ export default function ExperienceContractSettings({client,onBack}) {
   {!contracts.length && <p>新制度の購入情報はありません。</p>}
   {contracts.map(c=><section key={c.order_id} className="border border-white/15 rounded-2xl p-5 my-4 space-y-3">
    <h2>{c.purchase_kind==='gift'?'ギフト':'ご本人用'}の購入情報</h2>
-   {c.guarantee_days>0 && <p>本体代金 全額返金保証：{c.guarantee_days}日以内・本編開始前／期限 {date(c.guarantee_expires_at)}</p>}
+   {c.guarantee_days>0 && <p>{c.full_order_guarantee ? 'お支払い総額' : '本体代金'} 全額返金保証：{c.guarantee_days}日以内・本編開始前／期限 {date(c.guarantee_expires_at)}</p>}
    {c.main_started_at && <p>本編開始済み：{date(c.main_started_at)}</p>}
    {c.guarantee_days>0 && c.guarantee_previously_used && <p>この語り手の返金保証は利用済みです。</p>}
    {c.refund_status && <p>{states[c.refund_status]}</p>}
