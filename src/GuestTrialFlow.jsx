@@ -443,7 +443,7 @@ function GuestTrialExperience() {
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
       {screen === 'record' && <Scene_Recording key={questions[index].id} question={questions[index]}
-        progress={`${index + 1} / 3`} userName="あなた" onBack={() => setScreen('choice')}
+        storyProgress={{ currentIndex: index, total: 3 }} userName="あなた" onBack={() => setScreen('choice')}
         onComplete={saveRecording} />}
       {screen === 'record' && developmentPreview && !giftToken && <div className="px-7 pb-8 text-center">
         <button type="button" disabled={busy} onClick={fillTestAnswers}

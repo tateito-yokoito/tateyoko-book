@@ -18242,7 +18242,6 @@ export function Scene1_MyPage({
       <RecordingQuestionPrompt question={question} />
 
       <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
-        <h2 className="question-answer-label">この問いに答える</h2>
         <RecordingStartButton onClick={onNext} label="話して答える" />
         {onWrite && <button type="button" onClick={onWrite}
           className="recording-start-bar recording-start-bar--write" aria-label="書いて答える">
@@ -19130,7 +19129,7 @@ const stop = (reason = "manual") => {
 
 return (
 <StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4" background={QUESTION_BACKGROUND}>
-  <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={step === "checking_mic" || step === "mic_error" ? onBack : null} />
+  <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={step === 0 || step === "checking_mic" || step === "mic_error" ? onBack : null} />
 
   <RecordingQuestionPrompt question={question} />
 
