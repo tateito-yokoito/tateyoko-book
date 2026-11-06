@@ -225,6 +225,5 @@ export default function SupportConsultationInline({ reviewOnly = false }) {
           && <button type="button" className="inline-consult-primary" onClick={event => { event.preventDefault(); next(); }}>次へ →</button>}
     </div>
     {preview && <p className="inline-consult-preview-note">表示確認用プレビューです。実際の送信は行いません。</p>}
-    {!preview && !canSubmit && <p className="inline-consult-error">相談受付の準備中です。</p>}
   </form>;
 }
