@@ -59,7 +59,11 @@ export default function PublishedWebBook({ supabaseClient, publicId }) {
   }, [publicId, supabaseClient]);
 
   if (state.status === 'ready') {
-    return <WebBook publication={state.publication} resolveAsset={resolveAsset} />;
+    // This early sample predates the published cover snapshot. Use its approved
+    // printed cover until the sample is republished with a cover asset.
+    const sampleCover = publicId === '0ae7500b3ee6507721663b40c02ea7dc3c5de4f7be949288'
+      ? '/site/webbook-sample-cover-sage.jpg' : '';
+    return <WebBook publication={{ ...state.publication, coverImageUrl: sampleCover }} resolveAsset={resolveAsset} />;
   }
   return <main className="wb wb-message">
     {state.status === 'loading' && <p role="status">Webブックを読み込んでいます…</p>}

@@ -8,3 +8,30 @@
 .wb-next-story{border-top:1px solid var(--wb-rule);margin-top:48px;padding-top:6px}.wb-next-story>button{border:0;background:transparent;display:flex;align-items:center;justify-content:space-between;gap:18px;width:100%;min-height:52px;padding:12px 0;text-align:left;font-size:20px;line-height:1.9}.wb-next-story>button>span:first-child{flex:1;min-width:0}.wb-next-story>button>span:last-child{flex:none}.wb-listen-label{text-align:center;font-size:11px;letter-spacing:.14em;margin-bottom:8px!important}.wb-previous-story{font-size:12px!important;margin-top:20px}.wb-book-ending{padding-top:90px!important;padding-bottom:50px}.wb-book-ending .wb-back{margin:24px auto 0;justify-content:center}
 .wb-player{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:640px;padding:8px 18px calc(8px + env(safe-area-inset-bottom));border-top:1px solid var(--wb-rule)}.wb-player-chapter{font-size:11px!important;line-height:1.5}.wb-player-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;width:calc(100% - 44px);text-align:left;line-height:1.5!important;font-size:13px!important;border:0;background:transparent;padding:2px 0;min-height:40px}.wb-player-title:disabled{opacity:1;cursor:default}.wb-audio-controls{justify-content:center;gap:8px;padding-top:0}.wb-audio-timeline{flex-basis:100%;order:-1;min-width:0}.wb-audio-timeline input{display:block;min-height:24px;margin:0}.wb-audio-timeline small{font-size:11px}.wb-audio-step{border:0;background:transparent;min-width:72px;min-height:44px;line-height:1!important}.wb-audio-step small{display:block;font-size:10px;margin-top:5px}.wb-audio-step:disabled{opacity:.35;cursor:default}.wb-has-player main{padding-bottom:240px}.wb input:focus-visible{outline:2px solid #416955;outline-offset:2px}
 .wb-legacy-chapter{margin:24px 0 34px}.wb-legacy-chapter>h3{padding:0 0 10px;border-bottom:1px solid var(--wb-rule);font-size:17px;letter-spacing:.04em}.wb-legacy-chapter .wb-question{align-items:flex-start}.wb-legacy-chapter .wb-question .wb-title-button{padding-top:0}
+
+/* Preserve the printed cover's hierarchy while making navigation and long text easier to read. */
+.wb{font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif}
+.wb h1,.wb h2,.wb-cover-print,.wb-cover-brand{font-family:'Noto Serif JP','Yu Mincho',serif}
+.wb-header img{width:140px}
+.wb-header span{font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-size:13px}
+.wb-cover-reference,.wb-cover-print{width:min(100%,460px);margin:25px auto 30px;padding:0}
+.wb-cover-reference img{display:block;width:100%;height:auto;box-shadow:0 4px 16px #1b322b18}
+.wb-cover-print{display:flex;flex-direction:column;align-items:center;aspect-ratio:533/745;background:var(--wb-cover-color,#a9bcb6);color:#294b43;padding:12% 5% 6%}
+.wb-cover-print .wb-name h1{font-size:clamp(25px,6vw,36px)}
+.wb-cover-print .wb-book-title{font-size:15px;margin-top:8px!important}
+.wb-cover-print .wb-subtitle{font-size:clamp(16px,3.7vw,20px);letter-spacing:.15em;margin-top:5px!important}
+.wb-cover-print .wb-cover-photo{width:100%;margin:8% 0 0;max-height:none}
+.wb-cover-print .wb-cover-photo-frame{aspect-ratio:1.12}
+.wb-cover-print .wb-cover-brand{margin-top:auto!important;font-size:16px;letter-spacing:.2em}
+.wb-cover-print .wb-date{margin-top:auto!important;font-size:12px}
+.wb-cover-print .wb-date+.wb-cover-brand{margin-top:10px!important}
+.wb-listen-book{min-height:60px;font-size:17px!important}
+.wb-theme{min-height:72px;font-size:17px!important}
+.wb-chapter-count{flex:none!important;font-size:13px;color:#65746b;white-space:nowrap}
+.wb-chapter-toggle{display:flex;align-items:center;gap:12px;width:100%;min-height:72px;padding:12px 0;border:0;border-bottom:1px solid var(--wb-rule);background:transparent;text-align:left;font-size:17px!important;font-weight:500}
+.wb-chapter-toggle>span{flex:1;min-width:0}.wb-chapter-toggle>small{font-size:13px;font-weight:400;color:#65746b;white-space:nowrap}
+.wb-legacy-chapter{margin:0}.wb-legacy-chapter .wb-question{align-items:center}
+.wb-question{min-height:60px;font-size:16px;line-height:1.7}
+.wb-title-button,.wb-back,.wb-player-title{font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif}
+.wb-prose{font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-size:18px;line-height:2.05}
+@media(max-width:420px){.wb-header img{width:128px}.wb-chapter-toggle,.wb-theme{font-size:16px!important}.wb-chapter-count,.wb-chapter-toggle>small{font-size:11px}.wb-question{font-size:16px}}
