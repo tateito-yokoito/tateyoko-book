@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Scene1_MyPage, Scene_Recording, ensureUserFoundation, ensureUserQuestions, supabaseClient } from './App.jsx';
 import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
 import TrialCompletionExperience, { StoryCard } from './TrialCompletionExperience.jsx';
@@ -27,6 +27,66 @@ const questions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) => ({
   chapter_label: '幼い頃', theme_label: '幼い頃', theme_order: 1,
   sequence_order: index + 1,
 }));
+
+function GuestTrialPolishControls({ session, question, text, onUse, saveButton, disabled }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [showStyles, setShowStyles] = useState(false);
+  const [candidate, setCandidate] = useState(null);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const latestText = useRef(text);
+  latestText.current = text;
+  useEffect(() => {
+    if (candidate && text.trim() !== candidate.original) setCandidate(null);
+  }, [text, candidate]);
+
+  const polish = async style => {
+    setShowStyles(false);
+    if (style === 'clean') return;
+    const source = text.trim();
+    if (!source || busy) return;
+    setBusy(true); setError('');
+    try {
+      const result = await guestTrialRequest(TRIAL_API, 'polish', {
+        sessionToken: session.token, questionId: question.id,
+        text: source, style,
+      });
+      if (latestText.current.trim() !== source) {
+        setError('整形中に文章が変更されたため、古い候補は表示しませんでした。');
+        return;
+      }
+      setCandidate({ original: source, text: result.candidate });
+      setShowOriginal(false);
+    } catch (cause) {
+      setError(cause?.message || '文章を整えられませんでした。元の文章は残っています。');
+    } finally { setBusy(false); }
+  };
+
+  return <div className="mt-5 space-y-3">
+    {candidate ? <>
+      <h3 className="text-lg">整えた文章を確認</h3>
+      <div className="rounded-xl bg-[#f5f3ed] p-5 text-lg leading-loose whitespace-pre-wrap text-[#24302d]">{candidate.text}</div>
+      <button type="button" onClick={() => setShowOriginal(value => !value)} className="min-h-11 text-white/70 underline">元の文章を{showOriginal ? '閉じる' : '確認する'}</button>
+      {showOriginal && <div className="rounded-xl border border-white/20 p-5 leading-loose whitespace-pre-wrap">{candidate.original}</div>}
+      <button type="button" onClick={() => { onUse(candidate.text); setCandidate(null); }} className="block min-h-14 w-full rounded-xl bg-white text-slate-900">この文章を使う</button>
+      <button type="button" onClick={() => setCandidate(null)} className="block min-h-14 w-full rounded-xl border border-white/30">元の文章に戻す</button>
+      <p className="text-sm text-white/50">候補を選んだ後、保存すると反映されます。</p>
+    </> : <>
+      {showStyles && <div role="group" aria-label="文章の整え方" className="grid grid-cols-3 gap-2">
+        {[["clean", "そのまま"], ["narrative", "語り調"], ["essay", "作品調"]].map(([value, label]) =>
+          <button key={value} type="button" onClick={() => void polish(value)} disabled={busy || disabled}
+            className="min-h-12 rounded-xl border border-white/30 text-sm disabled:opacity-40">{label}</button>)}
+      </div>}
+      <div className="grid grid-cols-[1fr_1.25fr] gap-2">
+        <button type="button" onClick={() => setShowStyles(value => !value)} disabled={busy || disabled || !text.trim()}
+          className="min-h-14 rounded-xl border border-white/30 disabled:opacity-40">✦ 整える</button>
+        {saveButton(busy)}
+      </div>
+    </>}
+    {busy && <p role="status" className="text-sm text-white/60">文章を整えています…</p>}
+    {error && <p role="alert" className="text-sm text-rose-200">{error}</p>}
+  </div>;
+}
 
 export default function GuestTrialFlow() {
   const legacyHost = window.location.hostname === 'tateyoko-book.vercel.app';
@@ -448,15 +508,19 @@ function GuestTrialExperience() {
         onEndToday={openExit}
       />}
       {screen === 'write' && <main className="px-7 py-14">
-        <button type="button" onClick={() => setScreen('choice')} className="text-white/65">← 戻る</button>
-        <p className="mt-8 text-center text-white/55">{index + 1} / 3</p>
-        <h1 className="mt-6 text-center text-[1.35rem] leading-[1.8]">{questions[index].content}</h1>
+        <header className="mb-5 flex items-start justify-between gap-4 pt-2">
+          <button type="button" onClick={() => setScreen('choice')} className="min-h-11 text-white/65">← 戻る</button>
+          <p className="flex min-h-11 shrink-0 items-center text-[1rem] text-white/75">{index + 1} / 3</p>
+        </header>
+        <h1 className="mt-8 text-center text-[1.35rem] leading-[1.8]">{questions[index].content}</h1>
         <label htmlFor="guest-trial-writing" className="mt-10 block text-white/80">書いて答える</label>
         <textarea id="guest-trial-writing" value={transcript} onChange={event => setTranscript(event.target.value)} rows={9}
           placeholder="思い出したことを、自由に書いてください" maxLength={100000}
           className="mt-4 w-full rounded-2xl border border-white/25 bg-white/[0.06] p-4 text-white outline-none" />
-        <button type="button" disabled={busy || !transcript.trim()} onClick={saveWrittenAnswer}
-          className="mt-5 w-full rounded-full bg-[#e9e5d9] px-7 py-4 text-[#15243a] disabled:opacity-50">{busy ? '保存中…' : '保存する'}</button>
+        <GuestTrialPolishControls key={questions[index].id} session={session} question={questions[index]}
+          text={transcript} onUse={setTranscript} disabled={busy}
+          saveButton={polishing => <button type="button" disabled={busy || polishing || !transcript.trim()} onClick={saveWrittenAnswer}
+            className="min-h-14 rounded-xl bg-white text-slate-900 disabled:opacity-40">{busy ? '保存中…' : '保存する'}</button>} />
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
       {screen === 'record' && <Scene_Recording key={questions[index].id} question={questions[index]}
@@ -483,16 +547,23 @@ function GuestTrialExperience() {
         <button type="button" onClick={() => setScreen('record')} className="mt-6 block w-full text-white/60 underline">録音し直す</button>
       </main>}
       {screen === 'review' && <main className="px-7 py-14">
-        <p className="text-center text-white/55">{index + 1} / 3　語りを確認</p>
-        <h1 className="mt-7 text-center text-[1.35rem] leading-[1.8]">{questions[index].content}</h1>
+        <header className="mb-5 flex items-start justify-between gap-4 pt-2 text-white/55">
+          <p className="flex min-h-11 items-center">語りを確認</p>
+          <p className="flex min-h-11 shrink-0 items-center text-[1rem] text-white/75">{index + 1} / 3</p>
+        </header>
+        <h1 className="mt-8 text-center text-[1.35rem] leading-[1.8]">{questions[index].content}</h1>
         <div className="mt-10 rounded-3xl border border-white/15 bg-white/[0.05] p-6">
           {editing ? <textarea value={transcript} onChange={event => setTranscript(event.target.value)} rows={8}
             className="w-full bg-transparent leading-loose outline-none" aria-label="語りの文章" />
             : <p className="whitespace-pre-wrap leading-[2]">{transcript || '声は保存されました。文字起こしが空の場合は文章を追加できます。'}</p>}
           {pendingAudioUrl && <audio className="mt-5 w-full" controls src={pendingAudioUrl} />}
         </div>
-        <button type="button" onClick={() => setEditing(true)} className="mt-5 w-full text-sm text-white/60 underline">文章を直す</button>
-        <button type="button" disabled={busy || (editing && !transcript.trim())} onClick={next} className="btn-quiet mt-9 w-full rounded-full bg-[#e9e5d9] px-7 py-4 text-[#15243a] disabled:opacity-50">{busy ? '保存しています…' : index === 2 ? '三つの問いを終える' : '次の問いへ'}</button>
+        {!editing && <button type="button" onClick={() => setEditing(true)} className="mt-5 w-full text-sm text-white/60 underline">文章を直す</button>}
+        {editing && <GuestTrialPolishControls key={questions[index].id} session={session} question={questions[index]}
+          text={transcript} onUse={setTranscript} disabled={busy}
+          saveButton={polishing => <button type="button" disabled={busy || polishing || !transcript.trim()} onClick={next}
+            className="min-h-14 rounded-xl bg-white text-slate-900 disabled:opacity-40">{busy ? '保存しています…' : index === 2 ? '保存して終了' : '保存して次へ'}</button>} />}
+        {!editing && <button type="button" disabled={busy} onClick={next} className="btn-quiet mt-9 w-full rounded-full bg-[#e9e5d9] px-7 py-4 text-[#15243a] disabled:opacity-50">{busy ? '保存しています…' : index === 2 ? '三つの問いを終える' : '次の問いへ'}</button>}
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
       {screen === 'finished' && <main className="px-7 py-14 text-center">
