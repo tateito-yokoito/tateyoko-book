@@ -16,7 +16,9 @@
 .landing-site .hp-hero-nov8 .hp-hero-category {
   margin-top: 22px;
   color: var(--navy);
+  font-family: "Noto Sans JP", sans-serif;
   font-size: clamp(19px, 1.7vw, 23px);
+  font-weight: 700;
   line-height: 1.8;
   letter-spacing: .035em;
 }
@@ -24,11 +26,69 @@
   align-self: end;
   padding-bottom: 32px;
 }
+.landing-site .hp-hero-nov8 .hp-hero-offer {
+  background: transparent;
+}
 .landing-site .hp-hero-nov8 .hp-hero-ease {
+  margin: 0;
+  padding: 0 0 18px;
+  font-family: "Noto Sans JP", sans-serif;
   font-size: 19px;
   line-height: 1.75;
   font-weight: 600;
 }
+.landing-site .hp-hero-nov8 .hp-hero-products {
+  margin: 0;
+  overflow: hidden;
+  border-radius: 7px;
+}
+.landing-site .hp-hero-nov8 .hp-hero-products img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.landing-site .hp-hero-nov8 .hp-hero-start {
+  max-width: none;
+  padding: 14px 0 0;
+}
+.landing-site .hp-hero-nov8 .hp-hero-benefits { display: grid; }
+.landing-site .hp-hero-nov8 .hp-hero-benefit {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  align-items: center;
+  gap: 15px;
+  min-width: 0;
+  padding: 13px 0;
+}
+.landing-site .hp-hero-nov8 .hp-hero-benefit + .hp-hero-benefit { border-top: 1px solid var(--line); }
+.landing-site .hp-hero-nov8 .hp-hero-benefit-icons { display: flex; align-items: center; justify-content: center; gap: 3px; }
+.landing-site .hp-hero-nov8 .hp-hero-benefit-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 31px;
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  background: #f1e9d8;
+  color: var(--navy);
+}
+.landing-site .hp-hero-nov8 .hp-hero-benefit-icon svg { width: 22px; height: 22px; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.landing-site .hp-hero-nov8 .hp-hero-benefit p { margin: 0; line-height: 1.5; }
+.landing-site .hp-hero-nov8 .hp-hero-benefit strong { display: block; font-family: "Noto Sans JP", sans-serif; font-size: 19px; font-weight: 600; }
+.landing-site .hp-hero-nov8 .hp-hero-benefit p span { display: block; margin-top: 3px; font-size: 14px; }
+.landing-site .hp-hero-nov8 .hp-hero-start-actions { margin-top: 17px; }
+.landing-site .hp-hero-nov8 .hp-hero-purchase-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 52px;
+  padding: 11px 20px;
+  border: 1px solid var(--navy) !important;
+  border-radius: 3px;
+  font-size: 16px;
+}
+.landing-site .hp-hero-nov8 .hp-hero-purchase-button:hover { background: color-mix(in srgb, var(--paper) 84%, var(--navy)); }
 @media (max-width: 620px) {
   .landing-site .hp-hero-nov8 {
     padding-bottom: 16px;
@@ -46,9 +106,42 @@
     padding-bottom: 0;
   }
   .landing-site .hp-hero-nov8 .hp-hero-ease {
-    font-size: 17px;
-    line-height: 1.8;
+    padding: 0 0 16px;
+    font-size: 16px;
+    line-height: 1.65;
   }
+  .landing-site .hp-hero-nov8 .hp-hero-products {
+    width: 100%;
+  }
+  .landing-site .hp-hero-nov8 .hp-hero-start { padding: 10px 0 0; }
+  .landing-site .hp-hero-nov8 .hp-hero-benefit {
+    grid-template-columns: 94px minmax(0, 1fr);
+    gap: 8px;
+    padding: 12px 0;
+  }
+  .landing-site .hp-hero-nov8 .hp-hero-benefit-icon { flex-basis: 29px; width: 29px; height: 29px; }
+  .landing-site .hp-hero-nov8 .hp-hero-benefit > .hp-hero-benefit-icon { justify-self: center; }
+  .landing-site .hp-hero-nov8 .hp-hero-benefit-icon svg { width: 20px; height: 20px; }
+  .landing-site .hp-hero-nov8 .hp-hero-benefit strong { font-size: 16px; }
+  .landing-site .hp-hero-nov8 .hp-hero-benefit p span { font-size: 12px; line-height: 1.55; }
+  .landing-site .hp-hero-nov8 .hp-hero-start-actions { margin-top: 12px; }
+  .landing-site .hp-hero-nov8 .hp-hero-start-actions .hp-button { min-height: 50px; padding: 11px 15px; }
+  .landing-site .hp-hero-nov8 .hp-hero-purchase-button { width: 100%; min-height: 48px; padding: 10px 15px; font-size: 14px; }
+}
+@media (min-width: 621px) {
+  .landing-site .hp-hero-nov8.hp-hero-integrated::before { content: none; }
+  .landing-site .hp-hero-nov8 .hp-hero-body { grid-column: 1 / -1; grid-row: 2; width: min(850px, 100%); justify-self: center; padding-top: 30px; }
+  .landing-site .hp-hero-nov8.hp-hero-integrated .hp-hero-art { position: relative; grid-column: 2; grid-row: 1; top: auto; right: auto; bottom: auto; left: auto; min-height: 580px; border-radius: 45% 45% 4px 4px; z-index: 0; }
+  .landing-site .hp-hero-nov8.hp-hero-integrated .hp-hero-art::after { content: none; }
+  .landing-site .hp-hero-nov8.hp-hero-integrated .hp-hero-art img { left: 0; width: 100%; }
+  .landing-site .hp-hero-nov8 .hp-hero-offer { width: 100%; }
+  .landing-site .hp-hero-nov8 .hp-hero-products img { max-height: 410px; object-fit: cover; object-position: center; }
+  .landing-site .hp-hero-nov8 .hp-hero-benefits { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .landing-site .hp-hero-nov8 .hp-hero-benefit { display: block; }
+  .landing-site .hp-hero-nov8 .hp-hero-benefit + .hp-hero-benefit { border-top: 0; }
+  .landing-site .hp-hero-nov8 .hp-hero-benefit-icons { margin-bottom: 9px; }
+  .landing-site .hp-hero-nov8 .hp-hero-benefit strong { font-size: 17px; }
+  .landing-site .hp-hero-nov8 .hp-hero-benefit p span { font-size: 13px; }
 }
 
 /* Preview only: shorten the path from the comparison to the creation steps. */
@@ -60,27 +153,63 @@
 .landing-site .hp-v4-ways .hp-v4-ways-arrow { margin-top: 14px; }
 .landing-site .hp-v4-ways > .hp-v4-ways-bridge { margin-top: 8px; }
 
-.landing-site .hp-nenrin { max-width: 1100px; padding-block: 66px 74px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+/* Preview: keep the comparison, the reason to begin, and the three steps in one visual rhythm. */
+.landing-site .hp-v4-ways-polished { max-width: 1050px; padding-block: 38px 66px; }
+.landing-site .hp-v4-ways-polished > h2:first-child { line-height: 1.48; }
+.landing-site .hp-v4-ways-polished .hp-v4-way-grid { max-width: 900px; margin-top: 28px; gap: 18px; }
+.landing-site .hp-v4-ways.hp-v4-ways-polished .hp-v4-way-card { display: flex; flex-direction: column; padding: 0 0 20px; overflow: hidden; border-radius: 11px; text-align: left; }
+.landing-site .hp-v4-ways-polished .hp-v4-way-card .hp-v4-crop { order: -1; border-radius: 0; }
+.landing-site #ways.hp-v4-ways-polished .hp-v4-way-card h3 { margin: 15px 20px 0; font-family: "Noto Sans JP", sans-serif; font-size: clamp(23px, 2.4vw, 29px); font-weight: 600; }
+.landing-site .hp-v4-ways-polished .hp-v4-way-card > p { margin: 7px 20px 0; font-size: clamp(16px, 1.6vw, 19px); line-height: 1.65; }
+.landing-site .hp-v4-ways-polished .hp-v4-way-card strong { font-size: 1em; }
+.landing-site .hp-v4-ways-polished .hp-v4-ways-note { max-width: 850px; margin-top: 13px !important; }
+.landing-site .hp-v4-ways-polished .hp-v4-when-bridge { max-width: 820px; margin-top: 35px; gap: 18px; }
+.landing-site .hp-v4-ways-polished .hp-v4-when-bridge p { font-size: clamp(18px, 1.75vw, 22px); line-height: 1.8; }
+.landing-site .hp-v4-ways-polished .hp-v4-when-emphasis { font-weight: 600; }
+.landing-site .hp-v4-ways-polished .hp-v4-when-bridge .hp-v4-when-resolution { margin-top: 3px; padding: 19px 16px; border-radius: 12px; background: color-mix(in srgb, var(--green) 7%, var(--paper)); color: var(--green); font-weight: 600; }
+.landing-site .hp-v4-ways-polished .hp-v4-when-resolution p + p { margin-top: 2px; }
+.landing-site .hp-v4-scenes { padding-bottom: 56px; }
+.landing-site .hp-v4-ways-polished > .hp-v4-ways-bridge { margin-top: 36px; font-size: clamp(25px, 2.65vw, 33px); line-height: 1.65; }
+.landing-site .hp-v4-ways-polished .hp-v4-way-steps { max-width: 900px; margin: 26px auto 0 !important; }
+.landing-site .hp-v4-ways-polished .hp-v4-way-steps li { padding-inline: 0; }
+.landing-site .hp-v4-ways-polished .hp-v4-way-steps .hp-v4-crop { border-radius: 8px; }
+
+.landing-site .hp-nenrin { max-width: 1100px; padding-block: 66px 50px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .landing-site .hp-nenrin-intro h2 { margin-top: 15px; font-size: clamp(34px, 3.4vw, 46px); line-height: 1.55; }
 .landing-site .hp-nenrin-intro > p { margin-top: 21px; font-size: clamp(18px, 1.7vw, 22px); line-height: 1.85; }
 .landing-site .hp-nenrin-seasons { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 36px; }
 .landing-site .hp-nenrin-seasons p { margin: 0; padding: 16px 12px; border: 1px solid var(--line); border-radius: 4px; font-size: 16px; line-height: 1.65; text-align: center; }
 .landing-site .hp-nenrin-seasons span { display: block; margin-bottom: 5px; color: var(--green); font-family: "Noto Serif JP", serif; font-size: 22px; }
-.landing-site .hp-nenrin-end { margin-top: 29px; font-size: 18px; line-height: 1.8; }
-.landing-site .hp-nenrin-note { margin-top: 16px; color: var(--muted); font: 12px/1.6 "Noto Sans JP", sans-serif; }
 @media (max-width: 620px) {
+  .landing-site .hp-v4-ways-polished { width: calc(100% - 32px); padding-block: 20px 44px; }
+  .landing-site .hp-v4-ways-polished > h2:first-child { font-size: 26px; line-height: 1.55; }
+  .landing-site .hp-v4-ways-polished .hp-v4-way-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 20px; }
+  .landing-site .hp-v4-ways.hp-v4-ways-polished .hp-v4-way-card { display: flex; padding: 0 0 12px; border-radius: 9px; }
+  .landing-site .hp-v4-ways-polished .hp-v4-way-card .hp-v4-crop { width: 100%; }
+  .landing-site .hp-v4-ways-polished .hp-v4-way-card h3 { margin: 11px 10px 0; font-size: 18px; line-height: 1.4; }
+  .landing-site .hp-v4-ways-polished .hp-v4-way-card > p { margin: 5px 10px 0; font-size: 14px; line-height: 1.55; }
+  .landing-site .hp-v4-ways-polished .hp-v4-ways-note { margin-top: 9px !important; font-size: 10px; }
+  .landing-site .hp-v4-ways-polished .hp-v4-when-bridge { margin-top: 27px; gap: 3px; }
+  .landing-site .hp-v4-ways-polished .hp-v4-when-bridge p { font-size: 17px; line-height: 1.75; }
+  .landing-site .hp-v4-ways-polished .hp-v4-when-bridge > p:nth-child(2) { margin-top: 7px; }
+  .landing-site .hp-v4-scenes { padding-bottom: 35px; }
+  .landing-site .hp-v4-ways-polished .hp-v4-when-bridge .hp-v4-when-resolution { margin-top: 17.5px; padding: 16px 8px; font-size: 17px; }
+  .landing-site .hp-v4-ways-polished > .hp-v4-ways-bridge { margin-top: 29px; font-size: 21px; line-height: 1.55; }
+  .landing-site .hp-v4-ways-polished .hp-v4-way-steps { gap: 7px; margin-top: 17px !important; }
+  .landing-site .hp-v4-ways-polished .hp-v4-way-number { margin-bottom: 2px; }
+  .landing-site .hp-v4-ways-polished .hp-v4-way-steps h3 { display: flex; align-items: flex-start; justify-content: center; min-height: 2.1em; margin-bottom: 3px; font-size: 13px; }
+  .landing-site .hp-v4-ways-polished .hp-v4-way-steps p { position: static; left: auto; width: auto; max-width: 100%; transform: none; white-space: normal; font-size: 11px; }
   .landing-site .hp-v4-ways .hp-v4-way-grid { margin-top: 17px; gap: 8px; }
   .landing-site .hp-v4-ways .hp-v4-way-card { padding: 10px; }
   .landing-site .hp-v4-ways .hp-v4-way-card h3 { margin-bottom: 0; }
   .landing-site .hp-v4-ways .hp-v4-way-card > p { margin-top: 4px; }
-  .landing-site .hp-nenrin { width: calc(100% - 40px); padding-block: 46px 50px; }
+  .landing-site .hp-nenrin { width: calc(100% - 40px); padding-block: 46px 30px; }
   .landing-site .hp-nenrin-intro h2 { font-size: clamp(28px, 7.1vw, 34px); }
   .landing-site .hp-nenrin-intro > p { margin-top: 17px; font-size: 17px; line-height: 1.8; }
   .landing-site .hp-nenrin .hp-desktop-break { display: none; }
   .landing-site .hp-nenrin-seasons { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 24px; }
   .landing-site .hp-nenrin-seasons p { padding: 12px 8px; font-size: 13px; line-height: 1.55; }
   .landing-site .hp-nenrin-seasons span { font-size: 18px; }
-  .landing-site .hp-nenrin-end { margin-top: 23px; font-size: 16px; }
 }
 
 /* Preview-only story cards between the approved collage and the next section. */
@@ -102,12 +231,12 @@
 .landing-site .hp-v4-question-mountains path:nth-child(3) { fill:color-mix(in srgb,var(--card-accent) 5%,var(--paper)); }
 @media (max-width:700px) {
   .landing-site .hp-v4-question-cards { width:calc(100% - 32px); grid-template-columns:1fr; gap:15px; padding-block:25px 28px; }
-  .landing-site .hp-v4-question-card { padding:23px 11px 64px 36px; border-radius:9px; }
-  .landing-site .hp-v4-question-card::before { top:25px; height:62px; left:17px; }
+  .landing-site .hp-v4-question-card { padding:19px 11px 42px 36px; border-radius:9px; }
+  .landing-site .hp-v4-question-card::before { top:21px; height:62px; left:17px; }
   .landing-site .hp-v4-question-card h3 { font-size:22px; line-height:1.42; }
   .landing-site .hp-v4-question-card :is(.hp-v4-question-curve, .hp-v4-question-voice, .hp-v4-question-closing) { margin-left:-8px; width:calc(100% + 8px); }
   .landing-site .hp-v4-question-curve { height:14px; margin-top:8px; }
   .landing-site .hp-v4-question-card .hp-v4-question-voice { margin-top:13px; margin-left:-16px; width:calc(100% + 16px); font-size:16px; line-height:1.65; }
   .landing-site .hp-v4-question-closing { margin-top:20px; font-size:18.5px; line-height:1.5; }
-  .landing-site .hp-v4-question-mountains { height:62px; }
+  .landing-site .hp-v4-question-mountains { height:50px; }
 }

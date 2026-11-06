@@ -6,12 +6,12 @@ const waysImage = asset + 'ways-to-preserve-reference.jpg';
 export default function StoryIntro({ nov8Preview = false }) {
   return <>
     <section className="hp-v4-memory" id="memory" aria-labelledby="memory-title">
-      <div className="hp-shell hp-v4-memory-heading"><h2 id="memory-title">写真は、こんなに残る。<br />では、想いはどうだろう。</h2></div>
+      <div className="hp-shell hp-v4-memory-heading"><h2 id="memory-title">写真は、残る。<br />想いはどうだろう。</h2></div>
       <figure className="hp-v4-record"><img src={asset + 'records-photos-and-phone.png'} alt="古いアルバム、たくさんの写真、写真一覧を表示するスマートフォン" width="1024" height="1536" loading="lazy" /></figure>
       {nov8Preview ? <div className="hp-v4-question-cards hp-shell" id="loved-one" aria-label="親と自分の人生への問いかけ">
         <article className="hp-v4-question-card hp-v4-question-card-parent">
           <div className="hp-v4-question-card-content">
-            <h3>ご両親のこと、<br />どれだけ知っていますか？</h3>
+            <h3>両親のこと、<br />どれだけ知っていますか？</h3>
             <svg className="hp-v4-question-curve" viewBox="0 0 300 16" preserveAspectRatio="none" aria-hidden="true"><path d="M2 11 C65 1 119 5 169 9 S255 4 298 8" /></svg>
             <p className="hp-v4-question-voice">「親の若い頃のこと、ほとんど知らない。<br /><span className="hp-v4-question-voice-second">どんなこと考えてきたんだろう。」</span></p>
             <p className="hp-v4-question-closing">今ならまだ、聞けることがある。</p>
@@ -36,26 +36,27 @@ export default function StoryIntro({ nov8Preview = false }) {
       <div className="hp-v4-questions hp-shell" id="loved-one"><h2>いつか聞こう。<br />いつか残そう。</h2><p className="hp-v4-question-end">でも、今日の言葉は、<br />今日しか残せない。</p></div>
       </>}
     </section>
-    <section className="hp-v4-ways hp-shell" id="ways" aria-labelledby="ways-title">
-      <h2 id="ways-title">人生を残す方法は、<br />これまでもありました。</h2>
+    <section className={`hp-v4-ways hp-shell${nov8Preview ? ' hp-v4-ways-polished' : ''}`} id="ways" aria-labelledby="ways-title">
+      <h2 id="ways-title">人生を残す方法は、<br />{nov8Preview ? 'ちょっと重かった。' : 'これまでもありました。'}</h2>
       <div className="hp-v4-way-grid">
         <article className="hp-v4-way-card">
           <h3>自分で残す</h3>
           <figure className="hp-v4-crop hp-v4-crop-self"><img src={waysImage} alt="日記や写真、スマートフォンを並べた机" width="853" height="1280" loading="lazy" /></figure>
-          <p>日記、メモ、写真、自分史…<br />続けるのが、むずかしい。</p>
+          <p>{nov8Preview ? <>日記、写真、自伝…<br />続けるのが、難しい。</> : <>日記、メモ、写真、自分史…<br />続けるのが、むずかしい。</>}</p>
         </article>
         <article className="hp-v4-way-card">
           <h3>プロに頼む</h3>
           <figure className="hp-v4-crop hp-v4-crop-pro"><img src={waysImage} alt="取材を受けて人生を語る男性" width="853" height="1280" loading="lazy" /></figure>
-          <p>プロの力で、しっかり残せる。<br /><strong>20万円〜数十万円</strong><br />のサービスも。</p>
+          <p>{nov8Preview ? <>プロの力でしっかり。<br /><strong>相場 20万〜数十万円※</strong></> : <>プロの力で、しっかり残せる。<br /><strong>20万円〜数十万円</strong><br />のサービスも。</>}</p>
         </article>
       </div>
       <p className="hp-v4-ways-note">※国内のインタビュー・執筆・製本を含む自分史制作サービスの公開価格例を参考。仕様等により異なります。</p>
-      <span className="hp-v4-ways-arrow" aria-hidden="true">↓</span>
-      <h2 className="hp-v4-ways-bridge">だから、語るだけにした。</h2>
+      {nov8Preview && <div className="hp-v4-when-bridge"><p>親だって、まだ元気。<br />今じゃなくてもいい。<strong className="hp-v4-when-emphasis">いつか</strong>でいい。</p><p>でも、その「<strong className="hp-v4-when-emphasis">いつか</strong>」は、<br />訪れないこともある。</p><div className="hp-v4-when-resolution"><p>だから、もっと気軽に。</p><p>今から始められる人生史を。</p></div></div>}
+      {!nov8Preview && <span className="hp-v4-ways-arrow" aria-hidden="true">↓</span>}
+      {!nov8Preview && <h2 className="hp-v4-ways-bridge">だから、語るだけにした。</h2>}
       <ol className="hp-v4-way-steps">
         <li><span className="hp-v4-way-number">1</span><h3>問いが届く</h3><figure className="hp-v4-crop hp-v4-crop-step-one"><img src={waysImage} alt="今日の問いを表示するスマートフォン" width="853" height="1280" loading="lazy" /></figure><p>専門家監修。<br />心地よい回想。</p></li>
-        <li><span className="hp-v4-way-number">2</span><h3>声で語る</h3><figure className="hp-v4-crop hp-v4-crop-step-two"><img src={waysImage} alt="スマートフォンに声で語る女性" width="853" height="1280" loading="lazy" /></figure><p>誰でも。<br />自分のペースで。</p></li>
+        <li><span className="hp-v4-way-number">2</span><h3>{nov8Preview ? '声や文章で答える' : '声で語る'}</h3><figure className="hp-v4-crop hp-v4-crop-step-two"><img src={waysImage} alt="スマートフォンに声で語る女性" width="853" height="1280" loading="lazy" /></figure><p>誰でも。<br />自分のペースで。</p></li>
         <li><span className="hp-v4-way-number">3</span><h3>作品になる</h3><figure className="hp-v4-crop hp-v4-crop-step-three"><img src={waysImage} alt="完成した本とWebブック" width="853" height="1280" loading="lazy" /></figure><p>1〜3ヶ月で完成。<br />写真や動画も添えて。</p></li>
       </ol>
     </section>
