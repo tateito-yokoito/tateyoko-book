@@ -39,9 +39,11 @@ serve(async request => {
   try {
     const input = await request.json().catch(() => ({}));
     const sessionToken = String(input.sessionToken || '');
+    const handoffToken = String(input.handoffToken || '');
     const projectId = String(input.projectId || '');
     const action = input.action === 'bind' ? 'bind' : 'claim';
-    if (!tokenPattern.test(sessionToken) || !uuidPattern.test(projectId))
+    if ((!tokenPattern.test(sessionToken) && !tokenPattern.test(handoffToken))
+      || !uuidPattern.test(projectId))
       return respond({ error: '体験または作品を確認できません' }, 400);
     const bearer = (request.headers.get('authorization') || '').match(/^Bearer (\S+)$/i)?.[1];
     if (!bearer) return respond({ error: '先にログインしてください' }, 401);
@@ -49,13 +51,26 @@ serve(async request => {
     if (authError || !identity.user || identity.user.is_anonymous)
       return respond({ error: '先にログインしてください' }, 401);
     const userId = identity.user.id;
-    const tokenHash = await sha256(sessionToken);
-    const { data: trial, error: trialError } = await admin.from('guest_trial_sessions')
-      .select('id,status,expires_at,origin_kind,claimed_user_id,claimed_project_id,purchase_bound_user_id,purchase_bound_project_id,purchase_bound_at')
-      .eq('token_hash', tokenHash).maybeSingle();
+    let guestSessionId: string | null = null;
+    if (!tokenPattern.test(sessionToken)) {
+      const { data: handoff, error: handoffError } = await admin.from('commerce_purchase_handoffs')
+        .select('guest_trial_session_id,claimed_user_id,expires_at')
+        .eq('token_hash', await sha256(handoffToken)).maybeSingle();
+      if (handoffError) throw handoffError;
+      if (!handoff || handoff.claimed_user_id !== userId
+        || !handoff.guest_trial_session_id || Date.parse(handoff.expires_at) <= Date.now())
+        return respond({ error: 'この購入への引き継ぎを確認できません' }, 403);
+      guestSessionId = handoff.guest_trial_session_id;
+    }
+    const trialLookup = admin.from('guest_trial_sessions')
+      .select('id,token_hash,status,expires_at,origin_kind,claimed_user_id,claimed_project_id,purchase_bound_user_id,purchase_bound_project_id,purchase_bound_at');
+    const { data: trial, error: trialError } = await (guestSessionId
+      ? trialLookup.eq('id', guestSessionId) : trialLookup.eq('token_hash', await sha256(sessionToken)))
+      .maybeSingle();
     if (trialError) throw trialError;
     if (!trial || trial.origin_kind !== 'self')
       return respond({ error: 'この体験を確認できません' }, 401);
+    const tokenHash = trial.token_hash;
     if (trial.status === 'claimed') {
       if (trial.claimed_user_id !== userId || trial.claimed_project_id !== projectId)
         return respond({ error: 'この体験は別のアカウントに引き継がれています' }, 403);

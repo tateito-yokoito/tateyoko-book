@@ -52,6 +52,7 @@ import CommerceV2Purchase from "./CommerceV2Purchase.jsx";
 import ProjectRoleInvitePanel from './ProjectRoleInvitePanel.jsx';
 import CoManagerSharingPanel from './CoManagerSharingPanel.jsx';
 import { clearCommercePurchaseIntent, commercePurchaseReviewRequested, readCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
+import { bindPurchaseHandoffEmail, purchaseHandoffToken } from './lib/commercePurchaseHandoff.js';
 import { ThemeMemoryRequestComposer, ThemeMemoryRequestManager } from "./ThemeMemoryRequestFlow.jsx";
 import StoryRequestComposer, { PaperHeartIcon } from "./StoryRequestComposer.jsx";
 import StoryRequestManager from "./StoryRequestManager.jsx";
@@ -488,6 +489,8 @@ function getAuthReturnUrlFromCurrentLocation() {
   if (entryMode) url.searchParams.set("entry", entryMode);
   if (guestTrialClaimRequested(params.toString())) url.searchParams.set('guest_trial_claim', '1');
   if (commercePurchaseReviewRequested(params.toString())) url.searchParams.set('purchase_review', '1');
+  const purchaseHandoff = purchaseHandoffToken(params.toString());
+  if (purchaseHandoff) url.searchParams.set('purchase_handoff', purchaseHandoff);
 
   // Preserve a question deep link across the LINE OAuth round-trip.
   const deliveryToken = params.get("token");
@@ -9693,7 +9696,7 @@ function Scene_TokenInvalid({ onBack, issue = "invalid", onRetry }) {
 }
 
 
-function Scene_Login({ onLogin, giftPreview, familyInvitePreview }) {
+export function Scene_Login({ onLogin, giftPreview, familyInvitePreview }) {
   const supporterInvitationUrl = getSupporterInvitationUrlFromCurrentLocation();
   const authReturnUrl = getAuthReturnUrlFromCurrentLocation();
   const isSupporterInviteLogin = Boolean(supporterInvitationUrl);
@@ -9858,6 +9861,14 @@ if (isNewMode) {
     return;
   }
 }
+
+    try {
+      await bindPurchaseHandoffEmail(supabaseClient, purchaseHandoffToken(), normalizedEmail);
+    } catch (cause) {
+      setLoading(false);
+      alert(cause?.message || '購入手続きを確認できませんでした。もう一度お試しください。');
+      return;
+    }
 
     const { error } = await supabaseClient.auth.signInWithOtp({
       email: normalizedEmail,
