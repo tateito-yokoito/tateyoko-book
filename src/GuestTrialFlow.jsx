@@ -172,7 +172,7 @@ function GuestTrialExperience() {
         setSession(current);
       }
       const destination = await refresh(current);
-      if (destination === 'choice') setScreen('choice');
+      if (destination === 'choice') setScreen('theme_intro');
     } catch (cause) { setError(cause.message || '始められませんでした'); }
     finally { setBusy(false); }
   }
@@ -422,10 +422,27 @@ function GuestTrialExperience() {
         <button type="button" disabled={busy || !key} onClick={begin} className="mx-auto mt-[60px] min-h-[72px] w-full max-w-[560px] rounded-full bg-[#28473e] px-7 py-5 text-[clamp(18px,4.7vw,22px)] text-[#f5f3ed] disabled:opacity-50 sm:mt-[76px]">{busy ? '準備しています…' : '「お試し３問」を始める'}</button>
         {error && <p role="alert" className="mt-6 text-[#a6472d]">{error}</p>}
       </main>}
+      {screen === 'theme_intro' && <main className="mx-auto flex min-h-[100dvh] w-full max-w-[580px] flex-col px-6 text-center" style={{ paddingTop: 'calc(28px + env(safe-area-inset-top))', paddingBottom: 'calc(48px + env(safe-area-inset-bottom))' }}>
+        <div className="flex min-h-12 items-center justify-between text-base text-white/80">
+          <button type="button" onClick={() => setScreen('intro')}>← 戻る</button>
+          <span className="text-sm">お試し３問</span>
+        </div>
+        <div className="pt-10 sm:pt-12">
+          <p className="text-[13px] tracking-[0.13em] text-[#d9c9a5]">テーマ</p>
+          <h1 className="mt-[22px] text-[clamp(29px,7vw,39px)] font-normal leading-[1.6] tracking-[0.04em]" style={{ fontFamily: 'var(--font-display)' }}>「幼い頃のこと」</h1>
+        </div>
+        <img src="/site/theme-childhood-triptych.jpg" alt="幼い頃を思い出す三つの情景"
+          className="mt-[39px] h-[clamp(210px,62vw,315px)] w-[calc(100%+48px)] max-w-none -translate-x-6 object-cover sm:w-full sm:translate-x-0 sm:rounded-3xl" />
+        <p className="mx-auto mt-[35px] max-w-[470px] text-[clamp(16px,4.2vw,19px)] leading-[2] text-[#d5dae2]">本編では、<br />様々なテーマの質問に触れながら、<br />人生を辿っていきます。</p>
+        <p className="mx-auto mt-[30px] max-w-[470px] text-[clamp(17px,4.3vw,20px)] leading-[2] text-[#e0e2e5]">幼少期から中学生くらいまでを<br />少しずつ、思い出してみてください。</p>
+        <div className="min-h-8 flex-1" />
+        <button type="button" onClick={() => setScreen('choice')} className="mt-[52px] min-h-[65px] w-full rounded-full bg-[#e9e6dd] px-6 text-lg font-medium text-[#172539]">1問目へ進む</button>
+        <p className="mt-[15px] text-[13px] text-[#9fa8b7]">この後、声または文字で答えられます。</p>
+      </main>}
       {screen === 'choice' && <Scene1_MyPage
         question={questions[index]} userName="あなた"
         progress={{ currentIndex: index, total: 3 }}
-        onBack={() => setScreen('intro')}
+        onBack={() => setScreen(index === 0 ? 'theme_intro' : 'intro')}
         onNext={() => setScreen('record')}
         onWrite={() => { setTranscript(''); setScreen('write'); }}
         onEndToday={openExit}
