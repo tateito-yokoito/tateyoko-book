@@ -77,7 +77,7 @@ export function takeGuestTrialResumeToken(location = window.location) {
   return /^[a-f0-9]{64}$/.test(token) ? token : null;
 }
 
-export async function guestTrialRequest(supabaseUrl, action, { sessionToken, giftToken, questionId, audio, text, discountCode, eventName } = {}) {
+export async function guestTrialRequest(supabaseUrl, action, { sessionToken, giftToken, questionId, audio, text, style, discountCode, eventName } = {}) {
   const endpoint = guestTrialEndpoint(supabaseUrl);
   const url = `${endpoint}?action=${encodeURIComponent(action)}`;
   let body;
@@ -98,6 +98,9 @@ export async function guestTrialRequest(supabaseUrl, action, { sessionToken, gif
     }
     if (audio) body.set('audio', audio, audio.name || 'recording.m4a');
     if (typeof text === 'string') body.set('text', text);
+    if (action === 'polish') {
+      if (typeof style === 'string') body.set('style', style);
+    }
     if (typeof discountCode === 'string') body.set('discountCode', discountCode);
     if (action === 'event' && typeof eventName === 'string') body.set('eventName', eventName);
   }

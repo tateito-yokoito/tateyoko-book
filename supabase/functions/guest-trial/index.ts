@@ -16,6 +16,11 @@ const encoder = new TextEncoder();
 const trialIds = new Set([
   'TY_TRIAL_CHILDHOOD01', 'TY_TRIAL_CHILDHOOD02', 'TY_TRIAL_CHILDHOOD03',
 ]);
+const trialQuestionText: Record<string, string> = {
+  TY_TRIAL_CHILDHOOD01: '幼い頃、どんなところに住んでいましたか？',
+  TY_TRIAL_CHILDHOOD02: 'その頃、よく一緒にいた人を一人思い浮かべてください。どんな人でしたか？',
+  TY_TRIAL_CHILDHOOD03: 'その頃、どんな遊びが好きでしたか？',
+};
 const clientFunnelEvents = new Set([
   'trial_conversion_page_viewed', 'trial_problem_section_reached',
   'trial_journey_preview_reached', 'trial_book_preview_reached',
@@ -34,6 +39,11 @@ const hex = (bytes: Uint8Array) => Array.from(bytes, value => value.toString(16)
 const token = () => hex(crypto.getRandomValues(new Uint8Array(32)));
 const hash = async (value: string) => hex(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))));
 const isToken = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+const outputText = (response: Record<string, unknown>) => {
+  const output = Array.isArray(response.output) ? response.output : [];
+  return output.flatMap((item: any) => Array.isArray(item?.content) ? item.content : [])
+    .map((part: any) => part?.text || '').join('').trim();
+};
 
 serve(async request => {
   const origin = request.headers.get('origin');
@@ -240,7 +250,7 @@ serve(async request => {
     const sessionToken = form.get('sessionToken');
     if (!isToken(sessionToken)) return respond({ error: '体験を確認できません' }, 401);
     const { data: session, error: sessionError } = await admin.from('guest_trial_sessions')
-      .select('id,status,expires_at,origin_kind,purchase_bound_project_id').eq('token_hash', await hash(sessionToken)).maybeSingle();
+      .select('id,status,expires_at,origin_kind,purchase_bound_project_id,polish_attempts').eq('token_hash', await hash(sessionToken)).maybeSingle();
     if (sessionError) throw sessionError;
     if (!session || Date.parse(session.expires_at) <= Date.now() || session.status === 'claimed' || session.status === 'expired')
       return respond({ error: '体験の有効期限が切れています' }, 401);
@@ -361,6 +371,49 @@ serve(async request => {
     }
 
     if (!trialIds.has(questionId)) return respond({ error: '問いを確認できません' }, 400);
+    if (action === 'polish') {
+      if (session.status !== 'active') return respond({ error: 'この体験は完了しています' }, 409);
+      const text = String(form.get('text') || '').trim();
+      const style = String(form.get('style') || '');
+      const questionText = trialQuestionText[questionId];
+      if (!text || text.length > 12000 || !['narrative', 'essay'].includes(style))
+        return respond({ error: '文章を確認してください' }, 400);
+      const apiKey = Deno.env.get('OPENAI_API_KEY');
+      if (!apiKey) return respond({ error: '文章を整えられませんでした。元の文章は残っています。' }, 503);
+      if (session.polish_attempts >= 9)
+        return respond({ error: '文章を整える回数の上限に達しました' }, 429);
+      const { data: reserved, error: reserveError } = await admin.from('guest_trial_sessions')
+        .update({ polish_attempts: session.polish_attempts + 1 })
+        .eq('id', session.id).eq('polish_attempts', session.polish_attempts)
+        .eq('status', 'active').select('id').maybeSingle();
+      if (reserveError) throw reserveError;
+      if (!reserved) return respond({ error: '処理中です。もう一度お試しください' }, 409);
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 25000);
+        const response = await fetch('https://api.openai.com/v1/responses', {
+          method: 'POST', signal: controller.signal,
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'gpt-4.1-mini', temperature: 0.2, max_output_tokens: 6000,
+            input: [
+              { role: 'system', content: style === 'essay'
+                ? 'あなたは本人の言葉を尊重する日本語の編集者です。文章の構成と表現を本として読みやすく整えてください。本人が書いていない事実・感情・教訓は足さず、意味、語り手の視点、固有名詞を維持します。編集後の本文だけを返してください。'
+                : 'あなたは本人の言葉を尊重する日本語校正者です。誤字脱字、文法、語順、重複、段落だけを整えてください。本人が書いていない事実・感情・教訓を足さず、意図的な表現・一人称・方言をできるだけ保ちます。校正後の本文だけを返してください。' },
+              { role: 'user', content: `問い（文脈のみ）:\n${questionText}\n\n校正する本文:\n${text}` },
+            ],
+          }),
+        }).finally(() => clearTimeout(timeout));
+        if (!response.ok) throw new Error('Polish service rejected request');
+        const candidate = outputText(await response.json());
+        if (!candidate) throw new Error('Polish response was empty');
+        // The candidate is not saved until the guest explicitly chooses and saves it.
+        return respond({ success: true, candidate });
+      } catch (error) {
+        console.error('guest-trial polish failed', error instanceof Error ? error.name : 'Unknown error');
+        return respond({ error: '文章を整えられませんでした。元の文章は残っています。' }, 503);
+      }
+    }
     if (action === 'write') {
       if (session.status !== 'active') return respond({ error: 'この体験は完了しています' }, 409);
       const transcript = String(form.get('text') || '').trim();
