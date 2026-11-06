@@ -259,7 +259,9 @@ serve(async request => {
         return respond({ error: 'この体験は削除できません' }, 409);
       const { data: purchase, error: purchaseError } = await admin.from('guest_trial_purchase_intents')
         .select('id,status').eq('session_id', session.id).maybeSingle();
-      if (purchaseError) throw purchaseError;
+      // The discontinued guest-only Checkout table exists in TEST but was never
+      // installed in production. Keep its purchase guard where it exists.
+      if (purchaseError && !['PGRST205', '42P01'].includes(purchaseError.code)) throw purchaseError;
       if (purchase && ['checkout_pending', 'paid_unclaimed', 'claimed'].includes(purchase.status))
         return respond({ error: '決済中の体験は削除できません' }, 409);
       if (session.purchase_bound_project_id) {

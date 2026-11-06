@@ -12,6 +12,7 @@ try {
   const actions = [];
   let completed = false;
   let discarded = false;
+  let discardAttempts = 0;
   const expiresAt = new Date(Date.now() + 86400000).toISOString();
   await page.route('**/functions/v1/guest-trial?action=*', async route => {
     const action = new URL(route.request().url()).searchParams.get('action');
@@ -27,7 +28,11 @@ try {
       answers.push(row);
       body = { saved: true, transcript: row.transcript };
     } else if (action === 'complete') { completed = true; body = { complete: true }; }
-    else if (action === 'discard') { discarded = true; answers.length = 0; body = { status: 'discarded' }; }
+    else if (action === 'discard') {
+      discardAttempts += 1;
+      if (discardAttempts === 1) body = { error: '一時的に削除できませんでした' };
+      else { discarded = true; answers.length = 0; body = { status: 'discarded' }; }
+    }
     else body = { error: 'Unexpected action' };
     await route.fulfill({ status: body.error ? 400 : 200, contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) });
@@ -69,10 +74,19 @@ try {
   assert.equal(new URL(page.url()).hash, '');
   await page.getByRole('button', { name: 'ここで終了する' }).click();
   await page.getByRole('button', { name: '保存せずに終了する' }).click();
-  await page.getByRole('button', { name: '削除して終了する' }).click();
-  await page.getByRole('heading', { name: '語りを削除しました' }).waitFor();
+  await page.getByRole('alertdialog').getByText('先ほどの語りが消えますが').waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'ここで終了する' }).count(), 1);
+  await page.getByRole('button', { name: '戻る' }).click();
+  assert.equal(discardAttempts, 0);
+  await page.getByRole('button', { name: '保存せずに終了する' }).click();
+  await page.getByRole('button', { name: 'OK' }).click();
+  await page.getByRole('alert').getByText('一時的に削除できませんでした').waitFor();
+  assert.equal(answers.length, 3);
+  await page.getByRole('button', { name: 'OK' }).click();
+  await page.waitForURL(new RegExp(`${new URL(page.url()).origin}/?$`));
   assert.equal(answers.length, 0);
   assert.equal(discarded, true);
+  assert.equal(discardAttempts, 2);
   console.log('PASS guest trial shows answers, service and shared exit, resumes from URL and discards');
 } finally {
   await browser.close();

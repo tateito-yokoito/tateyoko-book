@@ -61,6 +61,7 @@ function GuestTrialExperience() {
   const [givenName, setGivenName] = useState('');
   const [resumeUrl, setResumeUrl] = useState('');
   const [shareStatus, setShareStatus] = useState('');
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   useEffect(() => {
     const openResume = () => {
@@ -304,6 +305,7 @@ function GuestTrialExperience() {
   function openExit() {
     setError('');
     setShareStatus('');
+    setConfirmDiscard(false);
     setScreen('end_choice');
   }
 
@@ -328,8 +330,7 @@ function GuestTrialExperience() {
       if (result.status !== 'discarded') throw new Error('削除を確認できませんでした');
       localStorage.removeItem(key);
       clearGuestTrialPending(localStorage);
-      setSession(null); setAnswers([]); setResumeUrl('');
-      setScreen('end_discarded');
+      window.location.replace('/');
     } catch (cause) { setError(cause.message || '削除できませんでした。もう一度お試しください。'); }
     finally { setBusy(false); }
   }
@@ -504,8 +505,18 @@ function GuestTrialExperience() {
         <h1 className="text-2xl">ここで終了する</h1>
         <p className="mt-6 leading-loose text-white/65">無料3問の開始から10日間、再開できます。</p>
         <button type="button" onClick={saveAndExit} className="mt-10 w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-[#15243a]">10日間保存する</button>
-        <button type="button" onClick={() => setScreen('end_discard_confirm')} className="mt-5 w-full rounded-full border border-white/35 px-7 py-5">保存せずに終了する</button>
+        <button type="button" onClick={() => { setError(''); setConfirmDiscard(true); }} className="mt-5 w-full rounded-full border border-white/35 px-7 py-5">保存せずに終了する</button>
         <button type="button" onClick={() => setScreen('finished')} className="mt-8 text-sm text-white/65 underline">語りに戻る</button>
+        {confirmDiscard && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6">
+          <div role="alertdialog" aria-modal="true" aria-labelledby="guest-trial-discard-prompt" className="w-full max-w-sm rounded-3xl border border-white/25 bg-[#1d2536] px-6 py-8 shadow-2xl">
+            <p id="guest-trial-discard-prompt" className="text-lg leading-loose">先ほどの語りが消えますが<br />よろしいですか？</p>
+            <div className="mt-8 flex gap-3">
+              <button type="button" disabled={busy} onClick={() => { setConfirmDiscard(false); setError(''); }} className="min-h-14 flex-1 rounded-full border border-white/40 disabled:opacity-50">戻る</button>
+              <button type="button" disabled={busy} onClick={discardAndExit} className="min-h-14 flex-1 rounded-full bg-[#e9e5d9] text-[#15243a] disabled:opacity-50">{busy ? '削除中…' : 'OK'}</button>
+            </div>
+            {error && <p role="alert" className="mt-5 text-sm text-rose-200">{error}</p>}
+          </div>
+        </div>}
       </main>}
       {screen === 'end_saved' && <main className="px-7 py-20 text-center">
         <h1 className="text-2xl">再開URLを保存してください</h1>
@@ -515,14 +526,6 @@ function GuestTrialExperience() {
         {shareStatus && <p role="status" className="mt-4 text-sm">{shareStatus}</p>}
         <button type="button" onClick={() => setScreen('finished')} className="mt-8 text-sm underline">語りに戻る</button>
       </main>}
-      {screen === 'end_discard_confirm' && <main className="px-7 py-20 text-center">
-        <h1 className="text-2xl">語りを削除しますか？</h1>
-        <p className="mt-6 leading-loose text-white/65">回答本文・音声・再開URLを削除します。元には戻せません。</p>
-        <button type="button" disabled={busy} onClick={discardAndExit} className="mt-10 w-full rounded-full border border-rose-300/60 px-7 py-5 disabled:opacity-50">{busy ? '削除しています…' : '削除して終了する'}</button>
-        <button type="button" disabled={busy} onClick={() => setScreen('end_choice')} className="mt-5 w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-[#15243a]">戻る</button>
-        {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
-      </main>}
-      {screen === 'end_discarded' && <main className="px-7 py-28 text-center"><h1 className="text-2xl">語りを削除しました</h1><a href="/" className="mt-10 block underline">ホームへ</a></main>}
       {screen === 'conversion' && <>{(developmentPreview || !purchasePreviewEnabled) &&
         <p className="px-7 pt-5 text-center text-xs text-amber-100/75">
           {developmentPreview ? 'テスト用決済の確認画面です' : '接続確認用プレビュー・この画面から決済されません'}
