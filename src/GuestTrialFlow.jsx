@@ -407,20 +407,20 @@ function GuestTrialExperience() {
     };
   });
 
-  return <div className="app-container min-h-[100dvh] bg-[#101729] text-white" style={{ maxWidth: 'none', padding: 0 }}>
+  return <div className={`app-container min-h-[100dvh] ${screen === 'intro' ? 'bg-[#f5f3ed] text-[#182a35]' : 'bg-[#101729] text-white'}`} style={{ maxWidth: 'none', padding: 0 }}>
     <div className="min-h-[100dvh] w-full">
       {screen === 'loading' && <p className="px-7 py-20">体験を確認しています…</p>}
-      {screen === 'intro' && <main className="flex min-h-[75dvh] flex-col justify-center px-7 text-center">
-        <p className="text-[0.8rem] tracking-widest text-white/55">本人確認・カード登録なし</p>
-        <h1 className="mt-7 text-[1.5rem] leading-[1.7]">幼い頃を、<br />たどる三つの問い。</h1>
-        <p className="mt-8 leading-[2] text-white/65">名前もメールも不要です。<br />声でも文字でも答えられます。<br />この端末から10日間、再開できます。</p>
-        {giftToken && <p className="mt-3 text-sm leading-loose text-white/55">語った内容は、あなたが選ばない限り<br />贈り主に共有されません。</p>}
-        <button type="button" disabled={busy || !key} onClick={begin} className="mt-12 rounded-full px-7 py-5 disabled:opacity-50" style={{ background: '#e9e5d9', color: '#15243a' }}>{busy ? '準備しています…' : '3問を始める'}</button>
-        {!giftToken && <a
-          href="mailto:sugawara@saltlight.co.jp?subject=%E8%B3%BC%E5%85%A5%E5%BE%8C%E3%81%AE%E7%B6%9A%E3%81%8D%E3%81%8C%E8%A6%8B%E3%81%A4%E3%81%8B%E3%82%89%E3%81%AA%E3%81%84"
-          className="mt-8 text-sm text-white/60 underline underline-offset-4"
-        >購入済みで続きが見つからないとき</a>}
-        {error && <p role="alert" className="mt-6 text-rose-200">{error}</p>}
+      {screen === 'intro' && <main className="mx-auto flex min-h-[100dvh] w-full max-w-[690px] flex-col justify-center px-[30px] text-center" style={{ paddingTop: 'calc(64px + env(safe-area-inset-top))', paddingBottom: 'calc(64px + env(safe-area-inset-bottom))' }}>
+        <p className="text-[clamp(16px,4.2vw,22px)] tracking-[0.09em] text-[#28473e]" style={{ fontFamily: 'var(--font-display)' }}>縦糸横糸 ｜ 年輪 nenrin</p>
+        <h1 className="mt-[58px] text-[clamp(29px,7.1vw,43px)] font-medium leading-[1.75] tracking-[0.035em] sm:mt-[70px]" style={{ fontFamily: 'var(--font-display)' }}>質問を通じて<br />人生を振り返り、<br />言葉にする。</h1>
+        <p className="mt-6 text-[clamp(18px,4.7vw,23px)] leading-[1.85] text-[#455650]">その体験をお試しいただけます。</p>
+        <ul className="mx-auto mt-[46px] w-full max-w-[560px] space-y-5 text-left text-[clamp(16px,4.1vw,20px)] leading-[1.9] text-[#455650] sm:mt-[58px]">
+          <li className="flex gap-3"><span aria-hidden="true">・</span><span>お名前や連絡先の登録は不要です。</span></li>
+          <li className="flex gap-3"><span aria-hidden="true">・</span><span>この語りは、本編をご購入の際に<br />引き継ぐこともできます。</span></li>
+        </ul>
+        {giftToken && <p className="mt-5 text-sm leading-loose text-[#5b685f]">語った内容は、あなたが選ばない限り<br />贈り主に共有されません。</p>}
+        <button type="button" disabled={busy || !key} onClick={begin} className="mx-auto mt-[60px] min-h-[72px] w-full max-w-[560px] rounded-full bg-[#28473e] px-7 py-5 text-[clamp(18px,4.7vw,22px)] text-[#f5f3ed] disabled:opacity-50 sm:mt-[76px]">{busy ? '準備しています…' : '「お試し３問」を始める'}</button>
+        {error && <p role="alert" className="mt-6 text-[#a6472d]">{error}</p>}
       </main>}
       {screen === 'choice' && <Scene1_MyPage
         question={questions[index]} userName="あなた"
