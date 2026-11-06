@@ -448,9 +448,11 @@ function GuestTrialExperience() {
         onEndToday={openExit}
       />}
       {screen === 'write' && <main className="px-7 py-14">
-        <button type="button" onClick={() => setScreen('choice')} className="text-white/65">← 戻る</button>
-        <p className="mt-8 text-center text-white/55">{index + 1} / 3</p>
-        <h1 className="mt-6 text-center text-[1.35rem] leading-[1.8]">{questions[index].content}</h1>
+        <header className="mb-5 flex items-start justify-between gap-4 pt-2">
+          <button type="button" onClick={() => setScreen('choice')} className="min-h-11 text-white/65">← 戻る</button>
+          <p className="flex min-h-11 shrink-0 items-center text-[1rem] text-white/75">{index + 1} / 3</p>
+        </header>
+        <h1 className="mt-8 text-center text-[1.35rem] leading-[1.8]">{questions[index].content}</h1>
         <label htmlFor="guest-trial-writing" className="mt-10 block text-white/80">書いて答える</label>
         <textarea id="guest-trial-writing" value={transcript} onChange={event => setTranscript(event.target.value)} rows={9}
           placeholder="思い出したことを、自由に書いてください" maxLength={100000}
@@ -483,8 +485,11 @@ function GuestTrialExperience() {
         <button type="button" onClick={() => setScreen('record')} className="mt-6 block w-full text-white/60 underline">録音し直す</button>
       </main>}
       {screen === 'review' && <main className="px-7 py-14">
-        <p className="text-center text-white/55">{index + 1} / 3　語りを確認</p>
-        <h1 className="mt-7 text-center text-[1.35rem] leading-[1.8]">{questions[index].content}</h1>
+        <header className="mb-5 flex items-start justify-between gap-4 pt-2 text-white/55">
+          <p className="flex min-h-11 items-center">語りを確認</p>
+          <p className="flex min-h-11 shrink-0 items-center text-[1rem] text-white/75">{index + 1} / 3</p>
+        </header>
+        <h1 className="mt-8 text-center text-[1.35rem] leading-[1.8]">{questions[index].content}</h1>
         <div className="mt-10 rounded-3xl border border-white/15 bg-white/[0.05] p-6">
           {editing ? <textarea value={transcript} onChange={event => setTranscript(event.target.value)} rows={8}
             className="w-full bg-transparent leading-loose outline-none" aria-label="語りの文章" />
