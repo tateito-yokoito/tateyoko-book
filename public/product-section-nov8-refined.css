@@ -19,12 +19,24 @@
 .refined .work-detail strong{font-size:22px}
 .refined .work-detail p{margin-top:14px;font-size:16px;line-height:1.75}
 .refined .work-detail p+p{margin-top:9px}
-.refined .comparison-media{position:relative;width:min(900px,100%);aspect-ratio:16/9;margin:24px auto 22px;overflow:visible;background:var(--paper)}
+.refined .comparison-media{position:relative;width:min(900px,100%);aspect-ratio:16/9;margin:24px auto 66px;overflow:visible;background:var(--paper)}
 .refined .comparison-fallback,.refined .comparison-video{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;border-radius:5px}
 .refined .comparison-video{opacity:0;transition:opacity .2s}
 .refined .comparison-media.is-playing .comparison-video{opacity:1}
-.refined .comparison-toggle{position:absolute;right:12px;bottom:12px;z-index:1;min-width:86px;min-height:42px;padding:8px 14px;border:1px solid var(--paper);border-radius:3px;background:var(--green);color:var(--paper);font:14px/1.4 "Noto Sans JP",sans-serif;cursor:pointer}
-.refined .comparison-toggle[hidden]{display:none}
+.refined .comparison-controls{position:absolute;right:12px;bottom:12px;z-index:1;display:flex;gap:6px}
+.refined .comparison-controls button{min-width:86px;min-height:42px;padding:8px 12px;border:1px solid var(--paper);border-radius:3px;background:var(--green);color:var(--paper);font:14px/1.4 "Noto Sans JP",sans-serif;cursor:pointer}
+.refined .comparison-controls button[hidden]{display:none}
+.refined .comparison-timeline{position:absolute;top:100%;left:0;right:0;display:flex;align-items:center;gap:12px;margin-top:7px;color:var(--muted);font:12px/1.4 "Noto Sans JP",sans-serif}
+.refined .comparison-timeline[hidden]{display:none}
+.refined .comparison-timeline input{flex:1;min-width:0;height:36px;margin:0;appearance:none;background:transparent;cursor:pointer}
+.refined .comparison-timeline input:disabled{cursor:default}
+.refined .comparison-timeline input::-webkit-slider-runnable-track{height:5px;border-radius:3px;background:linear-gradient(to right,var(--green) var(--progress,0%),var(--line) var(--progress,0%))}
+.refined .comparison-timeline input::-moz-range-track{height:5px;border-radius:3px;background:var(--line)}
+.refined .comparison-timeline input::-moz-range-progress{height:5px;border-radius:3px;background:var(--green)}
+.refined .comparison-timeline input::-webkit-slider-thumb{width:16px;height:16px;margin-top:-5.5px;appearance:none;border:2px solid var(--paper);border-radius:50%;background:var(--green);box-shadow:0 0 0 1px var(--green)}
+.refined .comparison-timeline input::-moz-range-thumb{width:13px;height:13px;border:2px solid var(--paper);border-radius:50%;background:var(--green);box-shadow:0 0 0 1px var(--green)}
+.refined .comparison-timeline input:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.refined .comparison-timeline output{min-width:75px;text-align:right;white-space:nowrap}
 .refined .product-compare .plans{width:min(900px,100%);grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 auto}
 .refined .product-compare .plan{display:flex;padding:18px}
 .refined .product-compare .plan-body{display:flex;flex-direction:column;width:100%;height:100%;padding:0}
@@ -69,8 +81,11 @@
   .refined .work-detail strong{font-size:15px;text-align:center;letter-spacing:0}
   .refined .work-detail p{margin-top:8px;font-size:13px;line-height:1.55}
   .refined .work-detail p+p{margin-top:7px}
-  .refined .comparison-media{margin-top:19px;margin-bottom:16px}
-  .refined .comparison-toggle{right:8px;bottom:8px;min-width:72px;min-height:38px;padding:7px 10px;font-size:12px}
+  .refined .comparison-media{margin-top:19px;margin-bottom:57px}
+  .refined .comparison-timeline{gap:8px;margin-top:5px;font-size:11px}
+  .refined .comparison-timeline output{min-width:70px}
+  .refined .comparison-controls{right:8px;bottom:8px;gap:5px}
+  .refined .comparison-controls button{min-width:72px;min-height:38px;padding:7px 9px;font-size:12px}
   .refined .product-compare .plans{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .refined .product-compare .plan{padding:11px 9px}
   .refined .product-compare .plan h4{display:block;min-height:3.1em;margin-top:6px;font-size:14px;line-height:1.55}
