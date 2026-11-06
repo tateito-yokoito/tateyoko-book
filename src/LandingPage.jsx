@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createRoot } from 'react-dom/client';
 import "./landing-parity.css";
 import "./monitor-launch.css";
 import "./hp-nov8-hero-preview.css";
 import StoryIntro from './landing/StoryIntro.jsx';
+import SupportConsultationInline from './SupportConsultationInline.jsx';
 
 const LOGIN = "/?app=1&entry=login";
 const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true'
@@ -265,7 +267,35 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
         </article>
       </section>}
 
-      {nov8Preview && <section id="works" aria-label="商品と価格の全体プレビュー"><div id="price"><iframe title="縦糸横糸｜年輪の商品・価格と聞き取り制作サポート" src="/product-section-nov8-after.html?embedded=1" style={{display:'block',width:'100%',height:2600,border:0}} onLoad={event => { const frame=event.currentTarget; const body=frame.contentDocument?.body; if (!body) return; const resize=()=>{frame.style.height=`${Math.ceil(body.scrollHeight)}px`}; resize(); new ResizeObserver(resize).observe(body); for (const [selector, target] of [[".action-trial",TRIAL],[".action-gift-trial",GIFT_TRIAL],[".action-purchase",PURCHASE],[".action-gift-purchase",GIFT_PURCHASE],[".consultation-cta",PURCHASE]]) { const link=body.querySelector(selector); if(link){link.dataset.releaseHref=target;link.href=reviewOnly?"#hp-review-notice":target;} } }} /></div></section>}
+      {nov8Preview && <section id="works" aria-label="商品と価格の全体プレビュー"><div id="price"><iframe title="縦糸横糸｜年輪の商品・価格と聞き取り制作サポート" src="/product-section-nov8-after.html?embedded=1" style={{display:'block',width:'100%',height:2600,border:0}} onLoad={event => { const frame=event.currentTarget; const body=frame.contentDocument?.body; if (!body) return; const resize=()=>{frame.style.height=`${Math.ceil(body.scrollHeight)}px`}; resize(); new ResizeObserver(resize).observe(body); for (const [selector, target] of [[".action-trial",TRIAL],[".action-gift-trial",GIFT_TRIAL],[".action-purchase",PURCHASE],[".action-gift-purchase",GIFT_PURCHASE]]) { const link=body.querySelector(selector); if(link){link.dataset.releaseHref=target;link.href=reviewOnly?"#hp-review-notice":target;} }
+        {
+          const cta = body.querySelector('.consultation-cta');
+          const free = body.querySelector('.consultation-free');
+          if (cta && free) {
+            const style = body.ownerDocument.createElement('link');
+            style.rel = 'stylesheet';
+            style.href = '/support-consultation-inline.css';
+            body.ownerDocument.head.append(style);
+            const mount = body.ownerDocument.createElement('div');
+            mount.id = 'inline-consultation';
+            mount.hidden = true;
+            free.after(mount);
+            createRoot(mount).render(<SupportConsultationInline reviewOnly={reviewOnly} />);
+            cta.href = '#inline-consultation';
+            cta.textContent = '事前相談フォームを開く';
+            cta.setAttribute('role', 'button');
+            cta.setAttribute('aria-controls', mount.id);
+            cta.setAttribute('aria-expanded', 'false');
+            cta.addEventListener('click', click => {
+              click.preventDefault();
+              mount.hidden = !mount.hidden;
+              cta.textContent = mount.hidden ? '事前相談フォームを開く' : '事前相談フォームを閉じる';
+              cta.setAttribute('aria-expanded', String(!mount.hidden));
+              resize();
+            });
+          }
+        }
+      }} /></div></section>}
       {!nov8Preview && <section className="hp-support hp-section hp-shell" id="support">
         <div><SectionLabel>ともに、かたちにする。</SectionLabel><h2>一人で、全部<br className="hp-mobile-break" />やらなくていい。</h2><p>写真を選ぶ。文章を整える。本に仕上げる。<br />家族や友人など、信頼する方と進められます。</p>
           <div className="hp-support-staff"><h3>頼める方がいない場合も。</h3><p>スタッフによる制作サポートを、<br />少人数で試験的にご案内する予定です。</p><span className="hp-status">希望受付は準備中</span><p className="hp-note">受付開始後は、ご希望を伺ってからスタッフがご連絡します。<br />希望受付の時点で、利用が確定するものではありません。</p></div></div>

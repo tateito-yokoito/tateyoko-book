@@ -1,0 +1,43 @@
+#inline-consultation[hidden]{display:none!important}
+#inline-consultation{margin-top:18px}
+.inline-consult-wizard{box-sizing:border-box;padding:24px;border:1px solid #cbd0c5;border-radius:8px;background:#fffefa;color:#182a35;box-shadow:0 8px 26px rgba(24,42,53,.06);font-family:'Noto Sans JP',sans-serif;text-align:left}
+.inline-consult-wizard *{box-sizing:border-box}
+.inline-consult-kicker{margin:0 0 7px!important;color:#28473e;font:600 13px/1.5 'Noto Sans JP',sans-serif!important;letter-spacing:.03em}
+.inline-consult-intro{margin:0 0 18px!important;font:14px/1.65 'Noto Sans JP',sans-serif!important}
+.inline-consult-progress{height:4px;border-radius:2px;background:#e5e8e0;overflow:hidden}
+.inline-consult-progress span{display:block;height:100%;background:#28473e;transition:width .2s ease}
+.inline-consult-count{margin:8px 0 13px!important;color:#627069;font:12px/1.5 'Noto Sans JP',sans-serif!important;text-align:right}
+.inline-consult-question h4,.inline-consult-complete h4{margin:0 0 17px;color:#182a35;font:500 20px/1.5 'Noto Serif JP',serif}
+.inline-consult-options{display:grid;gap:8px}
+.inline-consult-options-compact{grid-template-columns:repeat(2,minmax(0,1fr))}
+.inline-consult-options-compact .inline-consult-option{align-items:center;min-height:44px;padding:8px 10px}
+.inline-consult-option{display:flex;align-items:flex-start;gap:10px;min-height:50px;padding:11px 12px;border:1px solid #cbd0c5;border-radius:5px;background:#f8f7f2;color:#182a35;cursor:pointer;font:14px/1.55 'Noto Sans JP',sans-serif}
+.inline-consult-option:has(input:checked){border-color:#28473e;background:#e9efe9}
+.inline-consult-option input,.inline-consult-check input{flex:none;width:18px;height:18px;margin:1px 0 0;accent-color:#28473e}
+.inline-consult-contact-fields{display:grid;gap:8px}
+.inline-consult-contact-fields input{display:block;width:100%;min-width:0;height:46px;padding:10px 12px;border:1px solid #bfc7bd;border-radius:5px;background:#fff;color:#182a35;font:16px/1.5 'Noto Sans JP',sans-serif}
+.inline-consult-contact-fields input::placeholder{color:#68766f;opacity:1}
+.inline-consult-honeypot{position:absolute!important;left:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important}
+.inline-consult-question>input,.inline-consult-question>textarea,.inline-consult-field input{display:block;width:100%;margin:6px 0 0;padding:12px;border:1px solid #bfc7bd;border-radius:5px;background:white;color:#182a35;font:16px/1.5 'Noto Sans JP',sans-serif}
+.inline-consult-question>textarea{resize:vertical}
+.inline-consult-field{display:block;margin:12px 0;font:14px/1.6 'Noto Sans JP',sans-serif}
+.inline-consult-field-title{margin:13px 0 9px!important;color:#182a35;font:600 14px/1.5 'Noto Sans JP',sans-serif!important}
+.inline-consult-hint{margin:0 0 13px!important;color:#4e6057;font:13px/1.7 'Noto Sans JP',sans-serif!important}
+.inline-consult-check{display:flex;align-items:flex-start;gap:10px;margin:14px 0;color:#182a35;font:13px/1.6 'Noto Sans JP',sans-serif}
+.inline-consult-privacy{color:#28473e;font:13px/1.5 'Noto Sans JP',sans-serif}
+.inline-consult-error{margin:12px 0 0!important;color:#a6472d;font:600 13px/1.6 'Noto Sans JP',sans-serif!important}
+.inline-consult-actions{display:flex;gap:10px;margin-top:22px}
+.inline-consult-primary,.inline-consult-secondary{min-height:46px;padding:10px 16px;border-radius:5px;cursor:pointer;font:600 14px/1.5 'Noto Sans JP',sans-serif}
+.inline-consult-primary{flex:1;border:1px solid #28473e;background:#28473e;color:white}
+.inline-consult-secondary{border:1px solid #28473e;background:transparent;color:#28473e}
+.inline-consult-preview-note{margin:15px 0 0!important;color:#65726a;font:12px/1.5 'Noto Sans JP',sans-serif!important}
+.inline-consult-complete>p:not(.inline-consult-kicker){margin:12px 0;font:14px/1.7 'Noto Sans JP',sans-serif}
+.inline-consult-receipt{overflow-wrap:anywhere}
+.inline-consult-complete details{margin:18px 0}
+.inline-consult-complete summary{cursor:pointer;color:#28473e;font:600 14px/1.6 'Noto Sans JP',sans-serif}
+.inline-consult-complete pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;background:#f5f3ed;color:#182a35;font:12px/1.7 'Noto Sans JP',sans-serif}
+@media(max-width:700px){
+  .inline-consult-wizard{padding:18px 15px}
+  .inline-consult-question h4,.inline-consult-complete h4{font-size:18px}
+  .inline-consult-option{font-size:14px}
+}
