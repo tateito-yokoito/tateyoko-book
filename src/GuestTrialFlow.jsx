@@ -28,21 +28,30 @@ const questions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) => ({
   sequence_order: index + 1,
 }));
 
-function GuestTrialPolishControls({ session, question, text, onUse, saveButton, disabled }) {
+function GuestTrialPolishControls({ session, question, text, onUse, saveButton, disabled,
+  reviewMode = false, originalText = '', onBlockedChange, children }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [showStyles, setShowStyles] = useState(false);
   const [candidate, setCandidate] = useState(null);
   const [showOriginal, setShowOriginal] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState('clean');
   const latestText = useRef(text);
   latestText.current = text;
   useEffect(() => {
     if (candidate && text.trim() !== candidate.original) setCandidate(null);
   }, [text, candidate]);
+  useEffect(() => {
+    if (reviewMode) onBlockedChange?.(busy || Boolean(candidate));
+  }, [reviewMode, onBlockedChange, busy, candidate]);
 
   const polish = async style => {
     setShowStyles(false);
-    if (style === 'clean') return;
+    if (style === 'clean') {
+      setSelectedStyle(style);
+      if (reviewMode) onUse(originalText);
+      return;
+    }
     const source = text.trim();
     if (!source || busy) return;
     setBusy(true); setError('');
@@ -55,6 +64,7 @@ function GuestTrialPolishControls({ session, question, text, onUse, saveButton, 
         setError('整形中に文章が変更されたため、古い候補は表示しませんでした。');
         return;
       }
+      setSelectedStyle(style);
       setCandidate({ original: source, text: result.candidate });
       setShowOriginal(false);
     } catch (cause) {
@@ -62,26 +72,29 @@ function GuestTrialPolishControls({ session, question, text, onUse, saveButton, 
     } finally { setBusy(false); }
   };
 
-  return <div className="mt-5 space-y-3">
+  return <div className={`${reviewMode ? '' : 'mt-5'} space-y-3`}>
     {candidate ? <>
       <h3 className="text-lg">整えた文章を確認</h3>
       <div className="rounded-xl bg-[#f5f3ed] p-5 text-lg leading-loose whitespace-pre-wrap text-[#24302d]">{candidate.text}</div>
       <button type="button" onClick={() => setShowOriginal(value => !value)} className="min-h-11 text-white/70 underline">元の文章を{showOriginal ? '閉じる' : '確認する'}</button>
       {showOriginal && <div className="rounded-xl border border-white/20 p-5 leading-loose whitespace-pre-wrap">{candidate.original}</div>}
       <button type="button" onClick={() => { onUse(candidate.text); setCandidate(null); }} className="block min-h-14 w-full rounded-xl bg-white text-slate-900">この文章を使う</button>
-      <button type="button" onClick={() => setCandidate(null)} className="block min-h-14 w-full rounded-xl border border-white/30">元の文章に戻す</button>
+      <button type="button" onClick={() => { setCandidate(null); setSelectedStyle('clean'); }} className="block min-h-14 w-full rounded-xl border border-white/30">元の文章に戻す</button>
       <p className="text-sm text-white/50">候補を選んだ後、保存すると反映されます。</p>
     </> : <>
-      {showStyles && <div role="group" aria-label="文章の整え方" className="grid grid-cols-3 gap-2">
+      {(reviewMode || showStyles) && <div role="group" aria-label="文章の整え方" className="grid grid-cols-3 gap-2">
         {[["clean", "そのまま"], ["narrative", "語り調"], ["essay", "作品調"]].map(([value, label]) =>
           <button key={value} type="button" onClick={() => void polish(value)} disabled={busy || disabled}
-            className="min-h-12 rounded-xl border border-white/30 text-sm disabled:opacity-40">{label}</button>)}
+            aria-pressed={reviewMode ? selectedStyle === value : undefined}
+            className={`min-h-12 rounded-full border text-sm disabled:opacity-40 ${reviewMode && selectedStyle === value
+              ? 'border-white/30 bg-white/15 text-white' : 'border-white/15 text-white/60'}`}>{label}</button>)}
       </div>}
-      <div className="grid grid-cols-[1fr_1.25fr] gap-2">
+      {children}
+      {!reviewMode && <div className="grid grid-cols-[1fr_1.25fr] gap-2">
         <button type="button" onClick={() => setShowStyles(value => !value)} disabled={busy || disabled || !text.trim()}
           className="min-h-14 rounded-xl border border-white/30 disabled:opacity-40">✦ 整える</button>
         {saveButton(busy)}
-      </div>
+      </div>}
     </>}
     {busy && <p role="status" className="text-sm text-white/60">文章を整えています…</p>}
     {error && <p role="alert" className="text-sm text-rose-200">{error}</p>}
@@ -112,16 +125,25 @@ function GuestTrialExperience() {
   const [error, setError] = useState('');
   const [pendingBlob, setPendingBlob] = useState(null);
   const [pendingAudioUrl, setPendingAudioUrl] = useState('');
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const reviewAudioRef = useRef(null);
   const [uploadDone, setUploadDone] = useState(false);
   const [canRetryTranscription, setCanRetryTranscription] = useState(true);
   const [transcript, setTranscript] = useState('');
   const [editing, setEditing] = useState(false);
+  const [reviewBlocked, setReviewBlocked] = useState(false);
   const [quote, setQuote] = useState(null);
   const [familyName, setFamilyName] = useState('');
   const [givenName, setGivenName] = useState('');
   const [resumeUrl, setResumeUrl] = useState('');
   const [shareStatus, setShareStatus] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  useEffect(() => {
+    if (!reviewBlocked) return;
+    reviewAudioRef.current?.pause();
+    setAudioPlaying(false);
+  }, [reviewBlocked]);
 
   useEffect(() => {
     const openResume = () => {
@@ -260,6 +282,7 @@ function GuestTrialExperience() {
 
   async function saveRecording(_text, _duration, audioUrl, blob) {
     setScreen('saving'); setError(''); setBusy(true);
+    setAudioPlaying(false);
     setPendingBlob(blob);
     setPendingAudioUrl(audioUrl);
     setUploadDone(false);
@@ -294,7 +317,10 @@ function GuestTrialExperience() {
   async function next() {
     setBusy(true); setError('');
     try {
-      if (editing) {
+      reviewAudioRef.current?.pause();
+      setAudioPlaying(false);
+      const savedText = answers.find(row => row.question_id === questions[index].id)?.transcript || '';
+      if (editing || transcript.trim() !== savedText.trim()) {
         const saved = await guestTrialRequest(TRIAL_API, 'edit', {
           sessionToken: session.token, questionId: questions[index].id, text: transcript,
         });
@@ -548,22 +574,41 @@ function GuestTrialExperience() {
       </main>}
       {screen === 'review' && <main className="px-7 py-14">
         <header className="mb-5 flex items-start justify-between gap-4 pt-2 text-white/55">
-          <p className="flex min-h-11 items-center">語りを確認</p>
+          <p className="flex min-h-11 items-center">語りを確認します</p>
           <p className="flex min-h-11 shrink-0 items-center text-[1rem] text-white/75">{index + 1} / 3</p>
         </header>
         <h1 className="mt-8 text-center text-[1.35rem] leading-[1.8]">{questions[index].content}</h1>
         <div className="mt-10 rounded-3xl border border-white/15 bg-white/[0.05] p-6">
-          {editing ? <textarea value={transcript} onChange={event => setTranscript(event.target.value)} rows={8}
-            className="w-full bg-transparent leading-loose outline-none" aria-label="語りの文章" />
-            : <p className="whitespace-pre-wrap leading-[2]">{transcript || '声は保存されました。文字起こしが空の場合は文章を追加できます。'}</p>}
-          {pendingAudioUrl && <audio className="mt-5 w-full" controls src={pendingAudioUrl} />}
+          <GuestTrialPolishControls key={questions[index].id} session={session} question={questions[index]}
+            text={transcript} originalText={answers.find(row => row.question_id === questions[index].id)?.transcript || ''}
+            onUse={setTranscript} onBlockedChange={setReviewBlocked} disabled={busy || editing || !transcript.trim()} reviewMode>
+            {editing ? <textarea value={transcript} onChange={event => setTranscript(event.target.value)} rows={8}
+              className="mt-5 w-full bg-transparent leading-loose outline-none" aria-label="語りの文章" />
+              : <p className="mt-5 whitespace-pre-wrap leading-[2]">{transcript || '声は保存されました。文字起こしが空の場合は文章を追加できます。'}</p>}
+            <div className="mt-4 flex items-center justify-between gap-3">
+              {pendingAudioUrl && <>
+                <audio ref={reviewAudioRef} className="hidden" src={pendingAudioUrl} onEnded={() => setAudioPlaying(false)} />
+                <button type="button" onClick={async () => {
+                  const audio = reviewAudioRef.current;
+                  if (!audio) return;
+                  if (!audio.paused) { audio.pause(); setAudioPlaying(false); return; }
+                  try { await audio.play(); setAudioPlaying(true); }
+                  catch { setError('録音を再生できませんでした'); }
+                }} aria-label={audioPlaying ? '録音の再生を止める' : '録音を再生する'}
+                  className="flex min-h-11 min-w-11 items-center justify-center rounded-full border border-white/20 text-white/70">
+                  {audioPlaying ? 'Ⅱ' : '▶'}
+                </button>
+              </>}
+              {!editing && <button type="button" onClick={() => setEditing(true)} aria-label="本文を修正する"
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-full border border-white/20 text-white/70">✎</button>}
+            </div>
+          </GuestTrialPolishControls>
         </div>
-        {!editing && <button type="button" onClick={() => setEditing(true)} className="mt-5 w-full text-sm text-white/60 underline">文章を直す</button>}
-        {editing && <GuestTrialPolishControls key={questions[index].id} session={session} question={questions[index]}
-          text={transcript} onUse={setTranscript} disabled={busy}
-          saveButton={polishing => <button type="button" disabled={busy || polishing || !transcript.trim()} onClick={next}
-            className="min-h-14 rounded-xl bg-white text-slate-900 disabled:opacity-40">{busy ? '保存しています…' : index === 2 ? '保存して終了' : '保存して次へ'}</button>} />}
-        {!editing && <button type="button" disabled={busy} onClick={next} className="btn-quiet mt-9 w-full rounded-full bg-[#e9e5d9] px-7 py-4 text-[#15243a] disabled:opacity-50">{busy ? '保存しています…' : index === 2 ? '三つの問いを終える' : '次の問いへ'}</button>}
+        {editing && <button type="button" onClick={() => {
+          setTranscript(answers.find(row => row.question_id === questions[index].id)?.transcript || '');
+          setEditing(false);
+        }} className="mt-5 w-full text-sm text-white/60 underline">編集をやめる</button>}
+        <button type="button" disabled={busy || reviewBlocked || (editing && !transcript.trim())} onClick={next} className="btn-quiet mt-9 w-full rounded-full bg-[#e9e5d9] px-7 py-4 text-[#15243a] disabled:opacity-50">{busy ? '保存しています…' : index === 2 ? '三つの問いを終える' : '次の問いへ'}</button>
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
       {screen === 'finished' && <main className="px-7 py-14 text-center">
