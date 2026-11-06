@@ -3,7 +3,7 @@ import { webcrypto } from 'node:crypto';
 import {
   guestTrialEndpoint, guestTrialStorageKey,
   ensureGuestTrialStorage, readGuestTrialSession, storeGuestTrialSession, guestTrialRequest,
-  guestTrialResumeUrl, takeGuestTrialResumeToken,
+  guestTrialResumeUrl, guestTrialCanonicalUrl, takeGuestTrialResumeToken,
 } from '../../src/lib/guestTrialApi.js';
 
 globalThis.crypto ||= webcrypto;
@@ -32,6 +32,9 @@ const session = storeGuestTrialSession(storage, selfKey, {
 assert.equal(readGuestTrialSession(storage, selfKey)?.token, token);
 assert.equal(session.sessionId, 'test-session');
 const resumeUrl = guestTrialResumeUrl({ origin: 'https://example.test' }, session);
+assert.equal(guestTrialCanonicalUrl({ href: 'https://tateyoko-book.vercel.app/?guest_trial=1' }, session),
+  `https://www.tateito-yokoito.jp/?guest_trial=1#resume=${token}`);
+assert.equal(guestTrialCanonicalUrl({ href: 'https://www.tateito-yokoito.jp/?guest_trial=1' }, session), null);
 assert.equal(new URL(resumeUrl).searchParams.get('resume'), null);
 assert.equal(new URL(resumeUrl).hash, `#resume=${token}`);
 const oldWindow = globalThis.window;

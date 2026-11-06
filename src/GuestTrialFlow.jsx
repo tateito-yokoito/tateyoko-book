@@ -7,7 +7,7 @@ import { hasLineIdentity, linkLineToCurrentAccount, startLineSignIn } from './li
 import {
   guestTrialRequest, guestTrialStorageKey,
   ensureGuestTrialStorage, readGuestTrialSession, storeGuestTrialSession,
-  guestTrialResumeUrl, takeGuestTrialResumeToken,
+  guestTrialResumeUrl, guestTrialCanonicalUrl, takeGuestTrialResumeToken,
 } from './lib/guestTrialApi.js';
 import { clearGuestTrialPending, guestTrialPurchaseUrl } from './lib/guestTrialClaim.js';
 
@@ -29,6 +29,20 @@ const questions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) => ({
 }));
 
 export default function GuestTrialFlow() {
+  const legacyHost = window.location.hostname === 'tateyoko-book.vercel.app';
+  useEffect(() => {
+    if (!legacyHost) return;
+    (async () => {
+      const storageKey = await guestTrialStorageKey(giftToken);
+      const saved = readGuestTrialSession(localStorage, storageKey);
+      window.location.replace(guestTrialCanonicalUrl(window.location, saved));
+    })();
+  }, [legacyHost]);
+  if (legacyHost) return <p>無料の3問を準備しています…</p>;
+  return <GuestTrialExperience />;
+}
+
+function GuestTrialExperience() {
   const [key, setKey] = useState(null);
   const [session, setSession] = useState(null);
   const [answers, setAnswers] = useState([]);

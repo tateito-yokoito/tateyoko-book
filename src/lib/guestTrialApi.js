@@ -59,6 +59,15 @@ export function guestTrialResumeUrl(location, session) {
   return url.toString();
 }
 
+export function guestTrialCanonicalUrl(location, session) {
+  const url = new URL(location.href);
+  if (url.hostname !== 'tateyoko-book.vercel.app') return null;
+  url.hostname = 'www.tateito-yokoito.jp';
+  // Keep an existing session when moving between the two production hosts.
+  if (!url.hash && /^[a-f0-9]{64}$/.test(session?.token || '')) url.hash = `resume=${session.token}`;
+  return url.toString();
+}
+
 export function takeGuestTrialResumeToken(location = window.location) {
   const url = new URL(location.href);
   const token = new URLSearchParams(url.hash.slice(1)).get('resume');
