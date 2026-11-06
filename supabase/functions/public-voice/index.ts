@@ -86,7 +86,7 @@ serve(async (req) => {
 
     const { data: itemRows, error: itemsError } = await admin
       .from("voice_publication_items")
-      .select("item_order, chapter_title, question_text, transcript_text, audio_assets, photo_assets")
+      .select("item_order, chapter_title, question_text, transcript_text, audio_assets, photo_assets, metadata")
       .eq("publication_id", publication.id)
       .order("item_order", { ascending: true });
     if (itemsError) throw itemsError;
@@ -103,6 +103,8 @@ serve(async (req) => {
         audio.push({
           assetIndex,
           part: finiteNumber(asset?.part),
+          purpose: asset?.purpose === 'voice_only' ? 'voice_only'
+            : asset?.purpose === 'append' ? 'append' : 'answer',
           durationSeconds: finiteNumber(asset?.durationSeconds)
         });
       }
@@ -120,12 +122,16 @@ serve(async (req) => {
         });
       }
 
-      if (audio.length === 0) continue;
       items.push({
         order: item.item_order,
         chapterTitle: String(item.chapter_title || "").trim(),
         question: String(item.question_text || "").trim(),
         transcript: String(item.transcript_text || "").trim(),
+        contributionId: item.metadata?.contributionId || null,
+        contributorName: item.metadata?.contributorName || null,
+        relationship: item.metadata?.relationship || null,
+        themeCode: item.metadata?.themeCode || null,
+        sourceUserQuestionId: item.metadata?.sourceUserQuestionId || null,
         audio,
         photos
       });
@@ -152,6 +158,9 @@ serve(async (req) => {
 
     if (items.length === 0 && videos.length === 0) throw new HttpError("Not found", 404);
 
+    const cover = publication.snapshot_metadata?.cover || {};
+    const coverPath = String(cover.cover_photo_path || "").trim();
+    const coverColor = String(cover.print_color || "").trim();
     return jsonResponse({
       success: true,
       publication: {
@@ -159,6 +168,9 @@ serve(async (req) => {
         subtitle: String(publication.book_subtitle || "").trim(),
         subjectName: String(publication.subject_name || "").trim(),
         footerText: String(publication.snapshot_metadata?.footerText || "").trim(),
+        hasCover: coverPath.startsWith(`published/${publication.id}/cover/`),
+        coverColor: /^#[0-9a-fA-F]{6}$/.test(coverColor) ? coverColor : "#a9bcb6",
+        coverTransform: cover.cover_photo_transform || null,
         publishedAt: publication.published_at,
         accessProtected: publication.access_mode === "code",
         items,
@@ -176,8 +188,20 @@ serve(async (req) => {
 async function createAssetResponse({ admin, body, publication }: any) {
   const kind = String(body.kind || "").trim().toLowerCase();
   const videoKinds = new Set(["video", "video_audio", "video_poster"]);
-  if (kind !== "audio" && kind !== "photo" && !videoKinds.has(kind)) {
+  if (kind !== "audio" && kind !== "photo" && kind !== "cover" && !videoKinds.has(kind)) {
     throw new HttpError("Invalid asset", 400);
+  }
+
+  if (kind === "cover") {
+    const storagePath = String(publication.snapshot_metadata?.cover?.cover_photo_path || "").trim();
+    if (!storagePath.startsWith(`published/${publication.id}/cover/`)) throw new HttpError("Not found", 404);
+    const { data: signed, error: signedError } = await admin.storage
+      .from(PHOTO_BUCKET)
+      .createSignedUrl(storagePath, SIGNED_URL_LIFETIME_SECONDS);
+    if (signedError || !signed?.signedUrl) throw new HttpError("Playback unavailable", 503);
+    return jsonResponse({ success: true, asset: {
+      kind, url: signed.signedUrl, expiresInSeconds: SIGNED_URL_LIFETIME_SECONDS
+    } });
   }
 
   if (videoKinds.has(kind)) {
@@ -278,7 +302,9 @@ async function authorizePublication({ req, body, admin, publication }: any) {
           .eq("id", publication.book_project_id)
           .maybeSingle()
       ]);
-      const isOwnerOrPurchaser = project?.owner_user_id === user.id || project?.purchaser_user_id === user.id;
+      const { data: managed, error: familyError } = await admin.rpc('family_managed', { p: publication.book_project_id });
+      if (familyError) throw new Error('Family authorization unavailable');
+      const isOwnerOrPurchaser = !managed && (project?.owner_user_id === user.id || project?.purchaser_user_id === user.id);
       if (canManage || canView || isOwnerOrPurchaser) return { authorized: true };
     }
   }
