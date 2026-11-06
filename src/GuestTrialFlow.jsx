@@ -406,9 +406,8 @@ function GuestTrialExperience() {
     };
   });
 
-  return <div className="app-container min-h-[100dvh] bg-[#101729] text-white">
-    <div className="mx-auto min-h-[100dvh] max-w-xl">
-      <header className="px-7 pt-8 text-[0.8rem] tracking-[0.18em] text-white/60">縦糸＋横糸　／　{giftToken ? '贈られた3問' : '無料の3問'}</header>
+  return <div className="app-container min-h-[100dvh] bg-[#101729] text-white" style={{ maxWidth: 'none', padding: 0 }}>
+    <div className="min-h-[100dvh] w-full">
       {screen === 'loading' && <p className="px-7 py-20">体験を確認しています…</p>}
       {screen === 'intro' && <main className="flex min-h-[75dvh] flex-col justify-center px-7 text-center">
         <p className="text-[0.8rem] tracking-widest text-white/55">本人確認・カード登録なし</p>
