@@ -8,11 +8,20 @@ import WebBookMediaControls from './WebBookMediaControls.jsx';
 import WebBookVideoPlayer from './WebBookVideoPlayer.jsx';
 
 const time = seconds => Number.isFinite(Number(seconds)) && Number(seconds) > 0 ? `${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}` : '';
+const creationDate = value => {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) return '';
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(date).map(({ type, value: part }) => [type, part]));
+  return `${parts.year}年 ${parts.month}月 ${parts.day}日`;
+};
 
 // Same presentation for an authorized draft preview and an immutable published work.
 // This component has no DB client and cannot publish, edit, or change sharing.
 export default function WebBook({ publication, resolveAsset, previewLabel, onClose }) {
   const sections = webBookSections(publication);
+  const createdOn = creationDate(publication.publishedAt);
   const sequence = useMemo(()=>webBookStorySequence(publication),[publication]);
   const audioSequence = useMemo(()=>webBookAudioSequence(sequence),[sequence]);
   const legacyChapters = useMemo(() => {
@@ -105,6 +114,10 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
       </article> : <>
         {publication.coverImageUrl ? <section className="wb-cover wb-cover-reference" aria-label="ブックの表紙"><img src={publication.coverImageUrl} alt={`${publication.subjectName || publication.title}のブック表紙`}/></section>
           : <section className="wb-cover wb-cover-print" style={{'--wb-cover-color':publication.coverColor || '#a9bcb6'}}><div className="wb-name"><h1>{publication.subjectName || publication.title}</h1>{sections.name?.audio?.length ? button(sections.name,0,null,'名前の声を聴く',true):null}</div>{publication.title && publication.title !== publication.subjectName && <p className="wb-book-title">{publication.title}</p>}{publication.subtitle&&<p className="wb-subtitle">{publication.subtitle}</p>}{cover&&<div className="wb-cover-photo" role="img" aria-label="BOOKの表紙写真"><CoverPhotoFrame photo={{url:cover,transform:publication.coverTransform}} backgroundColor="transparent" className="wb-cover-photo-frame"/></div>}{publication.footerText&&<p className="wb-date">{publication.footerText}</p>}<p className="wb-cover-brand">縦糸横糸</p></section>}
+        {(publication.subjectName || createdOn) && <div className="wb-cover-meta">
+          {publication.subjectName && <span>物語の主体　{publication.subjectName}</span>}
+          {createdOn && <span>作成日 {createdOn}</span>}
+        </div>}
         {!!audioSequence.length&&<div className="wb-listen-book-entry"><p className="wb-listen-label">連続再生</p><button className="wb-listen-book" onClick={()=>startContinuous()}><Play size={18} aria-hidden="true"/>声で、この人生を辿る</button></div>}
         {sections.now.some(Boolean)&&<section className="wb-now"><h2>今の私</h2>{sections.now.map((item,i)=>item&&<div className="wb-now-row" key={item.order}><div><button className="wb-title-button" onClick={()=>openStory(item)}>{i===0?'最近の暮らし':'日々の楽しみ'}</button>{item.transcript&&<p>{item.transcript}</p>}</div>{item.audio?.length?button(item,0,null,`${i===0?'最近の暮らし':'日々の楽しみ'}を聴く`):null}</div>)}</section>}
         {milestone(sections.opening)}

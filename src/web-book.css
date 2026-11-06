@@ -16,6 +16,8 @@
 .wb-header span{font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-size:13px}
 .wb-cover-reference,.wb-cover-print{width:min(100%,460px);margin:25px auto 30px;padding:0}
 .wb-cover-reference img{display:block;width:100%;height:auto;box-shadow:0 4px 16px #1b322b18}
+.wb-cover-reference,.wb-cover-print{margin-bottom:0}
+.wb-cover-meta{width:min(100%,460px);margin:9px auto 32px;display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right;color:#66766d;font-size:14px;line-height:1.6}
 .wb-cover-print{display:flex;flex-direction:column;align-items:center;aspect-ratio:533/745;background:var(--wb-cover-color,#a9bcb6);color:#294b43;padding:12% 5% 6%}
 .wb-cover-print .wb-name h1{font-size:clamp(25px,6vw,36px)}
 .wb-cover-print .wb-book-title{font-size:15px;margin-top:8px!important}
