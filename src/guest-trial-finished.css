@@ -1,0 +1,67 @@
+.guest-trial-finished {
+  width: min(100%, 390px);
+  margin: 0 auto;
+  padding: calc(48px + env(safe-area-inset-top)) 24px calc(64px + env(safe-area-inset-bottom));
+  text-align: center;
+}
+
+.guest-trial-finished > h1,
+.guest-trial-reflection > h2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+
+.guest-trial-finished > h1 { font-size: 29px; line-height: 1.6; }
+.guest-trial-finished-answers { margin-top: 36px; text-align: left; }
+.guest-trial-finished-answers .tc-story {
+  padding: 26px 0 34px;
+  border-top: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .18);
+}
+.guest-trial-finished-answers .tc-story:first-child { border-top: 1px solid rgba(255, 255, 255, .18); }
+.guest-trial-finished-answers .tc-story-top { gap: 14px; }
+.guest-trial-finished-answers .tc-number {
+  flex: 0 0 30px;
+  color: #bdc5d1;
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+.guest-trial-finished-answers .tc-story h2 { color: #f6f4ef; font-size: 17px; line-height: 1.8; }
+.guest-trial-finished-answers .tc-story-excerpt,
+.guest-trial-finished-answers .tc-story > p {
+  margin: 16px 0 0 44px !important;
+  color: #d6dae1;
+  font-size: 15px;
+  line-height: 1.9;
+}
+.guest-trial-finished-answers .tc-text-button,
+.guest-trial-finished-answers .tc-audio,
+.guest-trial-finished-answers details { margin-left: 44px; color: #e5e6e6; }
+.guest-trial-finished-answers .tc-audio audio { width: 100%; }
+
+.guest-trial-reflection { margin-top: 55px; }
+.guest-trial-theme { margin: 0; color: #d2c7aa; font-size: 13px; letter-spacing: .12em; }
+.guest-trial-reflection > h2 { margin: 17px 0 0; font-size: 25px; line-height: 1.65; }
+.guest-trial-lead { margin: 27px 0 0; color: #e7e8e8; font-size: 17px; line-height: 1.9; }
+.guest-trial-copy {
+  margin: 33px 0 0;
+  color: #d2d6dd;
+  font-size: clamp(11.5px, 3.8vw, 15px);
+  line-height: 2.1;
+  text-align: left;
+}
+.guest-trial-copy > span { display: block; white-space: nowrap; }
+.guest-trial-copy-gap { margin-top: 12px; }
+.guest-trial-reflection-image { display: block; width: 100%; height: auto; margin-top: 38px; border-radius: 14px; }
+.guest-trial-image-caption { margin-top: 25px; color: #e5e6e6; }
+.guest-trial-finished-primary,
+.guest-trial-finished-secondary {
+  display: block;
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 20px;
+  border-radius: 999px;
+  font-size: 17px;
+}
+.guest-trial-finished-primary { margin-top: 45px; border: 0; background: #e9e5d9; color: #15243a; font-weight: 600; }
+.guest-trial-finished-secondary { margin-top: 15px; border: 1px solid rgba(255, 255, 255, .4); background: transparent; color: #f6f4ef; }

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Scene1_MyPage, Scene_Recording, ensureUserFoundation, ensureUserQuestions, supabaseClient } from './App.jsx';
 import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
 import TrialCompletionExperience, { StoryCard } from './TrialCompletionExperience.jsx';
+import './guest-trial-finished.css';
 import { guestCheckout, guestPurchaseStatus, claimGuestPurchase } from './lib/guestPurchaseApi.js';
 import { hasLineIdentity, linkLineToCurrentAccount, startLineSignIn } from './lib/lineAuth.js';
 import {
@@ -611,17 +612,37 @@ function GuestTrialExperience() {
         <button type="button" disabled={busy || reviewBlocked || (editing && !transcript.trim())} onClick={next} className="btn-quiet mt-9 w-full rounded-full bg-[#e9e5d9] px-7 py-4 text-[#15243a] disabled:opacity-50">{busy ? '保存しています…' : index === 2 ? '三つの問いを終える' : '次の問いへ'}</button>
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
-      {screen === 'finished' && <main className="px-7 py-14 text-center">
-        <h1 className="text-[1.7rem] leading-[1.8]">3問の体験が完了しました</h1>
-        <div className="mt-10 space-y-6 text-left">{stories.map((story, storyIndex) => <StoryCard key={story.id} story={story} index={storyIndex}
+      {screen === 'finished' && <main className="guest-trial-finished">
+        <h1>3問の体験が完了しました</h1>
+        <div className="guest-trial-finished-answers">{stories.map((story, storyIndex) => <StoryCard key={story.id} story={story} index={storyIndex}
           resolveMedia={async asset => {
             const response = await guestTrialRequest(TRIAL_API, 'audio', { sessionToken: session.token, questionId: asset.id });
             return response.url;
           }} />)}</div>
+        {!giftToken && <section className="guest-trial-reflection" aria-labelledby="guest-trial-reflection-title">
+          <p className="guest-trial-theme">テーマ「幼い頃のこと」</p>
+          <h2 id="guest-trial-reflection-title">3問だけでしたが、<br />いかがでしたか？</h2>
+          <p className="guest-trial-lead">少し懐かしい記憶が、<br />開いたでしょうか。</p>
+          <p className="guest-trial-copy">
+            <span>本編では、語りやすい問いから始まり、</span>
+            <span>大切な人のこと、苦しかった時のこと、</span>
+            <span>大事にしてきたこと、</span>
+            <span>そしてこれからのことまで。</span>
+            <span className="guest-trial-copy-gap">様々なテーマを、少しずつ辿っていきます。</span>
+          </p>
+          <img className="guest-trial-reflection-image" src="/site/guest-trial-album-import-20261107.jpg"
+            alt="アルバムの写真をスマホで取り込み、思い出とともにブックへ残すイメージ" />
+          <p className="guest-trial-copy guest-trial-image-caption">
+            <span>懐かしいアルバム、スマホで撮った写真、</span>
+            <span>簡単に取り込むことができます。</span>
+            <span className="guest-trial-copy-gap">大量に、ではなく、選ぶ。</span>
+            <span>それも縦糸横糸の体験です。</span>
+          </p>
+        </section>}
         {!giftToken && <button type="button" onClick={() => setScreen('service')}
-          className="mt-10 w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-[#15243a]">縦糸横糸について詳しく見る</button>}
+          className="guest-trial-finished-primary">縦糸横糸について詳しく見る</button>}
         {!giftToken && <button type="button" onClick={openExit}
-          className="mt-5 w-full rounded-full border border-white/35 px-7 py-5">ここで終了する</button>}
+          className="guest-trial-finished-secondary">ここで終了する</button>}
         {giftToken && <p className="mt-9 text-sm leading-loose text-white/55">語りは贈り主へ自動で共有されません。</p>}
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
