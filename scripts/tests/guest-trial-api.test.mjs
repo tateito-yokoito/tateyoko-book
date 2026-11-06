@@ -58,6 +58,16 @@ await assert.rejects(() => guestTrialRequest('https://example.supabase.co', 'sav
   sessionToken: token, questionId: 'TY_Q01',
 }), /問いを確認できません/);
 const originalFetch = globalThis.fetch;
+let startRequest;
+globalThis.fetch = async (_url, options) => {
+  startRequest = options;
+  return { ok: true, json: async () => ({ sessionToken: token }) };
+};
+try {
+  await guestTrialRequest('https://example.supabase.co', 'start');
+  assert.equal(startRequest.headers['Content-Type'], 'text/plain;charset=UTF-8');
+  assert.deepEqual(JSON.parse(startRequest.body), { giftToken: null });
+} finally { globalThis.fetch = originalFetch; }
 globalThis.fetch = async () => ({ ok: false, status: 503,
   json: async () => ({ error: '声は保存されました。話した内容を入力して進めます。', retryable: false }),
 });

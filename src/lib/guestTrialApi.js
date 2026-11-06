@@ -75,7 +75,10 @@ export async function guestTrialRequest(supabaseUrl, action, { sessionToken, gif
   let headers;
   if (action === 'start') {
     body = JSON.stringify({ giftToken: giftToken || null });
-    headers = { 'Content-Type': 'application/json' };
+    // A simple CORS request avoids the preflight that some mobile browsers
+    // complete without sending the actual start POST. The Edge Function uses
+    // request.json(), which parses this body independently of Content-Type.
+    headers = { 'Content-Type': 'text/plain;charset=UTF-8' };
   } else {
     if (!/^[a-f0-9]{64}$/.test(sessionToken || '')) throw new Error('この体験を確認できません');
     body = new FormData();
