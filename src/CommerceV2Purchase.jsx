@@ -264,9 +264,11 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
             <p className="text-sm leading-7 text-white/75">商品・オプション：{(quote?.amount_subtotal ?? provisionalSubtotal)?.toLocaleString('ja-JP')}円（税込）<br />割引：−{quote ? Number(quote.discount_amount || 0).toLocaleString('ja-JP') : '—'}円</p>
             <p className="text-xl">お支払い合計：{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : method === 'interview_staff' ? '無料相談後に確定' : error ? '確認できませんでした' : '確認中'}</p>
             <p className="text-sm leading-6 text-white/70">{method === 'interview_staff' ? '聞き取り制作サポートは相談・合意後にお支払いとなります。' : '認証後に価格と割引条件を再確認し、変更があればお知らせします。'}</p>
-            <button type="button" className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={(method === 'self_or_family' && !quote) || (orderType === 'gift' && !gift.recipient_name.trim())} onClick={() => {
-              try { onProceed?.({ ...selection, quotedAmountTotal: quote?.amount_total, quotedDiscountAmount: quote?.discount_amount }); }
-              catch { setError('選択内容をこのブラウザに保存できません。通常モードで開き直してください。'); }
+            <button type="button" className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || (method === 'self_or_family' && !quote) || (orderType === 'gift' && !gift.recipient_name.trim())} onClick={async () => {
+              setBusy(true);
+              setError('');
+              try { await onProceed?.({ ...selection, quotedAmountTotal: quote?.amount_total, quotedDiscountAmount: quote?.discount_amount }); }
+              catch (cause) { setError(cause?.message || '購入内容を保存できませんでした。もう一度お試しください。'); setBusy(false); }
             }}>購入手続きへ進む</button>
             <p className="text-center text-sm text-white/65">購入手続きには、アカウント登録またはログインが必要です。</p>
           </> : <>

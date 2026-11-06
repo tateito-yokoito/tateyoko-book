@@ -230,7 +230,8 @@ serve(async request => {
         .select('id', { count: 'exact', head: true }).eq('creator_ip_hash', ipHash)
         .gte('created_at', new Date(Date.now() - 86400000).toISOString());
       if (countError) throw countError;
-      if ((count || 0) >= 5) return respond({ error: '本日の体験上限に達しました' }, 429);
+      // Keep an IP-level cap while allowing repeated release-day device tests.
+      if ((count || 0) >= 30) return respond({ error: '本日の体験上限に達しました' }, 429);
 
       const sessionToken = token();
       const { data: session, error } = await admin.from('guest_trial_sessions').insert({

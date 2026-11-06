@@ -1,4 +1,5 @@
 import { readGuestTrialSession } from './guestTrialApi.js';
+import { clearPendingGuestHandoff, pendingGuestHandoff } from './commercePurchaseHandoff.js';
 
 export const GUEST_TRIAL_CLAIM_PARAM = 'guest_trial_claim';
 const storageKey = 'tateyoko:guest-trial:self:v1';
@@ -28,6 +29,7 @@ export function pendingGuestTrialProject(storage = window.localStorage) {
 
 export function clearGuestTrialPending(storage = window.localStorage) {
   storage.removeItem(pendingKey);
+  clearPendingGuestHandoff(storage);
 }
 
 async function functionErrorMessage(error) {
@@ -38,9 +40,10 @@ async function functionErrorMessage(error) {
 
 export async function bindGuestTrialToPurchase(client, projectId, storage = window.localStorage) {
   const saved = readGuestTrialSession(storage, storageKey);
-  if (!saved?.token) throw new Error('この端末に無料3問の記録が見つかりません。再開URLから開いてください。');
+  const handoffToken = pendingGuestHandoff(storage);
+  if (!saved?.token && !handoffToken) throw new Error('無料3問の記録が見つかりません。再開URLから開いてください。');
   const { data, error } = await client.functions.invoke('claim-guest-trial', {
-    body: { action: 'bind', sessionToken: saved.token, projectId },
+    body: { action: 'bind', sessionToken: saved?.token, handoffToken, projectId },
   });
   if (error || data?.status !== 'bound' || data?.projectId !== projectId)
     throw new Error(data?.error || await functionErrorMessage(error)
@@ -51,9 +54,10 @@ export async function bindGuestTrialToPurchase(client, projectId, storage = wind
 
 export async function claimGuestTrialForProject(client, projectId, storage = window.localStorage) {
   const saved = readGuestTrialSession(storage, storageKey);
-  if (!saved?.token) throw new Error('この端末に無料3問の記録が見つかりません。元の画面からやり直してください。');
+  const handoffToken = pendingGuestHandoff(storage);
+  if (!saved?.token && !handoffToken) throw new Error('無料3問の記録が見つかりません。再開URLから開いてください。');
   const { data, error } = await client.functions.invoke('claim-guest-trial', {
-    body: { sessionToken: saved.token, projectId },
+    body: { sessionToken: saved?.token, handoffToken, projectId },
   });
   if (error || data?.status !== 'claimed' || data?.projectId !== projectId || data?.count !== 3) {
     throw new Error(data?.error || await functionErrorMessage(error)
