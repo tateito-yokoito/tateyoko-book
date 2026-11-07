@@ -34,8 +34,22 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const authHeader = req.headers.get("Authorization") || "";
-    const internalOrder = authHeader === `Bearer ${serviceRoleKey}` && body.action === "prepare_order";
-    const action = internalOrder ? "prepare" : String(body.action || "publish").trim();
+    let internalOrder = authHeader === `Bearer ${serviceRoleKey}`
+      && ["prepare_order", "publish_order"].includes(body.action);
+    // The scheduled production sweep can hold an older valid service-role key
+    // in Vault. Permit that credential only after a service-role-only RPC
+    // succeeds; an ordinary user JWT cannot call this RPC.
+    if (!internalOrder && /^Bearer .+/.test(authHeader)
+      && ["prepare_order", "publish_order"].includes(body.action)) {
+      const caller = createClient(supabaseUrl, authHeader.slice(7), {
+        global: { headers: { Authorization: authHeader } }
+      });
+      const { error: serviceError } = await caller.rpc("list_runnable_book_production_jobs", { input_limit: 1 });
+      internalOrder = !serviceError;
+    }
+    const action = internalOrder
+      ? body.action === "publish_order" ? "publish" : "prepare"
+      : String(body.action || "publish").trim();
     const serviceClient = createClient(supabaseUrl, serviceRoleKey);
     let user: { id: string };
     let internalBookProjectId = "";
@@ -48,15 +62,12 @@ serve(async (req) => {
         throw new HttpError("Paid order required", 409);
       }
       const { data: job, error: jobError } = await serviceClient.from("book_production_jobs")
-        .select("order_id").eq("order_id", orderId).maybeSingle();
+        .select("order_id,pdf_storage_path,pdf_page_count").eq("order_id", orderId).maybeSingle();
       if (jobError || !job) throw new HttpError("Production job required", 409);
-      // A claimed gift may have been paid for by somebody other than the
-      // subject. Internal preparation must use the current project owner for
-      // asset and production access, after verifying the paid order and job.
-      const { data: project, error: projectError } = await serviceClient.from("book_projects")
-        .select("owner_user_id").eq("id", order.book_project_id).single();
-      if (projectError || !project?.owner_user_id) throw new HttpError("Project owner required", 409);
-      user = { id: project.owner_user_id };
+      if (body.action === "publish_order" && (!job.pdf_storage_path || !job.pdf_page_count)) {
+        throw new HttpError("PDF proof required before publication", 409);
+      }
+      user = { id: order.purchaser_user_id };
       internalBookProjectId = order.book_project_id;
     } else {
       const authClient = createClient(supabaseUrl, serviceRoleKey, {
@@ -189,6 +200,29 @@ serve(async (req) => {
     if (workError) throw workError;
     if (!work?.confirmed_at || !work.snapshot) throw new HttpError("先に紙面と収録内容を確定してください", 409);
     if (action === "update") throw new HttpError("完成作品の内容は変更できません。共有設定のみ変更できます", 409);
+    let opsQuery = serviceClient.from("book_ops_cases")
+      .select("order_id,status,current_revision_id,proof_revision_id,approved_revision_id")
+      .eq("work_manifest_id", work.id);
+    if (internalOrder) opsQuery = opsQuery.eq("order_id", body.orderId);
+    const { data: opsCase, error: opsError } = await opsQuery
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (opsError) throw opsError;
+    if (opsCase && action === "publish" && (
+      !internalOrder || opsCase.status !== "approved"
+      || !opsCase.approved_revision_id
+      || opsCase.approved_revision_id !== opsCase.proof_revision_id
+      || opsCase.approved_revision_id !== opsCase.current_revision_id
+    )) throw new HttpError("運営の仕上がり確認が完了していません", 409);
+    let effectiveSnapshot = work.snapshot;
+    let revisionId = work.id;
+    if (opsCase) {
+      const { data: opsRevision, error: revisionError } = await serviceClient
+        .from("book_ops_revisions").select("id,snapshot")
+        .eq("id", opsCase.current_revision_id).eq("order_id", opsCase.order_id).single();
+      if (revisionError || !opsRevision?.snapshot) throw new HttpError("運営修正版が見つかりません", 409);
+      effectiveSnapshot = opsRevision.snapshot;
+      revisionId = opsRevision.id;
+    }
     const { data: prior, error: priorError } = await serviceClient.from("voice_publications")
       .select("id, public_id, book_project_id, status, access_mode")
       .eq("work_manifest_id", work.id).maybeSingle();
@@ -199,7 +233,8 @@ serve(async (req) => {
       status: prior.status, unchanged: true
     });
     existingPublication = prior;
-    const { project, cover, subject, answers, questions: questionRows, media, videos: videoRows } = work.snapshot;
+    const { project, cover, subject, answers, questions: questionRows, media, videos: videoRows } = effectiveSnapshot;
+    const contributions = Array.isArray(effectiveSnapshot.contributions) ? effectiveSnapshot.contributions : [];
     const audioRows = media.filter((m: any) => m.asset_type === "audio");
     const photoRows = media.filter((m: any) => m.asset_type === "photo");
 
@@ -239,7 +274,6 @@ serve(async (req) => {
       publication = createdPublication;
     }
 
-    const revisionId = work.id;
     const fixedCover = Object.fromEntries([
       "title","subtitle","footer_text","cover_style","cloth_color","print_color",
       "cover_photo_path","cover_photo_transform","premium_cover_photo_path","premium_cover_photo_transform"
@@ -280,6 +314,7 @@ serve(async (req) => {
         copiedAssets.push({
           storagePath: destinationPath,
           part,
+          purpose: media.meta_json?.audio_purpose || 'answer',
           durationSeconds: finiteNumber(media.meta_json?.duration_seconds),
           sourceMediaId: media.id
         });
@@ -315,8 +350,44 @@ serve(async (req) => {
         photo_assets: copiedPhotos,
         metadata: {
           sourceSequenceOrder: answer.sequence_order,
+          sourceUserQuestionId: answer.user_question_id,
           hidePromptInBook: Boolean(answer.meta_json?.hide_prompt_in_book)
         }
+      });
+    }
+
+    // The contribution appendix follows the owner's stories and is frozen in
+    // the same confirmed work snapshot. Each original recording is copied to
+    // a publication-owned path before the atomic item replacement below.
+    for (const contribution of contributions) {
+      itemOrder += 1;
+      const copiedAssets = [];
+      const copiedContributionPhotos = [];
+      for (const [index, record] of (contribution.audio_records || []).entries()) {
+        const sourcePath = String(record.path || "");
+        if (!sourcePath.startsWith(`${contribution.request_id}/`)) throw new Error("Invalid contribution audio path");
+        const destinationPath = `published/${publication.id}/revisions/${revisionId}/contributions/${contribution.id}/${index + 1}${safeExtension(sourcePath)}`;
+        await copyBetweenBucketsOnce(serviceClient, "memory-contributions", sourcePath, AUDIO_BUCKET, destinationPath);
+        copiedAssets.push({ storagePath: destinationPath, part: index + 1,
+          purpose: "contribution", sourceMediaId: contribution.id });
+      }
+      for (const [index, rawPath] of (contribution.photo_paths || []).entries()) {
+        const sourcePath = String(rawPath || "");
+        if (!sourcePath.startsWith(`${contribution.request_id}/`)) throw new Error("Invalid contribution photo path");
+        const destinationPath = `published/${publication.id}/revisions/${revisionId}/contributions/${contribution.id}/photo-${index + 1}${safeExtension(sourcePath, ".jpg")}`;
+        await copyBetweenBucketsOnce(serviceClient, "memory-contributions", sourcePath, PHOTO_BUCKET, destinationPath);
+        copiedContributionPhotos.push({ storagePath: destinationPath,
+          sourceMediaId: contribution.id, caption: "", bookLayout: null });
+      }
+      itemRows.push({ publication_id: publication.id, item_order: itemOrder,
+        source_answer_id: null, chapter_title: "大切な人たちの語り",
+        question_text: String(contribution.question || "").trim(),
+        transcript_text: String(contribution.body || "").trim(),
+        audio_assets: copiedAssets, photo_assets: copiedContributionPhotos,
+        metadata: { contributionId: contribution.id, contributorName: contribution.responder_name,
+          relationship: contribution.relationship, themeCode: contribution.theme_code,
+          sourceUserQuestionId: contribution.source_question_id,
+          recipientName: contribution.recipient_name }
       });
     }
 
@@ -511,4 +582,18 @@ async function copyOnce(client: ReturnType<typeof createClient>, bucket: string,
   if (data?.some((object: any) => object.name === name && Number(object.metadata?.size) > 0)) return;
   const { error: copyError } = await client.storage.from(bucket).copy(source, destination);
   if (copyError) throw copyError;
+}
+
+async function copyBetweenBucketsOnce(client: ReturnType<typeof createClient>, sourceBucket: string,
+  source: string, destinationBucket: string, destination: string) {
+  const parent = destination.slice(0, destination.lastIndexOf("/"));
+  const name = destination.slice(destination.lastIndexOf("/") + 1);
+  const { data: existing, error: listError } = await client.storage.from(destinationBucket).list(parent, { search: name });
+  if (listError) throw listError;
+  if (existing?.some((object: any) => object.name === name && Number(object.metadata?.size) > 0)) return;
+  const { data: blob, error: downloadError } = await client.storage.from(sourceBucket).download(source);
+  if (downloadError || !blob) throw downloadError || new Error("Contribution recording missing");
+  const { error: uploadError } = await client.storage.from(destinationBucket).upload(destination, blob,
+    { contentType: blob.type || "audio/webm", upsert: false });
+  if (uploadError && !/already exists/i.test(uploadError.message)) throw uploadError;
 }
