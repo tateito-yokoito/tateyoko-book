@@ -23,9 +23,8 @@
 .landing-site .hp-nenrin-story { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--paper) 76%, white); }
 .landing-site .hp-nenrin-story figure { aspect-ratio: 4 / 3; overflow: hidden; }
 .landing-site .hp-nenrin-story img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.landing-site .hp-nenrin-story-copy { padding: 18px 18px 20px; }
-.landing-site .hp-nenrin-story-number { color: var(--green); font: 12px/1.5 "Noto Sans JP", sans-serif; letter-spacing: .09em; }
-.landing-site .hp-nenrin-story h3 { margin-top: 6px; font-size: 20px; line-height: 1.55; }
+.landing-site .hp-nenrin-story-copy { padding: 14px 18px 20px; }
+.landing-site .hp-nenrin-story h3 { margin-top: 0; font-size: 20px; line-height: 1.55; }
 .landing-site .hp-nenrin-story-date { margin-top: 12px; color: var(--muted); font: 13px/1.6 "Noto Sans JP", sans-serif; }
 .landing-site .hp-nenrin-story-voice { margin-top: 14px; font-size: 15px; line-height: 1.85; }
 .landing-site .hp-nenrin-story-value { margin-top: 15px; color: var(--green); font-size: 16px; line-height: 1.65; font-weight: 600; }
@@ -53,11 +52,11 @@
   .landing-site .hp-v4-when-bridge { gap: 9px; margin-top: 18px; }
   .landing-site .hp-v4-when-bridge p { font-size: 15px; line-height: 1.7; }
   .landing-site .hp-nenrin-stories { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(80%, 315px); grid-template-columns: none; gap: 12px; width: calc(100% + 20px); overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x mandatory; margin-top: 23px; padding: 0 20px 10px 0; scrollbar-width: thin; }
-  .landing-site .hp-nenrin-story { scroll-snap-align: start; }
-  .landing-site .hp-nenrin-story-copy { padding: 15px 15px 17px; }
+  .landing-site .hp-nenrin-story { display: flex; flex-direction: column; scroll-snap-align: start; }
+  .landing-site .hp-nenrin-story-copy { display: flex; flex: 1; flex-direction: column; padding: 11px 15px 8px; }
   .landing-site .hp-nenrin-story h3 { font-size: 18px; }
   .landing-site .hp-nenrin-story-voice { font-size: 14px; }
-  .landing-site .hp-nenrin-story-value { font-size: 15px; }
+  .landing-site .hp-nenrin-story-value { min-height: calc(2 * 1.65em + 15px); margin-top: auto; padding-top: 15px; font-size: 15px; }
   .landing-site .hp-nenrin-swipe { display: block; margin-top: 2px; color: var(--muted); font: 12px/1.5 "Noto Sans JP", sans-serif; }
   .landing-site .hp-nenrin-uses { margin-top: 28px; }
   .landing-site .hp-nenrin-uses h3 { font-size: 22px; }
