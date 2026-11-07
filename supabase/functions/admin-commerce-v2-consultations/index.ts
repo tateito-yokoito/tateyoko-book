@@ -39,6 +39,19 @@ serve(async (request) => {
     }
     const id = String(body.consultationId || "");
     if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ success: false, error: "相談申込が見つかりません" }, 400);
+    if (body.action === "link_paid_order") {
+      const orderNumber = String(body.orderNumber || "").trim();
+      if (!/^TY-[0-9]{4}-[0-9]{6}$/.test(orderNumber)) {
+        return json({ success: false, error: "注文番号を確認してください" }, 400);
+      }
+      const { data, error } = await admin.rpc("link_paid_interview_consultation", {
+        input_admin_user_id: auth.user.id,
+        input_consultation_id: id,
+        input_order_number: orderNumber,
+      });
+      if (error) throw error;
+      return json({ success: true, linked: data });
+    }
     if (body.action === "agree") {
       if (!["standard", "premium"].includes(body.agreedEdition)
         || typeof body.purchaserUserId !== "string") {

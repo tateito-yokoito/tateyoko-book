@@ -16,7 +16,6 @@ export type QuoteInputV2 = {
   premiumExtraCount: number;
   discountAmount?: number;
   discountScope?: "base_product" | "entire_order";
-  consultationAgreed?: boolean;
 };
 export type QuoteLineV2 = {
   productCode: string;
@@ -83,9 +82,6 @@ export function calculateCommerceV2Quote(
   if (!Object.hasOwn(BASE, input.edition)) throw new Error("装丁が正しくありません");
   if (!["self_or_family", "interview_staff"].includes(input.productionMethod)) {
     throw new Error("制作方法が正しくありません");
-  }
-  if (input.productionMethod === "interview_staff" && !input.consultationAgreed) {
-    throw new Error("聞き取り制作サポートは無料相談と合意が必要です");
   }
   const standardCount = count(input.standardExtraCount, "スタンダード追加冊子");
   const premiumCount = count(input.premiumExtraCount, "プレミアム追加冊子");

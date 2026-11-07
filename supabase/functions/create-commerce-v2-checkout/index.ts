@@ -52,7 +52,7 @@ serve(async (request) => {
     const premiumCount = integer(body.premiumExtraCount ?? 0);
     const discountCode = typeof body.discountCode === "string" ? body.discountCode.trim() : "";
     if (!["standard", "premium"].includes(String(edition))
-      || body.productionMethod !== "self_or_family"
+      || !["self_or_family", "interview_staff"].includes(String(body.productionMethod))
       || (body.orderType && body.orderType !== "self")
       || !Number.isInteger(standardCount) || standardCount < 0 || standardCount > 30
       || !Number.isInteger(premiumCount) || premiumCount < 0 || premiumCount > 30
@@ -61,7 +61,7 @@ serve(async (request) => {
     }
     const { data: estimate, error } = await admin.rpc("get_commerce_v2_quote", {
       input_edition: edition,
-      input_production_method: "self_or_family",
+      input_production_method: body.productionMethod,
       input_standard_extra_count: standardCount,
       input_premium_extra_count: premiumCount,
       // An unowned sentinel only skips the per-account coupon check here.
@@ -111,13 +111,13 @@ serve(async (request) => {
     const premiumCount = integer(body.premiumExtraCount ?? 0);
     const orderType = body.orderType === "gift" ? "gift" : "self";
     const projectId = orderType === "self" ? String(body.projectId || "") : null;
-    const consultationId = method === "interview_staff" ? String(body.consultationId || "") : null;
+    const consultationId = method === "interview_staff" && body.consultationId
+      ? String(body.consultationId) : null;
     const familyInvitationId = body.familyInvitationId ? String(body.familyInvitationId) : null;
     if (body.includeGiftPackage === true || !["standard", "premium"].includes(edition)
       || !["self_or_family", "interview_staff"].includes(method)
       || !Number.isInteger(standardCount) || !Number.isInteger(premiumCount)
       || standardCount < 0 || standardCount > 30 || premiumCount < 0 || premiumCount > 30
-      || (method === "interview_staff" && !consultationId)
       || (method === "self_or_family" && body.consultationId)) {
       return json({ success: false, error: "商品・制作方法の選択を確認してください" }, 400);
     }
@@ -152,7 +152,7 @@ serve(async (request) => {
     // Independently check the RPC's immutable quote against catalog prices.
     const calculated = calculateCommerceV2Quote({
       edition, productionMethod: method, standardExtraCount: standardCount,
-      premiumExtraCount: premiumCount, consultationAgreed: method === "interview_staff",
+      premiumExtraCount: premiumCount,
       discountAmount: Number(quote.discount_amount || 0),
       discountScope: quote.discount_scope,
     }, catalog || []);
