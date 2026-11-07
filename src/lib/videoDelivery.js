@@ -18,15 +18,32 @@ function openDrafts() {
     request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
   });
 }
+const volatileDrafts = new Map();
+
 export async function videoDraft(action, userId, projectId, value) {
   if (!userId || !projectId) throw Error('動画の保存先を確認できません。');
-  const db=await openDrafts(),key=`${userId}:${projectId}`;
-  try {return await new Promise((resolve,reject)=>{
+  const key=`${userId}:${projectId}`;
+  if(action==='get' && volatileDrafts.has(key))return volatileDrafts.get(key);
+  let db;
+  try {
+    db=await openDrafts();
+    const result=await new Promise((resolve,reject)=>{
     const tx=db.transaction('drafts',action==='get'?'readonly':'readwrite'),store=tx.objectStore('drafts');
     const request=action==='get'?store.get(key):action==='delete'?store.delete(key):store.put({...value,key});
     let result;request.onsuccess=()=>{result=request.result;};
     tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
-  });} finally {db.close();}
+    });
+    if(action==='delete' || action==='put')volatileDrafts.delete(key);
+    return result;
+  } catch(error) {
+    // Safari private browsing can reject IndexedDB before the network upload.
+    // Keep the same draft and immutable paths for retries in this open page.
+    console.warn('Persistent video draft unavailable; using this page only',error);
+    if(action==='get')return volatileDrafts.get(key)||null;
+    if(action==='delete'){volatileDrafts.delete(key);return;}
+    if(action==='put'){volatileDrafts.set(key,{...value,key});return key;}
+    throw error;
+  } finally {db?.close();}
 }
 
 // Retry retains the same immutable paths. Successful objects are verified, never overwritten.
