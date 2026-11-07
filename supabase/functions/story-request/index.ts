@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { requireFamilyProjectAccess } from "../_shared/family-access.ts";
+import { storyRequestHomeUrl, storyRequestArrivalText } from "../_shared/storyRequestArrival.js";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const themes = new Set(["ty_theme_childhood","ty_theme_youth","ty_theme_likes","ty_theme_living","ty_theme_work","ty_theme_connections","ty_theme_family","ty_theme_turning_points","ty_theme_now_future"]);
@@ -28,6 +29,65 @@ async function tokenHash(token: string) { const bytes = await crypto.subtle.dige
 function requestUrl(id: string, token: string) { const url = new URL(Deno.env.get("APP_URL") || "https://www.tateito-yokoito.jp/?app=1"); url.searchParams.set("memory_request", id); url.searchParams.set("request_token", token); url.searchParams.delete("app"); return url.toString(); }
 function normalizedMime(mime: string) { return mime.toLowerCase().split(";", 1)[0].trim(); }
 function extension(mime: string) { return ({ "audio/webm": "webm", "audio/mp4": "m4a", "audio/mpeg": "mp3", "audio/ogg": "ogg", "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic", "image/heif": "heif" } as Record<string,string>)[normalizedMime(mime)]; }
+
+async function notifyArrival(db: any, invitation: any) {
+  // Claim once in the database before contacting a provider. A second submit
+  // cannot send the same arrival notification.
+  const { data: claim, error: claimError } = await db.from("theme_memory_requests")
+    .update({ arrival_notification_state: "sending", arrival_notification_attempted_at: new Date().toISOString() })
+    .eq("id", invitation.id).eq("arrival_notification_state", "pending")
+    .select("id").maybeSingle();
+  if (claimError) throw claimError;
+  if (!claim) return;
+  let channel: string | null = null;
+  try {
+    const { data: preference, error: preferenceError } = await db.from("notification_preferences")
+      .select("is_active,line_enabled,email_enabled")
+      .eq("user_id", invitation.requester_user_id).maybeSingle();
+    if (preferenceError) throw preferenceError;
+    const message = storyRequestArrivalText(storyRequestHomeUrl(Deno.env.get("APP_URL")));
+    const lineToken = Deno.env.get("LINE_CHANNEL_ACCESS_TOKEN");
+    if (preference?.is_active && preference.line_enabled && lineToken) {
+      const { data: connection, error: connectionError } = await db.from("line_notification_connections")
+        .select("line_user_id,status").eq("user_id", invitation.requester_user_id).maybeSingle();
+      if (connectionError) throw connectionError;
+      if (connection?.status === "active" && /^U[0-9a-f]{32}$/.test(connection.line_user_id)) {
+        channel = "line";
+        const response = await fetch("https://api.line.me/v2/bot/message/push", {
+          method: "POST", signal: AbortSignal.timeout(10000),
+          headers: { Authorization: `Bearer ${lineToken}`, "Content-Type": "application/json", "X-Line-Retry-Key": invitation.id },
+          body: JSON.stringify({ to: connection.line_user_id, messages: [{ type: "text", text: message }] })
+        });
+        if (!response.ok && !(response.status === 409 && response.headers.get("x-line-accepted-request-id"))) throw new Error(`LINE ${response.status}`);
+      }
+    }
+    if (!channel && preference?.is_active && preference.email_enabled && Deno.env.get("RESEND_API_KEY")) {
+      const { data: owner, error: ownerError } = await db.auth.admin.getUserById(invitation.requester_user_id);
+      if (ownerError) throw ownerError;
+      const email = owner?.user?.email;
+      if (email) {
+        channel = "email";
+        const response = await fetch("https://api.resend.com/emails", {
+          method: "POST", signal: AbortSignal.timeout(10000),
+          headers: { Authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "Content-Type": "application/json", "Idempotency-Key": `story-request-arrival/${invitation.id}` },
+          body: JSON.stringify({ from: Deno.env.get("SUPPORTER_INVITE_FROM") || "縦糸横糸 <hello@tateito-yokoito.jp>",
+            to: email, subject: "【縦糸横糸】大切な方からの語りが届きました", text: message })
+        });
+        if (!response.ok) throw new Error(`Email ${response.status}`);
+      }
+    }
+    const { error: updateError } = await db.from("theme_memory_requests").update({
+      arrival_notification_state: channel ? "sent" : "unavailable",
+      arrival_notification_channel: channel,
+      arrival_notification_sent_at: channel ? new Date().toISOString() : null
+    }).eq("id", invitation.id).eq("arrival_notification_state", "sending");
+    if (updateError) throw updateError;
+  } catch (error) {
+    await db.from("theme_memory_requests").update({ arrival_notification_state: "failed", arrival_notification_channel: channel })
+      .eq("id", invitation.id).eq("arrival_notification_state", "sending");
+    console.error("story-request arrival notification failed", error instanceof Error ? error.message : "unknown");
+  }
+}
 
 serve(async request => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -303,6 +363,12 @@ serve(async request => {
       if (savedError || saved?.length !== questions.size) throw savedError || new Error("Incomplete save");
       const { error: statusError } = await db.from("theme_memory_requests").update({ status: "submitted", submitted_at: now }).eq("id", requestId).in("status", ["pending","opened"]);
       if (statusError) throw statusError;
+      try { await notifyArrival(db, invitation); }
+      catch (notifyError) {
+        // The answers are already committed. A notification failure must not
+        // turn the recipient's successful submission into a false error.
+        console.error("story-request arrival claim failed", notifyError instanceof Error ? notifyError.message : "unknown");
+      }
       return respond({ success: true });
     }
     return fail("Unknown action");
