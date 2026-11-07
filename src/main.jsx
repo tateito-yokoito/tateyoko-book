@@ -13,6 +13,7 @@ import PublishedWebBook from "./PublishedWebBook.jsx";
 import { ThemeMemoryRequestRecipient } from "./ThemeMemoryRequestFlow.jsx";
 import StoryRequestRecipient from "./StoryRequestRecipient.jsx";
 import "./index.css";
+import "./hp-pc-balance.css";
 import FamilyConnectionTest from './FamilyConnectionTest.jsx';
 import FamilyRecordingFlow from './FamilyRecordingFlow.jsx';
 import FamilySharedStories from './FamilySharedStories.jsx';

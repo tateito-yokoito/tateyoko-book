@@ -1,0 +1,107 @@
+/* PC product layout only; product copy and purchase destinations are unchanged. */
+@media (min-width: 901px) {
+  .refined .shell {
+    width: min(1100px, calc(100% - 96px));
+  }
+  .refined .shared-scene,
+  .refined .shared-specs,
+  .refined .comparison-media,
+  .refined .product-compare .plans,
+  .refined .support-option-card,
+  .refined .support-renewed {
+    width: 100%;
+    max-width: none;
+  }
+  .refined .shared-specs strong,
+  .refined .work-detail strong {
+    font-size: 26px;
+  }
+  .refined .price-section header .eyebrow {
+    font-size: 26px;
+  }
+  .refined .shared-specs strong {
+    font-family: "Noto Sans JP", sans-serif;
+    font-weight: 600;
+  }
+  .refined .shared-specs p,
+  .refined .book-spec-list,
+  .refined .work-detail p {
+    font-size: 19px;
+    line-height: 1.75;
+  }
+  .refined .shared-specs p,
+  .refined .book-spec-list {
+    margin-top: 15px;
+  }
+  .refined .shared-specs p br {
+    display: none;
+  }
+  .refined .shared-points {
+    margin-top: 24px;
+    font-size: 17px;
+    line-height: 1.7;
+  }
+  .refined .price-section header h2 {
+    font-size: clamp(32px, 3.2vw, 46px);
+    white-space: nowrap;
+    letter-spacing: .035em;
+  }
+  .refined .price-section header h2 br {
+    display: none;
+  }
+  .refined .product-compare .plan-name {
+    font-size: 22px;
+  }
+  .refined .product-compare .block-heading h3 {
+    font-size: clamp(30px, 2.6vw, 37px);
+  }
+  .refined .product-compare .plan h4 {
+    font-size: 25px;
+  }
+  .refined .product-compare .plan-description,
+  .refined .product-compare .binding {
+    font-size: 17px;
+  }
+  .refined .product-compare .plan-standard .binding {
+    display: inline-flex;
+    margin-top: 10px;
+    white-space: nowrap;
+  }
+  .refined .product-compare .plan-standard .binding::after {
+    content: "、";
+  }
+  .refined .product-compare .plan-standard .cover-colors {
+    display: inline-flex;
+    margin-top: 0;
+    font-size: 17px;
+    line-height: 1.7;
+    white-space: nowrap;
+    vertical-align: baseline;
+  }
+  .refined .support-option-card h3 {
+    font-size: 22px;
+  }
+  .refined .support-option-card > p:not(.support-option-label) {
+    font-size: 17px;
+  }
+  .refined .support-option-card .support-price {
+    justify-self: start;
+  }
+  .refined .concern-bubbles {
+    max-width: 950px;
+    margin-inline: auto;
+    gap: 18px;
+  }
+  .refined .support-renewed .concern-bubbles p {
+    width: 100%;
+    max-width: none;
+    font-size: 17px;
+  }
+  .refined .action-links {
+    max-width: 510px;
+  }
+  .refined .gift-text-link,
+  .refined .direct-purchase-preview {
+    font-size: 17px;
+  }
+}
