@@ -1,0 +1,39 @@
+/* Free trial: keep Back and the question count on one quiet row at the top. */
+.guest-trial-flow .story-sky-surface.question-background-navy > .story-sky-content.question-flow-content,
+.guest-trial-flow .guest-trial-question-screen {
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  padding: calc(12px + env(safe-area-inset-top)) 22px calc(48px + env(safe-area-inset-bottom));
+}
+
+.guest-trial-flow .story-sky-content.question-flow-content > header.question-flow-header,
+.guest-trial-flow .guest-trial-question-nav {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 28px;
+  padding: 0;
+  color: rgb(255 255 255 / 75%);
+}
+
+.guest-trial-flow .question-flow-back-slot {
+  display: flex;
+  height: 44px;
+  align-items: center;
+}
+
+.guest-trial-flow .guest-trial-question-nav button,
+.guest-trial-flow .question-flow-back-slot button {
+  min-height: 44px;
+  text-align: left;
+}
+
+.guest-trial-flow .guest-trial-question-nav p,
+.guest-trial-flow .question-flow-header > p {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
