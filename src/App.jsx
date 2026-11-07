@@ -3223,6 +3223,20 @@ function App() {
   const [notificationPref, setNotificationPref] = useState(null);
   const [progress, setProgress] = useState({ currentIndex: 0, total: 0 });
   const [foundation, setFoundation] = useState(null);
+  const [storyRequestUnreviewedCount, setStoryRequestUnreviewedCount] = useState(0);
+  useEffect(() => {
+    const projectId = foundation?.project?.id;
+    if (scene !== "home" || !projectId) return;
+    let cancelled = false;
+    setStoryRequestUnreviewedCount(0);
+    supabaseClient.functions.invoke("story-request", { body: { action: "list_owner", bookProjectId: projectId } })
+      .then(({ data, error }) => {
+        if (cancelled || error || !data?.success) return;
+        setStoryRequestUnreviewedCount((data.requests || []).reduce((total, request) => total +
+          (request.theme_memory_answer_records || []).filter(answer => answer.publication_status === "unreviewed").length, 0));
+      });
+    return () => { cancelled = true; };
+  }, [scene, foundation?.project?.id]);
   const [recoverableRecordings, setRecoverableRecordings] = useState([]);
   const [localRecordingDrafts, setLocalRecordingDrafts] = useState([]);
   const [recordingRecoveryBusy, setRecordingRecoveryBusy] = useState(false);
@@ -8534,6 +8548,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
          }}
          onOpenStoryPages={() => { setStoryPagesReturnScene("home"); setStoryPagesFocusAnswerId(null); setScene("story_pages"); }}
          canOpenThemeMemories={hasCompletedStoryTheme(questionsDB, 1)}
+         storyRequestUnreviewedCount={storyRequestUnreviewedCount}
          onOpenThemeMemories={() => {
            setThemeMemoryReturnScene("home");
            setScene("theme_memory_manager");
