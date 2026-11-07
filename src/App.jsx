@@ -4752,14 +4752,19 @@ let targetAnswerId =
 telemetryAnswerId = targetAnswerId;
 
 if (!sourceVoiceData.targetAnswerId) {
-  const { data: existingAnswer } = await supabaseClient
+  const projectId = foundation?.project?.id || currentQ?.book_project_id || null;
+  let existingAnswerQuery = supabaseClient
     .from("answers")
     .select("id")
     .match({
       user_id: user.id,
       sequence_order: currentSeq
-    })
-    .maybeSingle();
+    });
+  existingAnswerQuery = projectId
+    ? existingAnswerQuery.eq("book_project_id", projectId)
+    : existingAnswerQuery.is("book_project_id", null);
+  const { data: existingAnswer, error: existingAnswerError } = await existingAnswerQuery.maybeSingle();
+  if (existingAnswerError) throw existingAnswerError;
 
   if (existingAnswer) targetAnswerId = existingAnswer.id;
   telemetryAnswerId = targetAnswerId;
@@ -6738,7 +6743,18 @@ const handleSaveAnswer = async (tag = null) => {
 
       const editMode = voiceData.editRecordingMode || null;
       const isEditRecording = editMode === "replace" || editMode === "append" || editMode === "voice_only";
-      const ansId = voiceData.targetAnswerId || voiceData.answerId || crypto.randomUUID();
+      const answerProjectId = foundation?.project?.id || currentQ?.book_project_id || null;
+      let ansId = voiceData.targetAnswerId || voiceData.answerId || crypto.randomUUID();
+      if (!voiceData.targetAnswerId && !voiceData.answerId) {
+        let existingAnswerQuery = supabaseClient.from("answers").select("id")
+          .eq("user_id", user.id).eq("sequence_order", currentSeq);
+        existingAnswerQuery = answerProjectId
+          ? existingAnswerQuery.eq("book_project_id", answerProjectId)
+          : existingAnswerQuery.is("book_project_id", null);
+        const { data: existingAnswer, error: existingAnswerError } = await existingAnswerQuery.maybeSingle();
+        if (existingAnswerError) throw existingAnswerError;
+        if (existingAnswer?.id) ansId = existingAnswer.id;
+      }
       telemetrySaveAnswerId = ansId;
 
       if (isEditRecording && voiceData.recordingAttemptId) {
@@ -6810,12 +6826,15 @@ const handleSaveAnswer = async (tag = null) => {
 
       let finalAnswerId = stagedAnswerId || ansId;
       if (!isInitialStagedRecording) {
-      const { data: savedAnswer, error: dbError } = await supabaseClient
+      const answerSave = editMode === "voice_only"
+        ? supabaseClient.from("answers").select("id")
+          .eq("id", ansId).eq("user_id", user.id).eq("book_project_id", answerProjectId).single()
+        : supabaseClient
         .from("answers")
         .upsert({
           id: ansId,
           user_id: user.id,
-          book_project_id: foundation?.project?.id || currentQ?.book_project_id || null,
+          book_project_id: answerProjectId,
           speaker_person_id: foundation?.person?.id || null,
           subject_person_id: foundation?.project?.subject_person_id || foundation?.person?.id || null,
           user_question_id: currentQ?.user_question_id || null,
@@ -6864,9 +6883,10 @@ const handleSaveAnswer = async (tag = null) => {
             audio_segment_count: (voiceData.audioSegments || []).length,
             audio_segment_durations: (voiceData.audioSegments || []).map(s => s.duration || 0)
           }
-        }, { onConflict: "book_project_id,sequence_order" })
+        }, { onConflict: answerProjectId ? "book_project_id,user_id,sequence_order" : "id" })
         .select("id")
         .single();
+      const { data: savedAnswer, error: dbError } = await answerSave;
 
       if (dbError) {
         console.error("answers save error", dbError);
