@@ -79,10 +79,9 @@ export function StoryOrigin() {
       <p className="hp-origin-kicker">Origin｜縦糸♾️横糸が生まれた理由</p>
       <h2 id="origin-title">家族でも知らない、<br className="hp-origin-heading-break" />人生がある。</h2>
       <div className="hp-origin-brief">
-        <p>18年間、約1,000世帯の方々の人生に関わってきました。</p>
-        <p>その中で感じたのは、誰の人生にも、<br />家族さえ知らない物語や想いがあるということです。<br />けれど、その多くは、語られないまま失われていきます。</p>
-        <p>私自身、祖父が用意した「家族史」を見つけたとき、<br />胸を突かれる思いがしました。</p>
-        <p>最初のページには家紋が貼られていましたが、<br />その先は全て白紙のままだったのです。</p>
+        <p>18年間、約1,000世帯の方々の人生に関わる中で、家族でさえ知らない物語や想いがあることを、何度も感じてきました。</p>
+        <p>私自身、祖父が残した「家族史」を見つけたとき、胸を突かれる思いがしました。</p>
+        <p>最初のページには家紋が貼られていましたが、その先はすべて白紙だったのです。</p>
       </div>
       <div className="hp-origin-photo-stack">
         <figure className="hp-origin-cover"><img src={asset + 'family-history-spine-wide-20261023.png'} alt="祖父が用意した「わが家の歴史」の冊子と背表紙" width="2852" height="1534" loading="lazy" /></figure>

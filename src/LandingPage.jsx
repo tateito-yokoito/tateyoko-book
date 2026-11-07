@@ -207,7 +207,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
         <div className="hp-nenrin-intro">
           <SectionLabel>縦糸横糸｜年輪 nenrin</SectionLabel>
           <h2 id="hp-nenrin-title">作って終わらない。<br />年輪を刻むように。</h2>
-          <p>一冊の本が完成しても、人生は続いていく。<br />3か月ごと、年4回。新しい記録を、少しずつ重ねていけます。</p>
+          <p>一冊の本が完成しても、人生は続いていく。<br />3か月ごと、年4回。新しい記録を、少しずつ重ねていけます。<br />写真を添えたり、今の気持ちを語ったり。完成後も、家族の物語を少しずつ重ねていけます。</p>
         </div>
         <div className="hp-nenrin-stories" aria-label="年輪の記録の例">
           {[

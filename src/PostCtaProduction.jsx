@@ -4,7 +4,7 @@ import "./postcta-preview.css";
 
 const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === "true"
   ? "/?guest_trial=1" : "/?app=1&entry=trial";
-const GIFT = "/?app=1&entry=purchase";
+const PURCHASE = "/?app=1&entry=purchase";
 
 const FAQS = [
   ["無料3問の後、勝手に課金されますか？", "自動課金はありません。無料の3問にカード登録は不要です。続けたいと思ったときに、ご自身で購入を選べます。"],
@@ -30,8 +30,8 @@ export default function PostCtaProduction() {
     <section className="hp-final hp-dark hp-section" aria-labelledby="final-title"><div className="hp-shell">
       <h2 id="final-title">まずは、3問。</h2>
       <p>人生を語るって、どんな感じだろう。<br />声で気軽に試してみてください。</p>
-      <div className="hp-final-actions"><a className="hp-button" href={TRIAL}>3問を試してみる <span aria-hidden="true">→</span></a><a className="hp-button hp-final-gift" href={GIFT}>ギフトとして購入する <span aria-hidden="true">→</span></a></div>
-      <p className="hp-note">カード登録不要・自動課金なし</p>
+      <div className="hp-final-actions"><a className="hp-button" href={TRIAL}>3問を試してみる <span aria-hidden="true">→</span></a><a className="hp-button hp-final-gift" href={PURCHASE}>商品を選んで購入する <span aria-hidden="true">→</span></a></div>
+      <p className="hp-note">無料3問はカード登録不要・自動課金なし</p>
     </div></section>
   </>;
 }

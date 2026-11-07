@@ -5705,24 +5705,9 @@ function Od() {
       "人生がある。"
     ] }),
     /* @__PURE__ */ v.jsxs("div", { className: "hp-origin-brief", children: [
-      /* @__PURE__ */ v.jsx("p", { children: "18年間、約1,000世帯の方々の人生に関わってきました。" }),
-      /* @__PURE__ */ v.jsxs("p", { children: [
-        "その中で感じたのは、誰の人生にも、",
-        /* @__PURE__ */ v.jsx("br", {}),
-        "家族さえ知らない物語や想いがあるということです。",
-        /* @__PURE__ */ v.jsx("br", {}),
-        "けれど、その多くは、語られないまま失われていきます。"
-      ] }),
-      /* @__PURE__ */ v.jsxs("p", { children: [
-        "私自身、祖父が用意した「家族史」を見つけたとき、",
-        /* @__PURE__ */ v.jsx("br", {}),
-        "胸を突かれる思いがしました。"
-      ] }),
-      /* @__PURE__ */ v.jsxs("p", { children: [
-        "最初のページには家紋が貼られていましたが、",
-        /* @__PURE__ */ v.jsx("br", {}),
-        "その先は全て白紙のままだったのです。"
-      ] })
+      /* @__PURE__ */ v.jsx("p", { children: "18年間、約1,000世帯の方々の人生に関わる中で、家族でさえ知らない物語や想いがあることを、何度も感じてきました。" }),
+      /* @__PURE__ */ v.jsx("p", { children: "私自身、祖父が残した「家族史」を見つけたとき、胸を突かれる思いがしました。" }),
+      /* @__PURE__ */ v.jsx("p", { children: "最初のページには家紋が貼られていましたが、その先はすべて白紙だったのです。" })
     ] }),
     /* @__PURE__ */ v.jsxs("div", { className: "hp-origin-photo-stack", children: [
       /* @__PURE__ */ v.jsx("figure", { className: "hp-origin-cover", children: /* @__PURE__ */ v.jsx("img", { src: gr + "family-history-spine-wide-20261023.png", alt: "祖父が用意した「わが家の歴史」の冊子と背表紙", width: "2852", height: "1534", loading: "lazy" }) }),
@@ -5847,7 +5832,7 @@ function Od() {
     ] })
   ] });
 }
-const Md = "/?guest_trial=1", Dd = "/?app=1&entry=purchase", Id = [
+const Md = "/?app=1&entry=trial", Dd = "/?app=1&entry=purchase", Id = [
   ["無料3問の後、勝手に課金されますか？", "自動課金はありません。無料の3問にカード登録は不要です。続けたいと思ったときに、ご自身で購入を選べます。"],
   ["完成までどのくらいかかりますか？", "語る量やペースによって異なります。1〜3ヶ月を目安に、ゆっくりなら最長1年間取り組めます。製本・発送の時期は、内容が確定してからご案内します。"],
   ["途中で休んでも大丈夫ですか？", "一度に語り終える必要はありません。無理のないペースで進められます。利用期間などの条件は、お申し込み時の案内をご確認ください。"],
@@ -5884,11 +5869,11 @@ function Fd() {
           /* @__PURE__ */ v.jsx("span", { "aria-hidden": "true", children: "→" })
         ] }),
         /* @__PURE__ */ v.jsxs("a", { className: "hp-button hp-final-gift", href: Dd, children: [
-          "ギフトとして購入する ",
+          "商品を選んで購入する ",
           /* @__PURE__ */ v.jsx("span", { "aria-hidden": "true", children: "→" })
         ] })
       ] }),
-      /* @__PURE__ */ v.jsx("p", { className: "hp-note", children: "カード登録不要・自動課金なし" })
+      /* @__PURE__ */ v.jsx("p", { className: "hp-note", children: "無料3問はカード登録不要・自動課金なし" })
     ] }) })
   ] });
 }
