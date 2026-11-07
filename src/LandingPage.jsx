@@ -212,11 +212,11 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
         <div className="hp-nenrin-stories" aria-label="年輪の記録の例">
           {[
             { number: '01', title: '今しかない想いを、残す', date: '2027年 春｜子どもの小学校入学', image: '/site/hp-renewal/nenrin/spring-school.jpg', alt: '桜の下をランドセルを背負った子どもと両親が歩く後ろ姿', voice: '「小さかったあの子が、もう小学生。今日の気持ちを、いつかこの子にも伝えたい。」', value: '人生の節目に、そのときの想いを。' },
-            { number: '02', title: '思い出は、あとからよみがえる', date: '2027年 秋｜幼い頃のこと', image: '/site/hp-renewal/nenrin/autumn-album.jpg', alt: '祖母と幼い女の子の写真を、古いアルバムからスマートフォンで撮影する女性', voice: '「去年はおじいちゃんの話をしたけれど、今度はおばあちゃんとの思い出も、写真と一緒に残しておきたくなった。」', value: '一度で、すべてを語らなくてもいい。' },
+            { number: '02', title: '残しておきたいこと。', date: '2027年 秋｜幼い頃のこと', image: '/site/hp-renewal/nenrin/autumn-album.jpg', alt: '祖母と幼い女の子の写真を、古いアルバムからスマートフォンで撮影する女性', voice: '「去年おじいちゃんの話をしたけれど、今度はおばあちゃんとの思い出も、写真と一緒に残しておきたくなった。」', value: '一度で、全てを語らなくてもいい。' },
             { number: '03', title: '家族から届いた言葉も、残す', date: '2027年 冬｜誕生日のこと', image: '/site/hp-renewal/nenrin/winter-letter.jpg', alt: '子どもからの手書きの誕生日の手紙をスマートフォンで撮影する場面', voice: '「また一つ歳を重ねた。子どもからもらった手紙が、何より嬉しかった。いつの間にか、こんな言葉を書けるようになったんだなあ。」', value: '家族の想いも、人生の大切な記録。' },
           ].map(story => <article className="hp-nenrin-story" key={story.number}>
             <figure><img src={story.image} alt={story.alt} width="1448" height="1086" loading="eager" fetchPriority="low" /></figure>
-            <div className="hp-nenrin-story-copy"><p className="hp-nenrin-story-number">CARD {story.number}</p><h3>{story.title}</h3><p className="hp-nenrin-story-date">{story.date}</p><p className="hp-nenrin-story-voice">{story.voice}</p><p className="hp-nenrin-story-value">{story.value}</p></div>
+            <div className="hp-nenrin-story-copy"><h3>{story.title}</h3><p className="hp-nenrin-story-date">{story.date}</p><p className="hp-nenrin-story-voice">{story.voice}</p><p className="hp-nenrin-story-value">{story.value}</p></div>
           </article>)}
         </div>
         <p className="hp-nenrin-swipe">横にスワイプして次の記録へ <span aria-hidden="true">→</span></p>
