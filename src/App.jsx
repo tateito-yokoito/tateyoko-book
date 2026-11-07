@@ -28,6 +28,7 @@ import { createRecordingClock, mergeRecordingDuration, RECORDING_LIMIT_SECONDS, 
 import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
 import WrittenAnswerEditor from "./WrittenAnswerEditor.jsx";
+import QuestionFlowTopBar from "./QuestionFlowTopBar.jsx";
 import { deleteAnswerRecordingDraft, listAnswerRecordingDrafts, saveAnswerRecordingDraft } from './lib/answerRecordingDraft.js';
 import BookendInvitation from "./BookendInvitation.jsx";
 import { BOOKEND_PROMPTS, bookendKindForQuestion, bookendKindForVideo } from "./lib/bookends.js";
@@ -7369,6 +7370,7 @@ setScene(1);
     scene !== "theme_resume" &&
     scene !== "theme_memory_request" &&
     scene !== "theme_memory_manager" &&
+    scene !== "story_request" &&
     scene !== -1 &&
     scene !== "supporter_invite_received" &&
     scene !== "family_invite_received" &&
@@ -9043,6 +9045,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
           userId={user.id}
           projectId={foundation.project.id}
           question={writingQuestion}
+          themeLabel={recordingSectionLabel(writingQuestion)}
           progressLabel={`${getMainStoryProgress(questionsDB, progress.currentIndex).currentIndex + 1} / ${getMainStoryProgress(questionsDB, progress.currentIndex).total}`}
           client={supabaseClient}
           onClose={() => setWritingQuestion(null)}
@@ -9373,6 +9376,7 @@ onRetry={() => {
           theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder) || null}
           questions={questionsDB}
           onBack={() => setScene(themeMemoryReturnScene || "theme_complete")}
+          onHome={returnToHome}
         />
       )}
       {scene === "theme_memory_manager" && (
@@ -18174,7 +18178,6 @@ function RecordingQuestionPrompt({ question }) {
 
   return (
     <div className="space-y-3 reading-question">
-      {!isFormalOnboardingQuestion(question) && <p className="recording-theme-label">{recordingSectionLabel(question)}</p>}
       <div className="recording-question-card px-5 py-6 text-center">
         <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
           {displayQuestion}
@@ -18193,21 +18196,16 @@ function RecordingQuestionPrompt({ question }) {
 
 function RecordingQuestionHeader({ question, userName, storyProgress, sectionLabel, isFormalOnboarding, onBack }) {
   return (
-    <header className="question-flow-header mb-5 pt-2 text-left flex items-start justify-between gap-4">
-      <div className="question-flow-back-slot">
-        {onBack && <button type="button" onClick={onBack} className="min-h-[44px] text-white/68 text-[1rem]" aria-label="前の画面へ戻る">
-          ← 戻る
-        </button>}
-      </div>
-      <h1 className="sr-only">
-        {withHonorific(userName)}の物語
-      </h1>
-      <p className="shrink-0 min-h-11 flex items-center text-white/75 text-[1rem]">
-        {isFormalOnboarding && question.progress_label
+    <>
+      <h1 className="sr-only">{withHonorific(userName)}の物語</h1>
+      <QuestionFlowTopBar
+        onBack={onBack}
+        theme={sectionLabel}
+        progress={isFormalOnboarding && question.progress_label
           ? String(question.progress_label).replace(/\s*\/\s*/g, "/")
           : `${Math.max(1, (storyProgress?.currentIndex ?? 0) + 1)} / ${Math.max(1, storyProgress?.total ?? 30)}`}
-      </p>
-    </header>
+      />
+    </>
   );
 }
 
@@ -18222,7 +18220,8 @@ function RecordingStartButton({ onClick, label = "録音を始める" }) {
 
 function recordingSectionLabel(question) {
   if (!isFormalOnboardingQuestion(question)) {
-    return question.chapter_label || question.chapter || question.chapter_description;
+    const theme = STORY_THEMES.find(item => item.code === question.theme_code || item.order === Number(question.theme_order));
+    return theme?.label || question.theme_label || question.chapter_label || "物語";
   }
   if (question.onboarding_group === "trial_experience") return "体験の一頁";
   if (question.onboarding_group === "starting_motivation") return "門出の声";
@@ -21571,6 +21570,7 @@ return (
     userId={user?.id}
     projectId={foundation?.project?.id}
     question={getQuestionForAnswer(editingAnswer)}
+    themeLabel={getQuestionForAnswer(editingAnswer) ? recordingSectionLabel(getQuestionForAnswer(editingAnswer)) : ''}
     answer={editingAnswer}
     client={supabaseClient}
     onClose={closeAnswerEditor}

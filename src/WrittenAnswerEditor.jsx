@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnswerTextDraft } from './lib/answerTextDraft.js';
+import QuestionFlowTopBar from './QuestionFlowTopBar.jsx';
 
 const statusLabels = {
   unknown: '下書きを確認中',
@@ -13,7 +14,7 @@ const statusLabels = {
 };
 
 export default function WrittenAnswerEditor({ userId, projectId, question,
-  answer = null, client, onClose, onSaved, progressLabel = '' }) {
+  answer = null, client, onClose, onSaved, progressLabel = '', themeLabel = '' }) {
   const [snapshot, setSnapshot] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -146,12 +147,8 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
   return createPortal(
     <div className="fixed inset-0 z-[9999] bg-slate-950 text-white flex flex-col px-5 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-[calc(0.75rem+env(safe-area-inset-bottom))] overflow-y-auto">
       <div className="mx-auto w-full max-w-xl flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center justify-between py-2 shrink-0">
-          <button type="button" onClick={leave} className="min-h-11 text-white/65">← 戻る</button>
-          <span className="text-white/80">{progressLabel}</span>
-        </div>
-        <p className="text-center text-amber-200/80 text-sm mt-2 shrink-0">{question.chapter_title_snapshot || question.chapter || ''}</p>
-        <h2 className="text-center text-narrative text-[1.3rem] leading-[1.7] mt-2 mb-4 max-h-[20dvh] overflow-y-auto shrink-0">{question.content || question.question_text_snapshot}</h2>
+        <QuestionFlowTopBar onBack={leave} theme={themeLabel || question.theme_label || question.chapter_label || ''} progress={progressLabel} />
+        <h2 className="text-center text-narrative text-[1.3rem] leading-[1.7] mt-7 mb-4 max-h-[20dvh] overflow-y-auto shrink-0">{question.content || question.question_text_snapshot}</h2>
 
         {snapshot?.conflict ? <>
           <h3 className="text-lg mb-2">{snapshot.conflict.kind === 'answer' ? '確定した文章が更新されています' : '下書きが2つあります'}</h3>

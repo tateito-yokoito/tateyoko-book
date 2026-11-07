@@ -32,16 +32,18 @@
   background:rgba(10,21,36,var(--sky-dim, .85));
 }
 
-.story-sky-content.question-flow-content>header.question-flow-header{
+.story-sky-content.question-flow-content>header.question-flow-top-bar{
   margin-bottom:28px;
+  padding-top:0;
 }
-/* Keep the chapter and prompt still when Back is unavailable during recording. */
-.question-flow-back-slot{
-  height:44px;
-  display:flex;
-  align-items:flex-start;
+.story-sky-content.question-flow-content>header.question-flow-top-bar p{
+  overflow:hidden;
+  color:#d6bb86;
+  font-size:.875rem;
+  line-height:1.6;
+  text-overflow:ellipsis;
+  white-space:nowrap;
 }
-.recording-theme-label{margin:0;text-align:center;color:#d6bb86;font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-size:.875rem;line-height:1.6}
 .story-sky-content .reading-question>.recording-question-card{
   padding:26px 20px;
   border:0;
@@ -152,7 +154,7 @@
     max-width:760px;
     padding:64px 30px 72px;
   }
-  .story-sky-content.question-flow-content>header.question-flow-header{
+  .story-sky-content.question-flow-content>header.question-flow-top-bar{
     margin-bottom:48px;
   }
   .story-sky-content.question-flow-content .reading-question>.recording-question-card{
