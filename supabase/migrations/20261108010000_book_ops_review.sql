@@ -198,7 +198,11 @@ create or replace function public.replace_voice_publication_snapshot(
   input_video_assets jsonb, input_items jsonb, input_published_at timestamptz,
   input_publish boolean default false
 ) returns void language plpgsql security definer set search_path = public as $$
-declare current_status text;
+declare
+  current_status text;
+  manifest public.book_work_manifests%rowtype;
+  review_revision_id uuid;
+  review_snapshot jsonb;
 begin
   if jsonb_typeof(coalesce(input_snapshot_metadata,'{}'::jsonb)) <> 'object'
     or jsonb_typeof(coalesce(input_video_assets,'[]'::jsonb)) <> 'array'
@@ -212,8 +216,47 @@ begin
   if input_publish and current_status <> 'draft' then
     raise exception 'Only a draft publication can be published';
   end if;
-  if not input_publish and current_status not in ('draft','published','disabled') then
-    raise exception 'Unsupported publication status';
+  -- Keep the production guard for every completed work, including the
+  -- existing published editions. Operations may replace a draft only.
+  select w.* into manifest from public.book_work_manifests w
+    join public.voice_publications p on p.work_manifest_id=w.id
+    where p.id=input_publication_id;
+  if manifest.id is not null then
+    if current_status<>'draft' then raise exception 'Completed work is immutable'; end if;
+    if manifest.answer_ids is distinct from (
+      select array_agg((i->>'source_answer_id')::uuid order by (i->>'item_order')::integer)
+      from jsonb_array_elements(input_items) i where i->>'source_answer_id' is not null
+    ) then raise exception 'Paper and Web Book selection mismatch'; end if;
+    if coalesce((select array_agg((i->'metadata'->>'contributionId')::uuid order by (i->>'item_order')::integer)
+      from jsonb_array_elements(input_items) i where i->'metadata'->>'contributionId' is not null),'{}'::uuid[])
+      is distinct from coalesce((select array_agg((c->>'id')::uuid order by ordinality)
+      from jsonb_array_elements(coalesce(manifest.snapshot->'contributions','[]'::jsonb))
+        with ordinality as x(c,ordinality)),'{}'::uuid[])
+      then raise exception 'Paper and Web Book contribution mismatch'; end if;
+
+    -- An operations correction is a separate immutable revision. Verify that
+    -- the Web draft is built from the same revision as the proof PDF.
+    select c.current_revision_id into review_revision_id
+      from public.book_ops_cases c where c.work_manifest_id=manifest.id
+      order by c.created_at desc limit 1;
+    if review_revision_id is not null then
+      select r.snapshot into review_snapshot from public.book_ops_revisions r
+        where r.id=review_revision_id;
+      if review_snapshot is null or input_snapshot_metadata->>'revisionId'
+        is distinct from review_revision_id::text then
+        raise exception 'BOOK and Web Book revision mismatch';
+      end if;
+      if (select array_agg((i->>'source_answer_id')::uuid order by (i->>'item_order')::integer)
+        from jsonb_array_elements(input_items) i where i->>'source_answer_id' is not null)
+        is distinct from (select array_agg((a->>'id')::uuid order by ordinality)
+        from jsonb_array_elements(coalesce(review_snapshot->'answers','[]'::jsonb))
+          with ordinality as x(a,ordinality)) then
+        raise exception 'BOOK and Web Book revision answers mismatch';
+      end if;
+    end if;
+  end if;
+  if not input_publish and manifest.id is null and current_status not in ('published','disabled') then
+    raise exception 'Only a published or disabled publication can be updated';
   end if;
   delete from public.voice_publication_items where publication_id=input_publication_id;
   insert into public.voice_publication_items(publication_id,item_order,source_answer_id,
@@ -231,7 +274,7 @@ begin
     subject_name=coalesce(input_subject_name,''),snapshot_schema_version=3,
     snapshot_metadata=coalesce(input_snapshot_metadata,'{}'::jsonb),
     video_assets=coalesce(input_video_assets,'[]'::jsonb),
-    published_at=case when input_publish then input_published_at else published_at end
+    published_at=input_published_at
   where id=input_publication_id;
 end $$;
 revoke all on function public.replace_voice_publication_snapshot(
