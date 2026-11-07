@@ -413,17 +413,24 @@ export default function VideoStoryFlow({
       return undefined;
     }
 
+    const audioConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true
+    };
     navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: cameraFacing },
         width: {ideal:VIDEO_DELIVERY.width},height:{ideal:VIDEO_DELIVERY.height},
         frameRate:{ideal:VIDEO_DELIVERY.frameRate,max:VIDEO_DELIVERY.frameRate}
       },
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
-      }
+      audio: audioConstraints
+    }).catch((error) => {
+      if (error?.name !== "OverconstrainedError" || !["width", "height", "frameRate"].includes(error.constraint)) throw error;
+      return navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: cameraFacing } },
+        audio: audioConstraints
+      });
     }).then((stream) => {
       if (cancelled) {
         stream.getTracks().forEach((track) => track.stop());
