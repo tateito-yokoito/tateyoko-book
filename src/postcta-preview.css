@@ -89,7 +89,7 @@
   .hp-trust .hp-text-link { margin-top: 20px; font-size: 14px!important; }
   .hp-faq { padding-top: 45px; padding-bottom: 80px; }
   .hp-faq h2 { margin-bottom: 24px!important; }
-  .hp-faq summary { padding: 19px 0; font-size: 15px; line-height: 1.7; }
+  .landing-site .hp-faq summary { padding: 9px 0; font-size: 15px; line-height: 1.7; }
   .hp-faq details > p { padding: 0 15px 21px 0; font-size: 14px; }
   .hp-final h2 { font-size: 30px; }
   .hp-final h2 + p { font-size: 15px; line-height: 1.95; margin: 20px auto 28px; }
@@ -246,7 +246,7 @@
   .landing-site .hp-origin-closing,
   .landing-site .hp-origin-scene p,
   .landing-site .hp-origin-vision-copy p {
-    font-size: 18px;
+    font-size: 15px;
     line-height: 1.85;
     overflow-wrap: normal;
     word-break: normal;
@@ -262,7 +262,13 @@
   .landing-site .hp-origin-scene p + p,
   .landing-site .hp-origin-vision-copy p + p { margin-top: 26px; }
   .landing-site .hp-origin-grandparents-copy p:last-child { margin-top: 36px; }
-  .landing-site .hp-origin-scene blockquote { font-size: 18px; line-height: 1.85; text-wrap: pretty; }
+  .landing-site .hp-origin-scene blockquote { font-size: 15px; line-height: 1.85; text-wrap: pretty; }
+  .landing-site .hp-origin-vision-signature { font-size: 15px; }
   .landing-site .hp-origin-heading-mobile-break { display: initial; }
   .landing-site .hp-origin-vision-person { margin-inline: auto; }
+}
+
+.landing-site .hp-origin-brief p:first-child { font-size: 16px; }
+@media (max-width: 620px) {
+  .landing-site .hp-origin-brief p:first-child { font-size: 15px; }
 }

@@ -1,13 +1,14 @@
 /* The previous proposal keeps the shared stylesheet unchanged for comparison. */
 .refined .mobile-title-break{display:none}
+.refined header .eyebrow{font:600 17px/1.5 "Noto Sans JP",sans-serif}
 .refined .shared-scene{width:min(900px,100%);margin:28px auto 0}
 .refined .shared-scene img{display:block;width:100%;height:auto;border-radius:6px}
 .refined .shared-specs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:min(900px,100%);margin:18px auto 0}
 .refined .shared-specs>div{min-width:0;padding:0 24px 0 0}
 .refined .shared-specs>div+div{border-left:1px solid var(--line);padding:0 0 0 24px}
 .refined .shared-specs strong{display:block;font-size:22px;line-height:1.5}
-.refined .shared-specs p{margin-top:12px;font-size:16px;line-height:1.8}
-.refined .book-spec-list{margin:12px 0 0;padding:0 0 0 1em;list-style:none;font-size:16px;line-height:1.8}
+.refined .shared-specs p{margin-top:12px;font-size:16px;line-height:1.8;font-family:"Noto Sans JP",sans-serif}
+.refined .book-spec-list{margin:12px 0 0;padding:0 0 0 1em;list-style:none;font-size:16px;line-height:1.8;font-family:"Noto Sans JP",sans-serif}
 .refined .book-spec-list li{position:relative}
 .refined .book-spec-list li::before{position:absolute;left:-1em;content:"・"}
 .refined .cover-colors{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-top:4px;font:15px/1.7 "Noto Sans JP",sans-serif}
@@ -45,24 +46,36 @@
 .refined .product-compare .plans{width:min(900px,100%);grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 auto}
 .refined .product-compare .plan{display:flex;padding:18px}
 .refined .product-compare .plan-body{display:flex;flex-direction:column;width:100%;height:100%;padding:0}
+.refined .product-compare .plan-name{font-weight:600}
 .refined .product-compare .price{margin-top:auto;padding-top:16px;white-space:nowrap}
+.refined .support-option-card{width:min(900px,100%);margin:12px auto 0;padding:20px 22px;border:1px solid var(--line);border-radius:6px;background:color-mix(in srgb,var(--paper) 70%,white)}
+.refined .support-option-label{color:var(--green);font:600 14px/1.5 "Noto Sans JP",sans-serif}
+.refined .support-option-card h3{margin:3px 0 10px;color:var(--green);font:600 15px/1.5 "Noto Sans JP",sans-serif}
+.refined .support-option-card>p:not(.support-option-label){font:16px/1.7 "Noto Sans JP",sans-serif}
+.refined .support-option-card>p+p{margin-top:4px}
+.refined .support-option-card .support-lead{font-weight:600}
+.refined .support-option-card .support-price{margin-top:14px;text-align:left;white-space:normal}
+.refined .support-option-card .support-price strong{font:400 38px/1.3 "Noto Serif JP",Yu Mincho,serif;letter-spacing:.02em;white-space:nowrap}
+.refined .support-option-card .support-price strong span{font-size:14px}
+.refined .support-option-card .support-price p{margin-top:2px;color:var(--muted);font:14px/1.6 "Noto Sans JP",sans-serif}
 .refined .plan-body{padding-top:14px}
 .refined .binding{margin-top:10px}
 .refined .price{margin-top:10px}
-.refined .support-renewed{grid-template-columns:1fr 1fr;gap:48px;align-items:start}
+.refined .support-renewed{grid-template-columns:1fr;gap:0;width:min(900px,100%);margin:28px auto 0;padding-top:0;border-top:0}
 .refined .support-renewed h3{margin:0 0 18px}
-.refined .concern-bubbles{display:grid;gap:12px;margin-bottom:0}
+.refined .concern-bubbles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:0}
 .refined .support-renewed .concern-bubbles p{position:relative;width:fit-content;max-width:95%;margin:0;padding:12px 15px;border:1px solid var(--line);border-radius:16px 16px 16px 4px;background:#fffefa;font-size:16px;line-height:1.7}
-.refined .support-renewed .concern-bubbles p:nth-child(2){justify-self:end;border-radius:16px 16px 4px 16px;background:#ebeee8}
-.refined .support-renewed .concern-bubbles p:nth-child(3){max-width:91%}
+.refined .support-renewed .concern-bubbles p:nth-child(2){justify-self:end;border-radius:16px 16px 4px 16px;background:#fffefa}
 .refined .concern-bubbles p::after{content:"";position:absolute;bottom:-5px;left:11px;width:9px;height:9px;transform:rotate(-45deg);border-left:1px solid var(--line);border-bottom:1px solid var(--line);background:#fffefa}
-.refined .concern-bubbles p:nth-child(2)::after{left:auto;right:11px;transform:rotate(-135deg);background:#ebeee8}
+.refined .concern-bubbles p:nth-child(2)::after{left:auto;right:11px;transform:rotate(-135deg);background:#fffefa}
+.refined .support-renewed .concern-bubbles p{max-width:100%}
+.refined .support-renewed .support-information{margin-top:23px}
 .refined .support-renewed .support-lead{font-weight:600}
 .refined .support-renewed .support-price{justify-self:start;margin-top:20px;text-align:left;white-space:normal}
 .refined .support-renewed .support-price strong{font-size:42px;white-space:nowrap}
 .refined .support-renewed .support-price strong span{font-size:15px}
 .refined .support-renewed .support-price p{margin-top:3px;color:var(--muted);font:14px/1.6 "Noto Sans JP",sans-serif}
-.refined .support-renewed .support-details{margin-top:25px}
+.refined .support-renewed .support-details{margin-top:0}
 .refined .support-renewed .consultation-cta{display:block;width:100%;min-height:60px;margin-top:24px;padding:13px 14px;border:0;border-radius:5px;background:var(--green);color:var(--paper);font:600 15px/1.5 "Noto Sans JP",sans-serif;text-align:center;opacity:1}
 .refined .support-renewed a.consultation-cta{text-decoration:none;line-height:34px}
 .refined .support-renewed .consultation-free{margin-top:7px;color:var(--muted);font:12px/1.5 "Noto Sans JP",sans-serif;text-align:center}
@@ -98,15 +111,23 @@
   .refined .product-compare .binding{margin-top:8px;font-size:13px;line-height:1.55}
   .refined .product-compare .price{padding-top:8px;font-size:clamp(19px,5.2vw,22px);line-height:1.2}
   .refined .product-compare .price span{display:inline;margin:0;font-size:11px}
+  .refined .support-option-card{margin-top:9px;padding:15px 14px}
+  .refined .support-option-label{font-size:13px}
+  .refined .support-option-card h3{margin:3px 0 8px;font-size:15px}
+  .refined .support-option-card>p:not(.support-option-label){font-size:14px;line-height:1.65}
+  .refined .support-option-card .support-price{margin-top:11px}
+  .refined .support-option-card .support-price strong{font-size:clamp(19px,5.2vw,22px);line-height:1.2}
+  .refined .support-option-card .support-price strong span{font-size:11px;letter-spacing:0}
+  .refined .support-option-card .support-price p{font-size:12px}
   .refined .plan img{height:220px}
   .refined .plan-body{padding-top:10px}
   .refined .binding{margin-top:8px}
   .refined .price{margin-top:8px}
-  .refined .support-renewed{grid-template-columns:1fr;gap:0}
+  .refined .support-renewed{grid-template-columns:1fr;gap:0;margin-top:22px}
   .refined .support-renewed h3{margin-bottom:18px}
-  .refined .support-renewed .concern-bubbles{margin-bottom:38px}
+  .refined .support-renewed .concern-bubbles{grid-template-columns:1fr;margin-bottom:0}
   .refined .support-renewed .concern-bubbles p{font-size:15px}
-  .refined .support-renewed .support-information{padding-top:27px;border-top:1px solid var(--line)}
+  .refined .support-renewed .support-information{margin-top:23px;padding-top:0;border-top:0}
   .refined .support-renewed .support-information h3{font-size:26px;line-height:1.45}
   .refined .support-renewed .support-information p{font-size:16px;line-height:1.8}
   .refined .support-renewed .support-price strong{font-size:32px}

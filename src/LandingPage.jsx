@@ -3,13 +3,13 @@ import { createRoot } from 'react-dom/client';
 import "./landing-parity.css";
 import "./monitor-launch.css";
 import "./hp-nov8-hero-preview.css";
+import "./hp-nenrin-focused-release.css";
 import StoryIntro from './landing/StoryIntro.jsx';
 import SupportConsultationInline from './SupportConsultationInline.jsx';
 
 const LOGIN = "/?app=1&entry=login";
 const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true'
   ? '/?guest_trial=1' : '/?app=1&entry=trial';
-const GIFT_TRIAL = '/gift-three-questions.html';
 const PURCHASE = "/?app=1&entry=purchase";
 const GIFT_PURCHASE = PURCHASE;
 const EMAIL = "sugawara@saltlight.co.jp";
@@ -170,23 +170,36 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
       <section className={`hp-hero hp-shell${heroLayout === 'integrated' ? ' hp-hero-integrated' : ''}${nov8Preview ? ' hp-hero-nov8' : ''}`} id="top" aria-labelledby="hp-title">
         <div className="hp-hero-title">{nov8Preview ? <>
           <h1 id="hp-title">誰にだって、<br />まだ語られていない<br />人生がある。</h1>
-          <p className="hp-hero-category">声も残せる。季節とともに育つ。<br />自分史づくりの新しい形。</p>
+          <p className="hp-hero-category">声も残せる。季節とともに育つ。<br />自分史づくりの新しいかたち。</p>
         </> : <h1 id="hp-title">人生を、<br />声でのこす。</h1>}</div>
         <figure className="hp-hero-art hp-hero-photo"><img src="/site/hp-renewal/hero-woman-remembering.png" alt="窓辺でスマートフォンを手に、アルバムを前に思い出を辿る女性" width="1536" height="1024" fetchPriority="high" /></figure>
-        <div className="hp-hero-body">{nov8Preview
-          ? <p className="hp-hero-ease">スマホに届く質問に、つぶやくだけ。<br />人生の物語を、一冊の本とWebブックに。</p>
-          : <p>スマホに届く質問に、つぶやくだけ。<br /><strong>あなたの人生が、家族に残る物語になる。</strong></p>}</div>
+        <div className="hp-hero-body">{nov8Preview ? <div className="hp-hero-offer">
+          <p className="hp-hero-ease">スマホに届く質問に、つぶやくだけ。<br />人生の物語を、一冊の本とWebブックに。</p>
+          <figure className="hp-hero-products" id="experience"><img src="/site/hp-renewal/book-web-pair-mobile.jpg" alt="一冊の縦糸横糸ブックと、声や写真に触れられるWebブックを並べたイメージ" width="1536" height="1024" loading="eager" /></figure>
+          <div className="hp-hero-start">
+            <div className="hp-hero-benefits" aria-label="縦糸横糸でできること">
+              <div className="hp-hero-benefit"><span className="hp-hero-benefit-icons" aria-hidden="true"><span className="hp-hero-benefit-icon"><svg viewBox="0 0 32 32" fill="none"><path d="M13 22c-4-2-6-5-6-9a9 9 0 0 1 15-7m-9 16-2 5 6-2m7-15c3 2 3 9 0 12m4-16c4 5 4 15 0 20"/></svg></span><span className="hp-hero-benefit-icon"><svg viewBox="0 0 32 32" fill="none"><rect x="3" y="5" width="26" height="22" rx="2"/><circle cx="11" cy="12" r="2"/><path d="m5 23 7-7 5 5 4-4 6 6"/></svg></span><span className="hp-hero-benefit-icon"><svg viewBox="0 0 32 32" fill="none"><rect x="3" y="5" width="26" height="22" rx="3"/><path d="m13 11 8 5-8 5z"/></svg></span></span><p><strong>声も、写真も、動画も。</strong><span>思い出を、そのまま残せる。</span></p></div>
+              <div className="hp-hero-benefit"><span className="hp-hero-benefit-icons" aria-hidden="true"><span className="hp-hero-benefit-icon"><svg viewBox="0 0 32 32" fill="none"><rect x="6" y="13" width="20" height="16" rx="3"/><path d="M10 13V9a6 6 0 0 1 12 0v4"/><circle cx="16" cy="21" r="1.5"/><path d="M16 22.5v2"/></svg></span><span className="hp-hero-benefit-icon"><svg viewBox="0 0 32 32" fill="none"><circle cx="12" cy="10" r="4"/><path d="M4 26v-2a8 8 0 0 1 13-6m4-9h7m-3-3 3 3-3 3m-6 7h9m-3-3 3 3-3 3"/></svg></span></span><p><strong>自分だけの記録にも。</strong><span>いつか、大切な人と分かち合うことも。</span></p></div>
+              <div className="hp-hero-benefit"><span className="hp-hero-benefit-icon" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><path d="M24 42V24m0 9c-10 0-16-7-16-18 9 0 16 5 16 14m0 2c0-11 6-18 16-18 0 11-6 18-16 18"/></svg></span><p><strong>完成後も、育っていく。</strong><span>季節ごとに、新しい語りを重ねられる。</span></p></div>
+            </div>
+            <div className="hp-hero-start-actions">
+              <a className="hp-button" href={reviewOnly ? '#hp-review-notice' : TRIAL}>登録不要の無料3問を試す <span aria-hidden="true">↗</span></a>
+              <a className="hp-hero-purchase-link hp-hero-purchase-button" href={reviewOnly ? '#hp-review-notice' : PURCHASE}>商品を選んで購入する <span aria-hidden="true">→</span></a>
+            </div>
+          </div>
+        </div> : <><p>スマホに届く質問に、つぶやくだけ。<br /><strong>あなたの人生が、家族に残る物語になる。</strong></p><div className="hp-hero-start"><p className="hp-hero-start-description">自分や大切な人の歩みと想いを、問いに声や文章で答えながら記録。写真・声・動画も添えて、ブックとWebブックに仕上げます。</p><p className="hp-hero-start-after">家族と分かち合い、完成後も季節ごとに記録を重ねていけます。</p><div className="hp-hero-start-actions"><a className="hp-button" href={reviewOnly ? '#hp-review-notice' : TRIAL}>登録不要の無料3問を試す <span aria-hidden="true">↗</span></a><a className="hp-hero-purchase-link" href={reviewOnly ? '#hp-review-notice' : PURCHASE}>商品を選んで購入する <span aria-hidden="true">→</span></a></div></div></>}
+        </div>
       </section>
 
-      <section className={`hp-v4-answer hp-shell${nov8Preview ? ' hp-v4-answer-nov8-no-heading' : ''}`} id="experience" {...(nov8Preview ? { 'aria-label': '二つの作品' } : { 'aria-labelledby': 'v4-answer-title' })}>
-        {!nov8Preview && <h2 id="v4-answer-title">語りは、二つの作品に。</h2>}
+      {!nov8Preview && <section className="hp-v4-answer hp-shell" id="experience" aria-labelledby="v4-answer-title">
+        <h2 id="v4-answer-title">語りは、二つの作品に。</h2>
         <div className="hp-v4-answer-grid">
-          <article><figure><button type="button" className="hp-v4-answer-image" aria-haspopup="dialog" aria-label="縦糸横糸ブックの写真を拡大" onClick={() => setZoomedProduct({ title: '縦糸横糸ブック', src: '/site/hp-story-preview/book-and-spread-user.png', alt: '縦糸横糸ブックの表紙と、写真・文章を収めた見開き' })}><img src="/site/hp-story-preview/book-and-spread-user.png" alt="" width="1536" height="1024" loading="eager" /><span aria-hidden="true">＋</span></button></figure>{!nov8Preview && <><h3>縦糸横糸ブック</h3><p>ここまでの人生を、一冊に。</p></>}</article>
-          <article><figure><button type="button" className="hp-v4-answer-image" aria-haspopup="dialog" aria-label="縦糸横糸Webブックの写真を拡大" onClick={() => setZoomedProduct({ title: '縦糸横糸Webブック', src: '/site/hp-story-preview/web-book-user.png', alt: '本のQRから声や写真に触れるWebブックのイメージ' })}><img src="/site/hp-story-preview/web-book-user.png" alt="" width="1536" height="1024" loading="eager" /><span aria-hidden="true">＋</span></button></figure>{!nov8Preview && <><h3>縦糸横糸Webブック</h3><p>声と写真に、いつでも逢える。</p></>}</article>
+          <article><figure><button type="button" className="hp-v4-answer-image" aria-haspopup="dialog" aria-label="縦糸横糸ブックの写真を拡大" onClick={() => setZoomedProduct({ title: '縦糸横糸ブック', src: '/site/hp-story-preview/book-and-spread-user.png', alt: '縦糸横糸ブックの表紙と、写真・文章を収めた見開き' })}><img src="/site/hp-story-preview/book-and-spread-user.png" alt="" width="1536" height="1024" loading="eager" /><span aria-hidden="true">＋</span></button></figure><h3>縦糸横糸ブック</h3><p>ここまでの人生を、一冊に。</p></article>
+          <article><figure><button type="button" className="hp-v4-answer-image" aria-haspopup="dialog" aria-label="縦糸横糸Webブックの写真を拡大" onClick={() => setZoomedProduct({ title: '縦糸横糸Webブック', src: '/site/hp-story-preview/web-book-user.png', alt: '本のQRから声や写真に触れるWebブックのイメージ' })}><img src="/site/hp-story-preview/web-book-user.png" alt="" width="1536" height="1024" loading="eager" /><span aria-hidden="true">＋</span></button></figure><h3>縦糸横糸Webブック</h3><p>声と写真に、いつでも逢える。</p></article>
         </div>
         <a className="hp-button hp-v4-answer-cta" href={reviewOnly ? "#hp-review-notice" : TRIAL}>無料で3問、話してみる。 <span aria-hidden="true">↗</span></a>
         <p className="hp-note hp-v4-answer-note">カード登録不要。</p>
-      </section>
+      </section>}
 
       <StoryIntro nov8Preview={nov8Preview} />
 
@@ -194,16 +207,19 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
         <div className="hp-nenrin-intro">
           <SectionLabel>縦糸横糸｜年輪 nenrin</SectionLabel>
           <h2 id="hp-nenrin-title">作って終わらない。<br />年輪を刻むように。</h2>
-          <p>完成後も、1月・4月・7月・10月に、<br className="hp-mobile-break" />新しい記録を1件ずつ。<br className="hp-mobile-break" />追加料金なしで重ねられます。</p>
+          <p>一冊の本が完成しても、人生は続いていく。<br />3か月ごと、年4回。新しい記録を、少しずつ重ねていけます。</p>
         </div>
-        <div className="hp-nenrin-seasons" aria-label="季節ごとに残せる記録の例">
-          <p><span>春</span>新しい挑戦への想い</p>
-          <p><span>夏</span>家族との思い出</p>
-          <p><span>秋</span>あの頃と今の自分</p>
-          <p><span>冬</span>一年を振り返って</p>
+        <div className="hp-nenrin-stories" aria-label="年輪の記録の例">
+          {[
+            { number: '01', title: '今しかない想いを、残す', date: '2027年 春｜子どもの小学校入学', image: '/site/hp-renewal/nenrin/spring-school.jpg', alt: '桜の下をランドセルを背負った子どもと両親が歩く後ろ姿', voice: '「小さかったあの子が、もう小学生。今日の気持ちを、いつかこの子にも伝えたい。」', value: '人生の節目に、そのときの想いを。' },
+            { number: '02', title: '思い出は、あとからよみがえる', date: '2027年 秋｜幼い頃のこと', image: '/site/hp-renewal/nenrin/autumn-album.jpg', alt: '祖母と幼い女の子の写真を、古いアルバムからスマートフォンで撮影する女性', voice: '「去年はおじいちゃんの話をしたけれど、今度はおばあちゃんとの思い出も、写真と一緒に残しておきたくなった。」', value: '一度で、すべてを語らなくてもいい。' },
+            { number: '03', title: '家族から届いた言葉も、残す', date: '2027年 冬｜誕生日のこと', image: '/site/hp-renewal/nenrin/winter-letter.jpg', alt: '子どもからの手書きの誕生日の手紙をスマートフォンで撮影する場面', voice: '「また一つ歳を重ねた。子どもからもらった手紙が、何より嬉しかった。いつの間にか、こんな言葉を書けるようになったんだなあ。」', value: '家族の想いも、人生の大切な記録。' },
+          ].map(story => <article className="hp-nenrin-story" key={story.number}>
+            <figure><img src={story.image} alt={story.alt} width="1448" height="1086" loading="eager" fetchPriority="low" /></figure>
+            <div className="hp-nenrin-story-copy"><p className="hp-nenrin-story-number">CARD {story.number}</p><h3>{story.title}</h3><p className="hp-nenrin-story-date">{story.date}</p><p className="hp-nenrin-story-voice">{story.voice}</p><p className="hp-nenrin-story-value">{story.value}</p></div>
+          </article>)}
         </div>
-        <p className="hp-nenrin-end">数年後、同じ問いにもう一度答えても、以前の答えは残ります。</p>
-        <p className="hp-nenrin-note">記録はブック完成後に付与。各記録の利用・編集は付与から6か月以内です。</p>
+        <p className="hp-nenrin-swipe">横にスワイプして次の記録へ <span aria-hidden="true">→</span></p>
       </section>}
 
       <section className="hp-v4-scenes hp-section hp-shell" id="scenes" aria-labelledby="scenes-title">
@@ -212,29 +228,30 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
           <article className="hp-v4-scene-card hp-v4-scene-family">
             <p className="hp-v4-scene-label" lang="en">For Family</p>
             <h3>家族に語ってもらう。</h3>
-            <p className="hp-v4-scene-copy">家族のルーツ、仕事のこと、苦労や喜び<br />“いつか聞こう”を今かたちに。</p>
+            <p className="hp-v4-scene-copy">親や大切な人の人生を残したい方へ。<br />“いつか聞こう”を今かたちに。</p>
             <figure className="hp-v4-scene-photo hp-v4-scene-photo-family"><img src="/site/hp-story-preview/usage-scenes-reference.png" alt="アルバムを広げながら、スマートフォンを見て語り合うシニア夫婦" width="1200" height="1310" loading="lazy" /></figure>
             <p className="hp-v4-scene-tag-label">こんなときに</p>
             <ul className="hp-v4-scene-tags"><li>還暦・古希</li><li>退職祝い</li><li>誕生日</li><li>母の日・父の日</li><li>親孝行ギフト</li></ul>
             <p className="hp-v4-scene-assist"><strong>あなたの端末から、語りや仕上げのお手伝いもできます。</strong></p>
+            <a className="hp-v4-scene-action" href={reviewOnly ? '#hp-review-notice' : PURCHASE}>ギフトとして購入する <span aria-hidden="true">→</span></a>
           </article>
           <article className="hp-v4-scene-card hp-v4-scene-you">
             <p className="hp-v4-scene-label" lang="en">For You</p>
             <h3>自分で語ってみる。</h3>
-            <p className="hp-v4-scene-copy">ここまでの人生、今の気持ち。<br />出てきた言葉を大切に残す。</p>
+            <p className="hp-v4-scene-copy">自分の人生を残したい方へ。<br />出てきた言葉を大切に残す。</p>
             <figure className="hp-v4-scene-photo hp-v4-scene-photo-you"><img src="/site/hp-story-preview/usage-scenes-reference.png" alt="書斎で静かにスマートフォンに語る男性と、明るい部屋でスマートフォンを持つ女性" width="1200" height="1310" loading="lazy" /><span className="hp-v4-scene-photo-younger" aria-hidden="true"><img src="/site/hp-story-preview/usage-scenes-younger-man.png" alt="" width="1200" height="1310" loading="lazy" /></span></figure>
             <p className="hp-v4-scene-tag-label">こんなときに</p>
             <ul className="hp-v4-scene-tags"><li>人生の節目</li><li>退職</li><li>家族が増えたとき</li><li>これからの人生を考えるとき</li></ul>
+            <a className="hp-v4-scene-action" href={reviewOnly ? '#hp-review-notice' : TRIAL}>無料3問を試す <span aria-hidden="true">→</span></a>
           </article>
         </div>
-        <p className="hp-v4-scenes-end">語るほどに、人生は愛おしくなる。</p>
       </section>
 
-      <section className="hp-trial hp-dark" id="trial"><div className="hp-shell hp-section">
+      {!nov8Preview && <section className="hp-trial hp-dark" id="trial"><div className="hp-shell hp-section">
         <SectionLabel>無料で体験する、三つの問い</SectionLabel><h2>まずは、三つだけ。</h2><p>最初は思い出しやすい幼い頃から。</p>
         <ol className="hp-questions">{QUESTIONS.map((q,i) => <li key={q}><span>0{i+1}</span><p>{q}</p></li>)}</ol>
         <TrialLink reviewOnly={reviewOnly} /><p className="hp-note">約10分・カード登録不要・自動課金なし。</p>
-      </div></section>
+      </div></section>}
 
       {!nov8Preview && <><section className="hp-who hp-section hp-shell">
         <h2>自分でも、<br className="hp-mobile-break" />大切な人とでも。</h2>
@@ -267,7 +284,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
         </article>
       </section>}
 
-      {nov8Preview && <section id="works" aria-label="商品と価格の全体プレビュー"><div id="price"><iframe title="縦糸横糸｜年輪の商品・価格と聞き取り制作サポート" src="/product-section-nov8-after.html?embedded=1" allowFullScreen style={{display:'block',width:'100%',height:2600,border:0}} onLoad={event => { const frame=event.currentTarget; const body=frame.contentDocument?.body; if (!body) return; const resize=()=>{frame.style.height=`${Math.ceil(body.scrollHeight)}px`}; resize(); new ResizeObserver(resize).observe(body); for (const [selector, target] of [[".action-trial",TRIAL],[".action-gift-trial",GIFT_TRIAL],[".action-purchase",PURCHASE],[".action-gift-purchase",GIFT_PURCHASE]]) { const link=body.querySelector(selector); if(link){link.dataset.releaseHref=target;link.href=reviewOnly?"#hp-review-notice":target;} }
+      {nov8Preview && <section id="works" aria-label="商品と価格の全体プレビュー"><div id="price"><iframe title="縦糸横糸｜年輪の商品・価格と聞き取り制作サポート" src="/product-section-nov8-after.html?embedded=1" allowFullScreen style={{display:'block',width:'100%',height:2600,border:0}} onLoad={event => { const frame=event.currentTarget; const body=frame.contentDocument?.body; if (!body) return; const resize=()=>{frame.style.height=`${Math.ceil(body.scrollHeight)}px`}; resize(); new ResizeObserver(resize).observe(body); for (const [selector, target] of [[".action-trial",TRIAL],[".action-purchase",PURCHASE],[".action-gift-purchase",GIFT_PURCHASE]]) { const link=body.querySelector(selector); if(link){link.dataset.releaseHref=target;link.href=reviewOnly?"#hp-review-notice":target;} }
         {
           const cta = body.querySelector('.consultation-cta');
           const free = body.querySelector('.consultation-free');

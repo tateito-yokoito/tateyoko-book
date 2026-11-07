@@ -1,0 +1,71 @@
+.landing-site .hp-hero-start {
+  max-width: 580px;
+  padding-top: 16px;
+}
+.landing-site .hp-hero-start-description,
+.landing-site .hp-hero-start-after {
+  font-size: 16px;
+  line-height: 1.8;
+}
+.landing-site .hp-hero-start-after { margin-top: 8px; }
+.landing-site .hp-hero-start-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 22px; margin-top: 20px; }
+.landing-site .hp-hero-start-actions .hp-button { min-height: 52px; padding: 12px 20px; }
+.landing-site .hp-hero-purchase-link,
+.landing-site .hp-v4-scene-action { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; border-bottom: 1px solid currentColor; font: 16px/1.5 "Noto Sans JP", sans-serif; }
+.landing-site .hp-v4-scene-action { margin-top: 16px; }
+
+.landing-site .hp-v4-when-bridge { display: grid; gap: 12px; max-width: 650px; margin: 24px auto 0; text-align: center; }
+.landing-site .hp-v4-when-bridge p { font-size: 17px; line-height: 1.8; }
+.landing-site .hp-v4-when-bridge p:last-child { color: var(--green); }
+
+.landing-site .hp-nenrin { max-width: 1180px; }
+.landing-site .hp-nenrin-stories { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; margin-top: 32px; }
+.landing-site .hp-nenrin-story { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--paper) 76%, white); }
+.landing-site .hp-nenrin-story figure { aspect-ratio: 4 / 3; overflow: hidden; }
+.landing-site .hp-nenrin-story img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.landing-site .hp-nenrin-story-copy { padding: 18px 18px 20px; }
+.landing-site .hp-nenrin-story-number { color: var(--green); font: 12px/1.5 "Noto Sans JP", sans-serif; letter-spacing: .09em; }
+.landing-site .hp-nenrin-story h3 { margin-top: 6px; font-size: 20px; line-height: 1.55; }
+.landing-site .hp-nenrin-story-date { margin-top: 12px; color: var(--muted); font: 13px/1.6 "Noto Sans JP", sans-serif; }
+.landing-site .hp-nenrin-story-voice { margin-top: 14px; font-size: 15px; line-height: 1.85; }
+.landing-site .hp-nenrin-story-value { margin-top: 15px; color: var(--green); font-size: 16px; line-height: 1.65; font-weight: 600; }
+.landing-site .hp-nenrin-swipe { display: none; }
+.landing-site .hp-nenrin-uses { margin-top: 38px; }
+.landing-site .hp-nenrin-uses h3 { font-size: 25px; }
+.landing-site .hp-nenrin-uses dl { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px 26px; margin: 18px 0 0; }
+.landing-site .hp-nenrin-uses dl > div { padding: 10px 0; border-top: 1px solid var(--line); }
+.landing-site .hp-nenrin-uses dt { font-size: 17px; font-weight: 600; }
+.landing-site .hp-nenrin-uses dd { margin: 4px 0 0; color: var(--muted); font-size: 15px; line-height: 1.75; }
+.landing-site .hp-nenrin-remake { margin-top: 32px; padding: 22px 25px; border: 1px solid var(--line); border-radius: 6px; }
+.landing-site .hp-nenrin-remake h3 { font-size: 23px; line-height: 1.6; }
+.landing-site .hp-nenrin-remake p { margin-top: 9px; font-size: 16px; line-height: 1.75; }
+.landing-site .hp-nenrin-remake .hp-nenrin-remake-note { color: var(--muted); font-size: 14px; }
+.landing-site .hp-nenrin-end { margin-top: 25px; }
+.landing-site .hp-nenrin-note { margin-top: 10px; }
+
+@media (max-width: 620px) {
+  .landing-site .hp-hero-start { padding-top: 14px; }
+  .landing-site .hp-hero-start-description,
+  .landing-site .hp-hero-start-after { font-size: 14px; line-height: 1.7; }
+  .landing-site .hp-hero-start-actions { margin-top: 14px; gap: 7px; }
+  .landing-site .hp-hero-start-actions .hp-button { width: 100%; }
+  .landing-site .hp-hero-purchase-link { margin-top: 0; font-size: 14px; }
+  .landing-site .hp-v4-when-bridge { gap: 9px; margin-top: 18px; }
+  .landing-site .hp-v4-when-bridge p { font-size: 15px; line-height: 1.7; }
+  .landing-site .hp-nenrin-stories { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(80%, 315px); grid-template-columns: none; gap: 12px; width: calc(100% + 20px); overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x mandatory; margin-top: 23px; padding: 0 20px 10px 0; scrollbar-width: thin; }
+  .landing-site .hp-nenrin-story { scroll-snap-align: start; }
+  .landing-site .hp-nenrin-story-copy { padding: 15px 15px 17px; }
+  .landing-site .hp-nenrin-story h3 { font-size: 18px; }
+  .landing-site .hp-nenrin-story-voice { font-size: 14px; }
+  .landing-site .hp-nenrin-story-value { font-size: 15px; }
+  .landing-site .hp-nenrin-swipe { display: block; margin-top: 2px; color: var(--muted); font: 12px/1.5 "Noto Sans JP", sans-serif; }
+  .landing-site .hp-nenrin-uses { margin-top: 28px; }
+  .landing-site .hp-nenrin-uses h3 { font-size: 22px; }
+  .landing-site .hp-nenrin-uses dl { grid-template-columns: 1fr; gap: 5px; margin-top: 13px; }
+  .landing-site .hp-nenrin-uses dt { font-size: 16px; }
+  .landing-site .hp-nenrin-uses dd { font-size: 14px; }
+  .landing-site .hp-nenrin-remake { margin-top: 23px; padding: 18px; }
+  .landing-site .hp-nenrin-remake h3 { font-size: 20px; }
+  .landing-site .hp-nenrin-remake p { font-size: 14px; }
+  .landing-site .hp-v4-scene-action { font-size: 15px; }
+}
