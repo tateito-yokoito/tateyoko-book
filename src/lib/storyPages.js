@@ -19,6 +19,12 @@ export const countAnsweredStories = (questions, options) => (questions || []).fi
   question => question.status === 'answered' && isVisibleStoryQuestion(question, options)
 ).length;
 
+export const countAnsweredStoryThemes = (questions, options) => new Set((questions || [])
+  .filter(question => question.status === 'answered' && isVisibleStoryQuestion(question, options)
+    && !bookendKindForQuestion(question))
+  .map(question => isChildhoodTrialStory(question) ? 'ty_theme_childhood'
+    : question.theme_code || (isTrialStoryQuestion(question) ? 'free-trial' : chapterTitleOf(question)))).size;
+
 export function questionForStory(answer, questions = []) {
   const candidates = questions.filter(question => !answer.book_project_id || !question.book_project_id
     || question.book_project_id === answer.book_project_id);

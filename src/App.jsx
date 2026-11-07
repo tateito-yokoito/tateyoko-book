@@ -58,6 +58,7 @@ import { bindPurchaseHandoffEmail, purchaseHandoffToken } from './lib/commercePu
 import { ThemeMemoryRequestComposer, ThemeMemoryRequestManager } from "./ThemeMemoryRequestFlow.jsx";
 import StoryRequestComposer, { PaperHeartIcon } from "./StoryRequestComposer.jsx";
 import StoryRequestManager from "./StoryRequestManager.jsx";
+import { storyRequestHomeSummary } from "./lib/storyRequestHomeSummary.js";
 import { SupporterIdentityFields, SupporterFamilyCandidates, SupporterRelationshipsSettings } from './SupporterIdentity.jsx';
 import { SupporterSmsComposer } from './SupporterSms.jsx';
 import MicAccessGuide from './MicAccessGuide.jsx';
@@ -3224,17 +3225,16 @@ function App() {
   const [notificationPref, setNotificationPref] = useState(null);
   const [progress, setProgress] = useState({ currentIndex: 0, total: 0 });
   const [foundation, setFoundation] = useState(null);
-  const [storyRequestUnreviewedCount, setStoryRequestUnreviewedCount] = useState(0);
+  const [storyRequestSummary, setStoryRequestSummary] = useState(null);
   useEffect(() => {
     const projectId = foundation?.project?.id;
     if (scene !== "home" || !projectId) return;
     let cancelled = false;
-    setStoryRequestUnreviewedCount(0);
+    setStoryRequestSummary(null);
     supabaseClient.functions.invoke("story-request", { body: { action: "list_owner", bookProjectId: projectId } })
       .then(({ data, error }) => {
         if (cancelled || error || !data?.success) return;
-        setStoryRequestUnreviewedCount((data.requests || []).reduce((total, request) => total +
-          (request.theme_memory_answer_records || []).filter(answer => answer.publication_status === "unreviewed").length, 0));
+        setStoryRequestSummary(storyRequestHomeSummary(data.requests || []));
       });
     return () => { cancelled = true; };
   }, [scene, foundation?.project?.id]);
@@ -8575,7 +8575,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
          }}
          onOpenStoryPages={() => { setStoryPagesReturnScene("home"); setStoryPagesFocusAnswerId(null); setScene("story_pages"); }}
          canOpenThemeMemories={hasCompletedStoryTheme(questionsDB, 1)}
-         storyRequestUnreviewedCount={storyRequestUnreviewedCount}
+         storyRequestSummary={storyRequestSummary}
          onOpenThemeMemories={() => {
            setThemeMemoryReturnScene("home");
            setScene("theme_memory_manager");
