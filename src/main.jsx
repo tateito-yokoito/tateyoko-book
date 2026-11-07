@@ -90,6 +90,9 @@ function PurchaseHandoffGate({ token }) {
   if (state === 'error') return <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-7 text-center text-white">
     <h1 className="text-2xl">購入内容を引き継げませんでした</h1>
     <p role="alert" className="mt-6 leading-7">{error}</p>
+    <p className="mt-6 leading-7 text-white/75">前回の物語を開く場合は、通常のアプリ入口からLINEでログインしてください。</p>
+    <a className="mt-6 block rounded-full border border-white/30 px-5 py-4 text-center" href="/?app=1">前回の物語を開く</a>
+    <a className="mt-3 block px-5 py-3 text-center text-white/75 underline underline-offset-4" href="/?app=1&entry=purchase">商品選択からやり直す</a>
     <p className="mt-5 text-sm leading-7 text-white/70">無料3問の回答は保存期限内であれば再開URLから開けます。商品選択から手続きをやり直してください。</p>
   </main>;
   return <main className="flex min-h-screen items-center justify-center text-white">購入内容を確認しています…</main>;
@@ -119,6 +122,8 @@ function RootScreen() {
       <h1 className="text-2xl leading-relaxed">購入内容を引き継げませんでした</h1>
       <p className="mt-7 leading-8 text-white/75">メールのURLが別のタブで開いた場合は、元の認証画面に戻り、メールに記載された数字を入力してください。無料3問の語りも元のタブに残っています。</p>
       <p className="mt-5 text-sm leading-7 text-white/60">元のタブがない場合は、無料3問の再開URLから開き直してください。</p>
+      <a className="mt-8 block rounded-full border border-white/30 px-5 py-4 text-center" href="/?app=1">前回の物語を開く</a>
+      <a className="mt-3 block px-5 py-3 text-center text-white/75 underline underline-offset-4" href="/?app=1&entry=purchase">商品選択からやり直す</a>
     </main>;
   }
 
