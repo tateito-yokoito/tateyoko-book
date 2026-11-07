@@ -101,7 +101,7 @@ serve(async request => {
       const rawQuestions = Array.isArray(body.questions) ? body.questions : [];
       if (!themes.has(themeCode) || !recipientName || !relationship || rawQuestions.length < 1 || rawQuestions.length > 3) return fail("テーマ・送り先・質問を確認してください");
       const { data: rows, error: rowsError } = await db.from("user_questions")
-        .select("id,question_id,question_text_snapshot,custom_question_text,meta_json,questions(content)")
+        .select("id,question_id,question_text_snapshot,custom_question_text,meta_json")
         .eq("book_project_id", projectId).eq("is_active", true);
       if (rowsError) throw rowsError;
       const byId = new Map((rows || []).filter((row: any) => row.meta_json?.theme_code === themeCode).map((row: any) => [row.id, row]));
@@ -113,7 +113,7 @@ serve(async request => {
           const row: any = byId.get(sourceId);
           if (!row) throw new Error("Unknown source question");
           return { id: sourceId, sourceQuestionId: sourceId, sourceQuestionKey: row.question_id || null,
-            prompt: row.custom_question_text || row.question_text_snapshot || row.questions?.content || "" };
+            prompt: row.custom_question_text || row.question_text_snapshot || "" };
         }
         if (extraId) {
           const prompt = extras[themeCode]?.[extraId];
