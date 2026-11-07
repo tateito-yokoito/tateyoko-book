@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Check, ChevronLeft, Clipboard, List, Plus } from 'lucide-react';
+import { ArrowRight, Check, Clipboard } from 'lucide-react';
 import { THEME_EXTRA_QUESTIONS } from './lib/themeExtras.js';
 import { buildStoryRequestQuestionPayload, clearStoryRequestProgress, readStoryRequestProgress, requestMatchesCreatingDraft, storyRequestProgressKey, writeStoryRequestProgress } from './lib/storyRequestComposerProgress.js';
+import QuestionFlowTopBar from './QuestionFlowTopBar.jsx';
 
 export async function invokeStoryRequest(client, body) {
   const { data, error } = await client.functions.invoke('story-request', { body });
@@ -32,7 +33,7 @@ export { PaperHeartIcon };
 const quiet = 'min-h-12 w-full rounded-xl border border-white/25 px-4 py-3 text-left text-[1rem] text-white/80';
 const primary = 'min-h-14 w-full rounded-xl bg-[#f5f3ed] px-4 py-3 text-[1rem] font-medium text-[#18243a] disabled:opacity-40';
 
-export default function StoryRequestComposer({ client, bookProjectId, theme, questions = [], onBack }) {
+export default function StoryRequestComposer({ client, bookProjectId, theme, questions = [], onBack, onHome }) {
   const progressKey = storyRequestProgressKey(bookProjectId, theme?.code);
   const [initialProgress] = useState(() => readStoryRequestProgress(progressKey));
   const [step, setStep] = useState(() => ['creating', 'created'].includes(initialProgress?.status) ? 'restoring' : initialProgress?.step || 'questions');
@@ -138,12 +139,11 @@ export default function StoryRequestComposer({ client, bookProjectId, theme, que
     window.open(`https://line.me/R/share?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
   };
   return <div className="flow-scene-shell fade-enter"><main className="mx-auto w-full max-w-[520px] pb-10 text-white">
-    <button type="button" className="mb-8 flex min-h-11 items-center gap-1 text-[1rem] text-white/75" onClick={() => {
+    <QuestionFlowTopBar theme={theme?.label || ''} onHome={onHome} onBack={() => {
       if (step === 'recipient') { setStep('questions'); saveEditing({ step: 'questions' }); }
       else returnToTheme();
-    }}><ChevronLeft size={18}/>戻る</button>
-    <p className="text-center text-sm text-[#d6bb86]">{theme?.label}</p>
-    <h1 className="mt-4 text-center text-narrative text-[1.5rem] leading-[1.7]">誰かの記憶も、<br/>この物語に</h1>
+    }} />
+    <h1 className="mt-7 text-center text-narrative text-[1.5rem] leading-[1.7]">誰かの記憶も、<br/>この物語に</h1>
     {step === 'restoring' && <div className="mt-10 space-y-5">
       <p role="status" className="text-sm leading-[1.8] text-white/70">{busy ? '作成途中の依頼を確認しています…' : error || '依頼を確認しています…'}</p>
       <button type="button" disabled={busy} className={primary} onClick={() => setRestoreAttempt(value => value + 1)}>もう一度確認する</button>
