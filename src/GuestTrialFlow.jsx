@@ -3,6 +3,7 @@ import { Scene1_MyPage, Scene_Recording, ensureUserFoundation, ensureUserQuestio
 import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
 import TrialCompletionExperience, { StoryCard } from './TrialCompletionExperience.jsx';
 import './guest-trial-finished.css';
+import './guest-trial-navigation.css';
 import { guestCheckout, guestPurchaseStatus, claimGuestPurchase } from './lib/guestPurchaseApi.js';
 import { hasLineIdentity, linkLineToCurrentAccount, startLineSignIn } from './lib/lineAuth.js';
 import {
@@ -494,7 +495,7 @@ function GuestTrialExperience() {
     };
   });
 
-  return <div className={`app-container min-h-[100dvh] ${screen === 'intro' ? 'bg-[#f5f3ed] text-[#182a35]' : 'bg-[#101729] text-white'}`} style={{ maxWidth: 'none', padding: 0 }}>
+  return <div className={`app-container guest-trial-flow min-h-[100dvh] ${screen === 'intro' ? 'bg-[#f5f3ed] text-[#182a35]' : 'bg-[#101729] text-white'}`} style={{ maxWidth: 'none', padding: 0 }}>
     <div className="min-h-[100dvh] w-full">
       {screen === 'loading' && <p className="px-7 py-20">体験を確認しています…</p>}
       {screen === 'intro' && <main className="mx-auto flex min-h-[100dvh] w-full max-w-[690px] flex-col justify-center px-[30px] text-center" style={{ paddingTop: 'calc(64px + env(safe-area-inset-top))', paddingBottom: 'calc(64px + env(safe-area-inset-bottom))' }}>
@@ -534,8 +535,8 @@ function GuestTrialExperience() {
         onWrite={() => { setTranscript(''); setScreen('write'); }}
         onEndToday={openExit}
       />}
-      {screen === 'write' && <main className="px-7 py-14">
-        <header className="mb-5 flex items-start justify-between gap-4 pt-2">
+      {screen === 'write' && <main className="guest-trial-question-screen">
+        <header className="guest-trial-question-nav">
           <button type="button" onClick={() => setScreen('choice')} className="min-h-11 text-white/65">← 戻る</button>
           <p className="flex min-h-11 shrink-0 items-center text-[1rem] text-white/75">{index + 1} / 3</p>
         </header>
@@ -573,9 +574,9 @@ function GuestTrialExperience() {
           className="mt-4 w-full rounded-full border border-white/35 px-6 py-4 disabled:opacity-40">入力した文章で進む</button>
         <button type="button" onClick={() => setScreen('record')} className="mt-6 block w-full text-white/60 underline">録音し直す</button>
       </main>}
-      {screen === 'review' && <main className="px-7 py-14">
-        <header className="mb-5 flex items-start justify-between gap-4 pt-2 text-white/55">
-          <p className="flex min-h-11 items-center">語りを確認します</p>
+      {screen === 'review' && <main className="guest-trial-question-screen">
+        <header className="guest-trial-question-nav">
+          <button type="button" onClick={() => setScreen(pendingAudioUrl ? 'record' : 'write')} className="min-h-11 text-white/65">← 戻る</button>
           <p className="flex min-h-11 shrink-0 items-center text-[1rem] text-white/75">{index + 1} / 3</p>
         </header>
         <h1 className="mt-8 text-center text-[1.35rem] leading-[1.8]">{questions[index].content}</h1>
