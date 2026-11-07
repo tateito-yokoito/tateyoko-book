@@ -138,6 +138,8 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           clearCommercePurchaseIntent(window.localStorage);
           const url = new URL(window.location.href);
           url.searchParams.delete('purchase_review');
+          url.searchParams.delete('purchase_handoff');
+          url.searchParams.set('entry', 'purchased');
           window.location.replace(url.toString());
         } else window.location.reload();
         return;
