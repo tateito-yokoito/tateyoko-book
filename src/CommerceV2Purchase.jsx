@@ -88,9 +88,6 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   }, [client, linkedConsultationId]);
 
   useEffect(() => {
-    if (method !== 'self_or_family' && !['agreed', 'checkout_pending'].includes(approvedConsultation?.status)) {
-      setQuote(null); setError(''); return;
-    }
     let active = true;
     setQuote(null);
     setError('');
@@ -248,7 +245,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={method === 'interview_staff'} disabled={Boolean(approvedConsultation)} onChange={event => { setMethod(event.target.checked ? 'interview_staff' : 'self_or_family'); requestKey.current = newRequestKey(); }} />聞き取り制作サポートを選ぶ</label>
           <p className="mt-3 text-sm leading-7">お気軽にご相談ください。決済は前後しても構いません。</p>
           <button type="button" aria-expanded={consultationOpen} aria-controls="purchase-consultation-form" className="mt-3 w-full rounded-lg border border-[#315a49] bg-white px-4 py-3 font-semibold" onClick={() => setConsultationOpen(open => !open)}>{consultationOpen ? '事前相談フォームを閉じる' : '事前相談フォームを開く'}</button>
-          {consultationOpen && <div id="purchase-consultation-form" className="mt-4 rounded-lg bg-[#fffefa] p-3"><SupportConsultationInline /></div>}
+          {consultationOpen && <div id="purchase-consultation-form" className="mt-4 rounded-lg bg-[#fffefa] p-3"><SupportConsultationInline purchaseSelection={selection} /></div>}
         </div>
 
         {orderType === 'gift' && <label className="mt-8 block text-sm font-semibold">贈る相手のお名前<input className="mt-2 w-full rounded-lg border border-[#bfc9bd] bg-white p-3 text-base" value={gift.recipient_name} disabled={Boolean(familyInvitation)} onChange={event => setGift(current => ({ ...current, recipient_name: event.target.value }))} /></label>}
@@ -256,23 +253,23 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         <div className="mt-7 rounded-xl bg-[#eaf0e8] p-5" aria-live="polite">
           <p className="flex justify-between gap-3 py-2 text-sm"><span>商品・オプション</span><span>{(quote?.amount_subtotal ?? provisionalSubtotal)?.toLocaleString('ja-JP')}円</span></p>
           <p className="flex justify-between gap-3 py-2 text-sm"><span>割引</span><span>{quote ? `−${Number(quote.discount_amount || 0).toLocaleString('ja-JP')}円` : '—'}</span></p>
-          <p className="mt-2 flex justify-between gap-3 border-t border-[#c4d1c5] pt-4 text-lg font-bold"><span>お支払い合計</span><span>{quote ? `${Number(quote.amount_total).toLocaleString('ja-JP')}円` : method === 'interview_staff' ? '相談後に確定' : error ? '確認できませんでした' : '確認中'}</span></p>
+          <p className="mt-2 flex justify-between gap-3 border-t border-[#c4d1c5] pt-4 text-lg font-bold"><span>お支払い合計</span><span>{quote ? `${Number(quote.amount_total).toLocaleString('ja-JP')}円` : error ? '確認できませんでした' : '確認中'}</span></p>
           <p className="mt-2 text-xs leading-6 text-[#65756b]">税込。正式な価格・割引は認証後に再確認します。</p>
         </div>
-        {method === 'self_or_family' && <button type="button" className="mt-5 w-full rounded-full bg-[#244c3c] px-5 py-4 text-lg font-bold text-white disabled:opacity-50" disabled={busy || !quote || (orderType === 'gift' && !gift.recipient_name.trim())} onClick={async () => {
+        {method === 'interview_staff' && <p role="note" className="mt-4 text-sm font-semibold leading-7 text-[#a34b35]">聞き取り制作サポートにお申し込みの方は、必ず事前相談フォームにもご入力ください。</p>}
+        <button type="button" className="mt-5 w-full rounded-full bg-[#244c3c] px-5 py-4 text-lg font-bold text-white disabled:opacity-50" disabled={busy || !quote || (orderType === 'gift' && !gift.recipient_name.trim())} onClick={async () => {
           setBusy(true); setError('');
           try { await onProceed?.({ ...selection, quotedAmountTotal: quote?.amount_total, quotedDiscountAmount: quote?.discount_amount }); }
           catch (cause) { setError(cause?.message || '購入内容を保存できませんでした。もう一度お試しください。'); setBusy(false); }
-        }}>購入手続きへ進む</button>}
-        {method === 'interview_staff' && <p className="mt-4 text-center text-sm leading-6 text-[#65756b]">聞き取り制作サポートは相談・合意後にお支払いとなります。</p>}
-        {method === 'self_or_family' && <p className="mt-3 text-center text-sm text-[#65756b]">購入手続きには登録またはログインが必要です。</p>}
+        }}>購入手続きへ進む</button>
+        <p className="mt-3 text-center text-sm text-[#65756b]">購入手続きには登録またはログインが必要です。</p>
         {error && <p role="alert" className="mt-5 text-[#a34b35]">{error}</p>}
         {onTryFree && <button className="mt-8 text-sm text-[#53645b] underline" onClick={onTryFree}>無料で3問体験する</button>}
       </div>
     </section>
   );
 
-  if (isReview && (method === 'self_or_family' || approvedConsultation)) return (
+  if (isReview) return (
     <section className="mx-auto max-w-2xl px-6 py-12 text-white">
       <h1 className="text-2xl">注文内容の最終確認</h1>
       <p className="mt-3 text-sm leading-7 text-white/75">お支払いの前に、選んだ内容と認証後の金額をご確認ください。</p>
@@ -296,6 +293,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         && Number(quote.amount_total) !== initialSelection.quotedAmountTotal &&
         <p role="status" className="mt-5 rounded-xl border border-amber-200/50 p-4 text-sm leading-6 text-amber-100">認証後の割引条件または商品価格が変わりました。選択時のお支払い合計は{initialSelection.quotedAmountTotal.toLocaleString('ja-JP')}円、現在は{Number(quote.amount_total).toLocaleString('ja-JP')}円です。新しい金額を確認してからお進みください。</p>}
       {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
+      {method === 'interview_staff' && <p role="note" className="mt-5 text-sm font-semibold leading-7 text-rose-200">聞き取り制作サポートにお申し込みの方は、必ず事前相談フォームにもご入力ください。</p>}
       <button type="button" className="mt-8 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote} onClick={checkout}>お支払いへ進む</button>
       <button type="button" className="mt-5 w-full text-sm text-white/70 underline" onClick={() => {
         const url = new URL(window.location.href);
@@ -355,27 +353,22 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         <legend className="text-lg">制作方法</legend>
         <label className="mt-3 flex gap-3"><input type="radio" checked={method === 'self_or_family'} disabled={Boolean(approvedConsultation)} onChange={() => { setMethod('self_or_family'); requestKey.current = newRequestKey(); }} />自分・家族で制作する</label>
         <label className="mt-3 flex gap-3"><input type="radio" checked={method === 'interview_staff'} disabled={Boolean(approvedConsultation)} onChange={() => { setMethod('interview_staff'); requestKey.current = newRequestKey(); }} />スタッフに聞き取ってもらう（＋20,000円）</label>
-        <p className="mt-3 text-sm leading-6 text-white/70">聞き取り制作サポートは無料相談後、合意してから一括決済します。スマホ操作が苦手な方もご相談いただけます。</p>
+        <p className="mt-3 text-sm leading-6 text-white/70">聞き取り制作サポートは、決済の前後どちらでもご相談いただけます。</p>
       </fieldset>
-      {method === 'interview_staff' && !approvedConsultation ? (
-        <div className="mt-8 space-y-4">
-          {orderType === 'gift' && <label className="block">贈る相手のお名前<input className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-slate-900" value={gift.recipient_name} disabled={Boolean(familyInvitation)}
-            onChange={event => setGift(current => ({ ...current, recipient_name: event.target.value }))} /></label>}
-          <p className="text-sm leading-7 text-white/75">商品・オプション：{provisionalSubtotal?.toLocaleString('ja-JP')}円（税込）。相談後に内容を確認します。</p>
-          <button type="button" className="w-full rounded-full bg-white py-4 text-slate-900" onClick={openSupportConsultation}>事前相談フォームへ進む</button>
-          <p className="text-center text-sm text-white/65">ご相談のみでは購入・決済は発生しません。</p>
-        </div>
-      ) : (
-        <div className="mt-8 space-y-4">
+      <div className="mt-8 space-y-4">
+          {method === 'interview_staff' && !approvedConsultation && <>
+            <p role="note" className="text-sm font-semibold leading-7 text-rose-200">聞き取り制作サポートにお申し込みの方は、必ず事前相談フォームにもご入力ください。</p>
+            <button type="button" className="w-full rounded-full border border-white/50 py-4 text-white" onClick={openSupportConsultation}>事前相談フォームへ進む</button>
+          </>}
           {orderType === 'gift' && <label className="block">贈る相手のお名前<input className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-slate-900" value={gift.recipient_name} disabled={Boolean(familyInvitation)}
             onChange={event => setGift(current => ({ ...current, recipient_name: event.target.value }))} /></label>}
           <label className="block">割引コード<input className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-slate-900" value={discountCode}
             onChange={event => { setDiscountCode(event.target.value); requestKey.current = newRequestKey(); }} /></label>
           {isSelection ? <>
             <p className="text-sm leading-7 text-white/75">商品・オプション：{(quote?.amount_subtotal ?? provisionalSubtotal)?.toLocaleString('ja-JP')}円（税込）<br />割引：−{quote ? Number(quote.discount_amount || 0).toLocaleString('ja-JP') : '—'}円</p>
-            <p className="text-xl">お支払い合計：{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : method === 'interview_staff' ? '無料相談後に確定' : error ? '確認できませんでした' : '確認中'}</p>
-            <p className="text-sm leading-6 text-white/70">{method === 'interview_staff' ? '聞き取り制作サポートは相談・合意後にお支払いとなります。' : '認証後に価格と割引条件を再確認し、変更があればお知らせします。'}</p>
-            <button type="button" className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || (method === 'self_or_family' && !quote) || (orderType === 'gift' && !gift.recipient_name.trim())} onClick={async () => {
+            <p className="text-xl">お支払い合計：{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : error ? '確認できませんでした' : '確認中'}</p>
+            <p className="text-sm leading-6 text-white/70">認証後に価格と割引条件を再確認し、変更があればお知らせします。</p>
+            <button type="button" className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote || (orderType === 'gift' && !gift.recipient_name.trim())} onClick={async () => {
               setBusy(true);
               setError('');
               try { await onProceed?.({ ...selection, quotedAmountTotal: quote?.amount_total, quotedDiscountAmount: quote?.discount_amount }); }
@@ -391,8 +384,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
             <p className="text-xl">お支払い合計：{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : error ? '確認できませんでした' : '確認中'}</p>
             <button className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote} onClick={checkout}>{isReview ? 'お支払いへ進む' : '決済へ進む'}</button>
           </>}
-        </div>
-      )}
+      </div>
       {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       {onTryFree && <button className="mt-8 text-sm text-white/70 underline" onClick={onTryFree}>無料で3問体験する</button>}
     </section>

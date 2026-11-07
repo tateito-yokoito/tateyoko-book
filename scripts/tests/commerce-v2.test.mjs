@@ -81,10 +81,9 @@ test('only an expired Stripe session can release a pending order for a fresh ret
   assert.equal(checkoutSessionDisposition('expired', false), 'retire_and_retry');
 });
 
-test('interview support requires agreed consultation and is charged once', () => {
-  assert.throws(() => calculateCommerceV2Quote(input({ productionMethod: 'interview_staff' }), catalog));
+test('interview support can be paid before consultation and is charged once', () => {
   const quote = calculateCommerceV2Quote(input({
-    edition: 'premium', productionMethod: 'interview_staff', consultationAgreed: true,
+    edition: 'premium', productionMethod: 'interview_staff',
   }), catalog);
   assert.equal(quote.totalJpy, 85000);
   assert.equal(quote.lines.at(-1).productCode, 'interview_support_v1');
@@ -93,8 +92,7 @@ test('interview support requires agreed consultation and is charged once', () =>
 test('all four base-edition and production-method totals use the approved prices', () => {
   for (const [edition, base] of [['standard', 35000], ['premium', 65000]]) {
     for (const [productionMethod, support] of [['self_or_family', 0], ['interview_staff', 20000]]) {
-      const quote = calculateCommerceV2Quote(input({ edition, productionMethod,
-        consultationAgreed: support > 0 }), catalog);
+      const quote = calculateCommerceV2Quote(input({ edition, productionMethod }), catalog);
       assert.equal(quote.subtotalJpy, base + support);
       assert.equal(quote.totalJpy, base + support);
       assert.equal(quote.lines.reduce((total, line) => total + line.lineAmountJpy, 0), quote.totalJpy);
@@ -104,7 +102,7 @@ test('all four base-edition and production-method totals use the approved prices
 
 test('mixed extra copies and a book-only legacy discount leave interview support payable', () => {
   const quote = calculateCommerceV2Quote(input({
-    edition: 'standard', productionMethod: 'interview_staff', consultationAgreed: true,
+    edition: 'standard', productionMethod: 'interview_staff',
     standardExtraCount: 1, premiumExtraCount: 1,
     discountScope: 'entire_order', discountAmount: 75000,
   }), catalog);

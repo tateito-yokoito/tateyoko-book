@@ -27,6 +27,8 @@ export default function ConsultationReview({ client }) {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [orderNumber, setOrderNumber] = useState("");
+  const [linking, setLinking] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,6 +53,22 @@ export default function ConsultationReview({ client }) {
       item.contact_phone].some(value => String(value || "").toLocaleLowerCase().includes(needle)));
   }, [items, query]);
   const selected = items.find(item => item.id === selectedId);
+
+  const linkPaidOrder = async () => {
+    if (!selected || linking || !/^TY-[0-9]{4}-[0-9]{6}$/.test(orderNumber.trim())) {
+      setError("決済済みの注文番号を確認してください。");
+      return;
+    }
+    if (!window.confirm(`相談 ${receiptNumber(selected)} と注文 ${orderNumber.trim()} を照合しましたか？`)) return;
+    setLinking(true);
+    setError("");
+    const { data, error: requestError } = await client.functions.invoke("admin-commerce-v2-consultations", {
+      body: { action: "link_paid_order", consultationId: selected.id, orderNumber: orderNumber.trim() },
+    });
+    if (requestError || !data?.success) setError(data?.error || "相談と注文を紐付けできませんでした。");
+    else { setOrderNumber(""); await load(); }
+    setLinking(false);
+  };
 
   return <div className="space-y-4">
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -82,6 +100,15 @@ export default function ConsultationReview({ client }) {
         {selected.admin_notification_status && <div><dt className="text-slate-600">運営通知</dt><dd>{selected.admin_notification_status === "sent" ? "送信済み" : selected.admin_notification_status === "failed" ? "未送信・確認が必要" : "処理中／未確認"}</dd></div>}
       </dl>
       <div className="mt-5 border-t border-slate-200 pt-4"><h4 className="font-medium">質問と回答</h4><pre className="mt-3 whitespace-pre-wrap break-words font-sans text-sm leading-7 text-slate-800">{selected.consultation_text || "記録なし"}</pre></div>
+      {selected.order_id ? <p className="mt-4 text-sm text-slate-600">決済済み注文に紐付け済みです。</p>
+        : ["submitted", "in_review"].includes(selected.status) && <div className="mt-5 border-t border-slate-200 pt-4">
+          <p className="text-sm font-medium">先に決済した注文との紐付け</p>
+          <p className="mt-1 text-sm text-slate-600">購入者・商品・受付内容を照合してから注文番号を入力してください。</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <input aria-label="決済済みの注文番号" placeholder="TY-2026-000000" value={orderNumber} onChange={event => setOrderNumber(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+            <button type="button" disabled={linking} onClick={linkPaidOrder} className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm disabled:opacity-50">注文を紐付ける</button>
+          </div>
+        </div>}
     </section>}
   </div>;
 }

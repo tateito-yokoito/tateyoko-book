@@ -40,7 +40,7 @@ function OptionList({ name, options, value, onSelect, multiple = false, compact 
   )}</div>;
 }
 
-export default function SupportConsultationInline({ reviewOnly = false }) {
+export default function SupportConsultationInline({ reviewOnly = false, purchaseSelection = null }) {
   const [values, setValues] = useState(initialValues);
   const [stepIndex, setStepIndex] = useState(0);
   const [error, setError] = useState('');
@@ -120,9 +120,12 @@ export default function SupportConsultationInline({ reviewOnly = false }) {
         headers: { 'Content-Type': 'application/json', apikey: publishableKey },
         body: JSON.stringify({
           requestKey: key.current,
-          orderType: 'self', productPreference: 'undecided',
-          standardExtraCount: 0, premiumExtraCount: 0,
-          familyInvitationId: null, giftRecipientName: null,
+          orderType: purchaseSelection?.purchaseFor === 'gift' ? 'gift' : 'self',
+          productPreference: purchaseSelection?.edition || 'undecided',
+          standardExtraCount: purchaseSelection?.standardExtraCount || 0,
+          premiumExtraCount: purchaseSelection?.premiumExtraCount || 0,
+          familyInvitationId: null,
+          giftRecipientName: purchaseSelection?.purchaseFor === 'gift' ? purchaseSelection?.recipientName || null : null,
           contactName: values.name.trim(), contactEmail: values.email.trim(), contactPhone: values.phone.trim(),
           consultationText: answers, consentToContact: values.consent, receiveCopy: values.receiveCopy,
           website: values.website,
