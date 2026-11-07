@@ -330,27 +330,31 @@
   margin: 28px 0;
 }
 @media (min-width: 621px) {
-  .landing-site .hp-origin-episode .hp-origin-photo-stack .hp-origin-cover,
-  .landing-site .hp-origin-episode .hp-origin-photo-stack .hp-origin-book {
+  .landing-site .hp-origin-episode .hp-origin-photo-stack .hp-origin-book,
+  .landing-site .hp-origin-episode .hp-origin-photo-stack .hp-origin-grandparents-photo {
     aspect-ratio: 2852 / 1534;
     overflow: hidden;
   }
-  .landing-site .hp-origin-episode .hp-origin-photo-stack .hp-origin-cover img,
-  .landing-site .hp-origin-episode .hp-origin-photo-stack .hp-origin-book img {
+  .landing-site .hp-origin-episode .hp-origin-photo-stack .hp-origin-book img,
+  .landing-site .hp-origin-episode .hp-origin-photo-stack .hp-origin-grandparents-photo img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     object-position: center;
   }
 }
-.landing-site .hp-origin-episode .hp-origin-closing { padding-top: 0; }
-.landing-site .hp-origin-episode .hp-origin-grandparents-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 26px;
+.landing-site .hp-origin-episode .hp-origin-grandparents-copy {
+  width: 100%;
+  min-width: 0;
   margin-top: 32px;
 }
-.landing-site .hp-origin-episode .hp-origin-grandparents-photo { width: 100%; margin: 0; }
+.landing-site .hp-origin-episode .hp-origin-closing { padding-top: 0; }
+.landing-site .hp-origin-episode .hp-origin-photo-stack .hp-origin-grandparents-photo {
+  grid-column: auto;
+  grid-row: auto;
+  width: 100%;
+  margin: 0;
+}
 .landing-site .hp-origin-compact .hp-origin-vision {
   width: 100%;
   max-width: none;
@@ -410,9 +414,9 @@
   .landing-site .hp-origin-episode .hp-origin-scene p,
   .landing-site .hp-origin-episode .hp-origin-brief p,
   .landing-site .hp-origin-episode .hp-origin-closing p { font-size: 14px; line-height: 1.85; }
-  .landing-site .hp-origin-episode .hp-origin-photo-stack,
-  .landing-site .hp-origin-episode .hp-origin-grandparents-layout { grid-template-columns: 1fr; }
+  .landing-site .hp-origin-episode .hp-origin-photo-stack { grid-template-columns: 1fr; }
   .landing-site .hp-origin-episode .hp-origin-photo-stack { margin: 20px 0; }
+  .landing-site .hp-origin-episode .hp-origin-photo-stack .hp-origin-grandparents-photo { aspect-ratio: auto; }
   .landing-site .hp-origin-compact .hp-origin-vision { margin-top: 60px; }
   .landing-site .hp-origin-compact .hp-origin-vision h3 { margin-bottom: 29px; font-size: 25px; }
   .landing-site .hp-origin-compact .hp-origin-vision-copy p { font-size: 15px; line-height: 1.9; }

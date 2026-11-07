@@ -101,15 +101,13 @@ export function StoryOrigin() {
               <p>最初のページには家紋が貼られていましたが、その先はすべて白紙だったのです。</p>
             </div>
             <div className="hp-origin-photo-stack">
-              <figure className="hp-origin-cover"><img src={asset + 'family-history-spine-wide-20261023.png'} alt="祖父が用意した「わが家の歴史」の冊子と背表紙" width="2852" height="1534" loading="lazy" /></figure>
               <figure className="hp-origin-book"><img src={asset + 'origin-family-history-open-20261023.jpg'} alt="家紋が貼られたページと、白紙のままの家系図のページ" width="1024" height="768" loading="lazy" /></figure>
+              <figure className="hp-origin-grandparents-photo"><img src={asset + 'grandparents.jpg'} alt="創業者の祖父母の写真" width="1102" height="713" loading="lazy" /></figure>
             </div>
             <div className="hp-origin-closing">
               <p>祖父は、どんな想いでこの冊子を用意したのか。<br />何を残したかったのか。</p>
               <p>今なら聞いてみたいことが、たくさんあります。<br />でも、もう聞くことはできません。</p>
             </div>
-          <div className="hp-origin-grandparents-layout">
-            <figure className="hp-origin-grandparents-photo"><img src={asset + 'grandparents.jpg'} alt="創業者の祖父母の写真" width="1102" height="713" loading="lazy" /></figure>
             <div className="hp-origin-grandparents-copy">
               <p>多くの方々の人生に触れてきた私自身、<br />身近な祖父母の人生については、<br />驚くほど何も聞けていませんでした。</p>
               <p>あの「わが家の歴史」には、<br />どんな物語が綴られるはずだったのだろう。</p>
@@ -117,7 +115,6 @@ export function StoryOrigin() {
               <p>そして、思いました。</p>
               <p>まだ話を聞ける両親についても、<br />いつか同じ後悔をするのではないか、と。</p>
             </div>
-          </div>
           </div>
         </details>
       </div>
