@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 const asset = '/site/hp-story-preview/';
 const waysImage = asset + 'ways-to-preserve-reference.jpg';
@@ -73,28 +73,13 @@ export function StoryToday() {
 }
 
 export function StoryOrigin() {
-  const [originExpanded, setOriginExpanded] = useState(false);
   return (
-    <section className="hp-story hp-origin hp-section hp-shell" id="origin" aria-labelledby="origin-title">
-      <p className="hp-origin-kicker">Origin｜縦糸♾️横糸が生まれた理由</p>
-      <h2 id="origin-title">家族でも知らない、<br className="hp-origin-heading-break" />人生がある。</h2>
-      <div className="hp-origin-brief">
-        <p>18年間、約1,000世帯の方々の人生に関わる中で、家族でさえ知らない物語や想いがあることを、何度も感じてきました。</p>
-        <p>私自身、祖父が残した「家族史」を見つけたとき、胸を突かれる思いがしました。</p>
-        <p>最初のページには家紋が貼られていましたが、その先はすべて白紙だったのです。</p>
-      </div>
-      <div className="hp-origin-photo-stack">
-        <figure className="hp-origin-cover"><img src={asset + 'family-history-spine-wide-20261023.png'} alt="祖父が用意した「わが家の歴史」の冊子と背表紙" width="2852" height="1534" loading="lazy" /></figure>
-        <figure className="hp-origin-book"><img src={asset + 'origin-family-history-open-20261023.jpg'} alt="家紋が貼られたページと、白紙のままの家系図のページ" width="1024" height="768" loading="eager" /></figure>
-      </div>
-      <div className="hp-origin-closing">
-        <p>祖父は、どんな想いでこの冊子を用意したのか。<br />何を残したかったのか。</p>
-        <p>今なら聞いてみたいことが、たくさんあります。<br />でも、もう聞くことはできません。</p>
-      </div>
-      <button className="hp-origin-toggle" type="button" aria-expanded={originExpanded} aria-controls="origin-full-story" onClick={() => setOriginExpanded(!originExpanded)}>{originExpanded ? '− 実話を閉じる' : '＋ 縦糸♾️横糸が生まれた２つの実話を読む'}</button>
-      <div id="origin-full-story" hidden={!originExpanded}>
-        <div className="hp-origin-scene hp-origin-client">
-          <h3>01　家族に届いた、<br className="hp-origin-heading-mobile-break" />12年前の言葉</h3>
+    <section className="hp-story hp-origin hp-origin-compact hp-section hp-shell" id="origin" aria-labelledby="origin-title">
+      <h2 id="origin-title">縦糸横糸が生まれた、2つの実話</h2>
+      <div className="hp-origin-episodes">
+        <details className="hp-origin-episode">
+          <summary>12年前の言葉が、家族に届いた日。</summary>
+          <div className="hp-origin-scene hp-origin-client">
           <p>私が初めて死亡保険金をお支払いしたのは、<br />当時の私と同じ、37歳の男性でした。</p>
           <p>持病もなく、いつもの通勤電車で突然具合が悪くなり、<br />病院へ運ばれ、数日後にこの世を去りました。</p>
           <p>九州から駆けつけたご両親とお姉さまは、<br />深い悲しみと戸惑いの中にいらっしゃいました。</p>
@@ -105,9 +90,24 @@ export function StoryOrigin() {
           <p>それでも、ご両親から、こんな言葉をいただきました。</p>
           <blockquote>東京に出てから、あまり話もできていなかった。<br />息子を誇りに思う。</blockquote>
           <p>その言葉を、今も忘れることができません。</p>
-        </div>
-        <div className="hp-origin-scene hp-origin-scene-grandparents">
-          <h3>02　聞けなかったこと。<br className="hp-origin-heading-mobile-break" />まだ聞けること。</h3>
+          </div>
+        </details>
+        <details className="hp-origin-episode">
+          <summary>白紙だった祖父の家族史</summary>
+          <div className="hp-origin-scene hp-origin-scene-grandparents">
+            <div className="hp-origin-brief">
+              <p>18年間、約1,000世帯の方々の人生に関わる中で、家族でさえ知らない物語や想いがあることを、何度も感じてきました。</p>
+              <p>私自身、祖父が残した「家族史」を見つけたとき、胸を突かれる思いがしました。</p>
+              <p>最初のページには家紋が貼られていましたが、その先はすべて白紙だったのです。</p>
+            </div>
+            <div className="hp-origin-photo-stack">
+              <figure className="hp-origin-cover"><img src={asset + 'family-history-spine-wide-20261023.png'} alt="祖父が用意した「わが家の歴史」の冊子と背表紙" width="2852" height="1534" loading="lazy" /></figure>
+              <figure className="hp-origin-book"><img src={asset + 'origin-family-history-open-20261023.jpg'} alt="家紋が貼られたページと、白紙のままの家系図のページ" width="1024" height="768" loading="lazy" /></figure>
+            </div>
+            <div className="hp-origin-closing">
+              <p>祖父は、どんな想いでこの冊子を用意したのか。<br />何を残したかったのか。</p>
+              <p>今なら聞いてみたいことが、たくさんあります。<br />でも、もう聞くことはできません。</p>
+            </div>
           <div className="hp-origin-grandparents-layout">
             <figure className="hp-origin-grandparents-photo"><img src={asset + 'grandparents.jpg'} alt="創業者の祖父母の写真" width="1102" height="713" loading="lazy" /></figure>
             <div className="hp-origin-grandparents-copy">
@@ -118,23 +118,23 @@ export function StoryOrigin() {
               <p>まだ話を聞ける両親についても、<br />いつか同じ後悔をするのではないか、と。</p>
             </div>
           </div>
-        </div>
+          </div>
+        </details>
       </div>
       <div className="hp-origin-vision">
-        <p className="hp-origin-vision-label">創業者の想い</p>
-        <h3>家族に還れる場所をつくる</h3>
+        <h3>“家族に還れる”場所をつくる。</h3>
         <div className="hp-origin-vision-layout">
           <div className="hp-origin-vision-copy">
             <p>特別な人だけが、自伝を書くのではなく。<br />成功した人生だけを、きれいな物語にするのでもなく。</p>
             <p className="hp-origin-vision-pledge">誰もが、自分の人生を気軽に残せないか。</p>
             <p>語ることで、自分の人生をもう一度辿り、<br />忙しい日々に埋もれていた、大切なものに気づく。</p>
             <p>そして、家族が受け取りたいと思ったときには、<br />時を越えて、その人らしさに触れられる場所として。</p>
-            <p>そんな願いを、<br className="hp-origin-mobile-break" />「縦糸♾️横糸」に込めています。</p>
-            <address className="hp-origin-vision-signature"><span>株式会社SaltLight 代表取締役</span><strong>菅原 英俊</strong></address>
+            <p>そんな願いを、「縦糸∞横糸」に込めています。</p>
           </div>
           <div className="hp-origin-vision-person">
             <figure><img src={asset + 'founder-and-son-landscape-20261022.png'} alt="創業者・菅原英俊と息子" width="1402" height="1122" loading="lazy" /></figure>
           </div>
+          <address className="hp-origin-vision-signature"><span>株式会社SaltLight 代表取締役</span><strong>菅原英俊</strong></address>
         </div>
       </div>
     </section>
