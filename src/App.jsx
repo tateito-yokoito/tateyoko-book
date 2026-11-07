@@ -16651,7 +16651,7 @@ export function Scene_BookBuilder({
     if (!commerceV2Project || project?.production_method_v2 === "interview_staff"
       || !bookProjectId || !bookWork || workSaving || !previewEdition) return;
     if (!bookWork.confirmed_at && !window.confirm(
-      "紙面を確定すると、紙のBOOKとWebブックはこの内容で制作します。内容を確認済みですか？"
+      "紙面を確定すると編集できなくなります。運営が仕上がりを確認し、必要に応じて意味を変えない軽微な調整やお問い合わせを行います。内容を確認済みですか？"
     )) return;
     setWorkSaving(true);
     setWorkError("");
@@ -17717,7 +17717,13 @@ export function Scene_BookBuilder({
               <div className="glass-card p-5 space-y-4">
                 {bookWork?.confirmed_at ? (
                   <>
-                    <p className="text-sm text-white/80">{productionJob?.state === "ready_review"
+                    <p className="text-sm text-white/80">{productionJob?.opsStatus && ![
+                      "approved", "print_ready", "ordered", "printing", "shipped", "delivered"
+                    ].includes(productionJob.opsStatus)
+                      ? "仕上がりを確認しています"
+                      : productionJob?.opsStatus
+                        ? "BOOK・Webブックが完成しました。印刷・発送の進行状況は運営がご案内します。"
+                      : productionJob?.state === "ready_review"
                       ? `紙のBOOKとWebブックの制作データができました。全${productionJob.pageCount}ページです。`
                       : productionJob?.state === "error"
                         ? "制作データを確認しています。再注文は不要です。"

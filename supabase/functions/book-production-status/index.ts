@@ -32,8 +32,13 @@ serve(async request => {
       .eq("book_project_id", projectId).order("created_at", { ascending: false }).limit(1);
     if (error) throw error;
     const job = jobs?.[0] || null;
+    const { data: opsCase, error: opsError } = job
+      ? await admin.from("book_ops_cases").select("status,approved_at").eq("order_id", job.order_id).maybeSingle()
+      : { data: null, error: null };
+    if (opsError) throw opsError;
     let pdfUrl = null;
-    if (job?.state === "ready_review" && job.pdf_storage_path) {
+    if (job?.state === "ready_review" && job.pdf_storage_path
+      && (!opsCase || ["approved", "print_ready", "ordered", "printing", "shipped", "delivered"].includes(opsCase.status))) {
       const { data: signed, error: signError } = await admin.storage.from("book-production")
         .createSignedUrl(job.pdf_storage_path, 300);
       if (signError) throw signError;
@@ -42,7 +47,8 @@ serve(async request => {
     return json({ success: true, job: job ? {
       orderId: job.order_id, state: job.state, stage: job.stage, attempts: job.attempts,
       pageCount: job.pdf_page_count, createdAt: job.created_at, completedAt: job.completed_at,
-      error: job.error_message, pdfUrl
+      error: job.error_message, pdfUrl,
+      opsStatus: opsCase?.status || null, opsApprovedAt: opsCase?.approved_at || null
     } : null });
   } catch (error) {
     console.error("book-production-status", error);

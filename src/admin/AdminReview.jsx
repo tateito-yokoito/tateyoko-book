@@ -44,6 +44,7 @@ import OpsErrorHistory from './OpsErrorHistory.jsx';
 import TodaySkyAdmin from './TodaySkyAdmin.jsx';
 import ConsultationReview from './ConsultationReview.jsx';
 import FixedLineTestReset from './FixedLineTestReset.jsx';
+import BookOpsReview from './BookOpsReview.jsx';
 import {normalizeUserQuestions} from '../App.jsx';
 import { AccountOverview, ProjectOverview } from './AdminDetailOverview.jsx';
 
@@ -56,6 +57,7 @@ const TAB_ITEMS = [
   { id: "errors", label: "エラー履歴", icon: AlertCircle },
   { id: "sky", label: "今日の空", icon: Bell },
   { id: "payments", label: "決済", icon: CreditCard },
+  { id: "book-ops", label: "完成作品", icon: PackageCheck },
   { id: "consultations", label: "事前相談", icon: Mail },
   { id: "sales", label: "販売", icon: BadgePercent }
 ];
@@ -1795,7 +1797,8 @@ export default function AdminReview({ supabaseClient }) {
   const [authorizationReady, setAuthorizationReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState(null);
-  const [tab, setTab] = useState("attention");
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).has("book_ops_order")
+    ? "book-ops" : "attention");
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [deliveryStatus, setDeliveryStatus] = useState("");
@@ -2987,6 +2990,7 @@ export default function AdminReview({ supabaseClient }) {
             {tab === "sky" && <TodaySkyAdmin client={supabaseClient} />}
             {tab === "questions" && <QuestionWorkbench client={supabaseClient} owner={adminRole === "owner"} onOpenCustomerExperience={()=>setTab('projects')} />}
             {tab === "payments" && <OrderReview key={appliedSearch} client={supabaseClient} search={appliedSearch} onAccount={openAccountDetail} onProject={openDetail} />}
+            {tab === "book-ops" && <BookOpsReview client={supabaseClient} role={adminRole} />}
             {tab === "consultations" && adminRole === "owner" && <ConsultationReview client={supabaseClient} />}
             {tab === "sales" && (
               <CommercePanel
