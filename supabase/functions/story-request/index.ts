@@ -147,7 +147,7 @@ serve(async request => {
       }
       if (action === "list_owner") {
         const { data, error } = await db.from("theme_memory_requests")
-          .select("id,theme_code,recipient_name,relationship_label,selected_questions,status,created_at,submitted_at,revoked_at,theme_memory_answer_records(id,question_key,publication_status)")
+          .select("id,theme_code,recipient_name,relationship_label,selected_questions,status,created_at,submitted_at,revoked_at,owner_viewed_at,theme_memory_answer_records(id,question_key,publication_status,responder_name)")
           .eq("book_project_id", projectId).not("link_token_hash", "is", null).order("created_at", { ascending: false });
         if (error) throw error;
         return respond({ success: true, requests: await Promise.all((data || []).map(async (item: any) => ({
@@ -225,6 +225,13 @@ serve(async request => {
       }
       const { data: answers, error } = await db.from("theme_memory_answer_records").select("*").eq("request_id", requestId).order("created_at");
       if (error) throw error;
+      if (action === "owner_preview" && answers?.length
+        && (!invitation.owner_viewed_at || (invitation.submitted_at && invitation.submitted_at > invitation.owner_viewed_at))) {
+        const { error: viewedError } = await db.from("theme_memory_requests")
+          .update({ owner_viewed_at: new Date().toISOString() })
+          .eq("id", requestId);
+        if (viewedError) throw viewedError;
+      }
       const paths = [...new Set((answers || []).flatMap((answer: any) => [
         ...(answer.audio_records || []).map((audio: any) => audio.path), ...(answer.photo_paths || [])
       ]).filter(Boolean))];
