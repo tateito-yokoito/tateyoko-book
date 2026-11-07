@@ -29,6 +29,7 @@ import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
 import WrittenAnswerEditor from "./WrittenAnswerEditor.jsx";
 import QuestionFlowTopBar from "./QuestionFlowTopBar.jsx";
+import { nextThemeQuestion } from "./lib/nextThemeQuestion.js";
 import { deleteAnswerRecordingDraft, listAnswerRecordingDrafts, saveAnswerRecordingDraft } from './lib/answerRecordingDraft.js';
 import BookendInvitation from "./BookendInvitation.jsx";
 import { BOOKEND_PROMPTS, bookendKindForQuestion, bookendKindForVideo } from "./lib/bookends.js";
@@ -6038,6 +6039,12 @@ const beginSelectedThemeExtras = async () => {
 const leaveThemeTransition = async nextScene => {
   try {
     setIsInitializing(true);
+    const nextQuestion = nextThemeQuestion(questionsDB, completedThemeOrder);
+    if (!nextQuestion) throw new Error("次のテーマの問いを確認できません");
+    const { error: progressError } = await supabaseClient.from("profiles")
+      .update({ current_sequence: nextQuestion.sequenceOrder }).eq("id", user.id);
+    if (progressError) throw progressError;
+    setProgress(previous => ({ ...previous, currentIndex: nextQuestion.index }));
     await savePendingThemeTransition(null);
     resetVoiceData();
     setScene(nextScene);
@@ -16560,7 +16567,7 @@ export function Scene_BookBuilder({
   const [draftPdfError, setDraftPdfError] = useState("");
   const workSaveLock = useRef(false);
   useEffect(() => {
-    if (import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED !== "true" || !bookProjectId
+    if ((!commerceV2Project && import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED !== "true") || !bookProjectId
       || !["paid", "zero_paid"].includes(project?.access_status) && !orderCompleted && !orderCompletedAt) return undefined;
     let cancelled = false;
     const refresh = async () => {
@@ -16572,7 +16579,7 @@ export function Scene_BookBuilder({
     refresh();
     const timer = window.setInterval(refresh, 15_000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [bookProjectId, project?.access_status, orderCompleted, orderCompletedAt]);
+  }, [commerceV2Project, bookProjectId, project?.access_status, orderCompleted, orderCompletedAt]);
   const saveSelection = async ids => {
     const {data,error}=await supabaseClient.rpc("save_book_selection",{
       input_project_id:bookProjectId,input_answer_ids:ids,input_expected_revision:bookWork?.revision ?? 0
@@ -17675,7 +17682,17 @@ export function Scene_BookBuilder({
               <div className="glass-card p-5 space-y-4">
                 {bookWork?.confirmed_at ? (
                   <>
-                    <p className="text-sm text-white/80">作品は確定済みです。紙のBOOKとWebブックを制作しています。</p>
+                    <p className="text-sm text-white/80">{productionJob?.state === "ready_review"
+                      ? `紙のBOOKとWebブックの制作データができました。全${productionJob.pageCount}ページです。`
+                      : productionJob?.state === "error"
+                        ? "制作データを確認しています。再注文は不要です。"
+                        : "作品は確定済みです。紙のBOOKとWebブックを制作しています。"}</p>
+                    {productionJob?.state === "ready_review" && productionJob.pdfUrl && (
+                      <a href={productionJob.pdfUrl} target="_blank" rel="noreferrer"
+                        className="block text-center text-sm text-white/80 underline underline-offset-4">
+                        校正用PDFを開く
+                      </a>
+                    )}
                     <button type="button" onClick={() => setV2AdditionalOpen(value => !value)}
                       className="btn-quiet w-full rounded-full bg-white/10 py-3 text-sm text-white">
                       {v2AdditionalOpen ? "追加冊子の注文を閉じる" : "完成した作品の追加冊子を注文する"}
