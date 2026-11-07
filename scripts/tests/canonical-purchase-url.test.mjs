@@ -14,6 +14,13 @@ test('an existing purchase handoff token is kept across the redirect', () => {
   assert.equal(canonical.searchParams.get('purchase_review'), '1');
 });
 
+test('old landing page and standalone consultation use the supported host', () => {
+  assert.equal(canonicalPurchaseUrl(new URL('https://tateyoko-book.vercel.app/')),
+    'https://www.tateito-yokoito.jp/');
+  assert.equal(canonicalPurchaseUrl(new URL('https://tateyoko-book.vercel.app/support-consultation/?source=hp')),
+    'https://www.tateito-yokoito.jp/support-consultation/?source=hp');
+});
+
 test('official site, free trial, and checkout return are left in their current flows', () => {
   for (const url of [
     'https://www.tateito-yokoito.jp/?app=1&entry=purchase',
