@@ -6,6 +6,12 @@ alter table public.theme_memory_requests
   add column if not exists arrival_notification_attempted_at timestamptz,
   add column if not exists arrival_notification_sent_at timestamptz;
 
+-- Requests completed before this feature was installed are not new arrivals.
+update public.theme_memory_requests
+set arrival_notification_state = 'unavailable'
+where status = 'submitted'
+  and arrival_notification_state = 'pending';
+
 alter table public.theme_memory_requests
   add constraint theme_memory_requests_arrival_notification_state_check
   check (arrival_notification_state in ('pending', 'sending', 'sent', 'failed', 'unavailable'));
