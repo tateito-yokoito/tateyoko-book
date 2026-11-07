@@ -5,9 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>縦糸横糸｜年輪・全体プレビュー</title>
+  <link rel="stylesheet" href="/assets/postcta-overlay.css">
+  <script defer src="/assets/postcta-overlay.js"></script>
 </head>
 <body>
   <div id="root"></div>
   <script type="module" src="/src/hp-nov8-preview.jsx"></script>
+  <script>
+    window.addEventListener('load', () => {
+      const target = decodeURIComponent(location.hash.slice(1));
+      if (target) setTimeout(() => document.getElementById(target)?.scrollIntoView(), 1500);
+    });
+  </script>
 </body>
 </html>
