@@ -6,6 +6,7 @@ import LandingPage from "./LandingPage.jsx";
 import CommerceV2Purchase from './CommerceV2Purchase.jsx';
 import { commercePurchaseReviewRequested, readCommercePurchaseIntent, saveCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
 import { createPurchaseHandoff, purchaseHandoffToken, restorePurchaseHandoff, savePendingGuestHandoff } from './lib/commercePurchaseHandoff.js';
+import { canonicalPurchaseUrl } from './lib/canonicalPurchaseUrl.js';
 import GiftThreeQuestionsPage from "./gift-three-questions.jsx";
 import VoiceLibraryPage from "./VoiceLibraryPage.jsx";
 import PublishedWebBook from "./PublishedWebBook.jsx";
@@ -96,6 +97,8 @@ function PurchaseHandoffGate({ token }) {
 
 function RootScreen() {
   const params = new URLSearchParams(window.location.search);
+  const canonicalUrl = canonicalPurchaseUrl(window.location);
+  if (canonicalUrl) return <CanonicalPurchaseRedirect url={canonicalUrl} />;
   const purchaseIntent = params.get('entry') === 'purchase'
     ? readCommercePurchaseIntent(window.localStorage) : null;
 
@@ -184,6 +187,11 @@ function RootScreen() {
   }
 
   return shouldOpenApplication() ? <App /> : <LandingPage />;
+}
+
+function CanonicalPurchaseRedirect({ url }) {
+  useEffect(() => { window.location.replace(url); }, [url]);
+  return <main className="flex min-h-screen items-center justify-center text-white">購入画面を開いています…</main>;
 }
 
 function FamilyTestGate({params}) {
