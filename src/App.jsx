@@ -5,6 +5,7 @@ import { clearOnboardingNotificationDraft, clearOnboardingPreferenceDraft, clear
 import ApprovedHome from './home/ApprovedHome.jsx';
 import LineNotificationConnection from './LineNotificationConnection.jsx';
 import SupporterContextFrame from './SupporterContextFrame.jsx';
+import { photoStoryAccess } from './lib/photoStoryAccess.js';
 import StorySkySurface, { PersistentStorySkyBackdrop } from './home/StorySkySurface.jsx';
 import { configureSkyClient } from './home/liveSkies.js';
 import './reading-flow.css';
@@ -75,6 +76,7 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 configureSkyClient(supabaseClient);
 const applicationSupabaseClient = supabaseClient;
+const FamilyPhotoStoryFlow = React.lazy(() => import('./FamilyPhotoStoryFlow.jsx'));
 
 const FREE_TRIAL_QUESTION_COUNT = 3;
 const FREE_TRIAL_RETENTION_ENABLED = import.meta.env.VITE_FREE_TRIAL_RETENTION_ENABLED === "true";
@@ -3226,6 +3228,7 @@ function App() {
   const [notificationPref, setNotificationPref] = useState(null);
   const [progress, setProgress] = useState({ currentIndex: 0, total: 0 });
   const [foundation, setFoundation] = useState(null);
+  const [familyPhotoContext, setFamilyPhotoContext] = useState(null);
   const [storyRequestSummary, setStoryRequestSummary] = useState(null);
   useEffect(() => {
     const projectId = foundation?.project?.id;
@@ -4637,6 +4640,29 @@ const handleRecordComplete = async (txt, dur, url, blob, details = {}) => {
       console.error("photo story start error", error);
       alert("写真から語る準備ができませんでした。");
     } finally { setIsInitializing(false); }
+  };
+
+  const openPhotoStory = async () => {
+    try {
+      setIsInitializing(true);
+      const access = await photoStoryAccess(supabaseClient, foundation?.project?.id);
+      setFamilyPhotoContext(access.kind === 'family' ? access : null);
+      setScene(access.kind === 'family' ? 'family_photo_story_start' : 'photo_story_start');
+    } catch (error) {
+      console.error('photo story access error', error);
+      alert('写真から語る画面を開けませんでした。もう一度お試しください。');
+    } finally { setIsInitializing(false); }
+  };
+
+  const leaveFamilyPhotoStory = async (destination = 'home') => {
+    try {
+      const refreshed = await loadUserQuestionSet(user.id, foundation);
+      setQuestionsDB(refreshed);
+    } catch (error) {
+      console.warn('photo story refresh failed', error);
+    }
+    setFamilyPhotoContext(null);
+    setScene(destination);
   };
 
 const getAnswerTextForEditRecording = (answer) => (
@@ -8586,7 +8612,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
            setThemeMemoryReturnScene("home");
            setScene("theme_memory_manager");
          }}
-         onStartPhotoStory={() => setScene("photo_story_start")}
+         onStartPhotoStory={openPhotoStory}
          onOpenBookBuilder={() => { setBookBuilderResumeStep(0); setScene("book_builder"); }}
          onOpenQuestionLibrary={() => setScene("question_library")}
          onOpenSettings={() => setScene("settings")}
@@ -8800,6 +8826,18 @@ if (getProjectRoleInviteTokenFromUrl()) {
 
       {scene === "photo_story_start" && (
         <Scene_PhotoStoryStart onStart={startPhotoStory} onBack={() => setScene("home")} />
+      )}
+      {scene === 'family_photo_story_start' && familyPhotoContext && (
+        <React.Suspense fallback={<p className="text-white">写真の画面を開いています…</p>}>
+          <FamilyPhotoStoryFlow
+            key={familyPhotoContext.workspace.project_id}
+            client={supabaseClient}
+            api={familyPhotoContext.api}
+            workspace={familyPhotoContext.workspace}
+            onBack={() => leaveFamilyPhotoStory()}
+            onStories={() => leaveFamilyPhotoStory('story_pages')}
+          />
+        </React.Suspense>
       )}
 
       {scene === "settings" && (

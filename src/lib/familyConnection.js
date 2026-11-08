@@ -18,8 +18,8 @@ export function familyInvitationUrl(origin, token) {
   return `${origin}/?app=1&family_connect=1#connect=${token}`;
 }
 
-export function createFamilyApi(client) {
-  if (new URL(client.supabaseUrl).hostname !== `${FAMILY_TEST_REF}.supabase.co`) {
+export function createFamilyApi(client, { allowProduction = false } = {}) {
+  if (!allowProduction && new URL(client.supabaseUrl).hostname !== `${FAMILY_TEST_REF}.supabase.co`) {
     throw Error('母娘接続は現在TEST環境のみで利用できます。');
   }
   const rpc = async (name, parameters = {}) => {
