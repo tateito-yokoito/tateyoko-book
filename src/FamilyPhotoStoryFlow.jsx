@@ -1,6 +1,7 @@
 import React, {useRef, useState} from 'react';
 import {Scene_PhotoStoryStart} from './App.jsx';
 import FamilyRecordingFlow from './FamilyRecordingFlow.jsx';
+import { canProduce } from './lib/familyConnection.js';
 
 export default function FamilyPhotoStoryFlow({client,api,workspace,onBack,onSaved,onStories}) {
   const [recording,setRecording]=useState(null),[error,setError]=useState('');
@@ -30,4 +31,3 @@ export default function FamilyPhotoStoryFlow({client,api,workspace,onBack,onSave
     <Scene_PhotoStoryStart onStart={start} onBack={onBack}/>
   </div></div>;
 }
-import {canProduce} from './lib/familyConnection.js';
