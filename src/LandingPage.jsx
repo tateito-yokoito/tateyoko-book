@@ -6,6 +6,7 @@ import "./hp-nov8-hero-preview.css";
 import "./hp-nenrin-focused-release.css";
 import StoryIntro from './landing/StoryIntro.jsx';
 import SupportConsultationInline from './SupportConsultationInline.jsx';
+import { startHpAnalytics } from './lib/hpAnalytics.js';
 
 const LOGIN = "/?app=1&entry=login";
 const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true'
@@ -13,6 +14,8 @@ const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true'
 const PURCHASE = "/?app=1&entry=purchase";
 const GIFT_PURCHASE = PURCHASE;
 const EMAIL = "sugawara@saltlight.co.jp";
+const GA4_MEASUREMENT_ID = import.meta.env.VITE_GA4_MEASUREMENT_ID;
+const GA4_CONFIGURED = /^G-[A-Z0-9]+$/.test(GA4_MEASUREMENT_ID || '');
 const QUESTIONS = [
   "幼い頃、どんなところに住んでいましたか？",
   "その頃、よく一緒にいた人を一人思い浮かべてください。どんな人でしたか？",
@@ -100,7 +103,7 @@ function InformationDialog({ panel, close, reviewOnly }) {
     <div className="hp-dialog-inner"><button className="hp-dialog-close" onClick={close} aria-label="閉じる">×</button>
       <h2 id="hp-dialog-title">{title}</h2>
       {panel === "contact" && <><p>使い方、制作やご注文について、メールでご相談いただけます。</p><a href={reviewOnly ? "#hp-review-notice" : "mailto:" + EMAIL}>{EMAIL}</a></>}
-      {panel === "privacy" && <><p>本づくりを手伝うサポーターと、完成した物語を見る家族は別の役割です。</p><p>サポーターは制作に必要な情報を扱います。完成した物語の共有範囲とは分けて、ご本人の同意のもとで依頼してください。</p><p>録音、文章、写真、アカウント情報は、サービスの提供とサポートに必要な範囲で取り扱います。ご質問は運営窓口へご連絡ください。</p><p>操作のお困りごとへの対応と不具合の改善のため、配信リンクからのアクセス、ログインや問いの画面表示、録音・保存の操作状況、エラーの種類をアカウント・物語に関連付けて記録します。この操作記録に、お話の内容、入力した文章、録音データは含めません。</p><p>詳細な操作記録は90日を過ぎた後、毎日の削除処理で削除します。配信結果や保存した語りの履歴は別に管理します。操作記録はサポートを担当する管理者が確認し、広告目的には利用しません。</p><p>サービス内で既に記録される無料体験の開始・完了、回答保存の成否、決済開始、確定注文を、運営上の実績確認と改善のため日別の合計に集計します。この集計のためにブラウザへ識別子を追加せず、回答本文・音声・氏名・メールアドレスを日別集計表に保存しません。注文・決済の原記録はサービス提供と会計のため別に管理します。</p></>}
+      {panel === "privacy" && <><p>本づくりを手伝うサポーターと、完成した物語を見る家族は別の役割です。</p><p>サポーターは制作に必要な情報を扱います。完成した物語の共有範囲とは分けて、ご本人の同意のもとで依頼してください。</p><p>録音、文章、写真、アカウント情報は、サービスの提供とサポートに必要な範囲で取り扱います。ご質問は運営窓口へご連絡ください。</p><p>操作のお困りごとへの対応と不具合の改善のため、配信リンクからのアクセス、ログインや問いの画面表示、録音・保存の操作状況、エラーの種類をアカウント・物語に関連付けて記録します。この操作記録に、お話の内容、入力した文章、録音データは含めません。</p><p>詳細な操作記録は90日を過ぎた後、毎日の削除処理で削除します。配信結果や保存した語りの履歴は別に管理します。操作記録はサポートを担当する管理者が確認し、広告目的には利用しません。</p><p>サービス内で既に記録される無料体験の開始・完了、回答保存の成否、決済開始、確定注文を、運営上の実績確認と改善のため日別の合計に集計します。この集計のためにブラウザへ識別子を追加せず、回答本文・音声・氏名・メールアドレスを日別集計表に保存しません。注文・決済の原記録はサービス提供と会計のため別に管理します。</p>{GA4_CONFIGURED && <><h3>公開HPのアクセス解析・外部送信</h3><p>公開HPの訪問者数、ページビュー、流入元を把握するため、Google LLCのGoogle Analytics 4を利用します。閲覧時、HPのページURL（クエリやトークンを除いたもの）、参照元サイトのドメイン、許可した流入元・媒体の区分、閲覧日時、ブラウザ・端末情報、IPアドレス、Cookieで生成される識別子がGoogleに送信されます。IPアドレスはGoogle側で位置情報の判定後、記録前に破棄されます。氏名、メールアドレス、回答・録音内容、購入・管理画面の操作はこの計測に含めません。</p><p>Cookieの有効期間は最長30日で、訪問による延長はしません。Google Analyticsのイベント単位データの保持期間は2か月に設定します。広告配信・広告向けのデータ共有には利用しません。詳しい取扱いは<a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Googleのプライバシーポリシー</a>と<a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">Googleによるサイト情報の利用についての説明</a>をご確認ください。</p></>}</>}
       {panel === "commerce" && <dl>{[
         ["販売事業者", "株式会社SaltLight"], ["運営責任者", "菅原 英俊"], ["連絡先", EMAIL],
         ["販売価格", "スタンダード 35,000円（税込）、プレミアム 65,000円（税込）。聞き取り制作サポートは各プランに20,000円（税込）で追加できます。追加冊子はスタンダード5,000円／冊、プレミアム35,000円／冊（いずれも税込）。"],
@@ -140,6 +143,18 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
   const [zoomedProduct, setZoomedProduct] = useState(null);
   const [moreFaq, setMoreFaq] = useState(false);
   const [monitorApplicationOpen, setMonitorApplicationOpen] = useState(false);
+  useEffect(() => {
+    if (reviewOnly) return;
+    try {
+      startHpAnalytics({
+        measurementId: GA4_MEASUREMENT_ID,
+        location: window.location,
+        referrer: document.referrer,
+        document,
+        window,
+      });
+    } catch { /* Access measurement must never interrupt the HP. */ }
+  }, [reviewOnly]);
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('info') === 'privacy') setPanel('privacy');
   }, []);
