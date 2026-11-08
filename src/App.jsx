@@ -6411,6 +6411,30 @@ useEffect(() => {
   })();
 }, [user?.id, foundation?.project?.id, foundation?.project?.access_status]);
 
+const finishGiftCheckoutAsPaid = data => {
+  setPurchaseFor("gift");
+  const purchaseIntent = readCommercePurchaseIntent(window.localStorage);
+  const familyManaged = purchaseIntent?.purchaseFor === 'gift'
+    && purchaseIntent.giftMode === 'family_managed'
+    && purchaseIntent.recipientName === data.gift?.recipient_name;
+  setPurchaseResult({ order: data.order, gift: data.gift, familyManaged });
+  if (familyManaged && data.order?.id && data.gift?.claim_token) {
+    window.localStorage.setItem(pendingManagedGiftKey, JSON.stringify({
+      userId: user.id,
+      order: { id: data.order.id },
+      gift: { claim_token: data.gift.claim_token, recipient_name: data.gift.recipient_name }
+    }));
+  }
+  setPurchaseStatus("paid");
+  setPurchaseError("");
+  const url = new URL(window.location.href);
+  url.searchParams.delete('purchase_review');
+  url.searchParams.delete('purchase_handoff');
+  window.history.replaceState({}, '', url.toString());
+  replaceCommercialEntryUrl("purchased");
+  setScene("gift_purchase_success");
+};
+
 useEffect(() => {
   const checkoutReturn = getCheckoutReturnFromUrl();
 
@@ -6438,26 +6462,6 @@ useEffect(() => {
     setScene(project?.production_method_v2 === "interview_staff"
       ? "staff_contact_waiting"
       : checkoutReturn.context === "book_builder" ? "book_builder" : "purchase_success");
-  };
-
-  const finishGiftCheckoutAsPaid = data => {
-    setPurchaseFor("gift");
-    const purchaseIntent = readCommercePurchaseIntent(window.localStorage);
-    const familyManaged = purchaseIntent?.purchaseFor === 'gift'
-      && purchaseIntent.giftMode === 'family_managed'
-      && purchaseIntent.recipientName === data.gift?.recipient_name;
-    setPurchaseResult({ order: data.order, gift: data.gift, familyManaged });
-    if (familyManaged && data.order?.id && data.gift?.claim_token) {
-      window.localStorage.setItem(pendingManagedGiftKey, JSON.stringify({
-        userId: user.id,
-        order: { id: data.order.id },
-        gift: { claim_token: data.gift.claim_token, recipient_name: data.gift.recipient_name }
-      }));
-    }
-    setPurchaseStatus("paid");
-    setPurchaseError("");
-    replaceCommercialEntryUrl("purchased");
-    setScene("gift_purchase_success");
   };
 
   const syncCheckout = async () => {
@@ -7700,6 +7704,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
         COMMERCE_V2_ENABLED ? (
           <CommerceV2Purchase client={supabaseClient} projectId={foundation?.project?.id}
             phase={purchaseSelection ? 'review' : 'checkout'} initialSelection={purchaseSelection}
+            onCompleted={finishGiftCheckoutAsPaid}
             initialOrderType={purchaseSelection?.purchaseFor || purchaseFor}
             familyInvitation={commerceV2Invitation || (
               receivedFamilyInvitation && ['awaiting_payment', 'continuation_awaiting_payment', 'trial_completed'].includes(receivedFamilyInvitation.status)
@@ -8904,7 +8909,15 @@ if (getProjectRoleInviteTokenFromUrl()) {
         <Scene_SupportProjectHome
           project={supportContext.project}
           questionSet={supportContext.questionSet}
-          onOpenQuestions={() => setScene("support_recording_assist")}
+          onOpenQuestions={async () => {
+            try {
+              await confirmExperienceBoundary(supportContext.project.book_project_id, "paid");
+              setScene("support_recording_assist");
+            } catch (error) {
+              console.error("supported story start error", error);
+              alert("制作を開始できませんでした。もう一度お試しください。");
+            }
+          }}
           onOpenStories={() => setScene("support_story_pages")}
           onOpenBookBuilder={() => setScene("support_book_builder")}
           onInviteLink={() => { setRoleInviteProjectId(supportContext.project.book_project_id); setRoleInviteReturnScene('support_project_home'); setScene('project_role_invite_issue'); }}
@@ -16185,7 +16198,8 @@ export function Scene_SupportRecordingAssist({
   const isFacilitator = project?.support_role === "facilitator";
   const storyQuestions = (questionSet || []).filter(question =>
     question?.flow_type === "story" ||
-    question?.onboarding_group === "first_story"
+    question?.onboarding_group === "first_story" ||
+    question?.onboarding_group === "starting_conversation"
   );
   const suggestedQuestion =
     storyQuestions.find(question => !question.answer_id && question.status !== "answered") ||
@@ -16202,8 +16216,56 @@ export function Scene_SupportRecordingAssist({
   const [recordingData, setRecordingData] = useState(null);
   const [reviewText, setReviewText] = useState("");
   const [essayText, setEssayText] = useState("");
+  const [writtenText, setWrittenText] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const savingRef = useRef(false);
+
+  const completeStartingConversation = async savedQuestion => {
+    if (savedQuestion?.onboarding_group !== "starting_conversation") return;
+    const following = storyQuestions.find(question =>
+      question.sequence_order > savedQuestion.sequence_order
+    );
+    if (following?.onboarding_group === "starting_conversation") return;
+    const projectId = project.book_project_id || project.id;
+    const { error: stepError } = await supabaseClient.from("book_projects")
+      .update({
+        onboarding_status: "life_outline_completed",
+        onboarding_ritual_step: "chapter_complete",
+        life_outline_completed_at: new Date().toISOString(),
+        current_onboarding_user_question_id: following?.user_question_id || null
+      })
+      .eq("id", projectId);
+    if (stepError) throw stepError;
+    const { error: startError } = await supabaseClient.rpc("start_main_experience", {
+      input_project_id: projectId,
+      input_subject_intent_confirmed: true
+    });
+    if (startError) throw startError;
+  };
+
+  const saveWrittenAnswer = async () => {
+    if (savingRef.current || !nextQuestion?.user_question_id || !writtenText.trim()) return;
+    savingRef.current = true;
+    setErrorMessage("");
+    try {
+      const { error } = await supabaseClient.rpc("save_supported_story_text", {
+        input_book_project_id: project.book_project_id,
+        input_user_question_id: nextQuestion.user_question_id,
+        input_text: writtenText.trim()
+      });
+      if (error) throw error;
+      await completeStartingConversation(nextQuestion);
+      await onSaved?.();
+      setWrittenText("");
+      setRecordingQuestion(null);
+      setPhase("question");
+    } catch (error) {
+      console.error("supported story text save error", error);
+      setErrorMessage("語りを保存できませんでした。もう一度お試しください。");
+    } finally {
+      savingRef.current = false;
+    }
+  };
 
   const processRecording = async (transcript, duration, audioUrl, audioBlob, details = {}, retryData = null) => {
     const draft = retryData || {
@@ -16229,7 +16291,8 @@ export function Scene_SupportRecordingAssist({
           ? "aac"
           : "webm";
       const projectId = project.book_project_id || project.id;
-      const storagePath = `${recordingStorageRoot(user.id, projectId, answerId)}/part-01.${ext}`;
+      // The existing supporter recording RPC accepts the supporter/answer path.
+      const storagePath = `${user.id}/${answerId}/part-01.${ext}`;
 
       if (!draft.storagePaths.length) {
         const { error: permitError } = await supabaseClient.rpc('reserve_recording_audio_upload', {
@@ -16326,6 +16389,8 @@ export function Scene_SupportRecordingAssist({
 
       if (error) throw error;
 
+      await completeStartingConversation(nextQuestion);
+
       // A failed list refresh must not turn a successful save into a failed save.
       try { await onSaved?.(); } catch (refreshError) { console.warn("supporter list refresh failed", refreshError); }
       if (continueRecording) {
@@ -16351,9 +16416,44 @@ export function Scene_SupportRecordingAssist({
         question={nextQuestion}
         progress={{ currentIndex: questionIndex, total: storyQuestions.length }}
         userName={project?.subject_name || "ご家族"}
+        onBack={() => setPhase("question")}
         onComplete={processRecording}
       />
     );
+  }
+
+  if (phase === "question" && nextQuestion) {
+    return <Scene1_MyPage
+      question={nextQuestion}
+      progress={{ currentIndex: questionIndex, total: storyQuestions.length }}
+      userName={project?.subject_name || "ご家族"}
+      onBack={onBack}
+      onNext={() => { setRecordingQuestion(nextQuestion); setPhase("recording"); }}
+      onWrite={project?.can_edit_book_text ? () => {
+        setRecordingQuestion(nextQuestion);
+        setErrorMessage("");
+        setPhase("writing");
+      } : null}
+      onEndToday={onBack}
+    />;
+  }
+
+  if (phase === "writing" && nextQuestion) {
+    return <StorySkySurface className="question-flow-content h-full flex flex-col overflow-y-auto pb-4" background={QUESTION_BACKGROUND}>
+      <QuestionFlowTopBar onBack={() => setPhase("question")}
+        theme={recordingSectionLabel(nextQuestion)}
+        progress={`${questionIndex + 1} / ${storyQuestions.length}`} />
+      <RecordingQuestionPrompt question={nextQuestion} />
+      <div className="mx-auto w-full max-w-xl px-5 pb-8">
+        <textarea aria-label="回答の文章" value={writtenText}
+          onChange={event => setWrittenText(event.target.value)}
+          className="w-full min-h-[40dvh] rounded-xl border border-white/20 bg-[#f5f3ed] p-5 text-[#24302d] text-lg leading-loose outline-none resize-y"
+          placeholder="ここに思い出を書く" />
+        {errorMessage && <p role="alert" className="mt-3 text-rose-200">{errorMessage}</p>}
+        <button type="button" onClick={saveWrittenAnswer} disabled={!writtenText.trim() || savingRef.current}
+          className="mt-4 w-full min-h-14 rounded-xl bg-[#f5f3ed] text-[#24302d] disabled:opacity-40">保存する</button>
+      </div>
+    </StorySkySurface>;
   }
 
   return (
@@ -16371,44 +16471,6 @@ export function Scene_SupportRecordingAssist({
 
       <div className="flex-1 flex flex-col justify-center py-8">
         {recordingData?.stopReason === "limit" && phase !== "success" && <p role="status" className="mb-5 text-white/70 text-sm leading-loose text-center">{RECORDING_LIMIT_NOTICE}</p>}
-        {phase === "question" && nextQuestion && (
-          <div className="space-y-8 text-center">
-            <div className="space-y-3">
-              <p className="text-white/38 text-xs tracking-[0.18em]">
-                問いの録音を手伝う
-              </p>
-              <p className="text-white/78 text-sm">
-                {withHonorific(project?.subject_name || "ご家族")}の次の問い
-              </p>
-            </div>
-
-            <div className="glass-card p-7 space-y-5">
-              <p className="text-white/88 text-[1.08rem] leading-[2] text-narrative">
-                {nextQuestion.content}
-              </p>
-              {nextQuestion.reassurance_text && (
-                <p className="text-white/42 text-sm leading-loose">
-                  {nextQuestion.reassurance_text}
-                </p>
-              )}
-            </div>
-
-            <p className="text-white/38 text-xs leading-loose">
-              {isFacilitator
-                ? "ご本人と一緒に話せるときに、このスマートフォンで録音してください。"
-                : "語り手ご本人のそばで、録音の開始と終了をお手伝いしてください。"}
-            </p>
-
-            <button
-              type="button"
-              onClick={() => { setRecordingQuestion(nextQuestion); setPhase("recording"); }}
-              className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
-            >
-              録音を始める
-            </button>
-          </div>
-        )}
-
         {phase === "question" && !nextQuestion && (
           <div className="glass-card p-7 text-center space-y-3">
             <p className="text-white/75 text-[1rem] text-narrative">
@@ -18327,7 +18389,7 @@ export function Scene1_MyPage({
 
       {!isTokenMode() && (
         <div className="mt-5 flex items-center justify-center gap-3 pb-2">
-          {(!isOnboardingQuestion || question?.onboarding_group === "starting_motivation") && (
+          {onSkip && (!isOnboardingQuestion || question?.onboarding_group === "starting_motivation") && (
             <button
               onClick={onSkip}
               className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-[1rem] underline underline-offset-4"

@@ -205,12 +205,13 @@ serve(async (request) => {
 
     if (Number(order.amount_total) === 0) {
       const now = new Date().toISOString();
-      await finalizeExperienceCheckout(admin, {
+      const finalized = await finalizeExperienceCheckout(admin, {
         id: `zero-${order.id}`, metadata: { order_id: order.id },
         amount_total: 0, currency: "jpy", payment_status: "no_payment_required",
       }, now, commerceMode() === "live");
       if (method !== "interview_staff") kickBookProduction(url, key, order.id);
-      return json({ success: true, completed: true, orderId: order.id, quote });
+      return json({ success: true, completed: true, orderId: order.id, quote,
+        order: finalized.order, gift: finalized.gift || null });
     }
     if (order.stripe_checkout_session_id) {
       const session = await stripeRequest(stripeKey,

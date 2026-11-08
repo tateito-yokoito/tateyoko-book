@@ -14,7 +14,7 @@ function newRequestKey() {
 }
 
 export default function CommerceV2Purchase({ client, projectId, initialOrderType = 'self', familyInvitation = null, onTryFree,
-  phase = 'checkout', initialSelection = null, onProceed }) {
+  phase = 'checkout', initialSelection = null, onProceed, onCompleted }) {
   const isSelection = phase === 'selection';
   const isReview = phase === 'review';
   const [edition, setEdition] = useState(initialSelection?.edition || 'standard');
@@ -134,6 +134,13 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         return;
       }
       if (data.completed) {
+        if (isReview && orderType === 'gift') {
+          if (!data.order?.id || !data.gift?.claim_token || !onCompleted) {
+            throw new Error('贈り物の購入内容を確認できませんでした');
+          }
+          onCompleted(data);
+          return;
+        }
         if (isReview) {
           clearCommercePurchaseIntent(window.localStorage);
           const url = new URL(window.location.href);
