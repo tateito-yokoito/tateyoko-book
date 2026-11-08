@@ -33,6 +33,10 @@ export async function sendGeneralInquiryEmails(admin: AdminClient, inquiry: Inqu
         : [
           `${inquiry.name} 様`, '', 'お問い合わせを受け付けました。',
           `問い合わせID: ${inquiry.id}`, `受付日時: ${timestamp}`,
+          '', '送信内容の控え:',
+          `お名前: ${inquiry.name}`, `メールアドレス: ${inquiry.email}`,
+          `お問い合わせ種別: ${inquiry.category}`, 'お問い合わせ内容:', inquiry.message,
+          '',
           '内容を確認のうえ、ご入力いただいたメールアドレスへご連絡いたします。',
           'このメールにお心当たりがない場合は、返信せずに破棄してください。',
         ].join('\n');
