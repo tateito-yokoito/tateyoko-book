@@ -21,6 +21,7 @@
 .refined .work-detail p{margin-top:14px;font-size:16px;line-height:1.75}
 .refined .work-detail p+p{margin-top:9px}
 .refined .comparison-media{width:min(900px,100%);margin:24px auto 22px;background:var(--paper)}
+.refined .comparison-caption{margin-bottom:8px;color:var(--muted);font:13px/1.6 "Noto Sans JP",sans-serif}
 .refined .comparison-stage{position:relative;width:100%;aspect-ratio:16/9}
 .refined .comparison-fallback,.refined .comparison-video{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;border-radius:5px}
 .refined .comparison-video{opacity:0;transition:opacity .2s}
