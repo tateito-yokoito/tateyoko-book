@@ -82,14 +82,16 @@ export default function ConsultationReview({ client }) {
     {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error}</p>}
     {loading ? <p role="status" className="text-sm text-slate-600">読み込み中…</p>
       : filtered.length === 0 ? <p className="rounded-2xl bg-white p-5 text-sm text-slate-600">該当する相談はありません。</p>
-      : <div className="space-y-2">{filtered.map(item => <button key={item.id} type="button"
-          onClick={() => setSelectedId(item.id)} aria-expanded={selectedId === item.id}
-          className="block w-full rounded-2xl border border-slate-200 bg-white p-4 text-left hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-700">
+      : <div className="space-y-2">{filtered.map(item => <div key={item.id} className="rounded-2xl border border-slate-200 bg-white">
+        <button type="button"
+          onClick={() => { setSelectedId(current => current === item.id ? "" : item.id); setOrderNumber(""); }}
+          aria-expanded={selectedId === item.id} aria-controls={selectedId === item.id ? `consultation-detail-${item.id}` : undefined}
+          className="block w-full rounded-2xl p-4 text-left hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-700">
           <span className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium text-slate-900">{item.contact_name || "お名前なし"}</span><span className="text-sm text-slate-600">{statusLabel[item.status] || item.status || "状態不明"}</span></span>
           <span className="mt-2 block break-all text-sm text-slate-700">{receiptNumber(item)}</span>
           <span className="mt-1 block text-sm text-slate-600">受付：{dateTime(item.created_at)}{item.admin_notification_status === "failed" ? "　運営通知：未送信" : ""}</span>
-        </button>)}</div>}
-    {selected && <section aria-label="事前相談の詳細" className="rounded-2xl border border-slate-200 bg-white p-5">
+        </button>
+        {selectedId === item.id && <section id={`consultation-detail-${item.id}`} aria-label="事前相談の詳細" className="border-t border-slate-200 p-5">
       <div className="flex items-start justify-between gap-4"><h3 className="text-lg font-medium">相談内容</h3><button type="button" onClick={() => setSelectedId("")} className="rounded-lg border border-slate-200 px-3 py-1 text-sm">閉じる</button></div>
       <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
         <div><dt className="text-slate-600">受付番号</dt><dd className="break-all font-medium">{receiptNumber(selected)}</dd></div>
@@ -110,5 +112,6 @@ export default function ConsultationReview({ client }) {
           </div>
         </div>}
     </section>}
+      </div>)}</div>}
   </div>;
 }
