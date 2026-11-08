@@ -37,13 +37,6 @@ function placePostCta() {
     }
   }
 
-  const footerLinks = document.querySelector(".hp-footer > div");
-  if (footerLinks && !footerLinks.querySelector("a[href='/life/']")) {
-    const link = document.createElement("a");
-    link.href = "/life/";
-    link.textContent = "縦糸横糸ライフ";
-    footerLinks.prepend(link);
-  }
 }
 
 placePostCta();

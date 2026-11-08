@@ -5861,21 +5861,17 @@ function Fd() {
 const Ud = "hp-postcta-live-mount";
 let yt, Ho;
 function lc() {
-  var r;
-  const e = document.getElementById("hp-main"), t = document.getElementById("hp-price-live-mount") || ((r = document.querySelector("#works iframe[src^='/product-section-nov8-after.html']")) == null ? void 0 : r.closest("#works"));
-  if (!e || !t || t.parentElement !== e) return;
-  yt || (yt = document.createElement("div"), yt.id = Ud, Ho = rc(yt), Ho.render(/* @__PURE__ */ g.jsx(Fd, {}))), yt.previousElementSibling !== t && t.after(yt);
-  for (let l = yt.nextElementSibling; l; l = l.nextElementSibling) {
-    if (l.matches("dialog.hp-product-zoom")) {
-      l.classList.remove("hp-postcta-legacy"), l.removeAttribute("aria-hidden"), l.inert = !1;
-      continue;
+  var n;
+  const e = document.getElementById("hp-main"), t = document.getElementById("hp-price-live-mount") || ((n = document.querySelector("#works iframe[src^='/product-section-nov8-after.html']")) == null ? void 0 : n.closest("#works"));
+  if (!(!e || !t || t.parentElement !== e)) {
+    yt || (yt = document.createElement("div"), yt.id = Ud, Ho = rc(yt), Ho.render(/* @__PURE__ */ g.jsx(Fd, {}))), yt.previousElementSibling !== t && t.after(yt);
+    for (let r = yt.nextElementSibling; r; r = r.nextElementSibling) {
+      if (r.matches("dialog.hp-product-zoom")) {
+        r.classList.remove("hp-postcta-legacy"), r.removeAttribute("aria-hidden"), r.inert = !1;
+        continue;
+      }
+      r.classList.contains("hp-postcta-legacy") || (r.classList.add("hp-postcta-legacy"), r.setAttribute("aria-hidden", "true"), r.inert = !0);
     }
-    l.classList.contains("hp-postcta-legacy") || (l.classList.add("hp-postcta-legacy"), l.setAttribute("aria-hidden", "true"), l.inert = !0);
-  }
-  const n = document.querySelector(".hp-footer > div");
-  if (n && !n.querySelector("a[href='/life/']")) {
-    const l = document.createElement("a");
-    l.href = "/life/", l.textContent = "縦糸横糸ライフ", n.prepend(l);
   }
 }
 lc();

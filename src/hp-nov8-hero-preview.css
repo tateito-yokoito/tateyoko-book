@@ -177,6 +177,7 @@
 .landing-site .hp-nenrin { max-width: 1100px; padding-block: 66px 50px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .landing-site .hp-nenrin-intro h2 { margin-top: 15px; font-size: clamp(34px, 3.4vw, 46px); line-height: 1.55; }
 .landing-site .hp-nenrin-intro > p { margin-top: 21px; font-size: clamp(18px, 1.7vw, 22px); line-height: 1.85; }
+.landing-site .hp-nenrin-intro > p:not(.hp-label) { font-family: "Noto Sans JP", sans-serif; }
 .landing-site .hp-nenrin-seasons { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 36px; }
 .landing-site .hp-nenrin-seasons p { margin: 0; padding: 16px 12px; border: 1px solid var(--line); border-radius: 4px; font-size: 16px; line-height: 1.65; text-align: center; }
 .landing-site .hp-nenrin-seasons span { display: block; margin-bottom: 5px; color: var(--green); font-family: "Noto Serif JP", serif; font-size: 22px; }

@@ -21,6 +21,7 @@
 .refined .work-detail p{margin-top:14px;font-size:16px;line-height:1.75}
 .refined .work-detail p+p{margin-top:9px}
 .refined .comparison-media{width:min(900px,100%);margin:24px auto 22px;background:var(--paper)}
+.refined .comparison-caption{margin-top:8px;color:var(--muted);font:13px/1.6 "Noto Sans JP",sans-serif}
 .refined .comparison-stage{position:relative;width:100%;aspect-ratio:16/9}
 .refined .comparison-fallback,.refined .comparison-video{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;border-radius:5px}
 .refined .comparison-video{opacity:0;transition:opacity .2s}
@@ -43,6 +44,7 @@
 .refined .comparison-media:fullscreen .comparison-stage{width:min(100%,calc((100vh - 120px)*16/9));flex:none}
 .refined .comparison-media:fullscreen .comparison-controls,.refined .comparison-media:fullscreen .comparison-timeline{width:min(100%,calc((100vh - 120px)*16/9))}
 .refined .comparison-media:fullscreen .comparison-timeline{color:var(--paper)}
+.refined .comparison-media:fullscreen .comparison-caption{color:var(--paper)}
 .refined .product-compare .plans{width:min(900px,100%);grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 auto}
 .refined .product-compare .plan{display:flex;padding:18px}
 .refined .product-compare .plan-body{display:flex;flex-direction:column;width:100%;height:100%;padding:0}
