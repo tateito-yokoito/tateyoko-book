@@ -10,6 +10,7 @@ export default defineConfig({
         app: 'index.html',
         giftThreeQuestions: 'gift-three-questions.html',
         supportConsultation: 'support-consultation/index.html',
+        generalInquiry: 'contact/index.html',
       },
     },
   },

@@ -10449,6 +10449,7 @@ if (isNewMode) {
           )}
         </div>
       )}
+      <a href="/contact/?source=app" className="mt-5 py-2 text-sm text-white/60 underline underline-offset-4">お問い合わせ</a>
     </div>
   );
 }
@@ -14939,6 +14940,10 @@ export function Scene_SettingsHome({
           detail="登録氏名とメールアドレス"
           onClick={onOpenProfile}
         />
+        <a href="/contact/?source=app" className="glass-card w-full px-5 py-4 flex items-center gap-4 text-left text-white/82">
+          <div className="w-10 h-10 rounded-full bg-white/[0.07] flex items-center justify-center shrink-0"><Mail size={19} className="text-white/62" strokeWidth={1.7} /></div>
+          <span className="flex-1 text-[0.98rem] text-narrative">お問い合わせ</span><ChevronRight size={18} className="text-white/25" strokeWidth={1.7} />
+        </a>
       </div>
     </div>
   );

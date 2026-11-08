@@ -43,6 +43,7 @@ import QuestionWorkbench from './QuestionWorkbench.jsx';
 import OpsErrorHistory from './OpsErrorHistory.jsx';
 import TodaySkyAdmin from './TodaySkyAdmin.jsx';
 import ConsultationReview from './ConsultationReview.jsx';
+import GeneralInquiryReview from './GeneralInquiryReview.jsx';
 import FixedLineTestReset from './FixedLineTestReset.jsx';
 import BookOpsReview from './BookOpsReview.jsx';
 import {normalizeUserQuestions} from '../App.jsx';
@@ -59,6 +60,7 @@ const TAB_ITEMS = [
   { id: "payments", label: "決済", icon: CreditCard },
   { id: "book-ops", label: "完成作品", icon: PackageCheck },
   { id: "consultations", label: "事前相談", icon: Mail },
+  { id: "general-inquiries", label: "お問い合わせ", icon: Mail },
   { id: "sales", label: "販売", icon: BadgePercent }
 ];
 
@@ -1794,6 +1796,7 @@ export default function AdminReview({ supabaseClient }) {
   });
   const [authorized, setAuthorized] = useState(false);
   const [adminRole, setAdminRole] = useState(null);
+  const [inquiryCount, setInquiryCount] = useState(0);
   const [authorizationReady, setAuthorizationReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState(null);
@@ -2904,11 +2907,24 @@ export default function AdminReview({ supabaseClient }) {
       : "ギフト配送状況を更新しました。");
   };
 
+  useEffect(() => {
+    if (!authorized || !["owner", "operator"].includes(adminRole)) return;
+    let active = true;
+    const refresh = async () => {
+      const { data } = await supabaseClient.functions.invoke("admin-general-inquiries", { body: { action: "count" } });
+      if (active && data?.success) setInquiryCount(data.count || 0);
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 60000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [authorized, adminRole, supabaseClient]);
   const metrics = dashboard?.metrics || {};
   const projects = dashboard?.projects || [];
   const attention = dashboard?.attention || [];
   const activeRows = tab === "attention" ? attention : projects;
-  const visibleTabs = TAB_ITEMS.filter(item => item.id !== "consultations" || adminRole === "owner");
+  const visibleTabs = TAB_ITEMS.filter(item =>
+    item.id === "consultations" ? adminRole === "owner"
+      : item.id === "general-inquiries" ? ["owner", "operator"].includes(adminRole) : true);
   const navigationItems = organizationModeActive
     ? [...visibleTabs, { id: "hidden", label: "非表示ゾーン", icon: EyeOff }, { id: "test-reset", label: "LINEテスト初期化", icon: RotateCcw }]
     : visibleTabs;
@@ -2957,7 +2973,7 @@ export default function AdminReview({ supabaseClient }) {
         <section className="admin-metrics">{metricCards.map(([label, value, hint, alert]) => <MetricCard key={label} label={label} value={value} hint={hint} alert={alert} />)}</section>
 
         <div className="admin-review-layout">
-          <nav className="admin-review-nav">{navigationItems.map((item) => { const Icon = item.icon; return <button key={item.id} aria-current={tab===item.id?'page':undefined} onClick={() => setTab(item.id)} className={`flex w-full items-center justify-between rounded-xl px-3.5 py-3 text-sm transition ${tab === item.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:bg-white/60"}`}><span className="flex items-center gap-3"><Icon size={17} />{item.id==='payments'?'注文・決済':item.label}</span>{item.id === "attention" && metrics.attention_count > 0 && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700">{metrics.attention_count}</span>}{item.id === "hidden" && trashEntries.length > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">{trashEntries.length}</span>}</button>; })}</nav>
+          <nav className="admin-review-nav">{navigationItems.map((item) => { const Icon = item.icon; return <button key={item.id} aria-current={tab===item.id?'page':undefined} onClick={() => setTab(item.id)} className={`flex w-full items-center justify-between rounded-xl px-3.5 py-3 text-sm transition ${tab === item.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:bg-white/60"}`}><span className="flex items-center gap-3"><Icon size={17} />{item.id==='payments'?'注文・決済':item.label}</span>{item.id === "attention" && metrics.attention_count > 0 && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700">{metrics.attention_count}</span>}{item.id === "general-inquiries" && inquiryCount > 0 && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700">{inquiryCount}</span>}{item.id === "hidden" && trashEntries.length > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">{trashEntries.length}</span>}</button>; })}</nav>
 
           <section className="min-w-0">
             <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -2974,7 +2990,7 @@ export default function AdminReview({ supabaseClient }) {
                     <option value="failed">失敗</option>
                   </select>
                 )}
-                {tab !== "hidden" && tab !== "questions" && tab !== "errors" && tab !== "test-reset" && tab !== "consultations" && <form onSubmit={(event) => { event.preventDefault(); setAppliedSearch(search.trim()); }} className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-white px-3"><Search size={15} className="shrink-0 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="氏名・メール・ID" className="min-w-0 bg-transparent px-2 py-2.5 text-sm outline-none" /></form>}
+                {tab !== "hidden" && tab !== "questions" && tab !== "errors" && tab !== "test-reset" && tab !== "consultations" && tab !== "general-inquiries" && <form onSubmit={(event) => { event.preventDefault(); setAppliedSearch(search.trim()); }} className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-white px-3"><Search size={15} className="shrink-0 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="氏名・メール・ID" className="min-w-0 bg-transparent px-2 py-2.5 text-sm outline-none" /></form>}
                 <button onClick={loadDashboard} title="再読み込み" className="rounded-xl border border-slate-200 bg-white p-3 text-slate-500"><RefreshCw size={16} className={loading ? "animate-spin" : ""} /></button>
               </div>
             </div>
@@ -2992,6 +3008,7 @@ export default function AdminReview({ supabaseClient }) {
             {tab === "payments" && <OrderReview key={appliedSearch} client={supabaseClient} search={appliedSearch} onAccount={openAccountDetail} onProject={openDetail} />}
             {tab === "book-ops" && <BookOpsReview client={supabaseClient} role={adminRole} />}
             {tab === "consultations" && adminRole === "owner" && <ConsultationReview client={supabaseClient} />}
+            {tab === "general-inquiries" && ["owner", "operator"].includes(adminRole) && <GeneralInquiryReview client={supabaseClient} onCountChange={setInquiryCount} />}
             {tab === "sales" && (
               <CommercePanel
                 data={commerceData}
