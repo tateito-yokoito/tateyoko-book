@@ -46,6 +46,7 @@ import ConsultationReview from './ConsultationReview.jsx';
 import GeneralInquiryReview from './GeneralInquiryReview.jsx';
 import FixedLineTestReset from './FixedLineTestReset.jsx';
 import BookOpsReview from './BookOpsReview.jsx';
+import CoreDailyKpis from './CoreDailyKpis.jsx';
 import {normalizeUserQuestions} from '../App.jsx';
 import { AccountOverview, ProjectOverview } from './AdminDetailOverview.jsx';
 
@@ -53,6 +54,7 @@ const TAB_ITEMS = [
   { id: "attention", label: "要対応", icon: AlertCircle },
   { id: "projects", label: "物語", icon: BookOpen },
   { id: "questions", label: "質問・顧客体験", icon: BookOpen },
+  { id: "analysis", label: "日別実績", icon: CreditCard },
   { id: "accounts", label: "アカウント", icon: UsersRound },
   { id: "deliveries", label: "配信", icon: Mail },
   { id: "errors", label: "エラー履歴", icon: AlertCircle },
@@ -2990,7 +2992,7 @@ export default function AdminReview({ supabaseClient }) {
                     <option value="failed">失敗</option>
                   </select>
                 )}
-                {tab !== "hidden" && tab !== "questions" && tab !== "errors" && tab !== "test-reset" && tab !== "consultations" && tab !== "general-inquiries" && <form onSubmit={(event) => { event.preventDefault(); setAppliedSearch(search.trim()); }} className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-white px-3"><Search size={15} className="shrink-0 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="氏名・メール・ID" className="min-w-0 bg-transparent px-2 py-2.5 text-sm outline-none" /></form>}
+                {tab !== "hidden" && tab !== "questions" && tab !== "errors" && tab !== "test-reset" && tab !== "consultations" && tab !== "general-inquiries" && tab !== "analysis" && <form onSubmit={(event) => { event.preventDefault(); setAppliedSearch(search.trim()); }} className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-white px-3"><Search size={15} className="shrink-0 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="氏名・メール・ID" className="min-w-0 bg-transparent px-2 py-2.5 text-sm outline-none" /></form>}
                 <button onClick={loadDashboard} title="再読み込み" className="rounded-xl border border-slate-200 bg-white p-3 text-slate-500"><RefreshCw size={16} className={loading ? "animate-spin" : ""} /></button>
               </div>
             </div>
@@ -3003,6 +3005,7 @@ export default function AdminReview({ supabaseClient }) {
             {tab === "accounts" && <AccountTable rows={dashboard?.accounts || []} onOpen={openAccountDetail} />}
             {tab === "deliveries" && <DeliveryTable rows={deliveryHistory} onOpenProject={openDetail} onOpenAccount={openAccountDetail} />}
             {tab === "errors" && <OpsErrorHistory client={supabaseClient} onOpenAccount={openAccountDetail} onOpenProject={openDetail} />}
+            {tab === "analysis" && <CoreDailyKpis client={supabaseClient} />}
             {tab === "sky" && <TodaySkyAdmin client={supabaseClient} />}
             {tab === "questions" && <QuestionWorkbench client={supabaseClient} owner={adminRole === "owner"} onOpenCustomerExperience={()=>setTab('projects')} />}
             {tab === "payments" && <OrderReview key={appliedSearch} client={supabaseClient} search={appliedSearch} onAccount={openAccountDetail} onProject={openDetail} />}
