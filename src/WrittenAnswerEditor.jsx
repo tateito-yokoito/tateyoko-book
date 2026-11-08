@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { AnswerTextDraft } from './lib/answerTextDraft.js';
-import QuestionFlowTopBar from './QuestionFlowTopBar.jsx';
+import { AnswerTextCandidate, AnswerTextFields, AnswerTextLayout } from './AnswerTextShared.jsx';
 
 const statusLabels = {
   unknown: '下書きを確認中',
@@ -20,7 +19,6 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
   const [error, setError] = useState('');
   const [candidate, setCandidate] = useState(null);
   const [showStyles, setShowStyles] = useState(false);
-  const [showOriginal, setShowOriginal] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [versions, setVersions] = useState(null);
   const [restoreReason, setRestoreReason] = useState(false);
@@ -117,7 +115,6 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
         return;
       }
       setCandidate({ original: source, text: data.candidate });
-      setShowOriginal(false);
       setShowStyles(false);
     } catch (cause) {
       setError(cause?.message || '文章を整えられませんでした。下書きは残っています。');
@@ -144,12 +141,7 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
     else setVersions(data || []);
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-[9999] bg-slate-950 text-white flex flex-col px-5 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-[calc(0.75rem+env(safe-area-inset-bottom))] overflow-y-auto">
-      <div className="mx-auto w-full max-w-xl flex min-h-0 flex-1 flex-col">
-        <QuestionFlowTopBar onBack={leave} theme={themeLabel || question.theme_label || question.chapter_label || ''} progress={progressLabel} />
-        <h2 className="text-center text-narrative text-[1.3rem] leading-[1.7] mt-7 mb-4 max-h-[20dvh] overflow-y-auto shrink-0">{question.content || question.question_text_snapshot}</h2>
-
+  return <AnswerTextLayout question={question} theme={themeLabel} progress={progressLabel} onBack={leave}>
         {snapshot?.conflict ? <>
           <h3 className="text-lg mb-2">{snapshot.conflict.kind === 'answer' ? '確定した文章が更新されています' : '下書きが2つあります'}</h3>
           <p className="text-white/60 text-sm leading-relaxed mb-4">文章を見比べて、編集を続ける方を選んでください。選択だけでは本の文章は更新されません。</p>
@@ -159,27 +151,15 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
             <button type="button" onClick={() => choose('local')} disabled={busy} className="w-full min-h-14 rounded-xl bg-white text-slate-900">{snapshot.state === 'discard_pending' ? '下書きを破棄する' : 'この端末の文章で続ける'}</button>
             <button type="button" onClick={() => choose('remote')} disabled={busy} className="w-full min-h-14 rounded-xl border border-white/30">{snapshot.conflict.state === 'discarded' ? '別の端末の破棄を反映する' : snapshot.conflict.kind === 'answer' ? '現在の確定文章で続ける' : '別の端末の文章を残す'}</button>
           </div>
-        </> : candidate ? <>
-          <h3 className="text-lg mb-4">整えた文章を確認</h3>
-          <div className="rounded-xl bg-[#f5f3ed] p-5 text-[#24302d] whitespace-pre-wrap leading-loose text-lg">{candidate.text}</div>
-          <button type="button" onClick={() => setShowOriginal(!showOriginal)} className="py-4 text-white/70 underline">元の文章を{showOriginal ? '閉じる' : '確認する'}</button>
-          {showOriginal && <div className="rounded-xl border border-white/20 p-5 whitespace-pre-wrap leading-loose">{candidate.original}</div>}
-          <div className="mt-5 space-y-3">
-            <button type="button" className="w-full min-h-14 rounded-xl bg-white text-slate-900" onClick={() => { edit(candidate.text); setCandidate(null); }}>この文章を使う</button>
-            <button type="button" className="w-full min-h-14 rounded-xl border border-white/30" onClick={() => setCandidate(null)}>元の文章に戻す</button>
-          </div>
-          <p className="text-white/50 text-sm mt-4">まだ確定していません。編集画面で「保存する」を押すと反映されます。</p>
-        </> : <>
-          <div className="flex items-center justify-between gap-3 mb-2 shrink-0">
-            <p role="status" className="text-white/55 text-xs">{statusLabels[snapshot?.remoteStatus || 'unknown']}</p>
-            {answer?.id && <button type="button" onClick={loadVersions} disabled={busy}
-              className="min-h-10 text-white/60 text-sm underline">履歴</button>}
-          </div>
-          <textarea aria-label="回答の文章" value={body} onChange={event => edit(event.target.value)}
-            className="w-full min-h-[48dvh] flex-1 rounded-xl border border-white/20 bg-[#f5f3ed] p-5 text-[#24302d] text-lg leading-loose outline-none resize-y"
-            placeholder="ここに思い出を書く" />
-          <div className="pt-3 space-y-2 shrink-0">
-            {versions && <div className="space-y-3 rounded-xl border border-white/20 p-4">
+        </> : candidate ? <AnswerTextCandidate candidate={candidate}
+          onUse={() => { edit(candidate.text); setCandidate(null); }}
+          onDiscard={() => setCandidate(null)} /> : <AnswerTextFields
+          value={body} onChange={edit} busy={busy}
+          status={statusLabels[snapshot?.remoteStatus || 'unknown']}
+          showStyles={showStyles} onToggleStyles={() => setShowStyles(value => !value)}
+          onPolish={style => void polish(style)} onSave={save}
+          onDiscard={() => changed ? setConfirmDiscard(true) : discard()}
+          beforeActions={versions && <div className="space-y-3 rounded-xl border border-white/20 p-4">
               <h3 className="text-white/80">文章の履歴</h3>
               {versions.length === 0 && <p className="text-white/50">以前の文章はありません。</p>}
               {versions.map(version => <div key={version.id} className="border-t border-white/15 pt-3">
@@ -191,19 +171,10 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
                   setVersions(null);
                 }}>この文章を編集欄に入れる</button>
               </div>)}
-            </div>}
-            {showStyles && <div role="group" aria-label="文章の整え方" className="grid grid-cols-3 gap-2">
-              {[["clean", "そのまま"], ["narrative", "語り調"], ["essay", "作品調"]].map(([value, label]) =>
-                <button key={value} type="button" onClick={() => void polish(value)} disabled={busy}
-                  className="min-h-12 rounded-xl border border-white/30 text-sm disabled:opacity-40">{label}</button>)}
-            </div>}
-            <div className="grid grid-cols-[1fr_1.25fr] gap-2">
-              <button type="button" onClick={() => setShowStyles(value => !value)} disabled={busy || !body.trim()} className="min-h-14 rounded-xl border border-white/30 disabled:opacity-40">✦ 整える</button>
-              <button type="button" onClick={save} disabled={busy || !body.trim()} className="min-h-14 rounded-xl bg-white text-slate-900 disabled:opacity-40">{busy ? '処理中…' : '保存する'}</button>
-            </div>
-            <button type="button" onClick={() => changed ? setConfirmDiscard(true) : discard()} disabled={busy} className="w-full min-h-11 text-white/55 text-sm">保存せず終了</button>
-          </div>
-        </>}
+            </div>}>
+          {answer?.id && <button type="button" onClick={loadVersions} disabled={busy}
+            className="min-h-10 text-white/60 text-sm underline">履歴</button>}
+        </AnswerTextFields>}
 
         {confirmDiscard && <div role="dialog" aria-modal="true" className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/70 p-4">
           <div className="w-full max-w-xl rounded-2xl bg-[#1b2638] p-6">
@@ -213,6 +184,5 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
           </div>
         </div>}
         {error && <p role="alert" className="text-amber-200 py-3">{error}</p>}
-      </div>
-    </div>, document.body);
+    </AnswerTextLayout>;
 }
