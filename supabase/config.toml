@@ -67,6 +67,12 @@ verify_jwt = false
 [functions.admin-commerce-v2-consultations]
 verify_jwt = false
 
+[functions.submit-general-inquiry]
+verify_jwt = false
+
+[functions.admin-general-inquiries]
+verify_jwt = false
+
 [functions.commerce-v2-staff-production]
 verify_jwt = false
 

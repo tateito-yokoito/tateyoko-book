@@ -1,0 +1,14 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Noto+Serif+JP:wght@400;500;600&display=swap');
+:root{font-family:'Noto Sans JP',sans-serif;color:#182a35;background:#f5f3ed}
+*{box-sizing:border-box}body{margin:0;min-width:320px}a{color:#28473e;text-underline-offset:4px}
+.gi-header{height:88px;display:flex;align-items:center;padding:20px max(24px,calc((100vw - 1120px)/2));border-bottom:1px solid #ced1c6}
+.gi-header img{display:block;width:190px;height:auto}.gi-main{width:min(720px,calc(100% - 44px));margin:0 auto;padding:64px 0 96px}
+.gi-main h1{font:400 clamp(30px,3vw,42px)/1.5 'Noto Serif JP',serif;margin:0 0 22px}
+.gi-lead,.gi-complete>p{font-size:16px;line-height:1.85;margin:0 0 38px}
+.gi-main form{display:grid;gap:25px}.gi-main label{display:block;font-size:15px;font-weight:600}.gi-main label span{font-size:12px;color:#a6472d;margin-left:8px}
+.gi-main input,.gi-main select,.gi-main textarea{display:block;width:100%;margin-top:9px;padding:13px 14px;border:1px solid #bfc7bd;border-radius:5px;background:#fffefa;color:#182a35;font:16px/1.6 'Noto Sans JP',sans-serif}
+.gi-main textarea{resize:vertical}.gi-main input:focus,.gi-main select:focus,.gi-main textarea:focus{outline:2px solid #28473e;outline-offset:2px}
+.gi-privacy{font-size:13px;line-height:1.7;margin:0}.gi-error{color:#a6472d;font-size:14px;margin:0}.gi-main button,.gi-back{display:block;width:100%;padding:16px 20px;border:0;border-radius:5px;background:#28473e;color:#fffefa;text-align:center;font:600 16px/1.5 'Noto Sans JP',sans-serif;text-decoration:none;cursor:pointer}
+.gi-main button:disabled{opacity:.6;cursor:default}.gi-id{overflow-wrap:anywhere;background:#fffefa;border:1px solid #ced1c6;padding:16px}.gi-back{width:fit-content;margin-top:38px}
+.gi-honeypot{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}.gi-footer{padding:24px max(24px,calc((100vw - 1120px)/2));border-top:1px solid #ced1c6;font-size:13px}
+@media(max-width:700px){.gi-header{height:72px;padding:15px 22px}.gi-header img{width:160px}.gi-main{padding:42px 0 70px}.gi-lead{margin-bottom:30px}}
