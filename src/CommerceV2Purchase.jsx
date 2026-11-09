@@ -191,7 +191,6 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
       <div className="mx-auto max-w-2xl">
         <p className="text-xs tracking-[0.18em] text-[#65756b]">縦糸横糸｜年輪 nenrin</p>
         <h1 className="mt-3 font-serif text-3xl leading-relaxed">あなたに合う一冊をお選びください。</h1>
-        <p className="mt-2 leading-8 text-[#53645a]">問い、制作体験、Webブックは共通。違いは紙のブックの装いです。</p>
         <product-comparison-media class="mt-6" />
 
         {!familyInvitation && !approvedConsultation && <div className="mt-9">
@@ -250,8 +249,8 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           <p className="mt-3 text-2xl font-bold">＋20,000円 <small className="text-xs font-normal">税込</small></p>
           <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={method === 'interview_staff'} disabled={Boolean(approvedConsultation)} onChange={event => { setMethod(event.target.checked ? 'interview_staff' : 'self_or_family'); requestKey.current = newRequestKey(); }} />聞き取り制作サポートを選ぶ</label>
           <p className="mt-3 text-sm leading-7">お気軽にご相談ください。決済は前後しても構いません。</p>
-          <button type="button" aria-expanded={consultationOpen} aria-controls="purchase-consultation-form" className="mt-3 w-full rounded-lg border border-[#315a49] bg-white px-4 py-3 font-semibold" onClick={() => setConsultationOpen(open => !open)}>{consultationOpen ? '事前相談フォームを閉じる' : '事前相談フォームを開く'}</button>
-          {consultationOpen && <div id="purchase-consultation-form" className="mt-4 rounded-lg bg-white"><SupportConsultationInline purchaseSelection={selection} /></div>}
+          <button type="button" aria-expanded={consultationOpen} aria-controls="purchase-consultation-form" className={`mt-3 w-full border border-[#315a49] bg-white px-4 py-3 font-semibold ${consultationOpen ? 'rounded-t-lg border-b-0' : 'rounded-lg'}`} onClick={() => setConsultationOpen(open => !open)}>{consultationOpen ? '事前相談フォームを閉じる' : '事前相談フォームを開く'}</button>
+          {consultationOpen && <div id="purchase-consultation-form" className="rounded-b-lg border border-t-0 border-[#315a49] bg-white"><SupportConsultationInline purchaseSelection={selection} /></div>}
         </div>
 
         {orderType === 'gift' && <label className="mt-8 block text-sm font-semibold">贈る相手のお名前<input className="mt-2 w-full rounded-lg border border-[#bfc9bd] bg-white p-3 text-base" value={gift.recipient_name} disabled={Boolean(familyInvitation)} onChange={event => setGift(current => ({ ...current, recipient_name: event.target.value }))} /></label>}

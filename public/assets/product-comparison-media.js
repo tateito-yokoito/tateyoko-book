@@ -3,6 +3,7 @@ const template = document.createElement('template');
 template.innerHTML = `
   <link rel="stylesheet" href="/assets/product-comparison-media.css">
   <figure class="comparison-media" aria-label="スタンダードとプレミアムの実物冊子とWebブックの動画">
+    <p class="comparison-plan-label">左：スタンダード　右：プレミアム</p>
     <div class="comparison-stage">
       <img class="comparison-fallback" src="/assets/product-plan-comparison-fallback.jpg" width="960" height="540" alt="手が写っていない状態で同じ卓上に並んだスタンダードとプレミアムの実物冊子">
       <video class="comparison-video" muted playsinline loop preload="none" poster="/assets/product-plan-comparison-fallback.jpg" width="960" height="540" aria-label="実物冊子の装丁とページ、続いてWebブックの開き方を紹介する動画">
