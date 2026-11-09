@@ -78,7 +78,7 @@ export default function CoreDailyKpis({ client }) {
     </>}
     <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
       <p className="font-medium">現在、計測していない項目</p>
-      <p className="mt-1 leading-6">HP訪問数、流入元別訪問数、商品選択画面表示数。同一訪問を追跡していないため、転換率・離脱率・流入元別購入数は表示しません。</p>
+      <p className="mt-1 leading-6">この注文DB集計ではHP訪問数、流入元別訪問数、商品選択画面表示数を計測していません。HPトップのアクセスは上のGA4集計で別に表示します。同一訪問と注文を紐付けていないため、転換率・離脱率・流入元別購入数は表示しません。</p>
     </div>
   </div>;
 }
