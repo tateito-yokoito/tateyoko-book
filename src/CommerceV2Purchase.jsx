@@ -192,10 +192,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         <p className="text-xs tracking-[0.18em] text-[#65756b]">縦糸横糸｜年輪 nenrin</p>
         <h1 className="mt-3 font-serif text-3xl leading-relaxed">あなたに合う一冊をお選びください。</h1>
         <p className="mt-2 leading-8 text-[#53645a]">問い、制作体験、Webブックは共通。違いは紙のブックの装いです。</p>
-        <figure className="mt-6">
-          <img className="aspect-[16/10] w-full rounded-xl object-cover" src="/assets/product-plan-comparison-fallback.jpg" alt="スタンダードとプレミアムの実物冊子" />
-          <figcaption className="mt-2 text-sm text-[#65756b]">左：スタンダード　右：プレミアム</figcaption>
-        </figure>
+        <product-comparison-media class="mt-6" />
 
         {!familyInvitation && !approvedConsultation && <div className="mt-9">
           <h2 className="font-serif text-xl">どなたの人生史をつくりますか？</h2>
