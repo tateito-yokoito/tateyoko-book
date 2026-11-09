@@ -249,12 +249,12 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         <div className="mt-9 rounded-xl border border-[#cdd6ca] bg-[#f4f6ef] p-5">
           <p className="text-xs text-[#47745e]">制作方法のオプション</p>
           <h2 className="mt-1 text-xl font-bold">聞き取り制作サポート</h2>
-          <p className="mt-3 text-sm leading-7">スタッフが電話・LINE通話でお話を伺い、制作を進めます。対面ご希望の場合は相談フォームにご記入ください。</p>
+          <p className="mt-3 text-sm leading-7">スタッフが電話・LINE通話でお話を伺い、制作も進めます。<br />対面ご希望の場合は、その旨も相談フォームにご記入ください。</p>
           <p className="mt-3 text-2xl font-bold">＋20,000円 <small className="text-xs font-normal">税込</small></p>
           <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={method === 'interview_staff'} disabled={Boolean(approvedConsultation)} onChange={event => { setMethod(event.target.checked ? 'interview_staff' : 'self_or_family'); requestKey.current = newRequestKey(); }} />聞き取り制作サポートを選ぶ</label>
           <p className="mt-3 text-sm leading-7">お気軽にご相談ください。決済は前後しても構いません。</p>
           <button type="button" aria-expanded={consultationOpen} aria-controls="purchase-consultation-form" className="mt-3 w-full rounded-lg border border-[#315a49] bg-white px-4 py-3 font-semibold" onClick={() => setConsultationOpen(open => !open)}>{consultationOpen ? '事前相談フォームを閉じる' : '事前相談フォームを開く'}</button>
-          {consultationOpen && <div id="purchase-consultation-form" className="mt-4"><SupportConsultationInline purchaseSelection={selection} /></div>}
+          {consultationOpen && <div id="purchase-consultation-form" className="mt-4 rounded-lg bg-white"><SupportConsultationInline purchaseSelection={selection} /></div>}
         </div>
 
         {orderType === 'gift' && <label className="mt-8 block text-sm font-semibold">贈る相手のお名前<input className="mt-2 w-full rounded-lg border border-[#bfc9bd] bg-white p-3 text-base" value={gift.recipient_name} disabled={Boolean(familyInvitation)} onChange={event => setGift(current => ({ ...current, recipient_name: event.target.value }))} /></label>}
