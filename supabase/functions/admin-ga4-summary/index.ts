@@ -10,36 +10,23 @@ const cors = {
 const json = (body: Record<string, unknown>, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
 });
-const encode = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes))
-  .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-const utf8 = (text: string) => new TextEncoder().encode(text);
 let tokenCache: { value: string; expiresAt: number } | null = null;
 let reportCache: { value: Record<string, unknown>; expiresAt: number } | null = null;
 
 async function googleAccessToken() {
   if (tokenCache && tokenCache.expiresAt > Date.now()) return tokenCache.value;
-  const raw = Deno.env.get('GA4_SERVICE_ACCOUNT_JSON');
+  const raw = Deno.env.get('GA4_OAUTH_CREDENTIALS_JSON');
   if (!raw) throw new Error('Missing GA4 credentials');
   const credentials = JSON.parse(raw);
-  if (typeof credentials.client_email !== 'string' || typeof credentials.private_key !== 'string'
-    || credentials.token_uri !== 'https://oauth2.googleapis.com/token') {
+  if (typeof credentials.client_id !== 'string' || typeof credentials.client_secret !== 'string'
+    || typeof credentials.refresh_token !== 'string') {
     throw new Error('Invalid GA4 credentials');
   }
-  const keyBytes = Uint8Array.from(atob(credentials.private_key
-    .replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, '')), c => c.charCodeAt(0));
-  const key = await crypto.subtle.importKey('pkcs8', keyBytes,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
-  const now = Math.floor(Date.now() / 1000);
-  const head = encode(utf8(JSON.stringify({ alg: 'RS256', typ: 'JWT' })));
-  const claim = encode(utf8(JSON.stringify({ iss: credentials.client_email,
-    scope: 'https://www.googleapis.com/auth/analytics.readonly',
-    aud: credentials.token_uri, iat: now, exp: now + 3600 })));
-  const unsigned = `${head}.${claim}`;
-  const signature = encode(new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, utf8(unsigned))));
-  const response = await fetch(credentials.token_uri, { method: 'POST',
+  const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: `${unsigned}.${signature}` }), signal: AbortSignal.timeout(8000) });
+    body: new URLSearchParams({ grant_type: 'refresh_token', client_id: credentials.client_id,
+      client_secret: credentials.client_secret, refresh_token: credentials.refresh_token }),
+    signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error(`Google token HTTP ${response.status}`);
   const result = await response.json();
   if (typeof result.access_token !== 'string' || !Number.isFinite(Number(result.expires_in))) {
