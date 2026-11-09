@@ -73,6 +73,10 @@ verify_jwt = false
 [functions.admin-general-inquiries]
 verify_jwt = false
 
+# Verifies the signed-in user and active admin membership before reading GA4.
+[functions.admin-ga4-summary]
+verify_jwt = false
+
 [functions.commerce-v2-staff-production]
 verify_jwt = false
 

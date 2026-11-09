@@ -47,6 +47,7 @@ import GeneralInquiryReview from './GeneralInquiryReview.jsx';
 import FixedLineTestReset from './FixedLineTestReset.jsx';
 import BookOpsReview from './BookOpsReview.jsx';
 import CoreDailyKpis from './CoreDailyKpis.jsx';
+import Ga4Summary from './Ga4Summary.jsx';
 import {normalizeUserQuestions} from '../App.jsx';
 import { AccountOverview, ProjectOverview } from './AdminDetailOverview.jsx';
 
@@ -3005,7 +3006,7 @@ export default function AdminReview({ supabaseClient }) {
             {tab === "accounts" && <AccountTable rows={dashboard?.accounts || []} onOpen={openAccountDetail} />}
             {tab === "deliveries" && <DeliveryTable rows={deliveryHistory} onOpenProject={openDetail} onOpenAccount={openAccountDetail} />}
             {tab === "errors" && <OpsErrorHistory client={supabaseClient} onOpenAccount={openAccountDetail} onOpenProject={openDetail} />}
-            {tab === "analysis" && <CoreDailyKpis client={supabaseClient} />}
+            {tab === "analysis" && <div className="space-y-5"><Ga4Summary client={supabaseClient} /><CoreDailyKpis client={supabaseClient} /></div>}
             {tab === "sky" && <TodaySkyAdmin client={supabaseClient} />}
             {tab === "questions" && <QuestionWorkbench client={supabaseClient} owner={adminRole === "owner"} onOpenCustomerExperience={()=>setTab('projects')} />}
             {tab === "payments" && <OrderReview key={appliedSearch} client={supabaseClient} search={appliedSearch} onAccount={openAccountDetail} onProject={openDetail} />}
