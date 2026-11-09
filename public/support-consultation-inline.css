@@ -1,6 +1,7 @@
 #inline-consultation[hidden]{display:none!important}
 #inline-consultation{margin-top:18px}
 .inline-consult-wizard{box-sizing:border-box;padding:24px;border:1px solid #cbd0c5;border-radius:8px;background:#fffefa;color:#182a35;box-shadow:0 8px 26px rgba(24,42,53,.06);font-family:'Noto Sans JP',sans-serif;text-align:left}
+#purchase-consultation-form .inline-consult-wizard{border:0;background:transparent;box-shadow:none}
 .inline-consult-wizard *{box-sizing:border-box}
 .inline-consult-kicker{margin:0 0 7px!important;color:#28473e;font:600 13px/1.5 'Noto Sans JP',sans-serif!important;letter-spacing:.03em}
 .inline-consult-intro{margin:0 0 18px!important;font:14px/1.65 'Noto Sans JP',sans-serif!important}

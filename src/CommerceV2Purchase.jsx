@@ -226,7 +226,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           <div className="mt-3 grid grid-cols-2 gap-3">
             {[['standard', 'スタンダード', '軽やかで、手に取りやすい一冊。', '上質なソフトカバー', '35,000円'], ['premium', 'プレミアム', '想いをのせる、特別な装い。', '布貼り上製本・箔押し', '65,000円']].map(([value, name, description, cover, price]) => (
               <button key={value} type="button" aria-pressed={edition === value} disabled={Boolean(approvedConsultation)} onClick={() => { setEdition(value); requestKey.current = newRequestKey(); }}
-                className={`min-h-48 rounded-xl border p-4 text-left ${edition === value ? 'border-[#315a49] bg-[#f1f6ef]' : 'border-[#cfd5ca] bg-white'}`}>
+                className={`min-h-48 rounded-xl border p-4 text-left ${edition === value ? 'border-[#315a49] bg-white' : 'border-[#cfd5ca] bg-[#f1f6ef]'}`}>
                 <span className="block text-lg font-bold">{name}</span>
                 <span className="mt-2 block text-sm leading-6">{description}</span>
                 <span className="mt-2 block text-sm font-semibold">{cover}</span>
@@ -239,7 +239,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
 
         <div className="mt-9">
           <h2 className="font-serif text-xl">追加の冊子</h2>
-          <p className="mt-2 text-sm leading-7 text-[#65756b]">必要な場合だけお選びください。追加の冊子は、ブック・Webブックの完成時にもお申し込みいただけます。</p>
+          <p className="mt-2 text-sm leading-7 text-[#65756b]">必要な場合だけお選びください。物語の制作開始後にも追加できます。</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <label className="flex items-center justify-between gap-2 border-b border-[#e5e6df] py-3 text-sm">スタンダードを追加（5,000円／冊）<select className="rounded-lg border border-[#cbd4cb] bg-white p-2 text-base" value={standardExtraCount} disabled={Boolean(approvedConsultation)} onChange={event => { setStandardExtraCount(Number(event.target.value)); requestKey.current = newRequestKey(); }}>{Array.from({ length: 31 }, (_, count) => <option key={count} value={count}>{count}冊</option>)}</select></label>
             <label className="flex items-center justify-between gap-2 border-b border-[#e5e6df] py-3 text-sm">プレミアムを追加（35,000円／冊）<select className="rounded-lg border border-[#cbd4cb] bg-white p-2 text-base" value={premiumExtraCount} disabled={Boolean(approvedConsultation)} onChange={event => { setPremiumExtraCount(Number(event.target.value)); requestKey.current = newRequestKey(); }}>{Array.from({ length: 31 }, (_, count) => <option key={count} value={count}>{count}冊</option>)}</select></label>
@@ -254,7 +254,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={method === 'interview_staff'} disabled={Boolean(approvedConsultation)} onChange={event => { setMethod(event.target.checked ? 'interview_staff' : 'self_or_family'); requestKey.current = newRequestKey(); }} />聞き取り制作サポートを選ぶ</label>
           <p className="mt-3 text-sm leading-7">お気軽にご相談ください。決済は前後しても構いません。</p>
           <button type="button" aria-expanded={consultationOpen} aria-controls="purchase-consultation-form" className="mt-3 w-full rounded-lg border border-[#315a49] bg-white px-4 py-3 font-semibold" onClick={() => setConsultationOpen(open => !open)}>{consultationOpen ? '事前相談フォームを閉じる' : '事前相談フォームを開く'}</button>
-          {consultationOpen && <div id="purchase-consultation-form" className="mt-4 rounded-lg bg-[#fffefa] p-3"><SupportConsultationInline purchaseSelection={selection} /></div>}
+          {consultationOpen && <div id="purchase-consultation-form" className="mt-4"><SupportConsultationInline purchaseSelection={selection} /></div>}
         </div>
 
         {orderType === 'gift' && <label className="mt-8 block text-sm font-semibold">贈る相手のお名前<input className="mt-2 w-full rounded-lg border border-[#bfc9bd] bg-white p-3 text-base" value={gift.recipient_name} disabled={Boolean(familyInvitation)} onChange={event => setGift(current => ({ ...current, recipient_name: event.target.value }))} /></label>}
