@@ -3,3 +3,7 @@ export function supportRoleLabel(role) {
   if (role === 'co_manager') return '共同管理中';
   return 'お手伝い中';
 }
+
+export function canFinalizeBookAsSupportRole(role) {
+  return role === 'facilitator' || role === 'co_manager';
+}

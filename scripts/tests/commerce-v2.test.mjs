@@ -4,6 +4,7 @@ import {
   assertLegacyCheckoutAllowedForProject,
   assertStripePriceMatchesLine,
   calculateCommerceV2AdditionalCopyQuote,
+  calculateCommerceV2CompletionQuote,
   calculateCommerceV2Quote,
   checkoutSessionDisposition,
   routeAfterCommerceV2Purchase,
@@ -66,6 +67,16 @@ test('completion-time additional copies charge only selected copies at fixed pri
   assert.throws(() => calculateCommerceV2AdditionalCopyQuote(31, 0, catalog));
   assert.throws(() => calculateCommerceV2AdditionalCopyQuote(1, 0,
     catalog.filter(row => row.product_code !== 'standard_extra_v2')));
+});
+
+test('first BOOK completion permits zero extra copies without charging the purchased bundle', () => {
+  const zero = calculateCommerceV2CompletionQuote(0, 0, catalog);
+  assert.equal(zero.totalJpy, 0);
+  assert.deepEqual(zero.lines, []);
+  const copies = calculateCommerceV2CompletionQuote(1, 1, catalog);
+  assert.equal(copies.totalJpy, 40000);
+  assert.deepEqual(copies.lines.map(line => line.productCode),
+    ['standard_extra_v2', 'premium_extra_v2']);
 });
 
 test('a V2 project cannot enter the legacy discounted reprint checkout', () => {

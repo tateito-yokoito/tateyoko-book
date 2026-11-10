@@ -5,7 +5,7 @@ import { clearOnboardingNotificationDraft, clearOnboardingPreferenceDraft, clear
 import ApprovedHome from './home/ApprovedHome.jsx';
 import LineNotificationConnection from './LineNotificationConnection.jsx';
 import SupporterContextFrame from './SupporterContextFrame.jsx';
-import { supportRoleLabel } from './lib/supportRole.js';
+import { canFinalizeBookAsSupportRole, supportRoleLabel } from './lib/supportRole.js';
 import { photoStoryAccess } from './lib/photoStoryAccess.js';
 import StorySkySurface, { PersistentStorySkyBackdrop } from './home/StorySkySurface.jsx';
 import { configureSkyClient } from './home/liveSkies.js';
@@ -4167,7 +4167,7 @@ const openSupportedBookBuilder = async () => {
       input_book_project_id: projectId
     });
     if (error) throw error;
-    if (!data?.can_finalize_book) throw new Error("この作品の確定権限がありません");
+    if (!supportContext.project.can_build_book) throw new Error("この作品の仕上げ権限がありません");
     setSupportContext(previous => ({
       ...previous,
       project: { ...previous.project, ...(data || {}) }
@@ -9122,6 +9122,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
           questionSet={supportContext.questionSet}
           initialBookStories={supportContext.storyRows}
           initialBookMediaByAnswerId={supportContext.mediaByAnswerId}
+          mayFinalize={canFinalizeBookAsSupportRole(supportContext.project.support_role)}
           onBack={() => setScene("support_project_home")}
         />
       )}
@@ -16744,6 +16745,7 @@ export function Scene_BookBuilder({
   initialBookMediaByAnswerId = null,
   onOpenStories = null,
   readOnly = false,
+  mayFinalize = true,
   purchaseStatus = "idle",
   purchaseError = "",
   orderCompletedAt = null,
@@ -16876,7 +16878,7 @@ export function Scene_BookBuilder({
     v2AdditionalOpen, v2AdditionalCounts.standard, v2AdditionalCounts.premium]);
 
   const confirmCommerceV2Work = async () => {
-    if (!commerceV2Project || project?.production_method_v2 === "interview_staff"
+    if (!mayFinalize || !commerceV2Project || project?.production_method_v2 === "interview_staff"
       || !bookProjectId || !bookWork || workSaving || !previewEdition) return;
     if (!bookWork.confirmed_at && !window.confirm(
       "紙面を確定すると編集できなくなります。運営が仕上がりを確認し、必要に応じて意味を変えない軽微な調整やお問い合わせを行います。内容を確認済みですか？"
@@ -16908,7 +16910,7 @@ export function Scene_BookBuilder({
   };
 
   const checkoutCommerceV2Additional = async () => {
-    if (!v2AdditionalQuote || !shippingAddressComplete || v2AdditionalBusy) return;
+    if (!mayFinalize || !v2AdditionalQuote || !shippingAddressComplete || v2AdditionalBusy) return;
     const checkoutWindow = prepareCheckoutWindow();
     setV2AdditionalBusy(true);
     setV2AdditionalError("");
@@ -17962,12 +17964,12 @@ export function Scene_BookBuilder({
                         校正用PDFを開く
                       </a>
                     )}
-                    <button type="button" onClick={() => setV2AdditionalOpen(value => !value)}
+                    {mayFinalize && <button type="button" onClick={() => setV2AdditionalOpen(value => !value)}
                       className="btn-quiet w-full rounded-full bg-white/10 py-3 text-sm text-white">
                       {v2AdditionalOpen ? "追加冊子の注文を閉じる" : "完成した作品の追加冊子を注文する"}
-                    </button>
+                    </button>}
                   </>
-                ) : project?.production_method_v2 !== "interview_staff" ? (
+                ) : project?.production_method_v2 !== "interview_staff" && mayFinalize ? (
                   <>
                     <p className="text-sm leading-relaxed text-white/65">紙面をご確認のうえ、作品を確定してください。購入済みの装丁で制作します。</p>
                     <button type="button" onClick={confirmCommerceV2Work}
@@ -17976,12 +17978,14 @@ export function Scene_BookBuilder({
                       {workSaving ? "確定しています…" : "この内容で作品を確定する"}
                     </button>
                   </>
-                ) : (
+                ) : project?.production_method_v2 === "interview_staff" ? (
                   <p className="text-sm leading-relaxed text-white/65">
                     聞き取り制作の担当者からのご案内をお待ちください。
                   </p>
-                )}
-                {v2AdditionalOpen && bookWork?.confirmed_at && (
+                ) : <p className="text-sm leading-relaxed text-white/65">
+                  仕上がりを確認したら、制作管理者または共同管理者へ完成確定を依頼してください。
+                </p>}
+                {mayFinalize && v2AdditionalOpen && bookWork?.confirmed_at && (
                   <div className="space-y-4 border-t border-white/10 pt-4">
                     <p className="text-sm text-white/80">追加冊子（税込・複数冊割引なし）</p>
                     {[

@@ -55,16 +55,18 @@ function catalogLine(code: string, quantity: number, byCode: Map<string, Product
   };
 }
 
-// Completion-time copies are a separate order: never charge the base bundle
-// again, and never inherit the discontinued volume discount or gift package.
-export function calculateCommerceV2AdditionalCopyQuote(
+// Initial completion and later reprints share the same catalog prices. Only
+// the initial completion permits zero extra copies; neither charges the base
+// bundle a second time.
+function calculateCopyOnlyQuote(
   standardExtraCount: number,
   premiumExtraCount: number,
   catalog: ReadonlyArray<ProductV2>,
+  allowZero: boolean,
 ) {
   const standardCount = count(standardExtraCount, "スタンダード追加冊子");
   const premiumCount = count(premiumExtraCount, "プレミアム追加冊子");
-  if (standardCount + premiumCount === 0) throw new Error("追加冊子を選んでください");
+  if (!allowZero && standardCount + premiumCount === 0) throw new Error("追加冊子を選んでください");
   const byCode = new Map(catalog.map((product) => [product.product_code, product]));
   const lines = [
     standardCount ? catalogLine(OPTIONAL.standardExtra, standardCount, byCode) : null,
@@ -73,6 +75,22 @@ export function calculateCommerceV2AdditionalCopyQuote(
   const totalJpy = lines.reduce((sum, line) => sum + line.lineAmountJpy, 0);
   return { pricingVersion: "v2" as const, lines, subtotalJpy: totalJpy,
     discountJpy: 0, totalJpy, currency: "jpy" as const, taxIncluded: true as const };
+}
+
+export function calculateCommerceV2CompletionQuote(
+  standardExtraCount: number,
+  premiumExtraCount: number,
+  catalog: ReadonlyArray<ProductV2>,
+) {
+  return calculateCopyOnlyQuote(standardExtraCount, premiumExtraCount, catalog, true);
+}
+
+export function calculateCommerceV2AdditionalCopyQuote(
+  standardExtraCount: number,
+  premiumExtraCount: number,
+  catalog: ReadonlyArray<ProductV2>,
+) {
+  return calculateCopyOnlyQuote(standardExtraCount, premiumExtraCount, catalog, false);
 }
 
 export function calculateCommerceV2Quote(
