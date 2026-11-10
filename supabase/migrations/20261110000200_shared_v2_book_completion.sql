@@ -3,6 +3,21 @@
 -- commerce_orders, immutable order snapshot, and paid-order production trigger.
 begin;
 
+-- Publication notices are claimed once, after the approved Web book is live.
+-- Existing published cases remain NULL, so deployment never sends old notices.
+alter table public.book_ops_cases
+  add column publication_notice_state text
+    check (publication_notice_state in ('pending','sending','sent','unavailable','failed')),
+  add column publication_notice_attempted_at timestamptz,
+  add column publication_notice_sent_at timestamptz,
+  add column publication_notice_channel text,
+  add column publication_notice_error text;
+update public.book_ops_cases c set publication_notice_state='pending'
+where not exists (select 1 from public.voice_publications p
+  where p.book_project_id=c.book_project_id and p.status='published');
+alter table public.book_ops_cases
+  alter column publication_notice_state set default 'pending';
+
 -- V2 permits one additional standard copy. Legacy quote functions still
 -- enforce their existing two-copy minimum; no existing order is changed.
 alter table public.book_cover_settings

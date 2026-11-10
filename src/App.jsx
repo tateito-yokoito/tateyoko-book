@@ -14711,12 +14711,16 @@ export function Scene_Home(props) {
   useEffect(() => {
     if (!props.bookProjectId) { setPublishedBook(false); return undefined; }
     let active = true;
-    (props.supabaseClient || applicationSupabaseClient).functions.invoke("book-production-status", {
-      body: { projectId: props.bookProjectId }
-    }).then(({ data, error }) => {
-      if (active && !error && data?.success) setPublishedBook(Boolean(data.job?.webBookPublished));
-    });
-    return () => { active = false; };
+    const refreshPublishedBook = () => {
+      (props.supabaseClient || applicationSupabaseClient).functions.invoke("book-production-status", {
+        body: { projectId: props.bookProjectId }
+      }).then(({ data, error }) => {
+        if (active && !error && data?.success) setPublishedBook(Boolean(data.job?.webBookPublished));
+      }).catch(() => {});
+    };
+    refreshPublishedBook();
+    window.addEventListener("focus", refreshPublishedBook);
+    return () => { active = false; window.removeEventListener("focus", refreshPublishedBook); };
   }, [props.bookProjectId, props.supabaseClient]);
   return <ApprovedHome {...props} publishedBook={publishedBook}
     themeProgress={getStoryThemeProgress(props.questionSet || [], props.currentIndex || 0)}

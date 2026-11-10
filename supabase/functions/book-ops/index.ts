@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { notifyBookPublished } from "../_shared/bookPublicationNotice.js";
 
 const cors = { "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization,apikey,content-type,x-client-info",
@@ -192,9 +193,12 @@ serve(async request => {
             .select("status,snapshot_metadata").eq("id",existingJob.publication_id).single();
           if (publicationError) throw publicationError;
           if (existingPublication.status === "published"
-            && existingPublication.snapshot_metadata?.revisionId === review.approved_revision_id)
+            && existingPublication.snapshot_metadata?.revisionId === review.approved_revision_id) {
+            try { await notifyBookPublished(admin, orderId, review.book_project_id, existingJob.publication_id); }
+            catch { console.error("book publication notice unavailable"); }
             return json({success:true,approvedRevision:review.approved_revision_id,
               publicUrl:existingJob.public_url,unchanged:true});
+          }
         }
       }
       const { data: approvedRevision, error } = await admin.rpc("book_ops_mark_approved", {
@@ -207,6 +211,8 @@ serve(async request => {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.success) throw new HttpError("Web公開を完了できませんでした。再確認してください",502);
+      try { await notifyBookPublished(admin, orderId, review.book_project_id, result.publicationId); }
+      catch { console.error("book publication notice unavailable"); }
       return json({success:true,approvedRevision,publicUrl:result.publicUrl});
     }
 
