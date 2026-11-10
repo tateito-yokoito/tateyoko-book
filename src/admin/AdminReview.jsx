@@ -351,11 +351,12 @@ async function attachAdminMediaUrls(supabaseClient, detail) {
     detail.answers.map(async (answer) => {
       const media = await Promise.all(
         (answer.media || []).map(async (item) => {
-          if (!item.storage_path || item.asset_type !== "photo") {
+          const bucket = { photo: 'photos', audio: 'audio', video: 'videos' }[item.asset_type];
+          if (!item.storage_path || !bucket) {
             return item;
           }
 
-          const { data, error } = await supabaseClient.functions.invoke('admin-preview-media', {body:{project_id:detail.project.id,bucket:'photos',path:item.storage_path,seconds:1800}});
+          const { data, error } = await supabaseClient.functions.invoke('admin-preview-media', {body:{project_id:detail.project.id,bucket,path:item.storage_path,seconds:1800}});
 
           if (error) {
             console.warn("admin media unavailable");
@@ -2811,33 +2812,51 @@ export default function AdminReview({ supabaseClient }) {
   }
 
   async function loadRelatedPreview(projectId, viewerUserId) {
-    const [{ data: visibleIds, error: scopeError }, { data: supportedHome, error: homeError }] = await Promise.all([
-      supabaseClient.rpc("admin_preview_supporter_story_ids", {
-        input_project_id: projectId,
-        input_supporter_user_id: viewerUserId
-      }),
-      supabaseClient.rpc("get_admin_readonly_supported_home", {
-        input_account_id: viewerUserId,
-        input_project_id: projectId
-      })
-    ]);
+    const { data: context, error: scopeError } = await supabaseClient.rpc("admin_preview_supported_context", {
+      input_project_id: projectId,
+      input_supporter_user_id: viewerUserId
+    });
     if (scopeError) throw scopeError;
-    if (homeError) throw homeError;
     const { data, error } = await supabaseClient.rpc("admin_customer_preview", {
       input_project_id: projectId
     });
     if (error) throw error;
-    const allowed = new Set((visibleIds || []).map(row => row.answer_id));
+    const allowed = new Set(context?.answer_ids || []);
+    const fullMedia = context?.full_media === true;
+    const storyAnswers = (data?.answers || [])
+      .filter(answer => allowed.has(answer.id))
+      .map(answer => {
+        const bookText = answer.transcript_edited ||
+          (fullMedia ? answer.transcript_readable : answer.selected_style === 'essay' ? answer.transcript_essay : answer.transcript_readable) ||
+          answer.transcript_readable || answer.transcript_clean || '';
+        return {
+          id: answer.id,
+          book_project_id: projectId,
+          sequence_order: answer.sequence_order,
+          user_question_id: answer.user_question_id,
+          transcript_clean: bookText,
+          transcript_readable: bookText,
+          transcript_edited: bookText,
+          selected_style: 'readable',
+          access_override: answer.access_override || 'inherit',
+          created_at: answer.created_at,
+          media: (answer.media || []).filter(item =>
+            fullMedia ? ['photo', 'audio', 'video'].includes(item.asset_type) :
+              context?.can_read_photos === true && item.asset_type === 'photo'
+          )
+        };
+      });
     const scoped = {
       project: data?.project,
-      answers: (data?.answers || []).filter(answer => allowed.has(answer.id)),
+      answers: storyAnswers,
       rawQuestions: [],
-      questions: supportedHome?.questions || [],
+      questions: context?.questions || [],
       approvedThemeMemories: []
     };
     return {
       ...normalizeAdminPreview(await attachAdminMediaUrls(supabaseClient, scoped)),
-      questionSet: supportedHome?.questions || []
+      questionSet: context?.questions || [],
+      familyManaged: context?.family_managed === true
     };
   }
 

@@ -16138,6 +16138,7 @@ export function Scene_SupportedStoryPages({
   mediaByAnswerId = {},
   onSaveStory = null,
   onAttachMedia = null,
+  readOnly = false,
   mode = "supporter",
   onBack
 }) {
@@ -16152,7 +16153,7 @@ export function Scene_SupportedStoryPages({
 
   const visibleStories = [...(storyRows || [])]
     .filter(story => String(story.transcript_edited || story.transcript_readable || "").trim()
-      || (onSaveStory && (mediaByAnswerId?.[story.id] || []).some(item => item.asset_type === 'audio' && item.url)))
+      || ((onSaveStory || readOnly) && (mediaByAnswerId?.[story.id] || []).some(item => item.asset_type === 'audio' && item.url)))
     .sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0));
 
   return (
@@ -16228,8 +16229,8 @@ export function Scene_SupportedStoryPages({
                   ))}
                 </div>
               )}
-              {onSaveStory && recordings.map(item => <audio key={item.id} controls src={item.url} className="w-full" />)}
-              {onSaveStory && videos.map(item => <video key={item.id} controls src={item.url} className="w-full rounded-xl" />)}
+              {(onSaveStory || readOnly) && recordings.map(item => <audio key={item.id} controls src={item.url} className="w-full" />)}
+              {(onSaveStory || readOnly) && videos.map(item => <video key={item.id} controls src={item.url} className="w-full rounded-xl" />)}
               {onSaveStory && <CoManagerStoryEditor key={`${story.id}:${story.transcript_edited}:${story.access_override}`} story={story} onSave={onSaveStory} />}
               {onAttachMedia && <CoManagerMediaAdd storyId={story.id} onAttach={onAttachMedia} />}
             </article>
