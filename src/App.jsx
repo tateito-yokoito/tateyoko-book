@@ -7450,6 +7450,10 @@ setScene(1);
     scene !== "family_invite_purchase_success" &&
     scene !== "story_relationship_invite_received" &&
     scene !== "supporter_invite_account_mismatch";
+  const showSupportedStoryHeader = Boolean(supportContext) && (
+    String(scene).startsWith("support_") ||
+    (scene === 'project_role_invite_issue' && roleInviteReturnScene === 'support_project_home')
+  );
 
   const returnToHome = () => {
     const hasUnsavedVoice =
@@ -7478,9 +7482,18 @@ setScene(1);
   };
 
   return (
-    <div className={`app-container ${scene === "family_invite_received" ? "app-container--family-invitation" : ""} ${TRIAL_CONVERSION_ENABLED && scene === "trial_complete" ? "app-container--trial-conversion" : ""} ${["onboarding_preferences", "notification_setup", "sharing_setup"].includes(scene) ? "app-container--desktop-setup" : ""}`}>
+    <div className={`app-container ${scene === "family_invite_received" ? "app-container--family-invitation" : ""} ${TRIAL_CONVERSION_ENABLED && scene === "trial_complete" ? "app-container--trial-conversion" : ""} ${["onboarding_preferences", "notification_setup", "sharing_setup"].includes(scene) ? "app-container--desktop-setup" : ""} ${showSupportedStoryHeader ? "app-container--supported-story" : ""}`}>
       <PersistentStorySkyBackdrop active={QUESTION_BACKGROUND === "sky" && (scene === 1 || scene === 3)} />
-      {showGlobalHome && (
+      {showSupportedStoryHeader && <SupporterContextFrame
+        headerOnly
+        name={supportContext.project.subject_name}
+        role={supportContext.project.support_role}
+        onReturn={() => {
+          setSupportContext(null);
+          setScene(foundation?.project ? "home" : "connections_home");
+        }}
+      />}
+      {showGlobalHome && !showSupportedStoryHeader && (
         <button
           type="button"
           onClick={returnToHome}
@@ -16061,7 +16074,7 @@ export function Scene_SupportProjectHome({
     stories: Boolean(project?.can_edit_book_text || project?.can_build_book),
     book: Boolean(project?.can_build_book),
   };
-  return <SupporterContextFrame name={project?.subject_name} onReturn={onBack} embedded={readOnly}>
+  const content = <>
     {['co_manager', 'facilitator'].includes(project?.support_role) && <div className="mx-auto my-3 flex flex-wrap justify-center gap-3">
       {onInviteLink && <button type="button" className="rounded-full border border-white/30 px-5 py-2 text-sm text-white" onClick={onInviteLink}>共同管理者・お手伝いする人を招待</button>}
       {onSharing && <button type="button" className="rounded-full border border-white/30 px-5 py-2 text-sm text-white" onClick={onSharing}>共有設定</button>}
@@ -16075,7 +16088,10 @@ export function Scene_SupportProjectHome({
       onOpenStoryPages={onOpenStories}
       onOpenBookBuilder={readOnly ? onReadOnlyAction : onOpenBookBuilder}
     />
-  </SupporterContextFrame>;
+  </>;
+  return readOnly
+    ? <SupporterContextFrame name={project?.subject_name} role={project?.support_role} onReturn={onBack} embedded>{content}</SupporterContextFrame>
+    : content;
 }
 
 function CoManagerStoryEditor({ story, onSave }) {

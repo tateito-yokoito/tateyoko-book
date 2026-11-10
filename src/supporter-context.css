@@ -1,12 +1,22 @@
-.family-supporter-frame{--supporter-context-height:calc(38px + env(safe-area-inset-top));min-height:100dvh;padding-top:var(--supporter-context-height);background:#101c2c;box-sizing:border-box}
+.family-supporter-frame{--supporter-context-height:calc(44px + env(safe-area-inset-top));min-height:100dvh;padding-top:var(--supporter-context-height);background:#101c2c;box-sizing:border-box}
 .family-supporter-frame--embedded{min-height:100%;padding-top:0}
 .family-supporter-frame>.fixed.inset-0{top:var(--supporter-context-height)}
 .family-supporter-frame>.family-test{min-height:calc(100dvh - var(--supporter-context-height))}
-.family-supporter-context{position:fixed;top:0;right:0;left:0;z-index:10000;box-sizing:border-box;height:var(--supporter-context-height);padding-top:env(safe-area-inset-top);background:#101c2c;border-bottom:1px solid #ffffff14;color:#f2efe9}
-.family-supporter-frame--embedded .family-supporter-context{position:sticky;top:0;height:38px;padding-top:0}
-.family-supporter-context-inner{box-sizing:border-box;display:flex;align-items:center;gap:8px;width:min(100%,600px);height:38px;margin:0 auto;padding:0 12px;min-width:0;font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-size:16px;line-height:1.2}
-.family-supporter-context-return{display:inline-flex;align-items:center;justify-content:center;gap:3px;flex:none;min-width:72px;height:36px;padding:0 7px 0 0;border:0;border-right:1px solid #ffffff40;background:transparent;color:#f2dfb5;font:600 13px/1.2 'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;white-space:nowrap;cursor:pointer}
+.app-container--supported-story{padding-top:calc(env(safe-area-inset-top) + 3.5rem)}
+.app-container--supported-story>.fixed.inset-0{top:calc(44px + env(safe-area-inset-top))}
+.family-supporter-context{position:fixed;top:0;right:0;left:0;z-index:10000;box-sizing:border-box;height:calc(44px + env(safe-area-inset-top));padding-top:env(safe-area-inset-top);background:#101c2c;border-bottom:1px solid #ffffff14;color:#f2efe9}
+.family-supporter-frame--embedded .family-supporter-context{position:sticky;top:0;height:44px;padding-top:0}
+.family-supporter-context-inner{box-sizing:border-box;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;width:min(100%,600px);height:44px;margin:0 auto;padding:0 12px;min-width:0;font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-size:14px;line-height:1.2}
+.family-supporter-context-return{display:inline-flex;align-items:center;justify-content:center;gap:3px;min-height:40px;padding:0 8px 0 0;border:0;border-right:1px solid #ffffff40;background:transparent;color:#f2dfb5;font:600 12px/1.2 'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;white-space:nowrap;cursor:pointer}
 .family-supporter-context-return:disabled{opacity:.5;cursor:default}
 .family-supporter-context-return:focus-visible{outline:2px solid #ebd4a7;outline-offset:1px}
-.family-supporter-context-badge{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:2px 9px;border-radius:999px;background:#d9c9a5;color:#172336;white-space:nowrap;font-weight:600}
-.family-supporter-context-name{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f2efe9}
+.family-supporter-context-badge{display:inline-flex;align-items:center;justify-content:center;min-height:26px;padding:2px 7px;border-radius:999px;background:#d9c9a5;color:#172336;white-space:nowrap;font-size:12px;font-weight:600}
+.family-supporter-context-name{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;color:#f2efe9}
+.family-supporter-return-overlay{position:fixed;inset:0;z-index:10001;display:flex;align-items:center;justify-content:center;padding:24px;background:#020817bd}
+.family-supporter-return-dialog{box-sizing:border-box;width:min(100%,380px);padding:28px 22px;border:1px solid #ffffff30;border-radius:20px;background:#182438;color:#f2efe9;text-align:center;box-shadow:0 18px 50px #0008;font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif}
+.family-supporter-return-dialog h2{margin:0;font-size:19px;line-height:1.5;font-weight:600}
+.family-supporter-return-dialog p{margin:12px 0 22px;font-size:14px;line-height:1.8;color:#f2efe9b8}
+.family-supporter-return-dialog button{box-sizing:border-box;display:block;width:100%;min-height:48px;border-radius:999px;font-size:15px;cursor:pointer}
+.family-supporter-return-stay{border:0;background:#e8e4d8;color:#182438}
+.family-supporter-return-confirm{margin-top:10px;border:1px solid #ffffff50;background:transparent;color:#f2efe9}
+@media(max-width:380px){.family-supporter-context-inner{gap:4px;padding:0 7px;font-size:12px}.family-supporter-context-return{font-size:11px;padding-right:4px}.family-supporter-context-badge{font-size:11px;padding:2px 5px}}
