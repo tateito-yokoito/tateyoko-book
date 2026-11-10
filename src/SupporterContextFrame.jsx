@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { House } from 'lucide-react';
+import { supportRoleLabel } from './lib/supportRole.js';
 import './supporter-context.css';
 
 // Shared by the real supporter journey and the read-only customer preview.
 export default function SupporterContextFrame({ name, role, children, onReturn, returnDisabled = false, embedded = false, headerOnly = false }) {
   const [confirmReturn, setConfirmReturn] = useState(false);
   const storyLabel = `${name || 'ご家族'}の物語`;
-  const roleLabel = role === 'facilitator' ? '制作管理中'
-    : role === 'co_manager' ? '共同管理中' : 'お手伝い中';
+  const roleLabel = supportRoleLabel(role);
   const header = <>
     <div className="family-supporter-context">
       <div className="family-supporter-context-inner">
