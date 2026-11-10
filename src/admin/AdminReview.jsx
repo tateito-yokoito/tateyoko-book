@@ -2829,9 +2829,11 @@ export default function AdminReview({ supabaseClient }) {
     if (error) throw error;
     const allowed = new Set((visibleIds || []).map(row => row.answer_id));
     const scoped = {
-      ...data,
+      project: data?.project,
       answers: (data?.answers || []).filter(answer => allowed.has(answer.id)),
-      questions: supportedHome?.questions || []
+      rawQuestions: [],
+      questions: supportedHome?.questions || [],
+      approvedThemeMemories: []
     };
     return {
       ...normalizeAdminPreview(await attachAdminMediaUrls(supabaseClient, scoped)),

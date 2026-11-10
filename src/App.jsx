@@ -5,6 +5,7 @@ import { clearOnboardingNotificationDraft, clearOnboardingPreferenceDraft, clear
 import ApprovedHome from './home/ApprovedHome.jsx';
 import LineNotificationConnection from './LineNotificationConnection.jsx';
 import SupporterContextFrame from './SupporterContextFrame.jsx';
+import { supportRoleLabel } from './lib/supportRole.js';
 import { photoStoryAccess } from './lib/photoStoryAccess.js';
 import StorySkySurface, { PersistentStorySkyBackdrop } from './home/StorySkySurface.jsx';
 import { configureSkyClient } from './home/liveSkies.js';
@@ -14779,11 +14780,7 @@ function LegacyScene_Home({
                   key={project.supporter_id}
                   icon={Users}
                   label={`${project.subject_name || "ご家族"}の物語`}
-                  detail={
-                    project.support_role === "facilitator"
-                      ? "進行役として開いています"
-                      : "お手伝いする人として開いています"
-                  }
+                  detail={supportRoleLabel(project.support_role)}
                   onClick={() => onOpenSupportedProject?.(project)}
                 />
               ))}

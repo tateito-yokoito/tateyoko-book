@@ -5,6 +5,7 @@ import { useDailySky } from './useDailySky.js';
 import { countAnsweredStories, countAnsweredStoryThemes } from '../lib/storyPages.js';
 import './approved-home.css';
 import { homeQuestionHeading } from './homeQuestionHeading.js';
+import { supportRoleLabel } from '../lib/supportRole.js';
 
 function Row({ icon: Icon, children, badge, attention = false, onClick, href, disabled }) {
   const Tag = href ? 'a' : 'button';
@@ -62,7 +63,10 @@ function ApprovedHomeContent({ themeProgress, questionSet = [], currentIndex = 0
       </>}
       {!ownStoryEntry && !supportedActions && <Group title="本棚"><Row icon={Library} href={onOpenShelf ? undefined : '/?library=1'} onClick={onOpenShelf}>私の本棚・家族の本棚</Row></Group>}
       {receivedProjects.length > 0 && <Group title="家族の語り">{receivedProjects.map(p => <Row key={p.book_project_id} icon={Files} onClick={() => onOpenReceivedProject?.(p)}>{nameOf(p.subject_name)}の語り</Row>)}</Group>}
-      {supportedProjects.length > 0 && <Group title="サポート中の物語">{supportedProjects.map(p => <Row key={p.supporter_id || p.book_project_id} icon={Users} onClick={() => onOpenSupportedProject?.(p)}>物語：{p.subject_name || 'ご家族'}</Row>)}</Group>}
+      {['制作管理中', '共同管理中', 'お手伝い中'].map(roleLabel => {
+        const projects = supportedProjects.filter(p => supportRoleLabel(p.support_role) === roleLabel);
+        return projects.length > 0 && <Group key={roleLabel} title={roleLabel}>{projects.map(p => <Row key={p.supporter_id || p.book_project_id} icon={Users} onClick={() => onOpenSupportedProject?.(p)}>{nameOf(p.subject_name)}の物語</Row>)}</Group>;
+      })}
       {ownStoryEntry && <Group title="本棚"><Row icon={Library} href={onOpenShelf ? undefined : '/?library=1'} onClick={onOpenShelf}>私の本棚・家族の本棚</Row></Group>}
       {invitationCards}
       {onOpenLineDelivery && <Group title="問いの受け取り"><Row icon={Mail} onClick={onOpenLineDelivery}>LINEでも問いを受け取る</Row></Group>}
