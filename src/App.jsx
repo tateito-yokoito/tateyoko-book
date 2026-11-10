@@ -2737,7 +2737,7 @@ async function loadSupporterBookData(supportedProject) {
     supportedProject?.can_manage_photos || canReadStories;
   const coManager = ['co_manager', 'facilitator'].includes(supportedProject?.support_role);
 
-  const [questionsResult, storiesResult, photosResult] = await Promise.all([
+  const [questionsResult, storiesResult, photosResult, videoAccessResult, bookAccessResult] = await Promise.all([
     supabaseClient.rpc("get_supporter_questions", {
       input_book_project_id: bookProjectId
     }),
@@ -2750,12 +2750,20 @@ async function loadSupporterBookData(supportedProject) {
       ? supabaseClient.rpc(coManager ? "get_co_manager_media" : "get_supporter_book_photos", {
           input_book_project_id: bookProjectId
         })
-      : Promise.resolve({ data: [], error: null })
+      : Promise.resolve({ data: [], error: null }),
+    supportedProject?.can_operate_recording
+      ? supabaseClient.rpc("can_manage_video_stories", { input_book_project_id: bookProjectId })
+      : Promise.resolve({ data: false, error: null }),
+    supportedProject?.can_build_book
+      ? supabaseClient.rpc("can_manage_book_cover", { input_project_id: bookProjectId })
+      : Promise.resolve({ data: false, error: null })
   ]);
 
   if (questionsResult.error) throw questionsResult.error;
   if (storiesResult.error) throw storiesResult.error;
   if (photosResult.error) throw photosResult.error;
+  if (videoAccessResult.error) throw videoAccessResult.error;
+  if (bookAccessResult.error) throw bookAccessResult.error;
 
   const storyRows = (storiesResult.data || []).map(row => ({
     id: row.answer_id,
@@ -2824,7 +2832,9 @@ async function loadSupporterBookData(supportedProject) {
   return {
     storyRows,
     questionSet,
-    mediaByAnswerId: groupedMedia
+    mediaByAnswerId: groupedMedia,
+    videoAllowed: Boolean(videoAccessResult.data),
+    bookAllowed: Boolean(bookAccessResult.data)
   };
 }
 
@@ -3303,6 +3313,8 @@ function App() {
   const [supportedProjects, setSupportedProjects] = useState([]);
   const [receivedProjects, setReceivedProjects] = useState([]);
   const [supportContext, setSupportContext] = useState(null);
+  const [supportVideoOpen, setSupportVideoOpen] = useState(false);
+  const [supportVideoStories, setSupportVideoStories] = useState([]);
   const [roleInviteProjectId, setRoleInviteProjectId] = useState(null);
   const [roleInviteReturnScene, setRoleInviteReturnScene] = useState('home');
   const [supportNotificationPref, setSupportNotificationPref] = useState(null);
@@ -4144,6 +4156,45 @@ const openSupportedProject = async (supportedProject) => {
     alert("お手伝いする物語を開けませんでした。");
   } finally {
     setIsInitializing(false);
+  }
+};
+
+const openSupportedBookBuilder = async () => {
+  const projectId = supportContext?.project?.book_project_id;
+  if (!projectId) return;
+  try {
+    const { data, error } = await supabaseClient.rpc("get_supported_book_purchase_context", {
+      input_book_project_id: projectId
+    });
+    if (error) throw error;
+    if (!data?.can_finalize_book) throw new Error("この作品の確定権限がありません");
+    setSupportContext(previous => ({
+      ...previous,
+      project: { ...previous.project, ...(data || {}) }
+    }));
+    setScene("support_book_builder");
+  } catch (error) {
+    console.error("supported book context load error", error);
+    alert("作品の購入情報を確認できませんでした。もう一度お試しください。");
+  }
+};
+
+const reloadSupportVideoStories = async () => {
+  const projectId = supportContext?.project?.book_project_id;
+  if (!projectId) return;
+  const { data, error } = await supabaseClient.from("video_stories")
+    .select("*").eq("book_project_id", projectId).order("slot_order");
+  if (error) throw error;
+  setSupportVideoStories(data || []);
+};
+
+const openSupportVideoStory = async () => {
+  try {
+    await reloadSupportVideoStories();
+    setSupportVideoOpen(true);
+  } catch (error) {
+    console.error("supported video load error", error);
+    alert("動画の準備ができませんでした。もう一度お試しください。");
   }
 };
 
@@ -8972,7 +9023,10 @@ if (getProjectRoleInviteTokenFromUrl()) {
             }
           }}
           onOpenStories={() => setScene("support_story_pages")}
-          onOpenBookBuilder={() => setScene("support_book_builder")}
+          videoAllowed={supportContext.videoAllowed}
+          bookAllowed={supportContext.bookAllowed}
+          onOpenVideo={openSupportVideoStory}
+          onOpenBookBuilder={openSupportedBookBuilder}
           onInviteLink={() => { setRoleInviteProjectId(supportContext.project.book_project_id); setRoleInviteReturnScene('support_project_home'); setScene('project_role_invite_issue'); }}
           onSharing={() => setScene('support_co_manager_sharing')}
           onBack={() => {
@@ -9070,6 +9124,20 @@ if (getProjectRoleInviteTokenFromUrl()) {
           onBack={() => setScene("support_project_home")}
         />
       )}
+      <VideoStoryFlow
+        open={supportVideoOpen && Boolean(supportContext?.videoAllowed)}
+        user={user}
+        foundation={supportContext ? {
+          project: { id: supportContext.project.book_project_id, subject_person_id: supportContext.project.subject_person_id },
+          person: { id: supportContext.project.subject_person_id }
+        } : null}
+        answers={supportContext?.storyRows || []}
+        questionSet={supportContext?.questionSet || []}
+        stories={supportVideoStories}
+        supabaseClient={supabaseClient}
+        onReload={reloadSupportVideoStories}
+        onClose={() => setSupportVideoOpen(false)}
+      />
 
       {scene === "book_builder" && (
         <Scene_BookBuilder
@@ -16054,10 +16122,13 @@ export function Scene_QuestionLibrary({ foundation, questionSet = [], onAdded, o
 export function Scene_SupportProjectHome({
   project,
   questionSet = [],
+  videoAllowed = false,
+  bookAllowed = false,
   readOnly = false,
   onOpenQuestions,
   onOpenStories,
   onOpenBookBuilder,
+  onOpenVideo,
   onInviteLink,
   onSharing,
   onReadOnlyAction,
@@ -16069,7 +16140,8 @@ export function Scene_SupportProjectHome({
     photo: false,
     questionList: false,
     stories: Boolean(project?.can_edit_book_text || project?.can_build_book),
-    book: Boolean(project?.can_build_book),
+    book: bookAllowed,
+    video: videoAllowed,
   };
   const content = <>
     {['co_manager', 'facilitator'].includes(project?.support_role) && <div className="mx-auto my-3 flex flex-wrap justify-center gap-3">
@@ -16084,6 +16156,7 @@ export function Scene_SupportProjectHome({
       onStartTalking={readOnly ? onReadOnlyAction : onOpenQuestions}
       onOpenStoryPages={onOpenStories}
       onOpenBookBuilder={readOnly ? onReadOnlyAction : onOpenBookBuilder}
+      onStartVideoStory={readOnly ? onReadOnlyAction : onOpenVideo}
     />
   </>;
   return readOnly
@@ -16756,7 +16829,7 @@ export function Scene_BookBuilder({
   const workSaveLock = useRef(false);
   useEffect(() => {
     if ((!commerceV2Project && import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED !== "true") || !bookProjectId
-      || !["paid", "zero_paid"].includes(project?.access_status) && !orderCompleted && !orderCompletedAt) return undefined;
+      || !["paid", "zero_paid", "gifted"].includes(project?.access_status) && !orderCompleted && !orderCompletedAt) return undefined;
     let cancelled = false;
     const refresh = async () => {
       const { data, error } = await supabaseClient.functions.invoke("book-production-status", {
