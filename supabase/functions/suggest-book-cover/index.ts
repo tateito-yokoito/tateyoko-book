@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isStoryHelper } from "../_shared/helper-private-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,6 +45,7 @@ serve(async (req) => {
 
     const serviceClient = createClient(supabaseUrl, serviceRoleKey);
     await requireProjectAccess(serviceClient, bookProjectId, user.id);
+    const helper = await isStoryHelper(serviceClient, bookProjectId, user.id);
 
     const { data: stored } = await serviceClient
       .from("book_cover_settings")
@@ -51,19 +53,21 @@ serve(async (req) => {
       .eq("book_project_id", bookProjectId)
       .maybeSingle();
     const cached = sanitizeSuggestions(stored?.suggestions);
-    if (cached.length >= 10) {
+    if (!helper && cached.length >= 10) {
       return jsonResponse({ success: true, suggestions: cached, cached: true });
     }
 
-    const { data: answers, error: answersError } = await serviceClient
+    let answerQuery = serviceClient
       .from("answers")
-      .select("sequence_order, transcript_edited, transcript_readable, transcript_clean, transcript_raw, ai_mirror, snippet")
-      .eq("book_project_id", bookProjectId)
+      .select("sequence_order, access_override, transcript_edited, transcript_readable, transcript_clean, transcript_raw, ai_mirror, snippet")
+      .eq("book_project_id", bookProjectId);
+    if (helper) answerQuery = answerQuery.or("access_override.is.null,access_override.neq.private_forever");
+    const { data: answers, error: answersError } = await answerQuery
       .order("sequence_order", { ascending: true })
       .limit(24);
     if (answersError) throw answersError;
 
-    const sourceText = (answers || [])
+    const sourceText = (answers || []).filter(answer => !helper || answer.access_override !== "private_forever")
       .map((answer) => String(
         answer.transcript_edited || answer.transcript_readable || answer.transcript_clean ||
         answer.transcript_raw || answer.ai_mirror || answer.snippet || ""
@@ -80,6 +84,7 @@ serve(async (req) => {
       });
     }
 
+    if (helper) return jsonResponse({ success: true, suggestions, cached: false });
     const { error: saveError } = await serviceClient
       .from("book_cover_settings")
       .upsert({

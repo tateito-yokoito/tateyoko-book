@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { assertHelperAnswerVisible, assertHelperMediaPathsVisible, isStoryHelper } from "../_shared/helper-private-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -80,17 +81,20 @@ serve(async (req) => {
         .maybeSingle();
       bookProjectId = String(answer?.book_project_id || "").trim();
     }
+    if (!bookProjectId) throw new Error("Forbidden");
 
     let contextTerms: ContextTerm[] = [];
     if (bookProjectId) {
       await requireProjectAccess(serviceClient, bookProjectId, user.id);
-      await seedSubjectName(serviceClient, bookProjectId, user.id);
-      contextTerms = await loadRelevantTerms(
-        serviceClient,
-        bookProjectId,
-        questionText,
-        previousTranscript
-      );
+      // A fresh recording can use a pending upload ID before the answer row exists.
+      await assertHelperAnswerVisible(serviceClient, bookProjectId, user.id, answerId, true);
+      await assertHelperMediaPathsVisible(serviceClient, bookProjectId, user.id, audioPaths);
+      if (!await isStoryHelper(serviceClient, bookProjectId, user.id)) {
+        await seedSubjectName(serviceClient, bookProjectId, user.id);
+        contextTerms = await loadRelevantTerms(
+          serviceClient, bookProjectId, questionText, previousTranscript
+        );
+      }
     }
 
     if (audioPaths.length === 0) {

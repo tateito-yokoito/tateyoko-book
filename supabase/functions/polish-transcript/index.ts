@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { assertHelperAnswerVisible } from "../_shared/helper-private-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,6 +53,7 @@ serve(async (req) => {
     if (!answerId) throw new Error("answerId is required");
     if (bookProjectId) {
       await requireProjectAccess(serviceClient, bookProjectId, user.id);
+      await assertHelperAnswerVisible(serviceClient, bookProjectId, user.id, answerId, true);
     }
 
     if (!transcriptRaw) {

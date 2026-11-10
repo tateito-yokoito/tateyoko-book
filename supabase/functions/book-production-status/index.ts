@@ -26,6 +26,12 @@ serve(async request => {
     if (!/^[a-f\d-]{36}$/i.test(projectId)) return json({ error: "Invalid project" }, 400);
     const { error: accessError } = await client.rpc("get_book_work", { input_project_id: projectId });
     if (accessError) return json({ error: "Forbidden" }, 403);
+    // The production proof can contain private stories. Helpers may inspect
+    // their filtered draft preview, never the unfiltered finished PDF.
+    const { data: helper, error: roleError } = await client.rpc("book_role_is_helper", {
+      input_project_id: projectId
+    });
+    if (roleError) return json({ error: "Forbidden" }, 403);
     const admin = createClient(supabaseUrl, key);
     const { data: jobs, error } = await admin.from("book_production_jobs")
       .select("order_id,state,stage,attempts,pdf_page_count,pdf_storage_path,publication_id,created_at,completed_at,error_message")
@@ -42,7 +48,7 @@ serve(async request => {
       .select("id").eq("book_project_id", projectId).eq("status", "published").limit(1);
     if (publicationError) throw publicationError;
     let pdfUrl = null;
-    if (job?.state === "ready_review" && job.pdf_storage_path
+    if (!helper && job?.state === "ready_review" && job.pdf_storage_path
       && (!opsCase || ["approved", "print_ready", "ordered", "printing", "shipped", "delivered"].includes(opsCase.status))) {
       const { data: signed, error: signError } = await admin.storage.from("book-production")
         .createSignedUrl(job.pdf_storage_path, 300);
