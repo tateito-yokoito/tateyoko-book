@@ -16145,23 +16145,22 @@ export function Scene_SupportProjectHome({
     book: bookAllowed,
     video: videoAllowed,
   };
-  const content = <>
-    {['co_manager', 'facilitator'].includes(project?.support_role) && <div className="mx-auto my-3 flex flex-wrap justify-center gap-3">
-      {onInviteLink && <button type="button" className="rounded-full border border-white/30 px-5 py-2 text-sm text-white" onClick={onInviteLink}>共同管理者・お手伝いする人を招待</button>}
-      {onSharing && <button type="button" className="rounded-full border border-white/30 px-5 py-2 text-sm text-white" onClick={onSharing}>共有設定</button>}
-    </div>}
-    <Scene_Home
+  const settingsActions = ['co_manager', 'facilitator'].includes(project?.support_role) ? [
+    ...(onInviteLink ? [{ label: '共同管理者・お手伝いする人を招待', icon: Users, onClick: onInviteLink }] : []),
+    ...(onSharing ? [{ label: '共有設定', icon: Settings, onClick: onSharing }] : []),
+  ] : [];
+  const content = <Scene_Home
       userName={project?.subject_name || "ご家族"}
       questionSet={questionSet}
       currentIndex={firstPending < 0 ? Math.max(questionSet.length - 1, 0) : firstPending}
       supportedActions={supportedActions}
+      settingsActions={settingsActions}
       onStartTalking={readOnly ? onReadOnlyAction : onOpenQuestions}
       onOpenStoryPages={onOpenStories}
       onStartPhotoStory={onStartPhotoStory}
       onOpenBookBuilder={readOnly ? onReadOnlyAction : onOpenBookBuilder}
       onStartVideoStory={readOnly ? onReadOnlyAction : onOpenVideo}
-    />
-  </>;
+    />;
   return readOnly
     ? <SupporterContextFrame name={project?.subject_name} role={project?.support_role} onReturn={onBack} embedded>{content}</SupporterContextFrame>
     : content;
