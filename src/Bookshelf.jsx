@@ -8,6 +8,7 @@ export function BookCover({ book, className = '' }) {
     <div className="bs-cover-content"><div className="bs-cover-title">{book.title}</div>{book.subtitle && <div className="bs-cover-subtitle">{book.subtitle}</div>}
       {book.photo && <div className="bs-cover-photo"><img src={book.photo.src} alt="" loading="lazy" style={book.photo.crop ? { position: 'absolute', maxWidth: 'none', height: 'auto', ...book.photo.crop } : undefined} /></div>}
       <time className="bs-cover-date" dateTime={book.publishedAt || undefined}>{formatBookMonth(book.publishedAt)}</time>
+      {book.completionPending && <span className="bs-cover-pending">完成確認中・まもなく公開</span>}
     </div>
   </div>;
 }

@@ -28,7 +28,7 @@ serve(async request => {
     if (accessError) return json({ error: "Forbidden" }, 403);
     const admin = createClient(supabaseUrl, key);
     const { data: jobs, error } = await admin.from("book_production_jobs")
-      .select("order_id,state,stage,attempts,pdf_page_count,pdf_storage_path,created_at,completed_at,error_message")
+      .select("order_id,state,stage,attempts,pdf_page_count,pdf_storage_path,publication_id,created_at,completed_at,error_message")
       .eq("book_project_id", projectId).order("created_at", { ascending: false }).limit(1);
     if (error) throw error;
     const job = jobs?.[0] || null;
@@ -36,6 +36,11 @@ serve(async request => {
       ? await admin.from("book_ops_cases").select("status,approved_at").eq("order_id", job.order_id).maybeSingle()
       : { data: null, error: null };
     if (opsError) throw opsError;
+    // A later reprint can become the latest job while the first Web book is
+    // already public. Publication state belongs to the story, not that job.
+    const { data: published, error: publicationError } = await admin.from("voice_publications")
+      .select("id").eq("book_project_id", projectId).eq("status", "published").limit(1);
+    if (publicationError) throw publicationError;
     let pdfUrl = null;
     if (job?.state === "ready_review" && job.pdf_storage_path
       && (!opsCase || ["approved", "print_ready", "ordered", "printing", "shipped", "delivered"].includes(opsCase.status))) {
@@ -48,7 +53,8 @@ serve(async request => {
       orderId: job.order_id, state: job.state, stage: job.stage, attempts: job.attempts,
       pageCount: job.pdf_page_count, createdAt: job.created_at, completedAt: job.completed_at,
       error: job.error_message, pdfUrl,
-      opsStatus: opsCase?.status || null, opsApprovedAt: opsCase?.approved_at || null
+      opsStatus: opsCase?.status || null, opsApprovedAt: opsCase?.approved_at || null,
+      webBookPublished: Boolean(published?.length)
     } : null });
   } catch (error) {
     console.error("book-production-status", error);

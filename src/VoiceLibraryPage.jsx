@@ -39,7 +39,10 @@ export default function VoiceLibraryPage({ supabaseClient }) {
       }
       if (ticket !== request.current) return;
       if (result.error) throw result.error;
-      setPublications(result.data || []); setStatus("ready");
+      const pending = await supabaseClient.rpc("list_pending_book_library");
+      if (ticket !== request.current) return;
+      if (pending.error) throw pending.error;
+      setPublications([...(result.data || []), ...(pending.data || [])]); setStatus("ready");
     } catch {
       if (ticket !== request.current) return;
       setStatus("error"); setMessage("本棚を読み込めませんでした。時間をおいて、もう一度お試しください。");
@@ -73,7 +76,9 @@ export default function VoiceLibraryPage({ supabaseClient }) {
       : status === "error" ? <LibraryState text={message} action={loadLibrary} />
       : <><Bookshelf key={session.user.id} {...library} renderBookDetails={book => {
           const publication = publications.find(p => p.publication_id === book.id);
-          return publication ? <BookAccessDetails publication={publication} canManageAccess={book.canManageAccess} onUpdateAccess={updateAccess} /> : null;
+          return publication?.completion_pending
+            ? <article className="voice-book-card"><p>完成確認中・まもなく公開</p><p>仕上がりを確認しています。公開後にWebブックを開けます。</p></article>
+            : publication ? <BookAccessDetails publication={publication} canManageAccess={book.canManageAccess} onUpdateAccess={updateAccess} /> : null;
         }} />{message && <p className="voice-library-message" role="status">{message}</p>}</>}
     {session && <footer className="voice-library-return"><a href="/?app=1">ホームへ戻る</a></footer>}
   </main>;

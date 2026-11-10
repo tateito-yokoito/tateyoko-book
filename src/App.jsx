@@ -3564,6 +3564,14 @@ if (!session) {
         // A supporter opens the invited story, not their own onboarding.
         const supportEntryId = new URLSearchParams(location.search).get('support_project');
         if (supportEntryId) {
+          if (checkoutReturn.status === 'success' && checkoutReturn.sessionId) {
+            const { data: checkoutResult, error: syncError } = await supabaseClient.functions.invoke('sync-checkout-session', {
+              body: { sessionId: checkoutReturn.sessionId }
+            });
+            if (syncError || !checkoutResult?.paid || checkoutResult.order?.book_project_id !== supportEntryId) {
+              throw syncError || new Error('完成決済を確認できませんでした');
+            }
+          }
           const projects = await loadSupportedStoryProjects();
           const project = projects.find(p => p.book_project_id === supportEntryId);
           if (!project) throw Error('Supporter access unavailable');
@@ -3574,7 +3582,15 @@ if (!session) {
           setSupportedProjects(projects);
           setSupportContext({project,...bookData});
           setSupportNotificationPref(preference || null);
-          setScene('support_project_home');
+          if (checkoutReturn.context === 'book_builder' && checkoutReturn.status === 'success') {
+            setBookBuilderOrderCompletedAt(Date.now());
+            replaceCommercialEntryUrl('purchased');
+            setScene('support_book_builder');
+          } else if (checkoutReturn.context === 'book_builder' && checkoutReturn.status === 'cancelled') {
+            setScene('support_book_builder');
+          } else {
+            setScene('support_project_home');
+          }
           return;
         }
 
@@ -8647,6 +8663,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
 
       {scene === "home" && (
        <Scene_Home
+         bookProjectId={foundation?.project?.id || null}
          userName={user?.name || "あなた"}
          questionSet={questionsDB}
          trialCarryDecision={foundation?.project?.trial_carry_decision}
@@ -9123,6 +9140,9 @@ if (getProjectRoleInviteTokenFromUrl()) {
           initialBookStories={supportContext.storyRows}
           initialBookMediaByAnswerId={supportContext.mediaByAnswerId}
           mayFinalize={canFinalizeBookAsSupportRole(supportContext.project.support_role)}
+          orderCompletedAt={bookBuilderOrderCompletedAt}
+          initialStepIndex={getCheckoutReturnFromUrl().status === 'cancelled' ? 4 : bookBuilderResumeStep}
+          checkoutWasCancelled={getCheckoutReturnFromUrl().status === 'cancelled'}
           onBack={() => setScene("support_project_home")}
         />
       )}
@@ -14687,7 +14707,19 @@ function Scene_FamilyStoryDeliveryChoice({
 }
 
 export function Scene_Home(props) {
-  return <ApprovedHome {...props} themeProgress={getStoryThemeProgress(props.questionSet || [], props.currentIndex || 0)}
+  const [publishedBook, setPublishedBook] = useState(false);
+  useEffect(() => {
+    if (!props.bookProjectId) { setPublishedBook(false); return undefined; }
+    let active = true;
+    (props.supabaseClient || applicationSupabaseClient).functions.invoke("book-production-status", {
+      body: { projectId: props.bookProjectId }
+    }).then(({ data, error }) => {
+      if (active && !error && data?.success) setPublishedBook(Boolean(data.job?.webBookPublished));
+    });
+    return () => { active = false; };
+  }, [props.bookProjectId, props.supabaseClient]);
+  return <ApprovedHome {...props} publishedBook={publishedBook}
+    themeProgress={getStoryThemeProgress(props.questionSet || [], props.currentIndex || 0)}
     invitationCards={props.sentFamilyInvitations?.length > 0 && <section className="ah-group"><h2>招待した家族の物語</h2><div className="ah-rows">{props.sentFamilyInvitations.map(invitation => <FamilyInvitationHomeCard key={invitation.invitation_id} invitation={invitation} onContinue={() => props.onContinueFamilyTrial?.(invitation)} onDecline={() => props.onDeclineFamilyTrial?.(invitation)} />)}</div></section>} />;
 }
 
@@ -16151,6 +16183,7 @@ export function Scene_SupportProjectHome({
     ...(onSharing ? [{ label: '共有設定', icon: Settings, onClick: onSharing }] : []),
   ] : [];
   const content = <Scene_Home
+      bookProjectId={project?.book_project_id || project?.id || null}
       userName={project?.subject_name || "ご家族"}
       questionSet={questionSet}
       currentIndex={firstPending < 0 ? Math.max(questionSet.length - 1, 0) : firstPending}
@@ -16758,7 +16791,9 @@ export function Scene_BookBuilder({
 }) {
   const supabaseClient = adminPreviewClient || applicationSupabaseClient;
   const commerceV2Project = Boolean(project?.purchased_edition_v2);
-  const steps = readOnly || !onPurchase || commerceV2Project
+  // A purchased V2 story uses the same five existing BOOK screens regardless
+  // of whether its creator bought it for themselves or received it as a gift.
+  const steps = readOnly
     ? ["表紙", "収録", "紙面"]
     : ["表紙", "収録内容", "紙面確認", "オプション", "注文"];
   const [stepIndex, setStepIndex] = useState(() => Math.max(
@@ -16778,12 +16813,14 @@ export function Scene_BookBuilder({
   const [premiumFooterOverride, setPremiumFooterOverride] = useState(null);
   const [premiumCoverPhotoMode, setPremiumCoverPhotoMode] = useState("inherit");
   const [standardExtraCopyCount, setStandardExtraCopyCount] = useState(
-    Number(project?.ordered_standard_extra_copy_count || 0)
+    commerceV2Project ? 0 : Number(project?.ordered_standard_extra_copy_count || 0)
   );
   const [premiumCopyCount, setPremiumCopyCount] = useState(
-    Number(project?.ordered_premium_copy_count || 0)
+    commerceV2Project ? 0 : Number(project?.ordered_premium_copy_count || 0)
   );
-  const [includeGiftPackage, setIncludeGiftPackage] = useState(Boolean(project?.gift_package_purchased));
+  const [includeGiftPackage, setIncludeGiftPackage] = useState(
+    !commerceV2Project && Boolean(project?.gift_package_purchased)
+  );
   const [orderQuote, setOrderQuote] = useState(null);
   const [orderQuoteStatus, setOrderQuoteStatus] = useState("idle");
   const [orderQuoteError, setOrderQuoteError] = useState("");
@@ -16801,6 +16838,7 @@ export function Scene_BookBuilder({
   const [shippingAddress, setShippingAddress] = useState(() => normalizeBookShippingAddress());
   const [showCheckoutCancelled, setShowCheckoutCancelled] = useState(checkoutWasCancelled);
   const [orderCompleted, setOrderCompleted] = useState(false);
+  const [completionReleaseKey, setCompletionReleaseKey] = useState(0);
   const [productionJob, setProductionJob] = useState(null);
   const [coverSettingsReady, setCoverSettingsReady] = useState(false);
   const [coverSettingsSaveError, setCoverSettingsSaveError] = useState("");
@@ -16819,6 +16857,7 @@ export function Scene_BookBuilder({
   const [storiesLoading, setStoriesLoading] = useState(false);
   const [includedStoryIds, setIncludedStoryIds] = useState([]);
   const [bookWork, setBookWork] = useState(null);
+  const completedBook = Boolean(bookWork?.confirmed_at || orderCompleted || orderCompletedAt);
   const [workSaving, setWorkSaving] = useState(false);
   const [workError, setWorkError] = useState("");
   const [v2AdditionalCounts, setV2AdditionalCounts] = useState({ standard: 0, premium: 0 });
@@ -16831,6 +16870,26 @@ export function Scene_BookBuilder({
   const [paperPreviewStoryId, setPaperPreviewStoryId] = useState(null);
   const [draftPdfError, setDraftPdfError] = useState("");
   const workSaveLock = useRef(false);
+  const cancellationReleaseStarted = useRef(false);
+  useEffect(() => {
+    if (!checkoutWasCancelled || !commerceV2Project || !bookProjectId || !user?.id
+      || cancellationReleaseStarted.current) return;
+    cancellationReleaseStarted.current = true;
+    let mounted = true;
+    supabaseClient.functions.invoke("create-commerce-v2-additional-checkout", {
+      body: { action: "completion_release", projectId: bookProjectId }
+    }).then(async ({ data, error }) => {
+      if (!mounted) return;
+      if (error || !data?.success) throw error || new Error(data?.error || "決済状態を確認できませんでした");
+      setShowCheckoutCancelled(false);
+      setCompletionReleaseKey(value => value + 1);
+      setStepIndex(0);
+    }).catch(async error => {
+      if (mounted) setCoverSettingsSaveError(await getFunctionInvokeErrorMessage(error,
+        error?.message || "決済の中止を確認できませんでした"));
+    });
+    return () => { mounted = false; };
+  }, [checkoutWasCancelled, commerceV2Project, bookProjectId, user?.id, supabaseClient]);
   useEffect(() => {
     if ((!commerceV2Project && import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED !== "true") || !bookProjectId
       || !["paid", "zero_paid", "gifted"].includes(project?.access_status) && !orderCompleted && !orderCompletedAt) return undefined;
@@ -16846,6 +16905,9 @@ export function Scene_BookBuilder({
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [commerceV2Project, bookProjectId, project?.access_status, orderCompleted, orderCompletedAt]);
   const saveSelection = async ids => {
+    if (completedBook) throw new Error("完成したBOOKの収録内容は変更できません");
+    if (bookWork && ids.length === (bookWork.answer_ids || []).length
+      && ids.every((id, index) => id === bookWork.answer_ids[index])) return bookWork;
     const {data,error}=await supabaseClient.rpc("save_book_selection",{
       input_project_id:bookProjectId,input_answer_ids:ids,input_expected_revision:bookWork?.revision ?? 0
     });
@@ -16877,38 +16939,6 @@ export function Scene_BookBuilder({
   }, [commerceV2Project, bookWork?.confirmed_at, bookProjectId,
     v2AdditionalOpen, v2AdditionalCounts.standard, v2AdditionalCounts.premium]);
 
-  const confirmCommerceV2Work = async () => {
-    if (!mayFinalize || !commerceV2Project || project?.production_method_v2 === "interview_staff"
-      || !bookProjectId || !bookWork || workSaving || !previewEdition) return;
-    if (!bookWork.confirmed_at && !window.confirm(
-      "紙面を確定すると編集できなくなります。運営が仕上がりを確認し、必要に応じて意味を変えない軽微な調整やお問い合わせを行います。内容を確認済みですか？"
-    )) return;
-    setWorkSaving(true);
-    setWorkError("");
-    try {
-      if (!bookWork.confirmed_at) {
-        await persistCoverSettings();
-        const selection = await saveSelection(includedStoryIds);
-        const { data, error } = await supabaseClient.rpc("confirm_book_work", {
-          input_project_id: bookProjectId,
-          input_expected_revision: selection.revision,
-          input_subject_confirmed: true
-        });
-        if (error) throw error;
-        setBookWork(data);
-      }
-      const { data, error } = await supabaseClient.functions.invoke("queue-commerce-v2-book-production", {
-        body: { projectId: bookProjectId }
-      });
-      if (error || !data?.success) throw error || new Error(data?.error || "制作を開始できませんでした");
-      setOrderCompleted(true);
-    } catch (error) {
-      setWorkError(await getFunctionInvokeErrorMessage(error, error?.message || "作品を確定できませんでした"));
-    } finally {
-      setWorkSaving(false);
-    }
-  };
-
   const checkoutCommerceV2Additional = async () => {
     if (!mayFinalize || !v2AdditionalQuote || !shippingAddressComplete || v2AdditionalBusy) return;
     const checkoutWindow = prepareCheckoutWindow();
@@ -16934,7 +16964,7 @@ export function Scene_BookBuilder({
     }
   };
   const toggleWorkStory = async answer => {
-    if(readOnly || bookWork?.confirmed_at || workSaveLock.current)return;
+    if(readOnly || completedBook || workSaveLock.current)return;
     workSaveLock.current=true;setWorkSaving(true);setWorkError("");
     try {
       await saveSelection(includedStoryIds.includes(answer.id)
@@ -16996,7 +17026,7 @@ export function Scene_BookBuilder({
   ].join("\n"))}`;
 
   const persistCoverSettings = async (overrides = {}) => {
-    if (!bookProjectId || readOnly) return;
+    if (!bookProjectId || readOnly || completedBook) return;
     const nextPhoto = Object.prototype.hasOwnProperty.call(overrides, "coverPhoto")
       ? overrides.coverPhoto
       : coverPhoto;
@@ -17015,10 +17045,13 @@ export function Scene_BookBuilder({
       cover_style: Object.prototype.hasOwnProperty.call(overrides, "coverStyle") ? overrides.coverStyle : coverStyle,
       cloth_color: Object.prototype.hasOwnProperty.call(overrides, "clothColor") ? overrides.clothColor : clothCoverColor,
       print_color: Object.prototype.hasOwnProperty.call(overrides, "printColor") ? overrides.printColor : printCoverColor,
-      premium_hardcover_selected: (overrides.premiumCopyCount ?? premiumCopyCount) > 0,
-      standard_extra_copy_count: overrides.standardExtraCopyCount ?? standardExtraCopyCount,
-      premium_copy_count: overrides.premiumCopyCount ?? premiumCopyCount,
-      include_gift_package: overrides.includeGiftPackage ?? includeGiftPackage,
+      premium_hardcover_selected: (commerceV2Project ? Number(project?.ordered_premium_copy_count || 0) : 0)
+        + (overrides.premiumCopyCount ?? premiumCopyCount) > 0,
+      standard_extra_copy_count: (commerceV2Project ? Number(project?.ordered_standard_extra_copy_count || 0) : 0)
+        + (overrides.standardExtraCopyCount ?? standardExtraCopyCount),
+      premium_copy_count: (commerceV2Project ? Number(project?.ordered_premium_copy_count || 0) : 0)
+        + (overrides.premiumCopyCount ?? premiumCopyCount),
+      include_gift_package: commerceV2Project ? false : (overrides.includeGiftPackage ?? includeGiftPackage),
       premium_title: Object.prototype.hasOwnProperty.call(overrides, "premiumTitle") ? overrides.premiumTitle : premiumTitleOverride,
       premium_subtitle: Object.prototype.hasOwnProperty.call(overrides, "premiumSubtitle") ? overrides.premiumSubtitle : premiumSubtitleOverride,
       premium_footer_text: Object.prototype.hasOwnProperty.call(overrides, "premiumFooterText") ? overrides.premiumFooterText : premiumFooterOverride,
@@ -17047,10 +17080,12 @@ export function Scene_BookBuilder({
         payload[key]=bookWork.snapshot.cover[key];
       }
     }
-    const { error } = await supabaseClient
+    const { data: savedCover, error } = await supabaseClient
       .from("book_cover_settings")
-      .upsert(payload, { onConflict: "book_project_id" });
+      .upsert(payload, { onConflict: "book_project_id" })
+      .select("*").single();
     if (error) throw error;
+    return savedCover;
   };
 
   const generateCoverSuggestions = async () => {
@@ -17112,9 +17147,13 @@ export function Scene_BookBuilder({
           setCoverStyle("print");
           setClothCoverColor(data.cloth_color || CLOTH_COVER_COLORS[0].value);
           setPrintCoverColor(data.print_color || PRINT_COVER_COLORS[0].value);
-          setStandardExtraCopyCount(Number(data.standard_extra_copy_count || project?.ordered_standard_extra_copy_count || 0));
-          setPremiumCopyCount(Number(data.premium_copy_count || project?.ordered_premium_copy_count || 0));
-          setIncludeGiftPackage(Boolean(data.include_gift_package || project?.gift_package_purchased));
+          setStandardExtraCopyCount(commerceV2Project
+            ? Math.max(0, Number(data.standard_extra_copy_count || 0) - Number(project?.ordered_standard_extra_copy_count || 0))
+            : Number(data.standard_extra_copy_count || project?.ordered_standard_extra_copy_count || 0));
+          setPremiumCopyCount(commerceV2Project
+            ? Math.max(0, Number(data.premium_copy_count || 0) - Number(project?.ordered_premium_copy_count || 0))
+            : Number(data.premium_copy_count || project?.ordered_premium_copy_count || 0));
+          setIncludeGiftPackage(!commerceV2Project && Boolean(data.include_gift_package || project?.gift_package_purchased));
           setPremiumTitleOverride(data.premium_title ?? null);
           setPremiumSubtitleOverride(data.premium_subtitle ?? null);
           setPremiumFooterOverride(data.premium_footer_text ?? null);
@@ -17220,19 +17259,36 @@ export function Scene_BookBuilder({
   ]);
 
   useEffect(() => {
-    if (readOnly || !onPurchase || !bookProjectId) return undefined;
+    if (readOnly || (!onPurchase && !commerceV2Project) || !bookProjectId || bookWork?.confirmed_at) return undefined;
     let cancelled = false;
     const loadQuote = async () => {
       try {
         setOrderQuoteStatus("loading");
         setOrderQuoteError("");
-        const quote = await loadBookOrderQuote({
-          projectId: bookProjectId,
-          discountCode: orderDiscountCode,
-          standardExtraCopyCount,
-          premiumCopyCount,
-          includeGiftPackage
-        });
+        const quote = commerceV2Project
+          ? await (async () => {
+            const { data, error } = await supabaseClient.functions.invoke("create-commerce-v2-additional-checkout", {
+              body: { action: "completion_quote", projectId: bookProjectId,
+                standardExtraCount: standardExtraCopyCount, premiumExtraCount: premiumCopyCount }
+            });
+            if (error || !data?.success) throw error || new Error(data?.error || "見積を取得できませんでした");
+            return {
+              ...data.quote,
+              base_already_purchased: true,
+              configuration_total: data.quote.amount_total,
+              standard_reprint_catalog_amount: standardExtraCopyCount *
+                (data.quote.lines.find(line => line.product_code === "standard_extra_v2")?.unit_amount_jpy || 0),
+              premium_catalog_amount: premiumCopyCount *
+                (data.quote.lines.find(line => line.product_code === "premium_extra_v2")?.unit_amount_jpy || 0)
+            };
+          })()
+          : await loadBookOrderQuote({
+            projectId: bookProjectId,
+            discountCode: orderDiscountCode,
+            standardExtraCopyCount,
+            premiumCopyCount,
+            includeGiftPackage
+          });
         if (!cancelled) {
           setOrderQuote(quote);
           setOrderQuoteStatus("ready");
@@ -17247,9 +17303,11 @@ export function Scene_BookBuilder({
     };
     loadQuote();
     return () => { cancelled = true; };
-  }, [readOnly, onPurchase, bookProjectId, orderDiscountCode, standardExtraCopyCount, premiumCopyCount, includeGiftPackage]);
+  }, [readOnly, onPurchase, commerceV2Project, bookProjectId, bookWork?.confirmed_at,
+    orderDiscountCode, standardExtraCopyCount, premiumCopyCount, includeGiftPackage, completionReleaseKey]);
 
-  const baseBookPurchased = orderQuote?.base_already_purchased ?? hasFullProjectAccess(project);
+  const baseBookPurchased = commerceV2Project ||
+    (orderQuote?.base_already_purchased ?? hasFullProjectAccess(project));
 
   const retryCoverSettingsSave = async () => {
     try {
@@ -17414,7 +17472,46 @@ export function Scene_BookBuilder({
   ].every(value => String(value || "").trim());
 
   const submitBookOrder = async () => {
-    if (!shippingAddressComplete || !orderQuote || !onPurchase || workSaving || workError || !bookWork) return;
+    if (!shippingAddressComplete || !orderQuote || (!onPurchase && !commerceV2Project)
+      || (commerceV2Project && !mayFinalize) || workSaving || workError || !bookWork) return;
+    if (commerceV2Project) {
+      if (!previewEdition || bookWork.confirmed_at || !window.confirm(
+        "紙面・追加冊子・お届け先を確認しましたか？追加決済がある場合は、支払い完了時にBOOKを完成確定します。"
+      )) return;
+      setWorkSaving(true);
+      setShowCheckoutCancelled(false);
+      const checkoutWindow = Number(orderQuote.amount_total) > 0 ? prepareCheckoutWindow() : null;
+      try {
+        const cover = await persistCoverSettings();
+        // A retry must carry the same design as the prepared payment. The
+        // cover row's save timestamp is bookkeeping, not part of that design.
+        const { updated_at: _savedAt, ...designSnapshot } = cover;
+        await saveSelection(includedStoryIds);
+        const { data, error } = await supabaseClient.functions.invoke("create-commerce-v2-additional-checkout", {
+          body: { action: "completion_checkout", projectId: bookProjectId,
+            standardExtraCount: standardExtraCopyCount, premiumExtraCount: premiumCopyCount,
+            expectedQuote: Object.fromEntries(Object.entries(orderQuote).filter(([key]) =>
+              !["base_already_purchased", "configuration_total", "standard_reprint_catalog_amount", "premium_catalog_amount"].includes(key))),
+            shippingAddress: normalizeBookShippingAddress(shippingAddress), designSnapshot,
+            requestKey: crypto.randomUUID() }
+        });
+        if (error || !data?.success) throw error || new Error(data?.error || "完成手続きを開始できませんでした");
+        if (data.completed) {
+          setOrderCompleted(true);
+          setStepIndex(steps.length - 1);
+        }
+        else if (data.url && checkoutWindow) checkoutWindow.location.replace(data.url);
+        else if (data.url) window.location.assign(data.url);
+        else throw new Error("決済画面を開けませんでした");
+      } catch (error) {
+        closeCheckoutWindow(checkoutWindow);
+        setCoverSettingsSaveError(await getFunctionInvokeErrorMessage(error,
+          error?.message || "完成手続きを開始できませんでした"));
+      } finally {
+        setWorkSaving(false);
+      }
+      return;
+    }
     const productionV2 = import.meta.env.VITE_BOOK_PRODUCTION_V2_ENABLED === "true";
     if(!bookWork.confirmed_at && !window.confirm(productionV2
       ? "現在の紙面を確認済みですか？決済を開始すると、この時点の内容を注文用に保存します。注文が成立した後、その内容で紙の本とWebブックを制作します。"
@@ -17465,6 +17562,25 @@ export function Scene_BookBuilder({
       closeCheckoutWindow(checkoutWindow);
       console.error("book order settings save error", error);
       setCoverSettingsSaveError(error.message || "注文内容を保存できませんでした。もう一度お試しください。");
+    } finally {
+      setWorkSaving(false);
+    }
+  };
+
+  const releaseCompletionCheckout = async () => {
+    if (!commerceV2Project || !bookProjectId || workSaving) return;
+    setWorkSaving(true);
+    try {
+      const { data, error } = await supabaseClient.functions.invoke("create-commerce-v2-additional-checkout", {
+        body: { action: "completion_release", projectId: bookProjectId }
+      });
+      if (error || !data?.success) throw error || new Error(data?.error || "決済状態を確認できませんでした");
+      setShowCheckoutCancelled(false);
+      setCompletionReleaseKey(value => value + 1);
+      setStepIndex(0);
+    } catch (error) {
+      setCoverSettingsSaveError(await getFunctionInvokeErrorMessage(error,
+        error?.message || "決済の中止を確認できませんでした"));
     } finally {
       setWorkSaving(false);
     }
@@ -17533,6 +17649,17 @@ export function Scene_BookBuilder({
       setDraftPdfStatus("idle");
     }
   };
+
+  if (!readOnly && productionJob?.webBookPublished) {
+    return <div className="fixed inset-0 max-w-[760px] mx-auto bg-[#0f172a] px-6 py-12 text-white">
+      <button type="button" onClick={onBack} className="text-sm text-white/70">← 物語ホームへ</button>
+      <div className="mt-24 text-center">
+        <h1 className="text-xl text-narrative">Webブックが公開されました</h1>
+        <p className="mt-5 text-sm leading-loose text-white/65">完成したBOOKは本棚からご覧いただけます。</p>
+        <a href="/?library=1" className="btn-quiet mt-8 inline-block rounded-full bg-white/10 px-8 py-4">本棚で見る</a>
+      </div>
+    </div>;
+  }
 
   return (
     <div className="fixed inset-0 max-w-[760px] mx-auto min-h-0 bg-[#0f172a] flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
@@ -17631,7 +17758,7 @@ export function Scene_BookBuilder({
               />
             </div>
 
-            {!readOnly && !bookWork?.confirmed_at && <div className="glass-card p-5">
+            {!readOnly && !completedBook && <div className="glass-card p-5">
               <p className="text-white/82 text-[1.05rem] text-narrative mb-5">
                 基本パッケージ「スタンダード冊子」の表紙仕様
               </p>
@@ -17742,7 +17869,7 @@ export function Scene_BookBuilder({
               </div>
             </div>}
 
-            {!readOnly && (
+            {!readOnly && !completedBook && (
               <CoverSuggestionPicker
                 open={coverSuggestionPickerOpen}
                 suggestions={coverSuggestions}
@@ -17843,7 +17970,7 @@ export function Scene_BookBuilder({
                           </div>
                         </div>
                       </div>
-                      {!readOnly && onOpenStories && !bookWork?.confirmed_at && (
+                      {!readOnly && onOpenStories && !completedBook && (
                         <button type="button" onClick={() => onOpenStories(answer.id)} className="mt-3 text-xs text-white/65 underline underline-offset-4">
                           語りを見るで写真の配置を編集
                         </button>
@@ -17859,7 +17986,7 @@ export function Scene_BookBuilder({
                         <button
                           type="button"
                           aria-pressed={included}
-                          disabled={workSaving || Boolean(bookWork?.confirmed_at) || (!productionContext && answer.access_override === "private_forever")}
+                          disabled={workSaving || completedBook || (!productionContext && answer.access_override === "private_forever")}
                           onClick={() => toggleWorkStory(answer)}
                           className={`relative w-14 h-8 rounded-full transition ${
                             included
@@ -17874,7 +18001,7 @@ export function Scene_BookBuilder({
                           />
                         </button>
                       </div>}
-                      {!readOnly && included && !bookWork?.confirmed_at && (
+                      {!readOnly && included && !completedBook && (
                         <div className="mt-2 flex items-center justify-between px-1 text-xs text-white/45">
                           <span>本の中の順番 {includedStoryIds.indexOf(answer.id) + 1}</span>
                           <div className="flex gap-2">
@@ -17898,7 +18025,7 @@ export function Scene_BookBuilder({
 
         {stepIndex === 2 && (
           <div className="space-y-5">
-            {!readOnly && (
+            {!readOnly && !completedBook && (
               <label className="glass-card flex gap-3 p-5 text-left cursor-pointer">
                 <input type="checkbox" checked={includeWebBookQr}
                   onChange={event => setIncludeWebBookQr(event.target.checked)} className="mt-1" />
@@ -17943,7 +18070,7 @@ export function Scene_BookBuilder({
                 </p>
               </div>
             ) : includeWebBookQr && <p className="px-2 text-center text-xs text-white/45">確認用の紙面です。QRは注文完了後に固定します。</p>}
-            {commerceV2Project && !readOnly && (
+            {commerceV2Project && !readOnly && bookWork?.confirmed_at && (
               <div className="glass-card p-5 space-y-4">
                 {bookWork?.confirmed_at ? (
                   <>
@@ -17969,22 +18096,7 @@ export function Scene_BookBuilder({
                       {v2AdditionalOpen ? "追加冊子の注文を閉じる" : "完成した作品の追加冊子を注文する"}
                     </button>}
                   </>
-                ) : project?.production_method_v2 !== "interview_staff" && mayFinalize ? (
-                  <>
-                    <p className="text-sm leading-relaxed text-white/65">紙面をご確認のうえ、作品を確定してください。購入済みの装丁で制作します。</p>
-                    <button type="button" onClick={confirmCommerceV2Work}
-                      disabled={!previewEdition || !bookWork || workSaving || Boolean(workError)}
-                      className="btn-quiet w-full rounded-full bg-white/10 py-3 text-sm text-white disabled:opacity-40">
-                      {workSaving ? "確定しています…" : "この内容で作品を確定する"}
-                    </button>
-                  </>
-                ) : project?.production_method_v2 === "interview_staff" ? (
-                  <p className="text-sm leading-relaxed text-white/65">
-                    聞き取り制作の担当者からのご案内をお待ちください。
-                  </p>
-                ) : <p className="text-sm leading-relaxed text-white/65">
-                  仕上がりを確認したら、制作管理者または共同管理者へ完成確定を依頼してください。
-                </p>}
+                ) : null}
                 {mayFinalize && v2AdditionalOpen && bookWork?.confirmed_at && (
                   <div className="space-y-4 border-t border-white/10 pt-4">
                     <p className="text-sm text-white/80">追加冊子（税込・複数冊割引なし）</p>
@@ -18027,7 +18139,7 @@ export function Scene_BookBuilder({
         )}
 
         {stepIndex === 3 && !readOnly && (
-          <div className="space-y-5">
+          <fieldset disabled={completedBook} className="space-y-5 disabled:opacity-75">
             <p className="px-1 text-white/82 text-[1.05rem] text-narrative">基本パッケージ</p>
 
             <div className="glass-card p-5">
@@ -18035,11 +18147,13 @@ export function Scene_BookBuilder({
                 <div>
                   <p className="text-[0.82rem] text-white/76">縦糸横糸ブック 基本パッケージ</p>
                   <p className="mt-2 text-[0.64rem] leading-relaxed text-white/35">
-                    語り体験・スタンダード冊子1冊・電子冊子・QR音声再生
+                    {commerceV2Project && project?.purchased_edition_v2 === "premium"
+                      ? "語り体験・プレミアム冊子1冊・Webブック"
+                      : "語り体験・スタンダード冊子1冊・Webブック・QR音声再生"}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-[0.78rem] text-white/78">49,800円</p>
+                  <p className="text-[0.78rem] text-white/78">{commerceV2Project ? "お支払い済み" : "49,800円"}</p>
                   {baseBookPurchased && <p className="mt-1 text-[0.6rem] text-emerald-100/55">お支払い済み</p>}
                 </div>
               </div>
@@ -18048,7 +18162,7 @@ export function Scene_BookBuilder({
             <p className="px-1 text-white/82 text-[1.05rem] text-narrative">オプション</p>
 
             <div className="glass-card divide-y divide-white/[0.07] px-5">
-              <button
+              {!commerceV2Project && <button
                 type="button"
                 onClick={() => {
                   if (project?.gift_package_purchased) return;
@@ -18069,13 +18183,13 @@ export function Scene_BookBuilder({
                     includeGiftPackage ? "border-emerald-200/25 bg-emerald-300/15 text-emerald-100" : "border-white/18 text-transparent"
                   }`}>✓</span>
                 </span>
-              </button>
+              </button>}
 
               <div className="py-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-[0.82rem] text-white/76">縦糸横糸ブック-スタンダード冊子の増刷</p>
-                    <p className="mt-1 text-[0.62rem] text-white/32">増刷1〜2冊目は1冊5,000円、3冊目以降は1冊4,000円（税込）</p>
+                    <p className="mt-1 text-[0.62rem] text-white/32">{commerceV2Project ? "1冊5,000円（税込）" : "増刷1〜2冊目は1冊5,000円、3冊目以降は1冊4,000円（税込）"}</p>
                   </div>
                   <select
                     value={standardExtraCopyCount}
@@ -18091,7 +18205,7 @@ export function Scene_BookBuilder({
                   </select>
                 </div>
                 <div className="mt-3 flex items-center justify-between text-[0.66rem] text-white/38">
-                  <span>合計 {1 + standardExtraCopyCount}冊（基本の1冊を含む）</span>
+                  <span>{commerceV2Project ? `追加 ${standardExtraCopyCount}冊` : `合計 ${1 + standardExtraCopyCount}冊（基本の1冊を含む）`}</span>
                   <span>{formatYen(orderQuote?.standard_reprint_catalog_amount || 0)}</span>
                 </div>
               </div>
@@ -18100,7 +18214,7 @@ export function Scene_BookBuilder({
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-[0.82rem] text-white/76">縦糸横糸ブック-プレミアム冊子の増刷</p>
-                    <p className="mt-1 text-[0.62rem] text-white/32">ハードカバー上製本・1冊 30,000円</p>
+                    <p className="mt-1 text-[0.62rem] text-white/32">ハードカバー上製本・1冊 {commerceV2Project ? "35,000円" : "30,000円"}</p>
                   </div>
                   <select
                     value={premiumCopyCount}
@@ -18116,7 +18230,7 @@ export function Scene_BookBuilder({
                   </select>
                 </div>
                 <div className="mt-3 text-right text-[0.66rem] text-white/78">
-                  {formatYen(orderQuote?.premium_catalog_amount || premiumCopyCount * 30000)}
+                  {formatYen(orderQuote?.premium_catalog_amount || premiumCopyCount * (commerceV2Project ? 35000 : 30000))}
                 </div>
               </div>
 
@@ -18254,7 +18368,7 @@ export function Scene_BookBuilder({
                 </div>
               )}
             </div>
-          </div>
+          </fieldset>
         )}
 
         {stepIndex === 4 && !readOnly && (
@@ -18295,7 +18409,7 @@ export function Scene_BookBuilder({
                   <input type="text" value={shippingAddress.line1} onChange={event => updateShippingAddress("line1", event.target.value)} placeholder="番地" className="quiet-input" />
                   <input type="text" value={shippingAddress.line2} onChange={event => updateShippingAddress("line2", event.target.value)} placeholder="建物名・部屋番号（任意）" className="quiet-input" />
                 </div>
-                <p className="mt-3 text-[0.62rem] leading-relaxed text-white/28">選択した冊子とギフトパッケージを、このお届け先へ発送します。</p>
+                <p className="mt-3 text-[0.62rem] leading-relaxed text-white/28">選択した冊子を、このお届け先へ発送します。</p>
                 {coverSettingsSaveError && (
                   <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-rose-200/15 bg-rose-300/[0.04] px-4 py-3">
                     <p className="text-[0.65rem] text-rose-100/60">{coverSettingsSaveError}</p>
@@ -18308,12 +18422,13 @@ export function Scene_BookBuilder({
 
               <div className="glass-card divide-y divide-white/[0.07] px-5">
                 <div className="flex items-start justify-between gap-4 py-4">
-                  <div><p className="text-[0.78rem] text-white/72">基本パッケージ</p><p className="mt-1 text-[0.6rem] text-white/30">縦糸横糸ブック-スタンダード冊子1冊を含む</p></div>
+                  <div><p className="text-[0.78rem] text-white/72">基本パッケージ</p><p className="mt-1 text-[0.6rem] text-white/30">{commerceV2Project && project?.purchased_edition_v2 === "premium"
+                    ? "プレミアム冊子1冊を含む" : "スタンダード冊子1冊を含む"}</p></div>
                   <p className="text-[0.7rem] text-white/78">{baseBookPurchased ? "お支払い済み" : "49,800円"}</p>
                 </div>
                 {standardExtraCopyCount > 0 && <div className="flex items-center justify-between py-4 text-[0.72rem] text-white/58"><span>縦糸横糸ブック-スタンダード冊子 増刷{standardExtraCopyCount}冊</span><span>{formatYen(orderQuote?.standard_reprint_catalog_amount || 0)}</span></div>}
-                {premiumCopyCount > 0 && <div className="flex items-start justify-between gap-4 py-4"><div><p className="text-[0.72rem] text-white/58">縦糸横糸ブック-プレミアム冊子 {premiumCopyCount}冊</p><p className="mt-1 text-[0.58rem] text-white/28">{premiumCoverStyle === "cloth" ? "布張りハードカバー" : "プリントハードカバー"}</p></div><span className="text-[0.7rem] text-white/78">{formatYen(orderQuote?.premium_catalog_amount || premiumCopyCount * 30000)}</span></div>}
-                {includeGiftPackage && <div className="flex items-center justify-between py-4 text-[0.72rem] text-white/58"><span>ギフトパッケージ</span><span className="text-white/78">3,000円</span></div>}
+                {premiumCopyCount > 0 && <div className="flex items-start justify-between gap-4 py-4"><div><p className="text-[0.72rem] text-white/58">縦糸横糸ブック-プレミアム冊子 {premiumCopyCount}冊</p><p className="mt-1 text-[0.58rem] text-white/28">{premiumCoverStyle === "cloth" ? "布張りハードカバー" : "プリントハードカバー"}</p></div><span className="text-[0.7rem] text-white/78">{formatYen(orderQuote?.premium_catalog_amount ?? premiumCopyCount * (commerceV2Project ? 35000 : 30000))}</span></div>}
+                {!commerceV2Project && includeGiftPackage && <div className="flex items-center justify-between py-4 text-[0.72rem] text-white/58"><span>ギフトパッケージ</span><span className="text-white/78">3,000円</span></div>}
               </div>
 
               {!baseBookPurchased && (
@@ -18374,7 +18489,7 @@ export function Scene_BookBuilder({
                     <button
                       type="button"
                       onClick={purchaseStatus === "checkout_opened" ? onReopenCheckout : submitBookOrder}
-                      disabled={!shippingAddressComplete || workSaving || Boolean(workError) || !bookWork || purchaseStatus === "starting" || purchaseStatus === "checking"}
+                      disabled={!mayFinalize || !shippingAddressComplete || workSaving || Boolean(workError) || !bookWork || purchaseStatus === "starting" || purchaseStatus === "checking"}
                       className="btn-quiet mt-5 w-full rounded-full bg-white/10 py-4 text-white/88 disabled:opacity-40"
                     >
                       {purchaseStatus === "checkout_opened"
@@ -18385,6 +18500,10 @@ export function Scene_BookBuilder({
                           ? `${formatYen(orderQuote.amount_total)}の購入手続きへ`
                           : "注文を確定"}
                     </button>
+                    {commerceV2Project && <button type="button" onClick={releaseCompletionCheckout}
+                      disabled={workSaving} className="mt-4 w-full text-sm text-white/55 underline underline-offset-4 disabled:opacity-40">
+                      決済を中止して編集に戻る
+                    </button>}
                     {!shippingAddressComplete && <p className="mt-3 text-center text-[0.62rem] text-white/28">お届け先を入力してください</p>}
                   </>
                 )}

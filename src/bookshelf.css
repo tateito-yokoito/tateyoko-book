@@ -7,3 +7,4 @@
 .bs-book-slot:nth-child(odd):last-child::after{width:calc(200% + 48px)}
 @container(max-width:350px){.bs-book-slot:nth-child(odd):last-child::after{width:calc(200% + 41px)}}
 .bs-conversion-pair>.bs-root{display:flex;flex-direction:column}.bs-conversion-pair .bs-wood{flex:1;display:grid}.bs-conversion-pair .bs-book-grid{grid-auto-rows:1fr;align-content:stretch}
+.bs-cover-pending{display:block;margin-top:4%;padding:2% 3%;border:1px solid currentColor;border-radius:2px;font:600 6cqi/1.3 sans-serif;letter-spacing:0;white-space:nowrap}

@@ -21,6 +21,7 @@ export function libraryFromPublications(rows) {
       id: row.publication_id, personId, title: row.title || '残された声', subtitle: row.subtitle || '',
       publishedAt: row.published_at, publicId: row.public_id, color: '#d6dcc5',
       relationship: row.relationship, accessMode: row.access_mode,
+      completionPending: row.completion_pending === true,
       canManageAccess: row.relationship === 'owner' || row.relationship === 'managed',
     };
     books.set(book.id, book);

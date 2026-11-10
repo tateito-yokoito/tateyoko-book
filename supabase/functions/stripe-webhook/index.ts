@@ -62,7 +62,9 @@ serve(async request => {
           if (!Number.isFinite(event.created)) throw new Error("Payment event timestamp required");
           await finalizeExperienceCheckout(admin, checkout, new Date(event.created * 1000).toISOString(), event.livemode);
         } else {
-        const { error } = await admin.rpc("finalize_commerce_order", {
+        const { error } = await admin.rpc(
+          checkout.metadata?.order_kind === "initial_completion"
+            ? "finalize_commerce_v2_completion_order" : "finalize_commerce_order", {
           input_order_id: orderId,
           input_checkout_session_id: checkout.id,
           input_customer_id: typeof checkout.customer === "string" ? checkout.customer : "",

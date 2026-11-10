@@ -73,7 +73,9 @@ serve(async request => {
         return json({ success: true, paid: true, accessStopped: finalized.access_stopped === true,
           orderType: finalized.order.order_type, order: finalized.order, gift: finalized.gift, project });
       }
-      const { data: finalized, error: finalizeError } = await admin.rpc("finalize_commerce_order", {
+      const { data: finalized, error: finalizeError } = await admin.rpc(
+        checkout.metadata?.order_kind === "initial_completion"
+          ? "finalize_commerce_v2_completion_order" : "finalize_commerce_order", {
         input_order_id: orderId,
         input_checkout_session_id: checkout.id,
         input_customer_id: typeof checkout.customer === "string" ? checkout.customer : "",
