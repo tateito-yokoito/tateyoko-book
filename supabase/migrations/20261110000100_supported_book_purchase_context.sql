@@ -1,5 +1,5 @@
 -- The supported-project list deliberately omits commerce fields. Load the
--- minimum purchase context only when an active collaborator opens BOOK.
+-- minimum purchase context only for someone already allowed to manage BOOK.
 create or replace function public.get_supported_book_purchase_context(input_book_project_id uuid)
 returns jsonb
 language plpgsql
@@ -10,13 +10,9 @@ as $function$
 declare
   target_project public.book_projects%rowtype;
 begin
-  if auth.uid() is null or not exists (
-    select 1 from public.project_supporters ps
-    where ps.book_project_id = input_book_project_id
-      and ps.supporter_user_id = auth.uid()
-      and ps.status = 'active'
-      and ps.can_build_book = true
-  ) or public.experience_data_allowed(input_book_project_id, false) is distinct from true then
+  if auth.uid() is null
+    or public.can_manage_book_cover(input_book_project_id) is distinct from true
+    or public.experience_data_allowed(input_book_project_id, false) is distinct from true then
     raise exception 'この作品のBOOKを開けません' using errcode = '42501';
   end if;
 

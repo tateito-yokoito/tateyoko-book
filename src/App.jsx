@@ -9023,6 +9023,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
             }
           }}
           onOpenStories={() => setScene("support_story_pages")}
+          onStartPhotoStory={() => setScene("support_story_pages")}
           videoAllowed={supportContext.videoAllowed}
           bookAllowed={supportContext.bookAllowed}
           onOpenVideo={openSupportVideoStory}
@@ -16127,6 +16128,7 @@ export function Scene_SupportProjectHome({
   readOnly = false,
   onOpenQuestions,
   onOpenStories,
+  onStartPhotoStory,
   onOpenBookBuilder,
   onOpenVideo,
   onInviteLink,
@@ -16137,7 +16139,7 @@ export function Scene_SupportProjectHome({
   const firstPending = questionSet.findIndex(question => !["answered", "skipped"].includes(question.status));
   const supportedActions = {
     record: Boolean(project?.can_operate_recording),
-    photo: false,
+    photo: Boolean(project?.can_manage_photos),
     questionList: false,
     stories: Boolean(project?.can_edit_book_text || project?.can_build_book),
     book: bookAllowed,
@@ -16155,6 +16157,7 @@ export function Scene_SupportProjectHome({
       supportedActions={supportedActions}
       onStartTalking={readOnly ? onReadOnlyAction : onOpenQuestions}
       onOpenStoryPages={onOpenStories}
+      onStartPhotoStory={onStartPhotoStory}
       onOpenBookBuilder={readOnly ? onReadOnlyAction : onOpenBookBuilder}
       onStartVideoStory={readOnly ? onReadOnlyAction : onOpenVideo}
     />

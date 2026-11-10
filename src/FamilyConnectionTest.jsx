@@ -9,6 +9,7 @@ import {familyJourney} from './home/familyHomeModel.js';
 import {familyApprovedHomeData} from './home/familyApprovedHomeData.js';
 import {configureSkyClient,subscribeDailySky,refreshDailySky} from './home/liveSkies.js';
 import {firstStoryGuideState, finishFirstStoryGuide, firstStoryDestination} from './home/firstStoryGuide.js';
+import VideoStoryFlow from './VideoStoryFlow.jsx';
 
 // TEST-only adapter. Do not mount App's legacy Person/Project bootstrap here.
 export default function FamilyConnectionTest({client, onOwnStory, renderBook, renderRecording, renderSharedStories, renderSubjectStories, renderSupporterPhoto, renderPrivacy, renderStarting, renderSubjectPhoto, renderTheme, renderDelivery, fixtureUpload = false}) {
@@ -31,6 +32,7 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
   const [subjectName, setSubjectName] = useState(''), [createConsent, setCreateConsent] = useState(false);
   const creationKey = useRef(crypto.randomUUID());
   const [inviteUrl, setInviteUrl] = useState(''), [question, setQuestion] = useState('');
+  const [videoStories,setVideoStories]=useState([]);
   const [together, setTogether] = useState(false), [text, setText] = useState('');
   const [blob, setBlob] = useState(null), [recording, setRecording] = useState(false);
   const [continuation, setContinuation] = useState(null), [playback, setPlayback] = useState(null);
@@ -155,6 +157,14 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
     setScene('home');
   });
   const producer=canProduce(workspace);
+  const loadVideoStories=async()=>{
+    if(!workspace?.project_id)return;
+    const {data,error}=await client.from('video_stories').select('*')
+      .eq('book_project_id',workspace.project_id).order('slot_order');
+    if(error)throw error;
+    setVideoStories(data||[]);
+  };
+  const openVideo=()=>run(async()=>{await loadVideoStories();setScene('video');});
   const guidePending=workspace?.role==='subject' && firstStoryGuideState(session?.user?.id,workspace.person_id)==='pending';
   const guideWelcome=Boolean(session && !inviteToken && workspace && !install && scene==='home' && guidePending && !guideActive && firstStoryDestination(workspace).scene!=='home');
   const startGuidedQuestion=next=>{
@@ -239,6 +249,16 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
     onBack:async()=>{const fresh=await open(workspace.project_id);if(fresh)setScene(deliveryReturn);},
   });
   if(session && producer && scene==='book' && renderBook) return withSupporterContext(renderBook({workspace,session,onBack:()=>setScene('home')}));
+  if(session && producer && workspace && !inviteToken && !install && scene==='video') return withSupporterContext(
+    <VideoStoryFlow open user={session.user}
+      foundation={{project:{id:workspace.project_id,subject_person_id:workspace.person_id},person:{id:workspace.person_id}}}
+      answers={(workspace.answers||[]).map(answer=>({
+        ...answer,
+        sequence_order:workspace.questions?.find(item=>item.id===answer.question_id)?.sequence_order
+      }))}
+      questionSet={(workspace.questions||[]).map(item=>({...item,question_text:item.text}))}
+      stories={videoStories} supabaseClient={client}
+      onReload={loadVideoStories} onClose={()=>setScene('home')}/>);
   if(session && !inviteToken && !install && workspace?.role==='supporter' && !producer && scene==='stories' && renderSharedStories) return withSupporterContext(renderSharedStories({workspace,api,onBack:()=>setScene('home')}));
   if(session && !inviteToken && !install && producer && scene==='stories' && renderSubjectStories) return withSupporterContext(renderSubjectStories({workspace,api,client,session,
     onBack:()=>run(async()=>{await open(workspace.project_id);setScene('home');}),onNext:goQuestion,
@@ -288,10 +308,11 @@ export default function FamilyConnectionTest({client, onOwnStory, renderBook, re
     </section>}
     {home && <ApprovedHome {...approvedHomeData}
       supportedProjects={workspace.role==='subject'?supportedHomeProjects:[]}
-      supportedActions={workspace.role==='supporter'?{record:true,photo:true,questionList:true,stories:true,book:producer}:null}
+      supportedActions={workspace.role==='supporter'?{record:producer,photo:producer,video:producer,questionList:true,stories:true,book:producer}:null}
       onOpenSupportedProject={openSupportedHomeProject}
       onStartTalking={goQuestion}
       onStartPhotoStory={()=>setScene('photo')}
+      onStartVideoStory={openVideo}
       onOpenQuestionLibrary={()=>setScene('questions')}
       onOpenStoryPages={()=>setScene('stories')}
       onOpenBookBuilder={()=>setScene(workspace.access?.paid?'book':'purchase')}
