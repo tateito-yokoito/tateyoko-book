@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireExperienceProcessing } from "../_shared/experience-access.ts";
 import { assertHelperAnswerVisible } from "../_shared/helper-private-access.ts";
 
 const corsHeaders = {
@@ -16,7 +17,7 @@ serve(async (req) => {
 
   let serviceClient: ReturnType<typeof createClient> | null = null;
   let videoStoryId = "";
-  let processingStarted = false;
+  let processingAuthorized = false;
 
   try {
     const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
@@ -51,7 +52,8 @@ serve(async (req) => {
     if (story.source_answer_id) {
       await assertHelperAnswerVisible(serviceClient, story.book_project_id, user.id, story.source_answer_id);
     }
-    processingStarted = true;
+    await requireExperienceProcessing(serviceClient, story.book_project_id, user.id);
+    processingAuthorized = true;
 
     const storagePath = String(story.audio_storage_path || story.video_storage_path || "").trim();
     if (!storagePath) throw new Error("Recording was not found");
@@ -115,7 +117,7 @@ serve(async (req) => {
     return jsonResponse({ success: true, videoStoryId, transcript, title });
   } catch (error) {
     console.error("transcribe-video-story", error);
-    if (processingStarted && serviceClient && isUuid(videoStoryId)) {
+    if (processingAuthorized && serviceClient && isUuid(videoStoryId)) {
       await serviceClient.from("video_stories").update({ status: "failed" }).eq("id", videoStoryId);
     }
     const message = error instanceof Error ? error.message : "Unknown error";

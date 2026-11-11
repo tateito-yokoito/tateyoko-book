@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireExperienceProcessing } from "../_shared/experience-access.ts";
+import { requireFamilyProjectAccess, familyPendingVoiceScope } from "../_shared/family-access.ts";
 import { assertHelperAnswerVisible } from "../_shared/helper-private-access.ts";
 
 const corsHeaders = {
@@ -51,10 +53,13 @@ serve(async (req) => {
     const mode = body.mode === "life_outline" ? "life_outline" : "answer";
 
     if (!answerId) throw new Error("answerId is required");
-    if (bookProjectId) {
+    const pendingVoice = await familyPendingVoiceScope(serviceClient, body, user.id);
+    if (bookProjectId && !pendingVoice) {
       await requireProjectAccess(serviceClient, bookProjectId, user.id);
       await assertHelperAnswerVisible(serviceClient, bookProjectId, user.id, answerId, true);
     }
+
+    if (!pendingVoice) await requireExperienceProcessing(serviceClient, bookProjectId, user.id, answerId, String(body.userQuestionId || ""));
 
     if (!transcriptRaw) {
       return jsonResponse({
@@ -122,7 +127,7 @@ serve(async (req) => {
     const candidates = sanitizeCandidates(parsed.proper_noun_candidates);
 
     let savedCandidateCount = 0;
-    if (bookProjectId && candidates.length > 0) {
+    if (bookProjectId && candidates.length > 0 && (!pendingVoice || pendingVoice.subject)) {
       savedCandidateCount = await saveCandidates(
         serviceClient,
         bookProjectId,
@@ -261,6 +266,7 @@ async function requireProjectAccess(
   bookProjectId: string,
   userId: string
 ) {
+  if (await requireFamilyProjectAccess(serviceClient, bookProjectId, userId)) return;
   const { data: project, error: projectError } = await serviceClient
     .from("book_projects")
     .select("owner_user_id")

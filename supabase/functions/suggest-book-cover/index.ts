@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireExperienceProcessing } from "../_shared/experience-access.ts";
 import { isStoryHelper } from "../_shared/helper-private-access.ts";
 
 const corsHeaders = {
@@ -45,6 +46,7 @@ serve(async (req) => {
 
     const serviceClient = createClient(supabaseUrl, serviceRoleKey);
     await requireProjectAccess(serviceClient, bookProjectId, user.id);
+    await requireExperienceProcessing(serviceClient, bookProjectId, user.id);
     const helper = await isStoryHelper(serviceClient, bookProjectId, user.id);
 
     const { data: stored } = await serviceClient

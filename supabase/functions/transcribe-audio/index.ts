@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireExperienceProcessing } from "../_shared/experience-access.ts";
+import { requireFamilyProjectAccess, requireFamilyAssetAccess, familyPendingVoiceScope } from "../_shared/family-access.ts";
 import { assertHelperAnswerVisible, assertHelperMediaPathsVisible, isStoryHelper } from "../_shared/helper-private-access.ts";
 
 const corsHeaders = {
@@ -68,11 +70,6 @@ serve(async (req) => {
       throw new Error(`audioPaths must contain at most ${MAX_AUDIO_PARTS} items`);
     }
 
-    const userPathPrefix = `${user.id}/`;
-    if (audioPaths.some((path: string) => !path.startsWith(userPathPrefix))) {
-      throw new Error("Forbidden audio path");
-    }
-
     if (!bookProjectId) {
       const { data: answer } = await serviceClient
         .from("answers")
@@ -83,8 +80,19 @@ serve(async (req) => {
     }
     if (!bookProjectId) throw new Error("Forbidden");
 
+    const pendingVoice = await familyPendingVoiceScope(serviceClient, body, user.id);
+    if (pendingVoice) {
+      if (JSON.stringify(audioPaths) !== JSON.stringify(pendingVoice.paths)) throw new Error("Forbidden");
+    } else {
+      await requireExperienceProcessing(serviceClient, bookProjectId, user.id, answerId, String(body.userQuestionId || ""));
+    }
+    for (const path of audioPaths) {
+      const familyAsset = await requireFamilyAssetAccess(serviceClient, "audio", path, user.id, bookProjectId);
+      if (!familyAsset && !path.startsWith(`${user.id}/`)) throw new Error("Forbidden audio path");
+    }
+
     let contextTerms: ContextTerm[] = [];
-    if (bookProjectId) {
+    if (!pendingVoice || pendingVoice.subject) {
       await requireProjectAccess(serviceClient, bookProjectId, user.id);
       // A fresh recording can use a pending upload ID before the answer row exists.
       await assertHelperAnswerVisible(serviceClient, bookProjectId, user.id, answerId, true);
@@ -103,6 +111,7 @@ serve(async (req) => {
         answerId,
         transcript_raw: fallbackTranscript,
         transcript: fallbackTranscript,
+        segment_transcripts: [],
         transcribed_part_count: 0,
         used_fallback: true,
         context_term_count: contextTerms.length
@@ -166,10 +175,10 @@ serve(async (req) => {
 
       const transcriptionJson = await transcriptionResponse.json();
       const transcript = String(transcriptionJson?.text || "").trim();
-      if (transcript) transcripts.push(transcript);
+      transcripts.push(transcript);
     }
 
-    const transcriptRaw = transcripts.join("\n\n").trim() || fallbackTranscript;
+    const transcriptRaw = transcripts.filter(Boolean).join("\n\n").trim() || fallbackTranscript;
     if (bookProjectId && contextTerms.length > 0) {
       await markTermsUsed(serviceClient, contextTerms);
     }
@@ -179,8 +188,9 @@ serve(async (req) => {
       answerId,
       transcript_raw: transcriptRaw,
       transcript: transcriptRaw,
-      transcribed_part_count: transcripts.length,
-      used_fallback: transcripts.length === 0,
+      segment_transcripts: transcripts,
+      transcribed_part_count: transcripts.filter(Boolean).length,
+      used_fallback: transcripts.every(value => !value),
       context_term_count: contextTerms.length
     });
   } catch (error) {
@@ -198,6 +208,7 @@ async function requireProjectAccess(
   bookProjectId: string,
   userId: string
 ) {
+  if (await requireFamilyProjectAccess(serviceClient, bookProjectId, userId)) return;
   const { data: project, error: projectError } = await serviceClient
     .from("book_projects")
     .select("owner_user_id")
