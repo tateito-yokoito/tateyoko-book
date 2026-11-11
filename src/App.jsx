@@ -14707,22 +14707,36 @@ function Scene_FamilyStoryDeliveryChoice({
 }
 
 export function Scene_Home(props) {
-  const [publishedBook, setPublishedBook] = useState(false);
+  const [bookPhase, setBookPhase] = useState(props.bookProjectId ? "loading" : "editing");
   useEffect(() => {
-    if (!props.bookProjectId) { setPublishedBook(false); return undefined; }
+    if (!props.bookProjectId) { setBookPhase("editing"); return undefined; }
     let active = true;
-    const refreshPublishedBook = () => {
-      (props.supabaseClient || applicationSupabaseClient).functions.invoke("book-production-status", {
-        body: { projectId: props.bookProjectId }
-      }).then(({ data, error }) => {
-        if (active && !error && data?.success) setPublishedBook(Boolean(data.job?.webBookPublished));
-      }).catch(() => {});
+    const client = props.supabaseClient || applicationSupabaseClient;
+    const refreshBookPhase = async () => {
+      try {
+        const [workResult, statusResult] = await Promise.all([
+          client.rpc("get_book_work", { input_project_id: props.bookProjectId }),
+          client.functions.invoke("book-production-status", {
+            body: { projectId: props.bookProjectId }
+          })
+        ]);
+        if (!active) return;
+        if (workResult.error || !workResult.data) {
+          setBookPhase("loading");
+          return;
+        }
+        setBookPhase(statusResult.data?.job?.webBookPublished ? "published"
+          : workResult.data.confirmed_at ? "review" : "editing");
+      } catch {
+        if (active) setBookPhase("loading");
+      }
     };
-    refreshPublishedBook();
-    window.addEventListener("focus", refreshPublishedBook);
-    return () => { active = false; window.removeEventListener("focus", refreshPublishedBook); };
+    setBookPhase("loading");
+    refreshBookPhase();
+    window.addEventListener("focus", refreshBookPhase);
+    return () => { active = false; window.removeEventListener("focus", refreshBookPhase); };
   }, [props.bookProjectId, props.supabaseClient]);
-  return <ApprovedHome {...props} publishedBook={publishedBook}
+  return <ApprovedHome {...props} bookPhase={bookPhase}
     themeProgress={getStoryThemeProgress(props.questionSet || [], props.currentIndex || 0)}
     invitationCards={props.sentFamilyInvitations?.length > 0 && <section className="ah-group"><h2>招待した家族の物語</h2><div className="ah-rows">{props.sentFamilyInvitations.map(invitation => <FamilyInvitationHomeCard key={invitation.invitation_id} invitation={invitation} onContinue={() => props.onContinueFamilyTrial?.(invitation)} onDecline={() => props.onDeclineFamilyTrial?.(invitation)} />)}</div></section>} />;
 }
@@ -16797,12 +16811,9 @@ export function Scene_BookBuilder({
   const commerceV2Project = Boolean(project?.purchased_edition_v2);
   // A purchased V2 story uses the same five existing BOOK screens regardless
   // of whether its creator bought it for themselves or received it as a gift.
-  const steps = readOnly
-    ? ["表紙", "収録", "紙面"]
-    : ["表紙", "収録内容", "紙面確認", "オプション", "注文"];
   const [stepIndex, setStepIndex] = useState(() => Math.max(
     0,
-    Math.min(Number(initialStepIndex || 0), steps.length - 1)
+    Math.min(Number(initialStepIndex || 0), 4)
   ));
   const [coverPhoto, setCoverPhoto] = useState(null);
   const [premiumCoverPhoto, setPremiumCoverPhoto] = useState(null);
@@ -16862,6 +16873,13 @@ export function Scene_BookBuilder({
   const [includedStoryIds, setIncludedStoryIds] = useState([]);
   const [bookWork, setBookWork] = useState(null);
   const completedBook = Boolean(bookWork?.confirmed_at || orderCompleted || orderCompletedAt);
+  const viewerOnly = readOnly || completedBook || (Boolean(bookProjectId) && !bookWork);
+  const steps = viewerOnly
+    ? ["表紙", "収録", "紙面"]
+    : ["表紙", "収録内容", "紙面確認", "オプション", "注文"];
+  useEffect(() => {
+    if (bookWork && viewerOnly && stepIndex > 2) setStepIndex(2);
+  }, [bookWork, viewerOnly, stepIndex]);
   const [workSaving, setWorkSaving] = useState(false);
   const [workError, setWorkError] = useState("");
   const [v2AdditionalCounts, setV2AdditionalCounts] = useState({ standard: 0, premium: 0 });
@@ -17667,7 +17685,7 @@ export function Scene_BookBuilder({
 
   return (
     <div className="fixed inset-0 max-w-[760px] mx-auto min-h-0 bg-[#0f172a] flex flex-col fade-enter px-4 pt-0 pb-4 overflow-hidden">
-      {!readOnly && (
+      {!viewerOnly && (
         <CoverPhotoCorrectionFlow
           open={coverPhotoCorrectionOpen}
           photo={coverPhotoCorrectionTarget === "premium"
@@ -17693,7 +17711,7 @@ export function Scene_BookBuilder({
           <p className="text-white/90 text-[1.02rem] text-narrative">
             本に仕上げる
           </p>
-          {readOnly && (
+          {viewerOnly && (
             <p className="absolute right-0 text-[0.65rem] tracking-wider text-white/35">
               閲覧専用
             </p>
@@ -17762,7 +17780,7 @@ export function Scene_BookBuilder({
               />
             </div>
 
-            {!readOnly && !completedBook && <div className="glass-card p-5">
+            {!viewerOnly && <div className="glass-card p-5">
               <p className="text-white/82 text-[1.05rem] text-narrative mb-5">
                 基本パッケージ「スタンダード冊子」の表紙仕様
               </p>
@@ -17873,7 +17891,7 @@ export function Scene_BookBuilder({
               </div>
             </div>}
 
-            {!readOnly && !completedBook && (
+            {!viewerOnly && (
               <CoverSuggestionPicker
                 open={coverSuggestionPickerOpen}
                 suggestions={coverSuggestions}
@@ -17974,7 +17992,7 @@ export function Scene_BookBuilder({
                           </div>
                         </div>
                       </div>
-                      {!readOnly && onOpenStories && !completedBook && (
+                      {!viewerOnly && onOpenStories && (
                         <button type="button" onClick={() => onOpenStories(answer.id)} className="mt-3 text-xs text-white/65 underline underline-offset-4">
                           語りを見るで写真の配置を編集
                         </button>
@@ -17982,7 +18000,7 @@ export function Scene_BookBuilder({
                       {included && <button type="button" onClick={() => { setPaperPreviewStoryId(answer.id); setPaperPreviewOpen(true); }}
                         className="ml-4 mt-3 text-xs text-white/65 underline underline-offset-4">この語りの紙面を見る</button>}
 
-                      {!readOnly && <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3">
+                      {!viewerOnly && <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3">
                         <p className={`text-sm ${included ? "text-white/65" : "text-white/35"}`}>
                           収録する
                         </p>
@@ -18005,7 +18023,7 @@ export function Scene_BookBuilder({
                           />
                         </button>
                       </div>}
-                      {!readOnly && included && !completedBook && (
+                      {!viewerOnly && included && (
                         <div className="mt-2 flex items-center justify-between px-1 text-xs text-white/45">
                           <span>本の中の順番 {includedStoryIds.indexOf(answer.id) + 1}</span>
                           <div className="flex gap-2">
@@ -18029,7 +18047,7 @@ export function Scene_BookBuilder({
 
         {stepIndex === 2 && (
           <div className="space-y-5">
-            {!readOnly && !completedBook && (
+            {!viewerOnly && (
               <label className="glass-card flex gap-3 p-5 text-left cursor-pointer">
                 <input type="checkbox" checked={includeWebBookQr}
                   onChange={event => setIncludeWebBookQr(event.target.checked)} className="mt-1" />
@@ -18142,7 +18160,7 @@ export function Scene_BookBuilder({
           </div>
         )}
 
-        {stepIndex === 3 && !readOnly && (
+        {stepIndex === 3 && !viewerOnly && (
           <fieldset disabled={completedBook} className="space-y-5 disabled:opacity-75">
             <p className="px-1 text-white/82 text-[1.05rem] text-narrative">基本パッケージ</p>
 
@@ -18375,7 +18393,7 @@ export function Scene_BookBuilder({
           </fieldset>
         )}
 
-        {stepIndex === 4 && !readOnly && (
+        {stepIndex === 4 && !viewerOnly && (
           orderCompleted || orderCompletedAt ? (
             <div className="glass-card p-7 text-center">
               <p className="text-white/82 text-[1.05rem] text-narrative">注文を受け付けました</p>

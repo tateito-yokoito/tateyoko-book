@@ -32,7 +32,7 @@ export default function ApprovedHome({guideClient, ...props}) {
 function ApprovedHomeContent({ themeProgress, questionSet = [], currentIndex = 0, supportedProjects = [], receivedProjects = [], invitationCards, skyOverride,
   onStartTalking, onStartPhotoStory, onStartVideoStory, onOpenQuestionLibrary, onOpenStoryPages, canOpenThemeMemories, onOpenThemeMemories, storyRequestSummary, onOpenBookBuilder, onOpenSettings,
   onOpenSupportedProject, onOpenReceivedProject, onAddFamilyStory, onShareWithFriend, onDevLogout, onOpenShelf, ownStoryEntry,
-  onOpenLineDelivery, supportedActions = null, settingsActions = [], publishedBook = false }) {
+  onOpenLineDelivery, supportedActions = null, settingsActions = [], bookPhase = 'editing' }) {
   const liveSky = useDailySky('home', Boolean(skyOverride)), sky = skyOverride || liveSky, [failedSrc, setFailedSrc] = useState(null);
   const count = countAnsweredStories(questionSet);
   const themeCount = countAnsweredStoryThemes(questionSet);
@@ -42,6 +42,9 @@ function ApprovedHomeContent({ themeProgress, questionSet = [], currentIndex = 0
   const contributionBadge = unviewedCount ? `未確認${unviewedCount}件`
     : includedCount && contributorCount ? `採用${includedCount}件／${contributorCount}人` : `採用${includedCount}件`;
   const heading = homeQuestionHeading(questionSet, currentIndex, themeProgress);
+  const canCreate = bookPhase === 'editing';
+  const canReview = bookPhase === 'review';
+  const publishedBook = bookPhase === 'published';
   return <div className="approved-home">
     <div className="ah-sky" data-sky={sky?.id || 'fallback'}>
       {sky && sky.src !== failedSrc && <img src={sky.src} style={{objectPosition:sky.homeObjectPosition, '--sky-phone-position':sky.homeObjectPosition, '--sky-pc-position':sky.pcHomeObjectPosition || sky.homeObjectPosition}} alt="" width="960" height="640" fetchPriority="high" onError={() => setFailedSrc(sky.src)} />}
@@ -58,12 +61,12 @@ function ApprovedHomeContent({ themeProgress, questionSet = [], currentIndex = 0
           <button type="button" onClick={ownStoryEntry.onStart}>物語を始める</button>
         </div>
       </section> : <>
-      {(heading || !supportedActions || supportedActions.record) && <section className="ah-journey" aria-label="現在のテーマと次の問い">
+      {canCreate && (heading || !supportedActions || supportedActions.record) && <section className="ah-journey" aria-label="現在のテーマと次の問い">
         {heading && <div className="ah-theme"><span>{heading.eyebrow}</span>{heading.progress && <span className="ah-trial-progress">{heading.progress}</span>}<h1>{heading.title}</h1></div>}
         {(!supportedActions || supportedActions.record) && <button type="button" className="ah-primary" onClick={onStartTalking}>次の問いに語る<ArrowRight size={19} aria-hidden="true" /></button>}
       </section>}
-      {(!supportedActions || supportedActions.photo || supportedActions.questionList || supportedActions.video) && <div className="ah-rows">{(!supportedActions || supportedActions.photo) && <Row icon={Image} onClick={onStartPhotoStory}>写真から語る</Row>}{supportedActions?.video && <Row icon={Video} onClick={onStartVideoStory}>動画で語る</Row>}{(!supportedActions || supportedActions.questionList) && <Row icon={List} onClick={onOpenQuestionLibrary}>問いの一覧</Row>}</div>}
-      {(!supportedActions || supportedActions.stories || (supportedActions.book && !publishedBook)) && <Group title="これまでの語り">{(!supportedActions || supportedActions.stories) && <Row icon={Files} badge={`${count}件／${themeCount}テーマ`} onClick={onOpenStoryPages}>語りを見る</Row>}{!supportedActions && canOpenThemeMemories && <Row icon={Users} badge={contributionBadge} attention={unviewedCount > 0} onClick={onOpenThemeMemories}>大切な人からの語り</Row>}{!publishedBook && (!supportedActions || supportedActions.book) && <Row icon={BookOpen} onClick={onOpenBookBuilder}>本に仕上げる</Row>}</Group>}
+      {canCreate && (!supportedActions || supportedActions.photo || supportedActions.questionList || supportedActions.video) && <div className="ah-rows">{(!supportedActions || supportedActions.photo) && <Row icon={Image} onClick={onStartPhotoStory}>写真から語る</Row>}{supportedActions?.video && <Row icon={Video} onClick={onStartVideoStory}>動画で語る</Row>}{(!supportedActions || supportedActions.questionList) && <Row icon={List} onClick={onOpenQuestionLibrary}>問いの一覧</Row>}</div>}
+      {(canCreate || canReview) && (!supportedActions || supportedActions.stories || supportedActions.book) && <Group title={canReview ? "仕上がりを確認しています" : "これまでの語り"}>{canCreate && (!supportedActions || supportedActions.stories) && <Row icon={Files} badge={`${count}件／${themeCount}テーマ`} onClick={onOpenStoryPages}>語りを見る</Row>}{canCreate && !supportedActions && canOpenThemeMemories && <Row icon={Users} badge={contributionBadge} attention={unviewedCount > 0} onClick={onOpenThemeMemories}>大切な人からの語り</Row>}{(!supportedActions || supportedActions.book) && <Row icon={BookOpen} onClick={onOpenBookBuilder}>本に仕上げる</Row>}</Group>}
       </>}
       {!ownStoryEntry && !supportedActions && <Group title="本棚"><Row icon={Library} href={onOpenShelf ? undefined : '/?library=1'} onClick={onOpenShelf}>私の本棚・家族の本棚</Row></Group>}
       {receivedProjects.length > 0 && <Group title="家族の語り">{receivedProjects.map(p => <Row key={p.book_project_id} icon={Files} onClick={() => onOpenReceivedProject?.(p)}>{nameOf(p.subject_name)}の語り</Row>)}</Group>}
