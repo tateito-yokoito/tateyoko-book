@@ -150,7 +150,8 @@ export default function SeasonalMemoryFlow({
         body: { action: 'read', mediaId: item.id },
       });
       if (downloadError) return null;
-      const url = URL.createObjectURL(data);
+      // FunctionsClient only returns a Blob for application/octet-stream.
+      const url = URL.createObjectURL(new Blob([data], { type: item.mime_type }));
       if (!live) { URL.revokeObjectURL(url); return null; }
       objects.push(url);
       return [item.id, url];

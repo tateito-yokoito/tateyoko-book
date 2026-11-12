@@ -36,7 +36,7 @@ serve(async (request) => {
       if (fileError || !blob) return json({ error: "Not found" }, 404);
       return new Response(blob, {
         status: 200,
-        headers: { ...cors, "Content-Type": media.mime_type,
+        headers: { ...cors, "Content-Type": "application/octet-stream",
           "Cache-Control": "private, no-store, max-age=0", "X-Content-Type-Options": "nosniff" },
       });
     }

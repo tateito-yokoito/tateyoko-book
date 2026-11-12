@@ -14749,8 +14749,8 @@ export function Scene_Home(props) {
       onClose={() => setSeasonalPage(null)}
       onShelf={() => props.onOpenShelf ? props.onOpenShelf() : window.location.assign('/?library=1')}
       renderRecorder={({question,onBack,onComplete,photoUrls}) => <Scene_Recording
-        question={question} progress={{currentIndex:1,total:1}}
-        userName={props.userName || 'あなた'} autoStart onBack={onBack}
+        question={question} progress={{currentIndex:0,total:1}}
+        userName={props.userName || 'あなた'} autoStart seasonalMode onBack={onBack}
         referencePhotos={photoUrls}
         onComplete={onComplete} />}
       renderPhotoCorrection={photoProps => <PhotoCorrectionFlow
@@ -18648,16 +18648,16 @@ function RecordingQuestionPrompt({ question }) {
   );
 }
 
-function RecordingQuestionHeader({ question, userName, storyProgress, sectionLabel, isFormalOnboarding, onBack }) {
+function RecordingQuestionHeader({ question, userName, storyProgress, sectionLabel, isFormalOnboarding, onBack, progressOverride }) {
   return (
     <>
       <h1 className="sr-only">{withHonorific(userName)}の物語</h1>
       <QuestionFlowTopBar
         onBack={onBack}
         theme={sectionLabel}
-        progress={isFormalOnboarding && question.progress_label
+        progress={progressOverride || (isFormalOnboarding && question.progress_label
           ? String(question.progress_label).replace(/\s*\/\s*/g, "/")
-          : `${Math.max(1, (storyProgress?.currentIndex ?? 0) + 1)} / ${Math.max(1, storyProgress?.total ?? 30)}`}
+          : `${Math.max(1, (storyProgress?.currentIndex ?? 0) + 1)} / ${Math.max(1, storyProgress?.total ?? 30)}`)}
       />
     </>
   );
@@ -18934,6 +18934,7 @@ export function Scene_Recording({
   storyProgress = progress,
   userName,
   autoStart = false,
+  seasonalMode = false,
   referencePhotos = [],
   onBack,
   onJourneyEvent = () => {},
@@ -19109,7 +19110,7 @@ useEffect(() => {
     setCountdown(current => {
       const next = current - 1;
 
-      if (next === 1 && !hasStartedRecordingRef.current) {
+      if (next === (seasonalMode ? 0 : 1) && !hasStartedRecordingRef.current) {
         hasStartedRecordingRef.current = true;
         startActualRecording();
       }
@@ -19125,7 +19126,7 @@ useEffect(() => {
   }, 1000);
 
   return () => clearInterval(timer);
-}, [step, isPaused]);
+}, [step, isPaused, seasonalMode]);
 
   const startWaveMonitor = async (stream) => {
     if (isIOSLikeBrowser()) {
@@ -19595,8 +19596,8 @@ const stop = (reason = "manual") => {
 };
 
 return (
-<StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4" background={QUESTION_BACKGROUND}>
-  <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={step === 0 || step === "checking_mic" || step === "mic_error" ? onBack : null} />
+<StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4" surfaceClassName={seasonalMode ? 'sm-seasonal-recorder' : ''} background={QUESTION_BACKGROUND}>
+  <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} progressOverride={seasonalMode ? '1 / 1' : null} onBack={step === 0 || step === "checking_mic" || step === "mic_error" ? onBack : null} />
 
   <RecordingQuestionPrompt question={question} />
 
@@ -19622,13 +19623,22 @@ return (
         <MicAccessGuide onRetry={start} onContinue={onBack} continueLabel="問いに戻る" />
       )}
 
-      {step === "countdown" && (
+      {step === "countdown" && !seasonalMode && (
         <div className="recording-countdown-slot text-center">
           <p className="text-white/82 text-[4.2rem] leading-none font-light">
             {countdown}
           </p>
          </div>
       )}
+
+      {step === "countdown" && seasonalMode && <div className="recording-control-dock sm-recording-countdown-dock mt-4">
+        <div className="sm-recording-countdown-number" aria-live="polite">{countdown}</div>
+        <div className="recording-status-row"><span className="recording-state-label">録音の準備中</span></div>
+        <div className="recording-action-row">
+          <button type="button" className="recording-action-button" disabled>一時停止</button>
+          <button type="button" className="recording-action-button recording-action-button--stop" disabled>録音を終える</button>
+        </div>
+      </div>}
 
 {step === 1 && (
   <div className="recording-control-dock mt-4">
