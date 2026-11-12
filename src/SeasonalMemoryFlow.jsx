@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, Camera, ChevronRight, Image, Lock, Mic, Pencil, Play } from 'lucide-react';
 import { STORY_THEMES } from './lib/storyThemes.js';
-import { SEASON_NAMES, hasSeasonalContent, invokeSeasonal, loadSeasonalMemories, seasonalBoxes, seasonalSaveArgs } from './lib/seasonalMemory.js';
+import { SEASON_NAMES, hasSeasonalContent, invokeSeasonal, loadSeasonalMemories, markSeasonalWelcomeSeen, seasonalBoxes, seasonalSaveArgs, seasonalWelcomeSeen } from './lib/seasonalMemory.js';
 import './seasonal-memory.css';
 
 const STORE_KEY = id => `nenrin-seasonal-draft:${id}`;
@@ -19,21 +19,51 @@ const useSeasonalClock = () => {
 };
 
 export function SeasonalHomeCards({ client, projectId, onOpen, onShelf }) {
-  const [state, setState] = useState({ records: [], canEdit: false });
+  const [state, setState] = useState({ records: [], canEdit: false, welcomeSeen: true });
+  const [welcomeError, setWelcomeError] = useState('');
   useEffect(() => {
     if (!client || !projectId) return;
     let live = true;
-    Promise.all([
+    const refresh = () => Promise.all([
       loadSeasonalMemories(client, projectId),
       client.rpc('seasonal_memory_can_edit', { input_project_id: projectId }),
-    ]).then(([data, access]) => {
-      if (live) setState({ records: data.records, canEdit: !access.error && access.data === true });
-    }).catch(() => { if (live) setState({ records: [], canEdit: false }); });
-    return () => { live = false; };
+      client.auth.getUser(),
+    ]).then(([data, access, identity]) => {
+      if (live) setState({ records: data.records,
+        canEdit: !access.error && access.data === true,
+        welcomeSeen: Boolean(identity.error || seasonalWelcomeSeen(identity.data?.user)
+          || data.records.some(item => item.created_by === identity.data?.user?.id)),
+      });
+    }).catch(() => { if (live) setState({ records: [], canEdit: false, welcomeSeen: true }); });
+    refresh();
+    window.addEventListener('focus', refresh);
+    return () => { live = false; window.removeEventListener('focus', refresh); };
   }, [client, projectId]);
+  const dismissWelcome = async () => {
+    setWelcomeError('');
+    try {
+      await markSeasonalWelcomeSeen(client);
+      setState(previous => ({ ...previous, welcomeSeen: true }));
+    } catch {
+      setWelcomeError('案内を閉じた状態を保存できませんでした。もう一度お試しください。');
+    }
+  };
+  const openBox = async (page, season) => {
+    if (!state.welcomeSeen) {
+      try { await markSeasonalWelcomeSeen(client); }
+      catch { /* A failed welcome update must not prevent recording. */ }
+    }
+    onOpen(page, season);
+  };
   const boxes = useSeasonalClock();
   const entries = [boxes.current, boxes.previous].filter(Boolean);
   return <div className="sm-home">
+    {state.canEdit && !state.welcomeSeen && <section className="sm-welcome" aria-label="記憶箱のご案内">
+      <button type="button" className="sm-welcome-close" onClick={dismissWelcome} aria-label="案内を閉じる">×</button>
+      <h2>本が完成しても、物語は続きます。</h2>
+      <p>これからは、季節ごとに新しい記憶を残せます。写真を一枚添えるだけでも、声で少し語るだけでも大丈夫。年4回、追加料金なしで記録でき、残した思い出は「記憶のかけら」として積み重なっていきます。</p>
+      {welcomeError && <p className="sm-welcome-error" role="alert">{welcomeError}</p>}
+    </section>}
     {state.canEdit && entries.map((box, index) => {
       const record = state.records.find(item => item.season_start === box.start);
       if (record?.status === 'completed' && index > 0) return null;
@@ -44,7 +74,7 @@ export function SeasonalHomeCards({ client, projectId, onOpen, onShelf }) {
           : index ? box.graceDays ? `あと${box.graceDays}日で、フタが閉まります。`
             : '今日で、フタが閉まります。'
             : `この${box.name}、何を残しますか？`}</h2>
-        <button type="button" onClick={() => onOpen(finished ? 'fragments' : 'box', box.start)}>
+        <button type="button" onClick={() => openBox(finished ? 'fragments' : 'box', box.start)}>
           {finished ? '記憶のかけらで見る' : record ? '続きを残す' : '記憶を残す'}
         </button>
       </section>;

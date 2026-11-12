@@ -1,4 +1,12 @@
 export const SEASON_NAMES = ['冬', '春', '夏', '秋'];
+export const SEASONAL_WELCOME_KEY = 'seasonal_memory_welcome_seen_at';
+export const seasonalWelcomeSeen = user => Boolean(user?.user_metadata?.[SEASONAL_WELCOME_KEY]);
+export async function markSeasonalWelcomeSeen(client) {
+  const { error } = await client.auth.updateUser({
+    data: { [SEASONAL_WELCOME_KEY]: new Date().toISOString() },
+  });
+  if (error) throw error;
+}
 const SEASON_MONTHS = [1, 4, 7, 10];
 const jstParts = date => {
   const parts = new Intl.DateTimeFormat('en-US', {

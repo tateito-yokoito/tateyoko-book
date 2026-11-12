@@ -56,6 +56,11 @@
 .sm-nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;background:#fffdf8;border-top:1px solid #d9d9ce;padding:6px env(safe-area-inset-right) calc(6px + env(safe-area-inset-bottom)) env(safe-area-inset-left)}
 .sm-nav button{width:min(33%,160px);min-height:44px;border:0;background:transparent;color:#354c67;font-size:13px}
 .sm-home{margin:0 0 14px;color:#26352f;font:16px/1.6 'Noto Sans JP','Hiragino Kaku Gothic ProN',sans-serif}
+.sm-welcome{position:relative;margin:0 0 16px;padding:26px 24px 22px;border:1px solid #d5d8cb;border-radius:16px;background:#fffdf8;box-shadow:0 5px 22px #26352f0a}
+.sm-welcome h2{margin:0 32px 13px 0;font:normal clamp(21px,5vw,25px)/1.55 'Noto Serif JP','Yu Mincho',serif;color:#284c40}
+.sm-welcome p{margin:0;color:#3c4b43;font-size:15px;line-height:1.85}
+.sm-welcome .sm-welcome-error{margin-top:12px;color:#963e32;font-size:13px}
+.sm-welcome-close{position:absolute;top:8px;right:9px;display:grid;place-items:center;width:44px;height:44px;border:0;background:transparent;color:#55675b;font-size:27px;line-height:1}
 .sm-home-box{background:#e7ede4;border:1px solid #c4d2c5;border-radius:18px;padding:19px 18px;margin:0 0 11px}
 .sm-home-box--grace{background:#f0e9d9;border-color:#ddcfb6}
 .sm-home-box p{margin:0;font-weight:600}.sm-home-box small{font-weight:400;font-size:13px;color:#5e6d65}

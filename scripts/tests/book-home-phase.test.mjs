@@ -11,6 +11,7 @@ const { default: ApprovedHome } = await vite.ssrLoadModule('/src/home/ApprovedHo
 function home(phase, supportedActions = null) {
   return renderToStaticMarkup(React.createElement(ApprovedHome, {
     bookPhase: phase,
+    bookProjectId: phase === 'published' ? 'test-published-project' : null,
     questionSet: [],
     supportedActions,
     onOpenBookBuilder() {},
@@ -40,7 +41,8 @@ test('all roles use the same BOOK phase for production controls and bookshelf', 
     assert.doesNotMatch(review, /次の問いに語る|写真から語る|動画で語る|問いの一覧|語りを見る/);
 
     const published = home('published', role);
-    assert.match(published, /本棚で見る|私の本棚・家族の本棚/);
+    assert.match(published, /記憶のかけら/);
+    assert.match(published, /本棚/);
     assert.doesNotMatch(published, /本に仕上げる|次の問いに語る|写真から語る|動画で語る/);
   }
 });
