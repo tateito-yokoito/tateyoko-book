@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireExperienceProcessing } from "../_shared/experience-access.ts";
 import { requireFamilyProjectAccess, familyPendingVoiceScope } from "../_shared/family-access.ts";
 import { assertHelperAnswerVisible } from "../_shared/helper-private-access.ts";
+import { editableSeasonalMemory } from "../_shared/seasonal-memory-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,20 +47,23 @@ serve(async (req) => {
 
     const serviceClient = createClient(supabaseUrl, serviceRoleKey);
     const body = await req.json();
-    const answerId = String(body.answerId || "").trim();
+    const seasonalRecordId = String(body.seasonalRecordId || "").trim();
+    const answerId = seasonalRecordId || String(body.answerId || "").trim();
     const transcriptRaw = String(body.transcriptRaw || "").trim();
     const questionText = String(body.questionText || "").trim();
     const bookProjectId = String(body.bookProjectId || "").trim();
     const mode = body.mode === "life_outline" ? "life_outline" : "answer";
 
     if (!answerId) throw new Error("answerId is required");
-    const pendingVoice = await familyPendingVoiceScope(serviceClient, body, user.id);
-    if (bookProjectId && !pendingVoice) {
+    const pendingVoice = seasonalRecordId ? null : await familyPendingVoiceScope(serviceClient, body, user.id);
+    if (seasonalRecordId) {
+      await editableSeasonalMemory(authClient, serviceClient, seasonalRecordId, bookProjectId);
+    } else if (bookProjectId && !pendingVoice) {
       await requireProjectAccess(serviceClient, bookProjectId, user.id);
       await assertHelperAnswerVisible(serviceClient, bookProjectId, user.id, answerId, true);
     }
 
-    if (!pendingVoice) await requireExperienceProcessing(serviceClient, bookProjectId, user.id, answerId, String(body.userQuestionId || ""));
+    if (!seasonalRecordId && !pendingVoice) await requireExperienceProcessing(serviceClient, bookProjectId, user.id, answerId, String(body.userQuestionId || ""));
 
     if (!transcriptRaw) {
       return jsonResponse({
@@ -127,7 +131,7 @@ serve(async (req) => {
     const candidates = sanitizeCandidates(parsed.proper_noun_candidates);
 
     let savedCandidateCount = 0;
-    if (bookProjectId && candidates.length > 0 && (!pendingVoice || pendingVoice.subject)) {
+    if (!seasonalRecordId && bookProjectId && candidates.length > 0 && (!pendingVoice || pendingVoice.subject)) {
       savedCandidateCount = await saveCandidates(
         serviceClient,
         bookProjectId,

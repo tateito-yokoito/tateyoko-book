@@ -6,6 +6,7 @@ import { countAnsweredStories, countAnsweredStoryThemes } from '../lib/storyPage
 import './approved-home.css';
 import { homeQuestionHeading } from './homeQuestionHeading.js';
 import { supportRoleLabel } from '../lib/supportRole.js';
+import { SeasonalHomeCards } from '../SeasonalMemoryFlow.jsx';
 
 function Row({ icon: Icon, children, badge, attention = false, onClick, href, disabled }) {
   const Tag = href ? 'a' : 'button';
@@ -32,7 +33,8 @@ export default function ApprovedHome({guideClient, ...props}) {
 function ApprovedHomeContent({ themeProgress, questionSet = [], currentIndex = 0, supportedProjects = [], receivedProjects = [], invitationCards, skyOverride,
   onStartTalking, onStartPhotoStory, onStartVideoStory, onOpenQuestionLibrary, onOpenStoryPages, canOpenThemeMemories, onOpenThemeMemories, storyRequestSummary, onOpenBookBuilder, onOpenSettings,
   onOpenSupportedProject, onOpenReceivedProject, onAddFamilyStory, onShareWithFriend, onDevLogout, onOpenShelf, ownStoryEntry,
-  onOpenLineDelivery, supportedActions = null, settingsActions = [], bookPhase = 'editing' }) {
+  onOpenLineDelivery, supportedActions = null, settingsActions = [], bookPhase = 'editing',
+  bookProjectId, supabaseClient, onOpenSeasonal }) {
   const liveSky = useDailySky('home', Boolean(skyOverride)), sky = skyOverride || liveSky, [failedSrc, setFailedSrc] = useState(null);
   const count = countAnsweredStories(questionSet);
   const themeCount = countAnsweredStoryThemes(questionSet);
@@ -50,10 +52,9 @@ function ApprovedHomeContent({ themeProgress, questionSet = [], currentIndex = 0
       {sky && sky.src !== failedSrc && <img src={sky.src} style={{objectPosition:sky.homeObjectPosition, '--sky-phone-position':sky.homeObjectPosition, '--sky-pc-position':sky.pcHomeObjectPosition || sky.homeObjectPosition}} alt="" width="960" height="640" fetchPriority="high" onError={() => setFailedSrc(sky.src)} />}
     </div>
     <div className="ah-content">
-      {publishedBook && !ownStoryEntry && <section className="ah-group" aria-label="Webブック公開のお知らせ">
-        <h2>Webブックが公開されました</h2>
-        <div className="ah-rows"><Row icon={Library} href="/?library=1">本棚で見る</Row></div>
-      </section>}
+      {publishedBook && bookProjectId && <SeasonalHomeCards
+        client={supabaseClient} projectId={bookProjectId} onOpen={onOpenSeasonal}
+        onShelf={() => onOpenShelf ? onOpenShelf() : window.location.assign('/?library=1')} />}
       {ownStoryEntry ? <section className="ah-journey ah-own-entry" aria-label="自分の物語を始める">
         <h1>自分の物語</h1>
         <div className="ah-own-actions">
@@ -68,7 +69,7 @@ function ApprovedHomeContent({ themeProgress, questionSet = [], currentIndex = 0
       {canCreate && (!supportedActions || supportedActions.photo || supportedActions.questionList || supportedActions.video) && <div className="ah-rows">{(!supportedActions || supportedActions.photo) && <Row icon={Image} onClick={onStartPhotoStory}>写真から語る</Row>}{supportedActions?.video && <Row icon={Video} onClick={onStartVideoStory}>動画で語る</Row>}{(!supportedActions || supportedActions.questionList) && <Row icon={List} onClick={onOpenQuestionLibrary}>問いの一覧</Row>}</div>}
       {(canCreate || canReview) && (!supportedActions || supportedActions.stories || supportedActions.book) && <Group title={canReview ? "仕上がりを確認しています" : "これまでの語り"}>{canCreate && (!supportedActions || supportedActions.stories) && <Row icon={Files} badge={`${count}件／${themeCount}テーマ`} onClick={onOpenStoryPages}>語りを見る</Row>}{canCreate && !supportedActions && canOpenThemeMemories && <Row icon={Users} badge={contributionBadge} attention={unviewedCount > 0} onClick={onOpenThemeMemories}>大切な人からの語り</Row>}{(!supportedActions || supportedActions.book) && <Row icon={BookOpen} onClick={onOpenBookBuilder}>本に仕上げる</Row>}</Group>}
       </>}
-      {!ownStoryEntry && !supportedActions && <Group title="本棚"><Row icon={Library} href={onOpenShelf ? undefined : '/?library=1'} onClick={onOpenShelf}>私の本棚・家族の本棚</Row></Group>}
+      {!publishedBook && !ownStoryEntry && !supportedActions && <Group title="本棚"><Row icon={Library} href={onOpenShelf ? undefined : '/?library=1'} onClick={onOpenShelf}>私の本棚・家族の本棚</Row></Group>}
       {receivedProjects.length > 0 && <Group title="家族の語り">{receivedProjects.map(p => <Row key={p.book_project_id} icon={Files} onClick={() => onOpenReceivedProject?.(p)}>{nameOf(p.subject_name)}の語り</Row>)}</Group>}
       {['制作管理中', '共同管理中', 'お手伝い中'].map(roleLabel => {
         const projects = supportedProjects.filter(p => supportRoleLabel(p.support_role) === roleLabel);
@@ -85,5 +86,10 @@ function ApprovedHomeContent({ themeProgress, questionSet = [], currentIndex = 0
       </footer>}
       {onDevLogout && <button type="button" className="ah-dev" onClick={onDevLogout}>開発用ログアウト</button>}
     </div>
+    {publishedBook && bookProjectId && <nav className="sm-home-nav" aria-label="公開後のメニュー">
+      <button type="button" aria-current="page">ホーム</button>
+      <button type="button" onClick={() => onOpenSeasonal?.('fragments')}>記憶のかけら</button>
+      <button type="button" onClick={() => onOpenShelf ? onOpenShelf() : window.location.assign('/?library=1')}>本棚</button>
+    </nav>}
   </div>;
 }

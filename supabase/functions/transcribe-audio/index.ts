@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireExperienceProcessing } from "../_shared/experience-access.ts";
 import { requireFamilyProjectAccess, requireFamilyAssetAccess, familyPendingVoiceScope } from "../_shared/family-access.ts";
 import { assertHelperAnswerVisible, assertHelperMediaPathsVisible, isStoryHelper } from "../_shared/helper-private-access.ts";
+import { editableSeasonalMemory, assertSeasonalAudioPaths } from "../_shared/seasonal-memory-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,7 +56,8 @@ serve(async (req) => {
 
     const serviceClient = createClient(supabaseUrl, serviceRoleKey);
     const body = await req.json();
-    const answerId = String(body.answerId || "").trim();
+    const seasonalRecordId = String(body.seasonalRecordId || "").trim();
+    const answerId = seasonalRecordId || String(body.answerId || "").trim();
     const fallbackTranscript = String(body.fallbackTranscript || "").trim();
     const questionText = String(body.questionText || "").trim();
     const previousTranscript = String(body.previousTranscript || "").trim();
@@ -70,7 +72,7 @@ serve(async (req) => {
       throw new Error(`audioPaths must contain at most ${MAX_AUDIO_PARTS} items`);
     }
 
-    if (!bookProjectId) {
+    if (!bookProjectId && !seasonalRecordId) {
       const { data: answer } = await serviceClient
         .from("answers")
         .select("book_project_id")
@@ -78,21 +80,27 @@ serve(async (req) => {
         .maybeSingle();
       bookProjectId = String(answer?.book_project_id || "").trim();
     }
-    if (!bookProjectId) throw new Error("Forbidden");
+    if (!bookProjectId && !seasonalRecordId) throw new Error("Forbidden");
 
-    const pendingVoice = await familyPendingVoiceScope(serviceClient, body, user.id);
-    if (pendingVoice) {
-      if (JSON.stringify(audioPaths) !== JSON.stringify(pendingVoice.paths)) throw new Error("Forbidden");
+    const pendingVoice = seasonalRecordId ? null : await familyPendingVoiceScope(serviceClient, body, user.id);
+    if (seasonalRecordId) {
+      const seasonal = await editableSeasonalMemory(authClient, serviceClient, seasonalRecordId, bookProjectId);
+      bookProjectId = seasonal.book_project_id;
+      await assertSeasonalAudioPaths(serviceClient, seasonalRecordId, audioPaths);
     } else {
-      await requireExperienceProcessing(serviceClient, bookProjectId, user.id, answerId, String(body.userQuestionId || ""));
-    }
-    for (const path of audioPaths) {
-      const familyAsset = await requireFamilyAssetAccess(serviceClient, "audio", path, user.id, bookProjectId);
-      if (!familyAsset && !path.startsWith(`${user.id}/`)) throw new Error("Forbidden audio path");
+      if (pendingVoice) {
+        if (JSON.stringify(audioPaths) !== JSON.stringify(pendingVoice.paths)) throw new Error("Forbidden");
+      } else {
+        await requireExperienceProcessing(serviceClient, bookProjectId, user.id, answerId, String(body.userQuestionId || ""));
+      }
+      for (const path of audioPaths) {
+        const familyAsset = await requireFamilyAssetAccess(serviceClient, "audio", path, user.id, bookProjectId);
+        if (!familyAsset && !path.startsWith(`${user.id}/`)) throw new Error("Forbidden audio path");
+      }
     }
 
     let contextTerms: ContextTerm[] = [];
-    if (!pendingVoice || pendingVoice.subject) {
+    if (!seasonalRecordId && (!pendingVoice || pendingVoice.subject)) {
       await requireProjectAccess(serviceClient, bookProjectId, user.id);
       // A fresh recording can use a pending upload ID before the answer row exists.
       await assertHelperAnswerVisible(serviceClient, bookProjectId, user.id, answerId, true);
@@ -123,7 +131,7 @@ serve(async (req) => {
     for (let index = 0; index < audioPaths.length; index++) {
       const path = audioPaths[index];
       const { data: audioBlob, error: downloadError } =
-        await serviceClient.storage.from("audio").download(path);
+        await serviceClient.storage.from(seasonalRecordId ? "seasonal-memory" : "audio").download(path);
 
       if (downloadError || !audioBlob) {
         console.error("audio download error", {
@@ -179,7 +187,7 @@ serve(async (req) => {
     }
 
     const transcriptRaw = transcripts.filter(Boolean).join("\n\n").trim() || fallbackTranscript;
-    if (bookProjectId && contextTerms.length > 0) {
+    if (!seasonalRecordId && bookProjectId && contextTerms.length > 0) {
       await markTermsUsed(serviceClient, contextTerms);
     }
 

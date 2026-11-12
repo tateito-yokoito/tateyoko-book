@@ -3,6 +3,7 @@ import { paidConversationIndex, paidOnboardingApplies, paidOnboardingCheckpoint,
 import { getActiveOnboardingRitualScene, onboardingSetupScenes, resolveOnboardingRitualEntryScene } from './lib/onboardingRitualResume.js';
 import { clearOnboardingNotificationDraft, clearOnboardingPreferenceDraft, clearOnboardingSharingDraft, draftTimestamp, readOnboardingNotificationDraft, readOnboardingPreferenceDraft, readOnboardingSharingDraft, writeOnboardingNotificationDraft, writeOnboardingPreferenceDraft, writeOnboardingSharingDraft } from './lib/onboardingPreferenceDraft.js';
 import ApprovedHome from './home/ApprovedHome.jsx';
+import SeasonalMemoryFlow from './SeasonalMemoryFlow.jsx';
 import LineNotificationConnection from './LineNotificationConnection.jsx';
 import SupporterContextFrame from './SupporterContextFrame.jsx';
 import { canFinalizeBookAsSupportRole, supportRoleLabel } from './lib/supportRole.js';
@@ -14708,6 +14709,8 @@ function Scene_FamilyStoryDeliveryChoice({
 
 export function Scene_Home(props) {
   const [bookPhase, setBookPhase] = useState(props.bookProjectId ? "loading" : "editing");
+  const [seasonalPage, setSeasonalPage] = useState(null);
+  const [seasonalSeason, setSeasonalSeason] = useState(null);
   useEffect(() => {
     if (!props.bookProjectId) { setBookPhase("editing"); return undefined; }
     let active = true;
@@ -14736,7 +14739,27 @@ export function Scene_Home(props) {
     window.addEventListener("focus", refreshBookPhase);
     return () => { active = false; window.removeEventListener("focus", refreshBookPhase); };
   }, [props.bookProjectId, props.supabaseClient]);
+  if (seasonalPage && bookPhase === 'published' && props.bookProjectId) {
+    return <SeasonalMemoryFlow
+      client={props.supabaseClient || applicationSupabaseClient}
+      projectId={props.bookProjectId}
+      questionSet={props.questionSet || []}
+      initialPage={seasonalPage}
+      initialSeason={seasonalSeason}
+      onClose={() => setSeasonalPage(null)}
+      onShelf={() => props.onOpenShelf ? props.onOpenShelf() : window.location.assign('/?library=1')}
+      renderRecorder={({question,onBack,onComplete,photoUrls}) => <Scene_Recording
+        question={question} progress={{currentIndex:1,total:1}}
+        userName={props.userName || 'あなた'} autoStart onBack={onBack}
+        referencePhotos={photoUrls}
+        onComplete={onComplete} />}
+      renderPhotoCorrection={photoProps => <PhotoCorrectionFlow
+        {...photoProps} awaitCompletion title="写真を添える" />}
+    />;
+  }
   return <ApprovedHome {...props} bookPhase={bookPhase}
+    supabaseClient={props.supabaseClient || applicationSupabaseClient}
+    onOpenSeasonal={(page, season) => { setSeasonalPage(page); setSeasonalSeason(season || null); }}
     themeProgress={getStoryThemeProgress(props.questionSet || [], props.currentIndex || 0)}
     invitationCards={props.sentFamilyInvitations?.length > 0 && <section className="ah-group"><h2>招待した家族の物語</h2><div className="ah-rows">{props.sentFamilyInvitations.map(invitation => <FamilyInvitationHomeCard key={invitation.invitation_id} invitation={invitation} onContinue={() => props.onContinueFamilyTrial?.(invitation)} onDecline={() => props.onDeclineFamilyTrial?.(invitation)} />)}</div></section>} />;
 }
@@ -18911,6 +18934,7 @@ export function Scene_Recording({
   storyProgress = progress,
   userName,
   autoStart = false,
+  referencePhotos = [],
   onBack,
   onJourneyEvent = () => {},
   onComplete
@@ -19575,6 +19599,10 @@ return (
   <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={step === 0 || step === "checking_mic" || step === "mic_error" ? onBack : null} />
 
   <RecordingQuestionPrompt question={question} />
+
+  {referencePhotos.length > 0 && <div className="sm-recording-photos" aria-label="語りながら見る写真">
+    {referencePhotos.map((url, index) => <img key={url} src={url} alt={`参考の写真 ${index + 1}`} />)}
+  </div>}
 
 {step === 0 && (
   <div className="recording-control-dock recording-control-dock--start mt-5">
