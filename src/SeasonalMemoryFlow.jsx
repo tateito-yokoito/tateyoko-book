@@ -331,13 +331,16 @@ export default function SeasonalMemoryFlow({
   };
   const recordAudio = async (transcript, duration, _url, blob) => {
     setPage('processing'); setSaveState('saving'); setError('');
+    const mime = blob.type?.split(';')[0] || 'audio/mp4';
+    const file = new File([blob], 'memory.' + (mime === 'audio/webm' ? 'webm' : 'mp4'), { type: mime });
     try {
-      const mime = blob.type?.split(';')[0] || 'audio/mp4';
-      const file = new File([blob], 'memory.' + (mime === 'audio/webm' ? 'webm' : 'mp4'), { type: mime });
       const path = await addMedia(file, 'audio', Math.max(1, Math.ceil(duration)));
       setAudioToProcess({path, transcript: transcript || ''});
       await processAudio(path, transcript);
-    } catch (cause) { setSaveState('failed'); setError(cause.message); setPage('voice_review'); }
+    } catch (cause) {
+      setAudioToProcess({file, transcript: transcript || '', duration});
+      setSaveState('failed'); setError(cause.message); setPage('voice_review');
+    }
   };
   const proposePolish = async () => {
     if (!form.body.trim() || !recordRef.current) return;
@@ -497,8 +500,16 @@ export default function SeasonalMemoryFlow({
         <button className="sm-secondary" onClick={() => leave('answer')}>回答を確認する</button></>}
       {page === 'processing' && <><h1>文字起こし中…</h1><p>音声は保存しました。処理が終わるまでお待ちください。</p></>}
       {page === 'voice_review' && activeRecord && <><h1>{titleOf(activeRecord)}</h1>
+        {saveState === 'failed' && <p className="sm-save-state" role="status">保存できていません</p>}
         {activeMedia.filter(m=>m.kind==='audio').map(m=><audio key={m.id} src={mediaUrls[m.id]} controls />)}
-        {audioToProcess && <button className="sm-secondary" type="button" onClick={() => processAudio(audioToProcess.path,audioToProcess.transcript)}>文字起こしを再試行する</button>}
+        {audioToProcess?.file && <button className="sm-secondary" type="button" disabled={busy} onClick={async () => {
+          try {
+            const path = await addMedia(audioToProcess.file, 'audio', Math.max(1, Math.ceil(audioToProcess.duration)));
+            setAudioToProcess({path, transcript: audioToProcess.transcript});
+            await processAudio(path, audioToProcess.transcript);
+          } catch (cause) { setSaveState('failed'); setError(cause.message); }
+        }}>音声の保存を再試行する</button>}
+        {audioToProcess?.path && <button className="sm-secondary" type="button" onClick={() => processAudio(audioToProcess.path,audioToProcess.transcript)}>文字起こしを再試行する</button>}
         <h2>文章の仕上がりを選ぶ</h2><div className="sm-tone">
           {[["clean","そのまま"],["readable","語り調"],["essay","作品調"]].map(([value,label]) =>
             <button className={form.tone===value?'selected':''} key={value} onClick={() => {
