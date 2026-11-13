@@ -108,6 +108,7 @@ export default function SeasonalMemoryFlow({
   const [audioToProcess, setAudioToProcess] = useState(null);
   const [polishProposal, setPolishProposal] = useState('');
   const recordRef = useRef(null), desiredRef = useRef(null), pendingRef = useRef(null);
+  const mediaAttemptRef = useRef(null);
   const conflictRef = useRef(false);
   const draftBaseRevision = useRef(0);
   const editVersion = useRef(0), savedVersion = useRef(0), timer = useRef(null);
@@ -264,18 +265,36 @@ export default function SeasonalMemoryFlow({
       throw new Error('文章の保存が完了していません。再試行してください。');
     }
     setSaveState('saving'); setError(''); setBusy(true);
-    const recordId = recordRef.current.id, mediaId = crypto.randomUUID();
-    const path = `${recordId}/${mediaId}.${mimeExt(file)}`;
+    const recordId = recordRef.current.id;
+    const previous = mediaAttemptRef.current;
+    const attempt = previous?.file === file && previous.recordId === recordId && previous.kind === mediaKind
+      ? previous : { file, recordId, kind: mediaKind, mediaId: crypto.randomUUID(), uploaded: false };
+    const path = `${recordId}/${attempt.mediaId}.${mimeExt(file)}`;
+    mediaAttemptRef.current = attempt;
     try {
-      const { error: uploadError } = await client.storage.from('seasonal-memory')
-        .upload(path, file, { contentType: file.type, upsert: false });
-      if (uploadError) throw uploadError;
+      if (attempt === previous) {
+        const existing = await loadSeasonalMemories(client, projectId);
+        if (existing.media.some(item => item.id === attempt.mediaId)) {
+          mediaAttemptRef.current = null;
+          await refresh().catch(() => setError('保存した写真・音声を表示できません。再読み込みしてください。'));
+          if (mediaKind === 'photo') setSaveState('saved');
+          return path;
+        }
+      }
+      if (!attempt.uploaded) {
+        const { error: uploadError } = await client.storage.from('seasonal-memory')
+          .upload(path, file, { contentType: file.type, upsert: false });
+        // A lost upload response can leave the immutable object already present.
+        if (uploadError && !(attempt === previous && String(uploadError.statusCode || uploadError.status) === '409')) throw uploadError;
+        attempt.uploaded = true;
+      }
       await invokeSeasonal(client, 'register_seasonal_memory_media', {
-        input_record_id: recordId, input_media_id: mediaId, input_kind: mediaKind,
+        input_record_id: recordId, input_media_id: attempt.mediaId, input_kind: mediaKind,
         input_path: path, input_mime_type: file.type, input_byte_size: file.size,
         input_duration_seconds: duration,
       });
-      await refresh();
+      mediaAttemptRef.current = null;
+      await refresh().catch(() => setError('保存した写真・音声を表示できません。再読み込みしてください。'));
       if (mediaKind === 'photo') setSaveState('saved');
       return path;
     } catch (cause) {
