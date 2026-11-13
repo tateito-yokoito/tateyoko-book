@@ -106,6 +106,12 @@ export default function SeasonalMemoryFlow({
   const [mediaUrls, setMediaUrls] = useState({});
   const [voiceEditing, setVoiceEditing] = useState(false);
   const [audioToProcess, setAudioToProcess] = useState(null);
+  useEffect(() => {
+    if (!audioToProcess?.file) return;
+    const warn = event => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [audioToProcess?.file]);
   const [polishProposal, setPolishProposal] = useState('');
   const recordRef = useRef(null), desiredRef = useRef(null), pendingRef = useRef(null);
   const mediaAttemptRef = useRef(null);
@@ -243,7 +249,11 @@ export default function SeasonalMemoryFlow({
     if (fresh) { setCurrentRecord(fresh); setError(''); }
   };
   const leave = async target => {
+    if (audioToProcess?.file) {
+      if (!window.confirm('音声はまだ保存できていません。画面を離れると録音が失われます。戻りますか？')) return;
+    }
     if (editVersion.current > savedVersion.current && await flush() !== true) return;
+    if (audioToProcess?.file) setAudioToProcess(null);
     setPage(target);
   };
   const start = async (nextKind, question = null) => {
@@ -333,6 +343,7 @@ export default function SeasonalMemoryFlow({
     setPage('processing'); setSaveState('saving'); setError('');
     const mime = blob.type?.split(';')[0] || 'audio/mp4';
     const file = new File([blob], 'memory.' + (mime === 'audio/webm' ? 'webm' : 'mp4'), { type: mime });
+    setAudioToProcess({file, transcript: transcript || '', duration});
     try {
       const path = await addMedia(file, 'audio', Math.max(1, Math.ceil(duration)));
       setAudioToProcess({path, transcript: transcript || ''});

@@ -32,7 +32,9 @@ const root=process.cwd(),outDir=path.join(root,'output/production-stage');
 const filesUnder=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?filesUnder(path.join(dir,e.name)):[path.join(dir,e.name)]);
 const sources=filesUnder(path.join(root,'src')).filter(p=>/\.(jsx?|css)$/.test(p));
 const text=sources.map(p=>fs.readFileSync(p,'utf8')).join('\n')+fs.readFileSync('index.html','utf8');
-await build({envDir:false,build:{outDir,emptyOutDir:true,sourcemap:false},publicDir:false});
+await build({envDir:false,build:{outDir,emptyOutDir:true,sourcemap:false},publicDir:false,plugins:[{
+ name:'release-public-module',resolveId(id){if(id==='/assets/product-comparison-media.js')return path.join(root,'public/assets/product-comparison-media.js');}
+}]});
 const {verifyAnswerExperienceRelease}=await import('../tests/answer-experience-release.mjs');
 verifyAnswerExperienceRelease(root,outDir);
 const assets=new Set([...text.matchAll(/["'`]\/(?:site\/)?[A-Za-z0-9_.\/-]+\.(?:png|jpe?g|svg|webp|wav|mp3|mp4)["'`]/g)].map(m=>m[0].slice(2,-1)));
@@ -75,7 +77,11 @@ fs.writeFileSync(path.join(outDir,'vercel.json'),JSON.stringify(config,null,2));
 const files=filesUnder(outDir);
 assert.ok(files.every(p=>!/(?:private|\.env|\.map$)/i.test(path.relative(outDir,p))));
 const code=files.filter(p=>/\.(js|html|json)$/.test(p)).map(p=>fs.readFileSync(p,'utf8')).join('\n');
-assert.ok(!code.includes('zpswxefgfabzvxdbtyvq'),'TEST ref included');
+// The client retains a TEST-only URL comparison to block test invitations.
+// The release configuration and embedded client key must still point to production.
+assert.equal(process.env.VITE_SUPABASE_URL,`https://${ref}.supabase.co`);
+assert.ok(!fs.readFileSync(path.join(outDir,'vercel.json'),'utf8').includes('zpswxefgfabzvxdbtyvq'),'TEST endpoint configured');
+assert.ok(code.includes(ref),'Production endpoint missing');
 assert.ok(!/(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{10,}|whsec_[A-Za-z0-9]{10,}|sb_secret_[A-Za-z0-9]/.test(code));
 for(const jwt of code.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)||[]){
  const claims=JSON.parse(Buffer.from(jwt.split('.')[1],'base64url').toString());assert.equal(claims.role,'anon');assert.equal(claims.ref,ref);
@@ -83,8 +89,8 @@ for(const jwt of code.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
 assert.ok(files.some(p=>/AdminReview.*\.js$/.test(p)),'Admin missing');
 fs.mkdirSync(path.join(outDir,'.vercel'),{recursive:true});
 fs.writeFileSync(path.join(outDir,'.vercel/project.json'),JSON.stringify({projectId:'prj_WZM2OzVMdtm4x6VbwWLeISqMzjM4',orgId:'team_027fdPcnI7A33ybpJtw7Db4D',projectName:'tateyoko-book'}));
-const report={ref,at:new Date().toISOString(),adminBundle:true,sourceMaps:false,testRef:false,bookProductionEnabled:enableBookProduction,deployed:false,
+const report={ref,at:new Date().toISOString(),adminBundle:true,sourceMaps:false,testEndpointConfigured:false,bookProductionEnabled:enableBookProduction,deployed:false,
  files:files.map(p=>({file:path.relative(outDir,p),sha256:crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')}))};
 fs.mkdirSync('output/production-cutover-20260916',{recursive:true});
 fs.writeFileSync('output/production-cutover-20260916/build-manifest.json',JSON.stringify(report,null,2));
-console.log(JSON.stringify({ref,files:files.length,adminBundle:true,testRef:false}));
+console.log(JSON.stringify({ref,files:files.length,adminBundle:true,testEndpointConfigured:false}));

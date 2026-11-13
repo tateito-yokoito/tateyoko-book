@@ -25,15 +25,19 @@ template.innerHTML = `
 class ProductComparisonMedia extends HTMLElement {
   connectedCallback() {
     if (this.shadowRoot) {
-      this.observer?.observe(this);
+      this.observer?.observe(this.shadowRoot.querySelector('.comparison-stage'));
       document.addEventListener('fullscreenchange', this.onFullscreenChange);
       this.shadowRoot.addEventListener('fullscreenchange', this.onFullscreenChange);
       document.addEventListener('visibilitychange', this.onVisibilityChange);
+      this.parentViewport?.addEventListener('scroll', this.onParentViewportChange, { passive: true });
+      this.parentViewport?.addEventListener('resize', this.onParentViewportChange);
+      this.onParentViewportChange?.();
       return;
     }
     const root = this.attachShadow({ mode: 'open' });
     root.append(template.content.cloneNode(true));
     const frame = root.querySelector('.comparison-media');
+    const stage = root.querySelector('.comparison-stage');
     const video = root.querySelector('video');
     const toggle = root.querySelector('.comparison-toggle');
     const sound = root.querySelector('.comparison-sound');
@@ -47,7 +51,6 @@ class ProductComparisonMedia extends HTMLElement {
     sound.hidden = false;
     expand.hidden = !((document.fullscreenEnabled && frame.requestFullscreen) || video.webkitEnterFullscreen);
     timeline.hidden = false;
-    let inView = false;
     let userPaused = false;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const saveData = Boolean(navigator.connection?.saveData);
@@ -90,6 +93,35 @@ class ProductComparisonMedia extends HTMLElement {
       if (resetSound) setSound(true);
       updateButton();
     };
+    // The HP places this element in a tall same-origin iframe. Its own viewport
+    // can contain the video while the actual HP viewport is still far away.
+    const visibleFraction = () => {
+      const rect = stage.getBoundingClientRect();
+      let top = rect.top;
+      let left = rect.left;
+      let bottom = rect.bottom;
+      let right = rect.right;
+      let view = window;
+      while (view) {
+        top = Math.max(top, 0);
+        left = Math.max(left, 0);
+        bottom = Math.min(bottom, view.innerHeight);
+        right = Math.min(right, view.innerWidth);
+        const hostFrame = view.frameElement;
+        if (!hostFrame) break;
+        const hostRect = hostFrame.getBoundingClientRect();
+        top += hostRect.top;
+        bottom += hostRect.top;
+        left += hostRect.left;
+        right += hostRect.left;
+        view = hostFrame.ownerDocument.defaultView;
+      }
+      return Math.max(0, bottom - top) * Math.max(0, right - left) / (rect.width * rect.height || 1);
+    };
+    const syncPlayback = () => {
+      if (visibleFraction() < .5 || document.hidden) { stop(true); return; }
+      if (!userPaused && !reducedMotion && !saveData) start();
+    };
     video.addEventListener('play', () => { frame.classList.add('is-playing'); updateButton(); });
     video.addEventListener('pause', updateButton);
     video.addEventListener('error', () => {
@@ -120,24 +152,23 @@ class ProductComparisonMedia extends HTMLElement {
       updateExpand();
     });
     this.onFullscreenChange = updateExpand;
-    this.onVisibilityChange = () => {
-      if (document.hidden) stop(true);
-      else if (inView && !userPaused && !reducedMotion && !saveData) start();
-    };
+    this.onVisibilityChange = syncPlayback;
     document.addEventListener('fullscreenchange', this.onFullscreenChange);
     root.addEventListener('fullscreenchange', this.onFullscreenChange);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     video.addEventListener('webkitendfullscreen', () => { video.controls = false; updateExpand(); });
-    this.observer = new IntersectionObserver(entries => {
-      inView = entries[0].isIntersecting && entries[0].intersectionRatio >= .5;
-      if (!inView) { stop(true); return; }
-      if (!userPaused && !reducedMotion && !saveData && !document.hidden) start();
-    }, { threshold: [0, .5, 1] });
-    this.observer.observe(this);
+    this.observer = new IntersectionObserver(syncPlayback, { threshold: [0, .5, 1] });
+    this.observer.observe(stage);
+    const hostFrame = window.frameElement;
+    this.parentViewport = hostFrame?.ownerDocument.defaultView;
+    this.onParentViewportChange = syncPlayback;
+    this.parentViewport?.addEventListener('scroll', this.onParentViewportChange, { passive: true });
+    this.parentViewport?.addEventListener('resize', this.onParentViewportChange);
     setSound(true);
     updateButton();
     updateExpand();
     updatePosition();
+    syncPlayback();
   }
 
   disconnectedCallback() {
@@ -145,6 +176,8 @@ class ProductComparisonMedia extends HTMLElement {
     document.removeEventListener('fullscreenchange', this.onFullscreenChange);
     this.shadowRoot?.removeEventListener('fullscreenchange', this.onFullscreenChange);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    this.parentViewport?.removeEventListener('scroll', this.onParentViewportChange);
+    this.parentViewport?.removeEventListener('resize', this.onParentViewportChange);
     this.shadowRoot?.querySelector('video')?.pause();
   }
 }

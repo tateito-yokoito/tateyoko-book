@@ -27,7 +27,7 @@ const root=process.cwd(),outDir=path.join(root,'output/family-test-stage');
 const filesUnder=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?filesUnder(path.join(dir,e.name)):[path.join(dir,e.name)]);
 const sourceText=filesUnder(path.join(root,'src')).filter(p=>/\.(jsx?|css)$/.test(p)).map(p=>fs.readFileSync(p,'utf8')).join('\n')+fs.readFileSync('index.html','utf8');
 await build({envDir:false,build:{outDir,emptyOutDir:true,sourcemap:false},publicDir:false,plugins:[{
- name:'public-test-noindex',transformIndexHtml(html){return html
+ name:'public-test-noindex',resolveId(id){if(id==='/assets/product-comparison-media.js')return path.join(root,'public/assets/product-comparison-media.js');},transformIndexHtml(html){return html
   .replace('<head>','<head>\n<meta name="robots" content="noindex,nofollow,noarchive" />\n<meta name="application-environment" content="test" />')
   .replace('</head>','<link rel="manifest" href="/pwa/manifest.webmanifest"/><link rel="apple-touch-icon" href="/pwa/icon-180.png"/><meta name="apple-mobile-web-app-capable" content="yes"/><meta name="apple-mobile-web-app-title" content="縦糸横糸"/><meta name="theme-color" content="#101c2c"/></head>')
   .replace('<title>','<title>TEST｜')
