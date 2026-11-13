@@ -263,23 +263,28 @@ export default function SeasonalMemoryFlow({
     if (editVersion.current > savedVersion.current && await flush() !== true) {
       throw new Error('文章の保存が完了していません。再試行してください。');
     }
+    setSaveState('saving'); setError(''); setBusy(true);
     const recordId = recordRef.current.id, mediaId = crypto.randomUUID();
     const path = `${recordId}/${mediaId}.${mimeExt(file)}`;
-    const { error: uploadError } = await client.storage.from('seasonal-memory')
-      .upload(path, file, { contentType: file.type, upsert: false });
-    if (uploadError) throw uploadError;
     try {
+      const { error: uploadError } = await client.storage.from('seasonal-memory')
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (uploadError) throw uploadError;
       await invokeSeasonal(client, 'register_seasonal_memory_media', {
         input_record_id: recordId, input_media_id: mediaId, input_kind: mediaKind,
         input_path: path, input_mime_type: file.type, input_byte_size: file.size,
         input_duration_seconds: duration,
       });
+      await refresh();
+      if (mediaKind === 'photo') setSaveState('saved');
+      return path;
     } catch (cause) {
       // Unregistered objects remain inaccessible; the server logs failed cleanup.
+      setSaveState('failed'); setError('写真・音声を保存できていません。接続を確認して再試行してください。');
       throw cause;
+    } finally {
+      setBusy(false);
     }
-    await refresh();
-    return path;
   };
   const processAudio = async (path, transcript = '') => {
     setPage('processing'); setSaveState('saving'); setError('');
@@ -446,7 +451,7 @@ export default function SeasonalMemoryFlow({
         <p className="sm-save-state" role="status">{saveState==='saving'?'保存中…':saveState==='saved'?'保存しました':saveState==='failed'?'保存できていません':''}</p>
         {saveState==='failed' && (conflictRef.current
           ? <button className="sm-retry" type="button" onClick={discardConflict}>端末の下書きを破棄して最新の記録を開く</button>
-          : <button className="sm-retry" type="button" onClick={flush}>保存を再試行する</button>)}
+          : editVersion.current > savedVersion.current && <button className="sm-retry" type="button" onClick={flush}>保存を再試行する</button>)}
         <button className="sm-primary sm-finish" disabled={busy || saveState==='saving' || saveState==='failed' || !hasSeasonalContent(activeRecord,activeMedia) && !form.body.trim()}
           onClick={finish}>この記録を終える</button>
       </>}
@@ -457,7 +462,7 @@ export default function SeasonalMemoryFlow({
         <p className="sm-save-state" role="status">{saveState==='saving'?'保存中…':saveState==='saved'?'保存しました':saveState==='failed'?'保存できていません':''}</p>
         {saveState==='failed' && (conflictRef.current
           ? <button className="sm-retry" type="button" onClick={discardConflict}>端末の下書きを破棄して最新の記録を開く</button>
-          : <button className="sm-retry" type="button" onClick={flush}>保存を再試行する</button>)}
+          : editVersion.current > savedVersion.current && <button className="sm-retry" type="button" onClick={flush}>保存を再試行する</button>)}
         <button className="sm-primary" onClick={() => leave('answer')}>回答を確認する</button></>}
       {page === 'photos' && activeRecord && <><h1>写真を添える</h1>
         <div className="sm-thumbs">{activeMedia.filter(m=>m.kind==='photo').map(m=><button
@@ -513,6 +518,6 @@ export default function SeasonalMemoryFlow({
       <button onClick={onClose}>ホーム</button><button onClick={()=>setPage('fragments')}>記憶のかけら</button><button onClick={onShelf}>本棚</button>
     </nav>}
     {photoOpen && renderPhotoCorrection({ open: photoOpen, onClose: () => setPhotoOpen(false),
-      onComplete: async file => { await addMedia(file,'photo'); setSaveState('saved'); } })}
+      onComplete: async file => { await addMedia(file,'photo'); } })}
   </div>;
 }
