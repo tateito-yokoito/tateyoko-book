@@ -7813,6 +7813,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
       {scene === "purchase_start" && (
         COMMERCE_V2_ENABLED ? (
           purchaseSelection ? <CommerceV2Purchase client={supabaseClient} projectId={foundation?.project?.id}
+            projectAccessStatus={foundation?.project?.access_status}
             phase="review" initialSelection={purchaseSelection}
             onCompleted={finishGiftCheckoutAsPaid}
             initialOrderType={purchaseSelection?.purchaseFor || purchaseFor}
@@ -7826,6 +7827,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
                 ? "trial_expired"
                 : hasCompletedFreeTrial(questionsDB) ? "trial_complete" : 0);
             }} /> : <PurchaseSelectionEntry client={supabaseClient} projectId={foundation?.project?.id}
+              projectAccessStatus={foundation?.project?.access_status}
               initialOrderType={purchaseFor}
               familyInvitation={commerceV2Invitation || receivedFamilyInvitation}
               onTryFree={() => {

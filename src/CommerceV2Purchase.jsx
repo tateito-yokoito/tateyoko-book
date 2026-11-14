@@ -13,8 +13,19 @@ function newRequestKey() {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+async function checkoutErrorMessage(invokeError, data, fallback) {
+  if (data?.error) return data.error;
+  const response = invokeError?.context;
+  if (typeof response?.json === 'function') {
+    const details = await (typeof response.clone === 'function' ? response.clone() : response)
+      .json().catch(() => null);
+    if (details?.error) return details.error;
+  }
+  return fallback;
+}
+
 export default function CommerceV2Purchase({ client, projectId, initialOrderType = 'self', familyInvitation = null, onTryFree,
-  phase, initialSelection = null, onProceed, onCompleted }) {
+  phase, initialSelection = null, onProceed, onCompleted, projectAccessStatus = null }) {
   const isSelection = phase === 'selection';
   const isReview = phase === 'review';
   const [edition, setEdition] = useState(initialSelection?.edition || 'standard');
@@ -36,6 +47,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   const requestKey = useRef(newRequestKey());
   const linkedConsultationId = new URLSearchParams(window.location.search).get('consultation');
   const orderType = approvedConsultation?.orderType || purchaseFor;
+  const alreadyPurchased = orderType === 'self' && ['paid', 'gifted', 'legacy'].includes(projectAccessStatus);
   const selection = { edition, productionMethod: method, standardExtraCount, premiumExtraCount, discountCode,
     purchaseFor: orderType, giftMode, recipientName: gift.recipient_name };
 
@@ -115,7 +127,8 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   useEffect(() => {
     let active = true;
     setQuote(null);
-    setError('');
+    setError(alreadyPurchased ? 'この物語は購入済みです。ホームから制作を続けてください。' : '');
+    if (alreadyPurchased) return () => { active = false; };
     const load = () => client.functions.invoke('create-commerce-v2-checkout', { body: {
       // The public estimate has no purchaser or gift context; the authenticated
       // quote below rechecks the actual order type before Checkout.
@@ -123,17 +136,18 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
       projectId, edition, productionMethod: method,
       standardExtraCount, premiumExtraCount, discountCode,
       consultationId: approvedConsultation?.id || null,
-    } }).then(({ data, error: invokeError }) => {
+    } }).then(async ({ data, error: invokeError }) => {
       if (!active) return;
       if (invokeError || !data?.success) {
         setQuote(null);
-        setError(data?.error || '金額を確認できませんでした');
+        const message = await checkoutErrorMessage(invokeError, data, '金額を確認できませんでした');
+        if (active) setError(message);
       } else setQuote(data.quote);
     });
     const timer = isSelection ? window.setTimeout(load, 300) : null;
     if (!isSelection) void load();
     return () => { active = false; if (timer) window.clearTimeout(timer); };
-  }, [client, orderType, projectId, edition, method, standardExtraCount, premiumExtraCount, discountCode, approvedConsultation?.id, isSelection]);
+  }, [client, orderType, projectId, edition, method, standardExtraCount, premiumExtraCount, discountCode, approvedConsultation?.id, isSelection, alreadyPurchased]);
 
   const checkout = async () => {
     if (!quote || busy) return;
@@ -151,7 +165,8 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         discountCode, gift, consultationId: approvedConsultation?.id || null,
         familyInvitationId: approvedConsultation?.familyInvitationId || familyInvitation?.id || null,
       } });
-      if (invokeError || !data?.success) throw new Error(data?.error || '購入手続きを開始できませんでした');
+      if (invokeError || !data?.success)
+        throw new Error(await checkoutErrorMessage(invokeError, data, '購入手続きを開始できませんでした'));
       if (data.retryRequired) {
         requestKey.current = newRequestKey();
         setError(data.message || '決済期限が切れました。もう一度お試しください');

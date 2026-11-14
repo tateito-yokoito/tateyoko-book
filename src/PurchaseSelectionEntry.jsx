@@ -4,9 +4,10 @@ import { saveCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
 import { createPurchaseHandoff } from './lib/commercePurchaseHandoff.js';
 
 // Every new purchase enters the same selection and authenticated review flow.
-export default function PurchaseSelectionEntry({ client, projectId, initialOrderType = 'self',
+export default function PurchaseSelectionEntry({ client, projectId, projectAccessStatus = null, initialOrderType = 'self',
   initialSelection = null, familyInvitation = null, onTryFree }) {
   return <CommerceV2Purchase phase="selection" client={client} projectId={projectId}
+    projectAccessStatus={projectAccessStatus}
     initialOrderType={initialOrderType} initialSelection={initialSelection}
     familyInvitation={familyInvitation} onTryFree={onTryFree}
     onProceed={async selection => {
