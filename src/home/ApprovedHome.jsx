@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import JourneyGuideGate from '../JourneyGuideGate.jsx';
-import { ArrowRight, ChevronRight, Image, List, Files, BookOpen, Library, Users, Gift, UserRound, Mail, Settings, Video } from 'lucide-react';
+import { ArrowRight, ChevronRight, Image, List, Files, BookOpen, Library, Users, UserRound, Mail, Settings, Video } from 'lucide-react';
 import { useDailySky } from './useDailySky.js';
 import { countAnsweredStories, countAnsweredStoryThemes } from '../lib/storyPages.js';
 import './approved-home.css';
@@ -32,7 +32,7 @@ export default function ApprovedHome({guideClient, ...props}) {
 // Presentation only: all Person-scoped reads, guards and navigation stay with the caller.
 function ApprovedHomeContent({ themeProgress, questionSet = [], currentIndex = 0, supportedProjects = [], receivedProjects = [], invitationCards, skyOverride,
   onStartTalking, onStartPhotoStory, onStartVideoStory, onOpenQuestionLibrary, onOpenStoryPages, canOpenThemeMemories, onOpenThemeMemories, storyRequestSummary, onOpenBookBuilder, onOpenSettings,
-  onOpenSupportedProject, onOpenReceivedProject, onAddFamilyStory, onShareWithFriend, onDevLogout, onOpenShelf, ownStoryEntry,
+  onOpenSupportedProject, onOpenReceivedProject, onShareWithFriend, onDevLogout, onOpenShelf, ownStoryEntry,
   onOpenLineDelivery, supportedActions = null, settingsActions = [], bookPhase = 'editing',
   bookProjectId, supabaseClient, onOpenSeasonal }) {
   const liveSky = useDailySky('home', Boolean(skyOverride)), sky = skyOverride || liveSky, [failedSrc, setFailedSrc] = useState(null);
@@ -79,7 +79,7 @@ function ApprovedHomeContent({ themeProgress, questionSet = [], currentIndex = 0
       {invitationCards}
       {onOpenLineDelivery && <Group title="問いの受け取り"><Row icon={Mail} onClick={onOpenLineDelivery}>LINEでも問いを受け取る</Row></Group>}
       {ownStoryEntry?.onAddSupportedStory && <Group title="物語を追加する"><Row icon={Users} onClick={ownStoryEntry.onAddSupportedStory}>誰かの物語を始める</Row></Group>}
-      {!ownStoryEntry && !supportedActions && <Group title="物語を追加する"><Row icon={Gift} onClick={onAddFamilyStory} disabled={!onAddFamilyStory}>家族に贈る</Row><Row icon={UserRound} disabled>自分の物語を追加する</Row><Row icon={Mail} onClick={onShareWithFriend}>友人に紹介する</Row></Group>}
+      {!ownStoryEntry && !supportedActions && <Group title="物語を追加する"><Row icon={UserRound} disabled>自分の物語を追加する</Row><Row icon={Mail} onClick={onShareWithFriend}>友人に紹介する</Row></Group>}
       {(onOpenSettings || settingsActions.length > 0) && <footer className="ah-footer">
         {settingsActions.length > 0 ? <details className="ah-settings"><summary><Settings size={30} strokeWidth={1.4} aria-hidden="true" /><span>設定</span></summary><div className="ah-rows">{settingsActions.map(action => <Row key={action.label} icon={action.icon} onClick={action.onClick}>{action.label}</Row>)}</div></details>
           : <button type="button" onClick={onOpenSettings}><Settings size={30} strokeWidth={1.4} aria-hidden="true" /><span>設定</span></button>}

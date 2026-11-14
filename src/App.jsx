@@ -8769,7 +8769,6 @@ if (getProjectRoleInviteTokenFromUrl()) {
          } : null}
          onOpenSupportedProject={openSupportedProject}
          onOpenReceivedProject={openReceivedProject}
-         onAddFamilyStory={() => setScene("family_story_invite_flow")}
          onContinueFamilyTrial={async invitation => {
            if (!invitation?.invitation_id) return;
            try {
@@ -14843,7 +14842,6 @@ function LegacyScene_Home({
   onOpenSettings,
   onOpenSupportedProject,
   onOpenReceivedProject,
-  onAddFamilyStory,
   onContinueFamilyTrial,
   onDeclineFamilyTrial,
   onShareWithFriend,
@@ -15024,13 +15022,6 @@ function LegacyScene_Home({
             <p className="text-white/45 text-xs tracking-[0.18em] px-1 mb-4">
               物語を追加する
             </p>
-
-            <HomeMenuButton
-              icon={Users}
-              label="家族に贈る"
-              detail="無料体験への招待や、ギフトの形で贈れます。"
-              onClick={onAddFamilyStory}
-            />
 
             <button
               type="button"
