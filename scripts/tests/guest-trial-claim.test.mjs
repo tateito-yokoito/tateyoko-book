@@ -31,8 +31,8 @@ test('the guest is bound before checkout and claimed only after purchase', async
   const result = await claimGuestTrialForProject(client, projectId, storage);
   assert.equal(result.count, 3);
   assert.deepEqual(calls, [
-    { name: 'claim-guest-trial', input: { body: { action: 'bind', sessionToken: token, projectId } } },
-    { name: 'claim-guest-trial', input: { body: { sessionToken: token, projectId } } },
+    { name: 'claim-guest-trial', input: { body: { action: 'bind', sessionToken: token, handoffToken: null, projectId } } },
+    { name: 'claim-guest-trial', input: { body: { sessionToken: token, handoffToken: null, projectId } } },
   ]);
   assert.equal(pendingGuestTrialProject(storage), null);
 });

@@ -8,7 +8,7 @@ export default function BookendInvitation({ kind, onVideo, onVoice, onSkip, busy
   if (!prompt) return null;
 
   return (
-    <StorySkySurface className="question-flow-content bookend-question-flow h-full flex flex-col overflow-y-auto pb-4 fade-enter">
+    <StorySkySurface background="navy" surfaceClassName="answer-light-recorder" className="question-flow-content bookend-question-flow answer-light-page h-full flex flex-col overflow-y-auto pb-4 fade-enter">
       <header className="question-flow-header mb-5 pt-2 text-left">
         <h1 className="sr-only">{prompt.label}の語り</h1>
         <p className="text-white/60 text-[1rem] tracking-widest">{prompt.label} · 任意</p>

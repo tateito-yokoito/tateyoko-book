@@ -37,6 +37,7 @@ import { BookAnswerPhotoDraft } from './lib/bookAnswerPhotoDraft.js';
 import { draftStorageKey } from './lib/answerTextDraft.js';
 import QuestionFlowTopBar from "./QuestionFlowTopBar.jsx";
 import { nextThemeQuestion } from "./lib/nextThemeQuestion.js";
+import { getFirstMainStoryIndex } from "./lib/firstMainStoryQuestion.js";
 import { deleteAnswerRecordingDraft, listAnswerRecordingDrafts, saveAnswerRecordingDraft } from './lib/answerRecordingDraft.js';
 import BookendInvitation from "./BookendInvitation.jsx";
 import { BOOKEND_PROMPTS, bookendKindForQuestion, bookendKindForVideo } from "./lib/bookends.js";
@@ -1213,19 +1214,6 @@ function isFirstStoryQuestion(question) {
     question?.onboarding_group === "first_story" ||
     question?.flow_phase === "first_story" ||
     question?.completes_onboarding === true
-  );
-}
-
-function getFirstMainStoryIndex(questionSet) {
-  const explicitIndex = (questionSet || []).findIndex(question =>
-    question?.question_role === "first_weekly_question" ||
-    question?.question_role === "first_story"
-  );
-
-  if (explicitIndex >= 0) return explicitIndex;
-
-  return (questionSet || []).findIndex(
-    question => question?.include_in_story_list !== false
   );
 }
 
@@ -3289,8 +3277,7 @@ function App() {
   const bookProjectId = foundation?.project?.id;
   const bookPhotoEnabled = Boolean(user?.id && bookProjectId && bookQuestionId
     && hasFullProjectAccess(foundation?.project)
-    && canWriteStoryQuestion(questionsDB[progress.currentIndex])
-    && questionsDB[progress.currentIndex]?.onboarding_group !== 'trial_experience');
+    && canWriteStoryQuestion(questionsDB[progress.currentIndex]));
   useEffect(() => {
     bookPhotoDraftRef.current = null;
     setBookAnswerPhotos([]);
@@ -9571,6 +9558,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
           progress={progress}
           storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
           question={currentQ}
+          lightMode={hasFullProjectAccess(foundation?.project)}
           userName={user?.name || "あなた"}
           onBack={() => bookPhotoEnabled && progress.currentIndex > 0
             ? void stepBookQuestion(-1)
@@ -9605,6 +9593,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
           userId={user.id}
           projectId={foundation.project.id}
           question={writingQuestion}
+          lightMode={hasFullProjectAccess(foundation?.project)}
           answer={bookSavedAnswerReview?.questionId === writingQuestion.user_question_id
             ? bookSavedAnswerReview.answer : null}
           themeLabel={recordingSectionLabel(writingQuestion)}
@@ -9624,6 +9613,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
       {scene === 3 && (
 <Scene_Recording
   question={currentQ}
+  lightMode={hasFullProjectAccess(foundation?.project)}
   progress={progress}
   storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
   userName={user?.name || "あなた"}
@@ -9645,7 +9635,7 @@ onComplete={handleRecordComplete}
   canCommitMedia={!bookPhotoEnabled || (bookPhotoSaveState !== 'failed' && bookPhotoSaveState !== 'saving')}
   photoSaveState={bookPhotoSaveState}
   onPhotoRetry={retryBookAnswerPhoto}
-  light={currentQ?.onboarding_group !== 'trial_experience'}
+  light={hasFullProjectAccess(foundation?.project) || currentQ?.onboarding_group !== 'trial_experience'}
   isLifeOutline={currentQ?.onboarding_group === "life_outline"}
   isLastLifeOutline={
     currentQ?.onboarding_group === "life_outline" &&
@@ -18961,6 +18951,7 @@ export function Scene1_MyPage({
   progress,
   storyProgress = progress,
   question,
+  lightMode = false,
   userName,
   skyOverride,
   onBack,
@@ -18980,7 +18971,7 @@ export function Scene1_MyPage({
 }) {
   const isFormalOnboarding = isFormalOnboardingQuestion(question);
   const isOnboardingQuestion = isFormalOnboarding;
-  const brightAnswer = question?.onboarding_group !== 'trial_experience';
+  const brightAnswer = lightMode || question?.onboarding_group !== 'trial_experience';
 
   const sectionLabel = recordingSectionLabel(question);
 
@@ -19228,6 +19219,7 @@ export function Scene_DailyMicCheck({ onComplete }) {
 
 export function Scene_Recording({
   question,
+  lightMode = false,
   progress,
   storyProgress = progress,
   userName,
@@ -19895,7 +19887,7 @@ const stop = (reason = "manual") => {
 
 return (
 <StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4"
-  surfaceClassName={seasonalMode || question?.onboarding_group !== 'trial_experience' ? 'answer-light-recorder' : ''}
+  surfaceClassName={seasonalMode || lightMode || question?.onboarding_group !== 'trial_experience' ? 'answer-light-recorder' : ''}
   background={QUESTION_BACKGROUND}>
   <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} progressOverride={seasonalMode ? '1 / 1' : null} onBack={step === 0 || step === "checking_mic" || step === "mic_error" ? onBack : null} />
 
@@ -19923,7 +19915,7 @@ return (
         <MicAccessGuide onRetry={start} onContinue={onBack} continueLabel="問いに戻る" />
       )}
 
-      {step === "countdown" && question?.onboarding_group === 'trial_experience' && !seasonalMode && (
+      {step === "countdown" && question?.onboarding_group === 'trial_experience' && !seasonalMode && !lightMode && (
         <div className="recording-countdown-slot text-center">
           <p className="text-white/82 text-[4.2rem] leading-none font-light">
             {countdown}
@@ -19931,7 +19923,7 @@ return (
          </div>
       )}
 
-      {step === "countdown" && (seasonalMode || question?.onboarding_group !== 'trial_experience') && <div className="recording-control-dock sm-recording-countdown-dock mt-4">
+      {step === "countdown" && (seasonalMode || lightMode || question?.onboarding_group !== 'trial_experience') && <div className="recording-control-dock sm-recording-countdown-dock mt-4">
         <div className="sm-recording-countdown-number" aria-live="polite">{countdown}</div>
         <div className="recording-status-row"><span className="recording-state-label">録音の準備中</span></div>
         <div className="recording-action-row">
@@ -22292,7 +22284,7 @@ useEffect(() => {
   const visibleThemeMemories = selectedChapterIsChildhood ? approvedThemeMemories : [];
 
 return (
-  <div data-story-pages-scroll className="h-full min-h-0 flex flex-col [&>*]:shrink-0 fade-enter px-4 pt-0 pb-4 overflow-y-auto">
+  <div data-story-pages-scroll className={`h-full min-h-0 flex flex-col [&>*]:shrink-0 fade-enter px-4 pt-0 pb-4 overflow-y-auto ${adminPreview ? '' : 'answer-light-page'}`}>
     <VideoStoryFlow
       open={videoFlowOpen}
       user={user}
@@ -22579,6 +22571,10 @@ return (
             const media = mediaByAnswerId[answer.id] || [];
             const photos = media.filter(m => m.asset_type === "photo" && m.url);
             const audios = media.filter(m => m.asset_type === "audio" && (m.url || (renderAudio && m.storage_path)));
+            const photoOnly = photos.length > 0 && ![
+              answer.transcript_edited, answer.transcript_readable, answer.transcript_clean,
+              answer.transcript_essay, answer.transcript_raw, answer.snippet,
+            ].some(text => String(text || '').trim());
 
             return (
               <article key={answer.id} data-story-answer-id={answer.id} className="glass-card p-5 text-left">
@@ -22615,15 +22611,6 @@ return (
             {layout.placement === "excluded"
               ? "配置を選んでください"
               : `本では：${{ opener: "質問の下", after_full: "本文のあと・大きく", after_half: "本文のあと・小さく" }[layout.placement]}`}
-          </div>
-
-          <button type="button" onClick={() => { setEditingLayoutPhoto(photo); setPhotoActionAnswerId(answer.id); }}
-            className="absolute right-12 top-2 rounded-full bg-slate-950/85 px-3 py-2 text-xs text-white">配置を変える</button>
-
-          <div className="absolute left-3 top-3 rounded-full bg-slate-950/85 px-3 py-1 text-xs text-white">
-            {photoBookLayout(photo, photoIndex).placement === "excluded"
-              ? "配置を選んでください"
-              : `本では：${{ opener: "質問の下", after_full: "本文のあと・大きく", after_half: "本文のあと・小さく" }[photoBookLayout(photo, photoIndex).placement]}`}
           </div>
 
           <button type="button" onClick={() => { setEditingLayoutPhoto(photo); setPhotoActionAnswerId(answer.id); }}
@@ -22666,7 +22653,7 @@ return (
 
 </div>
 
-                <p className="text-white/75 text-[0.98rem] leading-[2.15] whitespace-pre-wrap text-narrative">{body}</p>
+                {!photoOnly && <p className="text-white/75 text-[0.98rem] leading-[2.15] whitespace-pre-wrap text-narrative">{body}</p>}
 
         <button
           type="button"

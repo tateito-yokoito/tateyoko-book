@@ -11,7 +11,7 @@ const trialStatusLabels = {
 
 export default function WrittenAnswerEditor({ userId, projectId, question,
   answer = null, client, onClose, onSaved, onVoice, onPhoto, photos = [], photoSaveState = 'idle',
-  onPhotoRetry, progressLabel = '', themeLabel = '' }) {
+  onPhotoRetry, progressLabel = '', themeLabel = '', lightMode = false }) {
   const [snapshot, setSnapshot] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -53,7 +53,7 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
   const draft = controller.current;
   const body = snapshot?.state === 'active' ? snapshot.body || '' : '';
   const changed = body !== initialText;
-  const light = question?.onboarding_group !== 'trial_experience';
+  const light = lightMode || question?.onboarding_group !== 'trial_experience';
   const saveState = bookTextSaveState(snapshot);
   const leave = async (destination = onClose) => {
     if (draft?.record.state === 'active' && draft.record.dirty) {

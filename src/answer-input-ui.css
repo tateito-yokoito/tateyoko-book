@@ -33,11 +33,12 @@
 
 /* One light answer surface for the existing recorder in both products. */
 .story-sky-surface.answer-light-recorder>.story-sky-backdrop{display:none}
+.story-sky-surface.question-background-navy.answer-light-recorder{background:#f5f2ea;color:#26352f}
 .story-sky-surface.answer-light-recorder>.story-sky-content.question-flow-content{max-width:480px;background:#f5f2ea;color:#26352f}
 .answer-light-recorder .question-flow-top-bar button,.answer-light-recorder .question-flow-top-bar span{color:#3c584b}
 .story-sky-surface.answer-light-recorder .story-sky-content.question-flow-content>header.question-flow-top-bar p{color:#8d5c48}
 .story-sky-surface.answer-light-recorder .story-sky-content.question-flow-content .reading-question>.recording-question-card p{color:#26352f}
-.answer-light-recorder .reading-question .recording-question-hint,.answer-light-recorder .reading-question .recording-question-hint p:not(.recording-question-hint-label){color:#53665b}
+.story-sky-surface.answer-light-recorder .story-sky-content .reading-question .recording-question-hint,.story-sky-surface.answer-light-recorder .story-sky-content .reading-question .recording-question-hint p:not(.recording-question-hint-label){color:#53665b}
 .answer-light-recorder .recording-state-label,.answer-light-recorder .recording-status-row>span:last-child{color:#345347}
 .answer-light-recorder .recording-start-bar{background:#284c40;color:#fff}
 .answer-light-recorder .recording-action-button{background:#fffdf8;border-color:#a6b7a9;color:#284c40}
@@ -80,6 +81,7 @@
 .answer-light-page .theme-preview [class*="border-white"],.answer-light-page [class*="border-white"]{border-color:#c9cfc5}
 .answer-light-page .theme-preview .theme-choice-card button>span:first-child{color:#53665b}
 .answer-light-page button{min-height:44px}
+.answer-light-page.scene-door button.btn-quiet{background:#284c40;color:#fff;border:1px solid #284c40}
 
 .app-container:has(.answer-voice-review){background:#f5f2ea;color:#26352f}
 .answer-voice-review{min-height:100%;color:#26352f}
@@ -92,3 +94,9 @@
 .answer-voice-review button.btn-quiet,.answer-voice-review button.recording-start-bar{background:#284c40;color:#fff}
 .answer-voice-review [role="status"]{color:#53665b}
 .answer-voice-review [role="alert"]{color:#8a392c}
+
+/* Keep the optional opening voice/video invitation in the same BOOK answer palette. */
+.answer-light-recorder .bookend-question-flow .recording-question-card{background:#fffdf8;border:1px solid #d9d9ce;box-shadow:none}
+.answer-light-recorder .bookend-question-flow .bookend-video-meaning,.answer-light-recorder .bookend-question-flow .bookend-video-limit,.answer-light-recorder .bookend-question-flow .bookend-later-note{color:#53665b}
+.answer-light-recorder .bookend-question-flow .bookend-voice-button{background:#fffdf8;border-color:#c9cfc5;color:#284c40}
+.answer-light-recorder .bookend-question-flow .bookend-skip-button{color:#53665b}
