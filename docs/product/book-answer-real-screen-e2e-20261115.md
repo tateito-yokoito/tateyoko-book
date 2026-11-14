@@ -55,7 +55,7 @@ Storage直接アクセスの追加確認：同じ架空写真・音声の匿名�
 - **失敗：同じTEST作品での正式回答確定。** 再試行後の「この内容で進む」は「保存に失敗しました」と表示された。TEST DBの `commit_answer_recording_with_segments` は既存回答を `user_id + sequence_order` だけで探す。TEST利用者には別作品の同じ番号の回答があり、`answer_conflict` となる。さらに `answers_user_id_sequence_order_key` が全作品を通じて同じ組み合わせを禁止している。関数の条件だけを変更しても直らず、既存データと他の回答経路を踏まえたDB制約の移行設計が必要。今回の録音中離脱修正には含めず、TEST DB・本番DBとも変更していない。再試行でアップロードされた音声は `planned` attempt として残り、正式回答へは確定していない。
 - **追加コード修正**：再試行成功時に前回の `transcriptionFailureStage='upload'` が残ってホーム移動を誤って止めていたため、成功した文字起こし結果を反映する際に失敗フラグを消す。修正後のホーム移動は、上記のTEST回答確定競合により実画面では未確認。
 - **未実施：隔離TESTでの録音中アプリ内離脱と季節の記憶箱の録音回帰。** ローカルの共通部品試験では保存待ち・保存失敗時の移動抑止を確認したが、隔離TESTの認証付き実画面では未確認。
-- **回帰**：`npm run test:answer-ui` 18件成功、`npx vite build` 成功、`git diff --check` 成功。既存の正常系音声処理を再送信して確認した結果ではない。
+- **回帰**：`npm run test:answer-ui` 18件成功、`node --test scripts/tests/seasonal-memory.test.mjs scripts/tests/recording-time.test.mjs` 7件成功、`npx vite build` 成功、`git diff --check` 成功。季節録音の認証付き実画面と、既存の正常系音声処理を再送信して確認した結果ではない。
 
 Safariプライベートブラウズでは前回の実試験でIndexedDBへの録音控え保存が失敗した。MediaRecorderの `start(1000)` による断片受信はあるが、録音中の断片を毎秒IndexedDBへ書く方法は、Safariの保存可否・容量・断片の再生可能性・書き込み負荷を追加検証しなければ安全策とみなせない。今回は採用しない。ブラウザ強制終了、OSによるタブ破棄、警告を承知した再読み込みでは録音中データを復元できない場合がある。録音を終えてサーバー保存した音声は既存の復元経路で扱う。
 
