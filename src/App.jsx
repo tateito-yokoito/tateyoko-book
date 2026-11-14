@@ -11566,9 +11566,6 @@ export function Scene_OnboardingPace({ onNext }) {
         </div>
 
         <div className="glass-card px-5 py-5 text-center space-y-3">
-          <p className="text-white/68 text-[0.94rem] text-narrative">
-            写真を見ながら話してもかまいません
-          </p>
           <p className="text-white/38 text-xs leading-loose">
             昔の写真や卒業アルバムなどがあれば、あとで見返しながら<br className="hidden sm:block" />
             お話しいただくのもおすすめです。なくても、そのまま進められます。
@@ -11579,7 +11576,7 @@ export function Scene_OnboardingPace({ onNext }) {
       <button
         type="button"
         onClick={onNext}
-        className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
+        className="btn-quiet mt-4 bg-white/10 w-full py-4 rounded-full text-white"
       >
         はじめの会話へ
       </button>
