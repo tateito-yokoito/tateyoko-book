@@ -7857,7 +7857,7 @@ setScene(1);
 
   const finishReturningHome = (safeRecorded = false) => {
     const hasUnsavedVoice =
-      [2, 3, 4].includes(scene) &&
+      ([2, 3, 4].includes(scene) || (scene === 3.5 && !voiceData.recordingAttemptId)) &&
       (
         voiceData.hasAudio ||
         voiceData.audioBlob ||
@@ -7883,6 +7883,10 @@ setScene(1);
   const returnToHome = () => {
     if (scene === 3.5 && voiceData.transcriptionStatus === 'processing') {
       alert('音声を保存しています。完了するまでお待ちください。');
+      return;
+    }
+    if (scene === 3.5 && voiceData.audioBlob && voiceData.transcriptionFailureStage === 'upload') {
+      alert('音声はまだ保存できていません。保存を再試行してから移動してください。');
       return;
     }
     if (recordingExitGuardRef.current) {
