@@ -55,6 +55,19 @@ for (const relative of [...fs.readFileSync('index.html','utf8').matchAll(/(?:src
 fs.cpSync(path.join(root,'public/assets'),path.join(outDir,'assets'),{recursive:true,force:false});
 fs.cpSync(path.join(root,'public/pwa'),path.join(outDir,'pwa'),{recursive:true});
 fs.copyFileSync(path.join(root,'public/pwa-sw.js'),path.join(outDir,'pwa-sw.js'));
+// The landing page embeds this existing product information section. Include
+// only its explicit dependencies; publicDir remains disabled for the release.
+for(const relative of ['product-section-nov8-after.html','product-section-nov8-preview.css','product-section-nov8-refined.css','product-section-nov8-pc-balance.css','support-consultation-inline.css']){
+ const source=path.join(root,'public',relative);
+ assert.ok(fs.existsSync(source),`Missing landing product asset ${relative}`);
+ if(relative==='product-section-nov8-after.html'){
+  const html=fs.readFileSync(source,'utf8')
+   .replace('<title>今回案｜商品・価格セクション比較</title>','<title>商品と価格｜縦糸横糸</title>')
+   .replace('<body class="refined">','<body class="refined embedded">')
+   .replace(/<script>\s*if\(new URLSearchParams\(location.search\).has\('embedded'\)\)document.body.classList.add\('embedded'\);\s*<\/script>/,'');
+  fs.writeFileSync(path.join(outDir,relative),html);
+ }else fs.copyFileSync(source,path.join(outDir,relative));
+}
 // JSON imports and prebuilt public scripts can introduce image paths that the
 // source-only collection above cannot see. Resolve every literal media path in
 // the compiled release and fail before deploy when its source is absent.
@@ -71,6 +84,7 @@ for(const compiled of filesUnder(outDir).filter(p=>/\.(?:html|js|css)$/.test(p))
 const config=JSON.parse(fs.readFileSync('scripts/deploy/public-test.vercel.json','utf8').replaceAll('zpswxefgfabzvxdbtyvq',ref));
 for(const route of config.headers||[])for(const header of route.headers||[]){
  if(header.key==='X-Tateyoko-Environment')header.value='production';
+ if(header.key==='Content-Security-Policy')header.value=header.value.replace("frame-ancestors 'none'","frame-ancestors 'self'");
 }
 // Prevent premature indexing until the remaining physical-device/print checks.
 // This does not restrict normal production use or admin authentication.
