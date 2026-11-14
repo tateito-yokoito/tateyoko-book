@@ -113,6 +113,10 @@ begin
       or left(input_body,length(input_carry_body))<>input_carry_body then
       raise exception 'Text draft changed during recording' using errcode='40001'; end if;
   end if;
+  -- Serialize all attempts that try to consume the same staged photos. The
+  -- committed count must be read *after* the row locks are acquired.
+  perform 1 from public.book_answer_photo_drafts where id=any(ids)
+    order by id for update;
   select count(*),count(*) filter(where committed_at is not null)
     into selected_count,committed_count from public.book_answer_photo_drafts
     where id=any(ids) and user_id=uid and book_project_id=t.book_project_id
@@ -203,6 +207,10 @@ begin
       where w.book_project_id=input_project_id and w.confirmed_at is not null) then
     raise exception 'Question unavailable' using errcode='42501';
   end if;
+  -- Two completion requests may arrive together after a lost response. Lock
+  -- first, then inspect committed_at so the second request is read-only.
+  perform 1 from public.book_answer_photo_drafts where id=any(ids)
+    order by id for update;
   select count(*),count(*) filter (where committed_at is not null)
     into selected_count,already_count from public.book_answer_photo_drafts
     where id=any(ids) and book_project_id=input_project_id
