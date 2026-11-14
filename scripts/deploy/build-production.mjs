@@ -23,6 +23,7 @@ for(const key of Object.keys(process.env))if(key.startsWith('VITE_'))delete proc
 Object.assign(process.env,{
  VITE_PUBLIC_TEST_MODE:'false',VITE_SUPABASE_URL:`https://${ref}.supabase.co`,VITE_SUPABASE_ANON_KEY:anon,
  VITE_EXPERIENCE_V2_TEST_ONLY:'false',VITE_EXPERIENCE_V2_ENABLED:'true',VITE_TRIAL_CONVERSION_ENABLED:'true',
+ VITE_COMMERCE_V2_ENABLED:'true',
  VITE_EXPERIENCE_NOTIFICATIONS_ENABLED:'true',
  VITE_LINE_AUTH_ENABLED:'true',VITE_FREE_TRIAL_RETENTION_ENABLED:'true',
  VITE_BOOK_PRODUCTION_V2_ENABLED:String(enableBookProduction),

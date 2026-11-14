@@ -3,9 +3,9 @@ import { createRoot } from "react-dom/client";
 import App, { Scene_BookBuilder, Scene_Login, Scene_SupporterInviteReceived, supabaseClient as adminSupabaseClient } from "./App.jsx";
 import { SupporterSmsEntry } from './SupporterSms.jsx';
 import LandingPage from "./LandingPage.jsx";
-import CommerceV2Purchase from './CommerceV2Purchase.jsx';
+import PurchaseSelectionEntry from './PurchaseSelectionEntry.jsx';
 import { commercePurchaseReviewRequested, readCommercePurchaseIntent, saveCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
-import { createPurchaseHandoff, purchaseHandoffToken, restorePurchaseHandoff, savePendingGuestHandoff } from './lib/commercePurchaseHandoff.js';
+import { purchaseHandoffToken, restorePurchaseHandoff, savePendingGuestHandoff } from './lib/commercePurchaseHandoff.js';
 import { canonicalPurchaseUrl } from './lib/canonicalPurchaseUrl.js';
 import GiftThreeQuestionsPage from "./gift-three-questions.jsx";
 import VoiceLibraryPage from "./VoiceLibraryPage.jsx";
@@ -133,21 +133,9 @@ function RootScreen() {
     && !params.has('consultation') && !params.has('family_invite')
     && !params.has('gift') && params.get('purchase_for') !== 'family_trial_package'
     && !commercePurchaseReviewRequested()) {
-    return <CommerceV2Purchase phase="selection" client={adminSupabaseClient}
+    return <PurchaseSelectionEntry client={adminSupabaseClient}
       initialOrderType={params.get('purchase_for') === 'gift' ? 'gift' : 'self'}
-      initialSelection={purchaseIntent}
-      onProceed={async selection => {
-        const handoffToken = await createPurchaseHandoff(adminSupabaseClient, selection,
-          params.get('guest_trial_claim') === '1');
-        saveCommercePurchaseIntent(window.localStorage, selection);
-        const url = new URL(window.location.href);
-        url.searchParams.set('app', '1');
-        if (selection.purchaseFor === 'gift') url.searchParams.set('purchase_for', 'gift');
-        else url.searchParams.delete('purchase_for');
-        url.searchParams.set('purchase_review', '1');
-        url.searchParams.set('purchase_handoff', handoffToken);
-        window.location.assign(url.toString());
-      }} />;
+      initialSelection={purchaseIntent} />;
   }
 
   if (window.location.pathname === '/gift-three-questions.html' || /^\/g\/[^/]+\/?$/.test(window.location.pathname)) {

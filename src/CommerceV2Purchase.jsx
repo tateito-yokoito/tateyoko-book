@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { clearCommercePurchaseIntent, provisionalCommerceSubtotal, readCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
+import { clearCommercePurchaseIntent, readCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
 import SupportConsultationInline from './SupportConsultationInline.jsx';
 
-const choiceClass = 'rounded-2xl border border-white/20 bg-white/[0.05] px-4 py-4 text-left text-white';
+const yen = amount => Number.isInteger(amount) ? `${amount.toLocaleString('ja-JP')}円` : '価格を確認中';
 
 function newRequestKey() {
   // crypto.randomUUID() is unavailable on HTTP LAN previews used by phones.
@@ -14,7 +14,7 @@ function newRequestKey() {
 }
 
 export default function CommerceV2Purchase({ client, projectId, initialOrderType = 'self', familyInvitation = null, onTryFree,
-  phase = 'checkout', initialSelection = null, onProceed, onCompleted }) {
+  phase, initialSelection = null, onProceed, onCompleted }) {
   const isSelection = phase === 'selection';
   const isReview = phase === 'review';
   const [edition, setEdition] = useState(initialSelection?.edition || 'standard');
@@ -27,6 +27,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   const [gift, setGift] = useState({ recipient_name: familyInvitation?.recipient_name || initialSelection?.recipientName || '',
     recipient_email: familyInvitation?.recipient_email || '', gift_message: '' });
   const [quote, setQuote] = useState(null);
+  const [catalogPrices, setCatalogPrices] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [approvedConsultation, setApprovedConsultation] = useState(null);
@@ -37,7 +38,31 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   const orderType = approvedConsultation?.orderType || purchaseFor;
   const selection = { edition, productionMethod: method, standardExtraCount, premiumExtraCount, discountCode,
     purchaseFor: orderType, giftMode, recipientName: gift.recipient_name };
-  const provisionalSubtotal = provisionalCommerceSubtotal(selection);
+
+  // Derive the displayed product prices from the same server quote used for
+  // checkout. A change in the catalog can no longer leave stale card prices.
+  useEffect(() => {
+    if (!isSelection) return;
+    let active = true;
+    const request = (edition, productionMethod = 'self_or_family', standardExtraCount = 0, premiumExtraCount = 0) =>
+      client.functions.invoke('create-commerce-v2-checkout', { body: {
+        action: 'public_quote', orderType: 'self', edition, productionMethod,
+        standardExtraCount, premiumExtraCount,
+      } }).then(({ data, error: invokeError }) => {
+        if (invokeError || !data?.success || !Number.isInteger(data.quote?.amount_subtotal))
+          throw new Error('商品価格を確認できませんでした');
+        return data.quote.amount_subtotal;
+      });
+    Promise.all([
+      request('standard'), request('premium'), request('standard', 'self_or_family', 1),
+      request('standard', 'self_or_family', 0, 1), request('standard', 'interview_staff'),
+    ]).then(([standard, premium, withStandard, withPremium, withInterview]) => {
+      if (active) setCatalogPrices({ standard, premium,
+        standardExtra: withStandard - standard, premiumExtra: withPremium - standard,
+        interview: withInterview - standard });
+    }).catch(() => { if (active) setCatalogPrices(null); });
+    return () => { active = false; };
+  }, [client, isSelection]);
 
   useEffect(() => {
     if (!isSelection || !consultationOpen) return;
@@ -220,13 +245,13 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         <div className="mt-9">
           <h2 className="font-serif text-xl">ブックの装いを選ぶ</h2>
           <div className="mt-3 grid grid-cols-2 gap-3">
-            {[['standard', 'スタンダード', '軽やかで、手に取りやすい一冊。', '上質なソフトカバー', '35,000円'], ['premium', 'プレミアム', '想いをのせる、特別な装い。', '布貼り上製本・箔押し', '65,000円']].map(([value, name, description, cover, price]) => (
+            {[['standard', 'スタンダード', '軽やかで、手に取りやすい一冊。', '上質なソフトカバー'], ['premium', 'プレミアム', '想いをのせる、特別な装い。', '布貼り上製本・箔押し']].map(([value, name, description, cover]) => (
               <button key={value} type="button" aria-pressed={edition === value} disabled={Boolean(approvedConsultation)} onClick={() => { setEdition(value); requestKey.current = newRequestKey(); }}
                 className={`min-h-48 rounded-xl border p-4 text-left ${edition === value ? 'border-[#315a49] bg-white' : 'border-[#cfd5ca] bg-[#f1f6ef]'}`}>
                 <span className="block text-lg font-bold">{name}</span>
                 <span className="mt-2 block text-sm leading-6">{description}</span>
                 <span className="mt-2 block text-sm font-semibold">{cover}</span>
-                <span className="mt-3 block text-xl font-bold">{price}<small className="ml-1 text-xs font-normal">税込</small></span>
+                <span className="mt-3 block text-xl font-bold">{yen(catalogPrices?.[value])}<small className="ml-1 text-xs font-normal">税込</small></span>
                 <span className="mt-1 block text-xs text-[#2a6550]">{edition === value ? '✓ 選択中' : '選択する'}</span>
               </button>
             ))}
@@ -237,8 +262,8 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           <h2 className="font-serif text-xl">追加の冊子</h2>
           <p className="mt-2 text-sm leading-7 text-[#65756b]">必要な場合だけお選びください。物語の制作開始後にも追加できます。</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="flex items-center justify-between gap-2 border-b border-[#e5e6df] py-3 text-sm">スタンダードを追加（5,000円／冊）<select className="rounded-lg border border-[#cbd4cb] bg-white p-2 text-base" value={standardExtraCount} disabled={Boolean(approvedConsultation)} onChange={event => { setStandardExtraCount(Number(event.target.value)); requestKey.current = newRequestKey(); }}>{Array.from({ length: 31 }, (_, count) => <option key={count} value={count}>{count}冊</option>)}</select></label>
-            <label className="flex items-center justify-between gap-2 border-b border-[#e5e6df] py-3 text-sm">プレミアムを追加（35,000円／冊）<select className="rounded-lg border border-[#cbd4cb] bg-white p-2 text-base" value={premiumExtraCount} disabled={Boolean(approvedConsultation)} onChange={event => { setPremiumExtraCount(Number(event.target.value)); requestKey.current = newRequestKey(); }}>{Array.from({ length: 31 }, (_, count) => <option key={count} value={count}>{count}冊</option>)}</select></label>
+            <label className="flex items-center justify-between gap-2 border-b border-[#e5e6df] py-3 text-sm">スタンダードを追加（{yen(catalogPrices?.standardExtra)}／冊）<select className="rounded-lg border border-[#cbd4cb] bg-white p-2 text-base" value={standardExtraCount} disabled={Boolean(approvedConsultation)} onChange={event => { setStandardExtraCount(Number(event.target.value)); requestKey.current = newRequestKey(); }}>{Array.from({ length: 31 }, (_, count) => <option key={count} value={count}>{count}冊</option>)}</select></label>
+            <label className="flex items-center justify-between gap-2 border-b border-[#e5e6df] py-3 text-sm">プレミアムを追加（{yen(catalogPrices?.premiumExtra)}／冊）<select className="rounded-lg border border-[#cbd4cb] bg-white p-2 text-base" value={premiumExtraCount} disabled={Boolean(approvedConsultation)} onChange={event => { setPremiumExtraCount(Number(event.target.value)); requestKey.current = newRequestKey(); }}>{Array.from({ length: 31 }, (_, count) => <option key={count} value={count}>{count}冊</option>)}</select></label>
           </div>
         </div>
 
@@ -246,7 +271,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           <p className="text-xs text-[#47745e]">制作方法のオプション</p>
           <h2 className="mt-1 text-xl font-bold">聞き取り制作サポート</h2>
           <p className="mt-3 text-sm leading-7">スタッフが電話・LINE通話でお話を伺い、制作も進めます。<br />対面ご希望の場合は、その旨も相談フォームにご記入ください。</p>
-          <p className="mt-3 text-2xl font-bold">＋20,000円 <small className="text-xs font-normal">税込</small></p>
+          <p className="mt-3 text-2xl font-bold">＋{yen(catalogPrices?.interview)} <small className="text-xs font-normal">税込</small></p>
           <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={method === 'interview_staff'} disabled={Boolean(approvedConsultation)} onChange={event => { setMethod(event.target.checked ? 'interview_staff' : 'self_or_family'); requestKey.current = newRequestKey(); }} />聞き取り制作サポートを選ぶ</label>
           <p className="mt-3 text-sm leading-7">お気軽にご相談ください。決済は前後しても構いません。</p>
           <button type="button" aria-expanded={consultationOpen} aria-controls="purchase-consultation-form" className={`mt-3 w-full border border-[#315a49] bg-white px-4 py-3 font-semibold ${consultationOpen ? 'rounded-t-lg border-b-0' : 'rounded-lg'}`} onClick={() => setConsultationOpen(open => !open)}>{consultationOpen ? '事前相談フォームを閉じる' : '事前相談フォームを開く'}</button>
@@ -256,13 +281,13 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         {orderType === 'gift' && <label className="mt-8 block text-sm font-semibold">贈る相手のお名前<input className="mt-2 w-full rounded-lg border border-[#bfc9bd] bg-white p-3 text-base" value={gift.recipient_name} disabled={Boolean(familyInvitation)} onChange={event => setGift(current => ({ ...current, recipient_name: event.target.value }))} /></label>}
         <label className="mt-8 block text-sm font-semibold">割引コード（お持ちの方）<input className="mt-2 w-full rounded-lg border border-[#bfc9bd] bg-white p-3 text-base" value={discountCode} onChange={event => { setDiscountCode(event.target.value); requestKey.current = newRequestKey(); }} /></label>
         <div className="mt-7 rounded-xl bg-[#eaf0e8] p-5" aria-live="polite">
-          <p className="flex justify-between gap-3 py-2 text-sm"><span>商品・オプション</span><span>{(quote?.amount_subtotal ?? provisionalSubtotal)?.toLocaleString('ja-JP')}円</span></p>
+          <p className="flex justify-between gap-3 py-2 text-sm"><span>商品・オプション</span><span>{quote ? yen(quote.amount_subtotal) : '確認中'}</span></p>
           <p className="flex justify-between gap-3 py-2 text-sm"><span>割引</span><span>{quote ? `−${Number(quote.discount_amount || 0).toLocaleString('ja-JP')}円` : '—'}</span></p>
           <p className="mt-2 flex justify-between gap-3 border-t border-[#c4d1c5] pt-4 text-lg font-bold"><span>お支払い合計</span><span>{quote ? `${Number(quote.amount_total).toLocaleString('ja-JP')}円` : error ? '確認できませんでした' : '確認中'}</span></p>
           <p className="mt-2 text-xs leading-6 text-[#65756b]">税込。正式な価格・割引は認証後に再確認します。</p>
         </div>
         {method === 'interview_staff' && <p role="note" className="mt-4 text-sm font-semibold leading-7 text-[#a34b35]">聞き取り制作サポートにお申し込みの方は、必ず事前相談フォームにもご入力ください。</p>}
-        <button type="button" className="mt-5 w-full rounded-full bg-[#244c3c] px-5 py-4 text-lg font-bold text-white disabled:opacity-50" disabled={busy || !quote || (orderType === 'gift' && !gift.recipient_name.trim())} onClick={async () => {
+        <button type="button" className="mt-5 w-full rounded-full bg-[#244c3c] px-5 py-4 text-lg font-bold text-white disabled:opacity-50" disabled={busy || !quote || !catalogPrices || (orderType === 'gift' && !gift.recipient_name.trim())} onClick={async () => {
           setBusy(true); setError('');
           try { await onProceed?.({ ...selection, quotedAmountTotal: quote?.amount_total, quotedDiscountAmount: quote?.discount_amount }); }
           catch (cause) { setError(cause?.message || '購入内容を保存できませんでした。もう一度お試しください。'); setBusy(false); }
@@ -308,90 +333,5 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
     </section>
   );
 
-  return (
-    <section className="mx-auto max-w-2xl px-6 py-12 text-white">
-      <h1 className="text-2xl">縦糸横糸ブックを選ぶ</h1>
-      <p className="mt-3 leading-7 text-white/75">どちらもWebブック付き。違いは紙のブックの装丁です。</p>
-      {!familyInvitation && !approvedConsultation && <fieldset className="mt-8 space-y-3">
-        <legend className="text-lg">どなたの人生史をつくりますか？</legend>
-        <label className="flex gap-3"><input type="radio" name="purchase-for" checked={orderType === 'self'} onChange={() => setPurchaseFor('self')} />自分の人生史をつくる</label>
-        <label className="flex gap-3"><input type="radio" name="purchase-for" checked={orderType === 'gift'} onChange={() => setPurchaseFor('gift')} />大切な方の人生史をつくる（贈り物）</label>
-        {orderType === 'gift' && <div className="mt-4 space-y-4 rounded-xl border border-white/20 p-4">
-          <h2 className="text-lg">どなたのスマホで作品づくりを進めますか？</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex items-center gap-2"><input type="radio" name="gift-mode" checked={giftMode === 'family_managed'} onChange={() => setGiftMode('family_managed')} />あなたのスマホ</label>
-            <label className="flex items-center gap-2"><input type="radio" name="gift-mode" checked={giftMode === 'recipient_led'} onChange={() => setGiftMode('recipient_led')} />贈り先の方のスマホ</label>
-          </div>
-          <ul className="list-disc space-y-1 pl-5 text-sm leading-7 text-white/75">
-            {(giftMode === 'family_managed'
-              ? ['ご本人のスマホ操作・会員登録は不要です。', 'あなたのスマホで、質問の回答や写真追加などを進められます。', '後からご本人のスマホを招待し、一緒に進めることもできます。']
-              : ['贈られた方、本人のスマホで登録し、作品づくりを進めます。', 'ご家族も招待を受けて、お手伝いできます。']).map(item => <li key={item}>{item}</li>)}
-          </ul>
-        </div>}
-      </fieldset>}
-      {orderType === 'gift' && <p className="mt-4 text-sm leading-7 text-white/65">新規ギフトには、決済日から45日以内かつ本編開始前まで、お支払い総額の返金保証があります。追加冊子・聞き取り制作サポートも対象です。既存のギフト注文の条件は変わりません。</p>}
-      <div className="mt-8 grid gap-3 sm:grid-cols-2">
-        {[['standard', 'スタンダード', 'B5ソフトカバー', '35,000円'], ['premium', 'プレミアム', '布貼り上製本', '65,000円']].map(([value, name, cover, price]) => (
-          <button key={value} type="button" className={`${choiceClass} ${edition === value ? 'border-amber-200 bg-amber-200/10' : ''}`}
-            aria-pressed={edition === value} disabled={Boolean(approvedConsultation)} onClick={() => { setEdition(value); requestKey.current = newRequestKey(); }}>
-            <span className="flex items-center justify-between gap-3 text-lg"><span>{name}</span><span className="text-sm text-amber-200">{edition === value ? '✓ 選択中' : '選択する'}</span></span>
-            <span className="mt-2 block text-sm text-white/70">{cover}・Webブック</span>
-            <span className="mt-3 block">{price}（税込）</span>
-          </button>
-        ))}
-      </div>
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
-        <label>追加スタンダード冊子（5,000円／冊）
-          <select className="mt-2 w-full rounded-xl bg-white px-3 py-3 text-base text-slate-900" value={standardExtraCount} disabled={Boolean(approvedConsultation)}
-            onChange={event => { setStandardExtraCount(Number(event.target.value)); requestKey.current = newRequestKey(); }}>
-            {Array.from({ length: 31 }, (_, count) => <option key={count} value={count}>{count}冊</option>)}
-          </select>
-        </label>
-        <label>追加プレミアム冊子（35,000円／冊）
-          <select className="mt-2 w-full rounded-xl bg-white px-3 py-3 text-base text-slate-900" value={premiumExtraCount} disabled={Boolean(approvedConsultation)}
-            onChange={event => { setPremiumExtraCount(Number(event.target.value)); requestKey.current = newRequestKey(); }}>
-            {Array.from({ length: 31 }, (_, count) => <option key={count} value={count}>{count}冊</option>)}
-          </select>
-        </label>
-      </div>
-      <fieldset className="mt-8">
-        <legend className="text-lg">制作方法</legend>
-        <label className="mt-3 flex gap-3"><input type="radio" checked={method === 'self_or_family'} disabled={Boolean(approvedConsultation)} onChange={() => { setMethod('self_or_family'); requestKey.current = newRequestKey(); }} />自分・家族で制作する</label>
-        <label className="mt-3 flex gap-3"><input type="radio" checked={method === 'interview_staff'} disabled={Boolean(approvedConsultation)} onChange={() => { setMethod('interview_staff'); requestKey.current = newRequestKey(); }} />スタッフに聞き取ってもらう（＋20,000円）</label>
-        <p className="mt-3 text-sm leading-6 text-white/70">聞き取り制作サポートは、決済の前後どちらでもご相談いただけます。</p>
-      </fieldset>
-      <div className="mt-8 space-y-4">
-          {method === 'interview_staff' && !approvedConsultation && <>
-            <p role="note" className="text-sm font-semibold leading-7 text-rose-200">聞き取り制作サポートにお申し込みの方は、必ず事前相談フォームにもご入力ください。</p>
-            <button type="button" className="w-full rounded-full border border-white/50 py-4 text-white" onClick={openSupportConsultation}>事前相談フォームへ進む</button>
-          </>}
-          {orderType === 'gift' && <label className="block">贈る相手のお名前<input className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-slate-900" value={gift.recipient_name} disabled={Boolean(familyInvitation)}
-            onChange={event => setGift(current => ({ ...current, recipient_name: event.target.value }))} /></label>}
-          <label className="block">割引コード<input className="mt-2 w-full rounded-xl bg-white px-3 py-2 text-slate-900" value={discountCode}
-            onChange={event => { setDiscountCode(event.target.value); requestKey.current = newRequestKey(); }} /></label>
-          {isSelection ? <>
-            <p className="text-sm leading-7 text-white/75">商品・オプション：{(quote?.amount_subtotal ?? provisionalSubtotal)?.toLocaleString('ja-JP')}円（税込）<br />割引：−{quote ? Number(quote.discount_amount || 0).toLocaleString('ja-JP') : '—'}円</p>
-            <p className="text-xl">お支払い合計：{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : error ? '確認できませんでした' : '確認中'}</p>
-            <p className="text-sm leading-6 text-white/70">認証後に価格と割引条件を再確認し、変更があればお知らせします。</p>
-            <button type="button" className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote || (orderType === 'gift' && !gift.recipient_name.trim())} onClick={async () => {
-              setBusy(true);
-              setError('');
-              try { await onProceed?.({ ...selection, quotedAmountTotal: quote?.amount_total, quotedDiscountAmount: quote?.discount_amount }); }
-              catch (cause) { setError(cause?.message || '購入内容を保存できませんでした。もう一度お試しください。'); setBusy(false); }
-            }}>購入手続きへ進む</button>
-            <p className="text-center text-sm text-white/65">購入手続きには、アカウント登録またはログインが必要です。</p>
-          </> : <>
-            {isReview && <h2 className="text-lg">注文内容の最終確認</h2>}
-            {isReview && initialSelection?.quotedAmountTotal != null && quote
-              && Number(quote.amount_total) !== initialSelection.quotedAmountTotal &&
-              <p role="status" className="rounded-xl border border-amber-200/50 p-4 text-sm leading-6 text-amber-100">認証後の割引条件または商品価格が変わりました。選択時のお支払い合計は{initialSelection.quotedAmountTotal.toLocaleString('ja-JP')}円、現在は{Number(quote.amount_total).toLocaleString('ja-JP')}円です。新しい金額を確認してからお進みください。</p>}
-            {quote && <p className="text-sm leading-7 text-white/75">商品・オプション：{Number(quote.amount_subtotal).toLocaleString('ja-JP')}円<br />割引：−{Number(quote.discount_amount || 0).toLocaleString('ja-JP')}円{discountCode.trim() && `（${discountCode.trim()}）`}</p>}
-            <p className="text-xl">お支払い合計：{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : error ? '確認できませんでした' : '確認中'}</p>
-            <button className="w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote} onClick={checkout}>{isReview ? 'お支払いへ進む' : '決済へ進む'}</button>
-          </>}
-      </div>
-      {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
-      {onTryFree && <button className="mt-8 text-sm text-white/70 underline" onClick={onTryFree}>無料で3問体験する</button>}
-    </section>
-  );
+  return null;
 }

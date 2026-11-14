@@ -55,6 +55,7 @@ import { themeExtraOptions } from "./lib/themeExtras.js";
 import ThemeMorePicker from "./ThemeMorePicker.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
 import CommerceV2Purchase from "./CommerceV2Purchase.jsx";
+import PurchaseSelectionEntry from "./PurchaseSelectionEntry.jsx";
 import ProjectRoleInvitePanel from './ProjectRoleInvitePanel.jsx';
 import CoManagerSharingPanel from './CoManagerSharingPanel.jsx';
 import { clearCommercePurchaseIntent, commercePurchaseReviewRequested, readCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
@@ -7811,8 +7812,8 @@ if (getProjectRoleInviteTokenFromUrl()) {
 
       {scene === "purchase_start" && (
         COMMERCE_V2_ENABLED ? (
-          <CommerceV2Purchase client={supabaseClient} projectId={foundation?.project?.id}
-            phase={purchaseSelection ? 'review' : 'checkout'} initialSelection={purchaseSelection}
+          purchaseSelection ? <CommerceV2Purchase client={supabaseClient} projectId={foundation?.project?.id}
+            phase="review" initialSelection={purchaseSelection}
             onCompleted={finishGiftCheckoutAsPaid}
             initialOrderType={purchaseSelection?.purchaseFor || purchaseFor}
             familyInvitation={commerceV2Invitation || (
@@ -7824,7 +7825,15 @@ if (getProjectRoleInviteTokenFromUrl()) {
               setScene(isFreeTrialExpired(trialRetention)
                 ? "trial_expired"
                 : hasCompletedFreeTrial(questionsDB) ? "trial_complete" : 0);
-            }} />
+            }} /> : <PurchaseSelectionEntry client={supabaseClient} projectId={foundation?.project?.id}
+              initialOrderType={purchaseFor}
+              familyInvitation={commerceV2Invitation || receivedFamilyInvitation}
+              onTryFree={() => {
+                replaceCommercialEntryUrl("trial");
+                setScene(isFreeTrialExpired(trialRetention)
+                  ? "trial_expired"
+                  : hasCompletedFreeTrial(questionsDB) ? "trial_complete" : 0);
+              }} />
         ) :
         <Scene_PurchaseStart
           initialOrderType={purchaseFor}
@@ -8789,7 +8798,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
 
       {scene === "family_story_payment_review" && familyPaymentInvitation && (
         COMMERCE_V2_ENABLED ?
-        <CommerceV2Purchase client={supabaseClient} projectId={foundation?.project?.id}
+        <PurchaseSelectionEntry client={supabaseClient} projectId={foundation?.project?.id}
           initialOrderType="gift" familyInvitation={familyPaymentInvitation} /> :
         TRIAL_CONVERSION_ENABLED && familyPaymentInvitation.pricing_policy_version === '2.0' ?
         <TrialGiftPurchaseReview key={familyPaymentInvitation.id} client={supabaseClient}
