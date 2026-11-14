@@ -14,6 +14,9 @@
 | 記憶のかけら・カギ | 一覧・詳細・写真・音声を閲覧可。カギ付き記録は本人だけが見られ、家族は直URL・Storage経由でも取得不可。 | `seasonal-memory.test.mjs`; 多ユーザーRLS・Storage E2E要確認 |
 | 回帰 | 本人購入・ギフトA/Bの質問回答、写真から語る、BOOK仕上げ、Webブック閲覧を維持。 | `npm run test:answer-ui`, `unified-app-release.test.mjs` 等 |
 | 共通回答入力の移行 | BOOK・季節の明色回答入力UIと録音・写真・文章・保存状態がAの共通部品で動き、Bの接続先で保存・権限が分かれ、Cの商品固有ルールが維持される。 | 実装時に両経路のコンポーネント参照・API/DB/Storage・離脱再開のE2Eが必要。現時点は未実施 |
+| BOOK回答の明色導線 | はじめの会話から通常テーマ終了まで暗色へ戻らず、声・文章・写真から入力、全体確認、次の問いへ進める。既存録音・文字起こし・3トーン・写真補正を維持する。 | `answer-entry-scene.test.mjs`, `answer-text-draft.test.mjs`, `theme-extra-selection.test.mjs`; 画面E2E未実施 |
+| BOOK回答の保存と戻り | 下書き・音声・写真の保存中／成功／失敗を区別し、未保存メディアは正式確定しない。離脱・再開、重複操作、前の問いへの戻り、回答済み再訪でも進捗・後続回答が保たれる。 | DB/API/Storageを伴うE2E未実施 |
+| 写真だけのBOOK回答 | 写真のみで正式回答でき、紙面プレビュー・PDF・公開Webブックで質問／写真が対応して表示される。本文ありの既存作品の版・順序に回帰なし。 | `book-pdf-server.test.mjs` と出力物E2E未実施。現行の本文空フィルターは要修正 |
 
 表のテスト名は `scripts/tests/` 内。Node単体テストだけで認証・DB・Storage・Stripeの合格とはしない。
 
