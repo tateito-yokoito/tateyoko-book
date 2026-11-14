@@ -1,7 +1,7 @@
-// One persisted checkpoint model for paid self-purchases, regardless of entry URL.
+// One persisted checkpoint model for purchased self and direct-gift projects.
 // Trial answers never satisfy the separate starting_conversation questions.
 export function paidOnboardingApplies(project, questions = []) {
-  return project?.access_status === 'paid'
+  return ['paid', 'gifted'].includes(project?.access_status)
     && project?.production_method_v2 !== 'interview_staff'
     && !project?.onboarding_preferences?.family_invitation_id
     && questions.some(q => q.onboarding_group === 'starting_conversation');

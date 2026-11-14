@@ -304,6 +304,9 @@ function isFamilyGiftTrialMode(project) {
 }
 
 function hasRestrictedProjectAccess(project) {
+  // A direct gift claim grants the same purchased access as a self purchase.
+  // Only the separate family-invitation trial may keep its trial experience.
+  if (hasFullProjectAccess(project) && !project?.onboarding_preferences?.family_invitation_id) return false;
   if (isFamilyGiftTrialMode(project)) return true;
   if (hasFullProjectAccess(project)) return false;
 
@@ -7561,6 +7564,7 @@ setScene(1);
     scene !== -1 &&
     scene !== "supporter_invite_received" &&
     scene !== "family_invite_received" &&
+    scene !== "gift_received" &&
     scene !== "family_story_invite_flow" &&
     scene !== "family_invite_purchase_success" &&
     scene !== "story_relationship_invite_received" &&
@@ -8147,6 +8151,10 @@ if (getProjectRoleInviteTokenFromUrl()) {
             const refreshedQuestions = await loadUserQuestionSet(user.id, refreshedFoundation);
             setFoundation(refreshedFoundation);
             setQuestionsDB(refreshedQuestions);
+            setProgress({
+              currentIndex: Math.max(getAuthenticatedQuestionIndex(refreshedQuestions, refreshedFoundation.project, user), 0),
+              total: refreshedQuestions.length
+            });
             window.localStorage.setItem(`tateyoko:active-book-project:${user.id}`, targetProjectId);
             window.localStorage.removeItem(`tateyoko:gift-recipient-project:${giftToken.slice(0, 16)}`);
             const url = new URL(window.location.href);
@@ -8154,11 +8162,11 @@ if (getProjectRoleInviteTokenFromUrl()) {
             url.searchParams.delete("entry");
             url.searchParams.delete("purchase_for");
             window.history.replaceState({}, "", url.toString());
-            setScene(
-              isProjectOnboardingComplete(refreshedFoundation?.project)
-                ? getFreeTrialResumeQuestionIndex(refreshedQuestions)
-                : "onboarding_overview"
-            );
+            setScene(paidOnboardingCheckpoint(refreshedFoundation.project, refreshedQuestions, {
+              notificationPref, sharingPreference
+            }) ?? getInitialSceneForProject({
+              project: refreshedFoundation.project, notificationPref, sharingPreference
+            }));
           }}
         />
       )}
@@ -11045,6 +11053,7 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
     onPurchase={onPurchase} onPaidContinue={() => onPurchase({resumePaid:true})} onFinish={onFinish} />;
   const isWorking = status === "starting" || status === "checking";
   const isPaidFamilyGift = familyInvitation?.offer_type === "full_gift";
+  const alreadyPurchased = Boolean(connection.paid) || isPaidFamilyGift;
   const waitsForGiftSender = familyInvitation?.offer_type === "trial_gift"
     && ["trial_completed", "continuation_awaiting_payment"].includes(familyInvitation?.status);
   const hasFamilyPrice = Boolean(familyInvitation);
@@ -11067,7 +11076,7 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
           声でも文章でも、思い出を写真とともに一冊へ育てていきます。
         </p>
 
-        {isPaidFamilyGift ? (
+        {alreadyPurchased ? (
           <div className="my-8 rounded-[1.7rem] border border-amber-100/12 bg-amber-100/[0.035] px-6 py-5">
             <p className="text-xs tracking-[0.16em] text-amber-50/42">贈られている内容</p>
             <p className="mt-3 text-[0.95rem] leading-[2] text-amber-50/72">{COMMERCE_V2_ENABLED ? '縦糸横糸ブック（Webブック付き）' : '縦糸横糸ブック・スタンダードプラン'}</p>
@@ -11106,7 +11115,7 @@ function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFi
 
         {!waitsForGiftSender && (
           <button type="button" onClick={onPurchase} disabled={isWorking} className="btn-quiet w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-45">
-            {isWorking ? "準備しています…" : isPaidFamilyGift ? "このまま物語を続ける" : "この物語を続ける"}
+            {isWorking ? "準備しています…" : alreadyPurchased ? "このまま物語を続ける" : "この物語を続ける"}
           </button>
         )}
 

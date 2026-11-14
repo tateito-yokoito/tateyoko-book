@@ -159,6 +159,9 @@ test('support order never enters ordinary paid recording on reload', () => {
   assert.equal(paidOnboardingApplies({ access_status: 'paid', production_method_v2: 'interview_staff' }, questions), false);
   assert.equal(paidOnboardingApplies({ access_status: 'paid', production_method_v2: 'self_or_family' }, questions), true);
   assert.equal(paidOnboardingApplies({ access_status: 'paid' }, questions), true);
+  assert.equal(paidOnboardingApplies({ access_status: 'gifted', production_method_v2: 'self_or_family' }, questions), true);
+  assert.equal(paidOnboardingApplies({ access_status: 'gifted', production_method_v2: 'interview_staff' }, questions), false);
+  assert.equal(paidOnboardingApplies({ access_status: 'gifted', onboarding_preferences: { family_invitation_id: 'family-invite' } }, questions), false);
 });
 
 test('paid interview support does not trigger automatic book production; legacy and self-made books retain it', async () => {
