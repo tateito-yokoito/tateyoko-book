@@ -16,7 +16,9 @@
 .answer-entry-choices button svg {width:20px;height:20px;flex:none}
 .answer-entry-choices .answer-entry-choices__photo {grid-column:1/-1}
 .answer-photo-strip {display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:thin}
+.answer-photo-strip__item{position:relative;flex:none}
 .answer-photo-strip button {flex:none;border:0;padding:0;background:transparent;cursor:pointer}
+.answer-photo-strip .answer-photo-strip__remove{position:absolute;top:2px;right:2px;width:30px;height:30px;border-radius:50%;background:#fffdf8;color:#284c40;font-size:20px;line-height:1;box-shadow:0 1px 5px #0004}
 .answer-photo-strip img {display:block;width:88px;height:78px;object-fit:cover;border:1px solid var(--answer-line,#c9cfc5);border-radius:7px}
 .answer-save-status {min-height:24px;color:var(--answer-muted,#53665b);font-size:.8rem;line-height:1.5}
 .answer-save-status--failed,.answer-save-status--conflict {color:#8a392c}

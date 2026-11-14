@@ -32,7 +32,9 @@ import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
 import WrittenAnswerEditor from "./WrittenAnswerEditor.jsx";
 import { AnswerTextCandidate, AnswerTextFields, AnswerTextLayout } from "./AnswerTextShared.jsx";
-import { AnswerEntryChoices } from './AnswerInputUI.jsx';
+import { AnswerEntryChoices, AnswerPhotoStrip, AnswerReview, AnswerSaveStatus } from './AnswerInputUI.jsx';
+import { BookAnswerPhotoDraft } from './lib/bookAnswerPhotoDraft.js';
+import { draftStorageKey } from './lib/answerTextDraft.js';
 import QuestionFlowTopBar from "./QuestionFlowTopBar.jsx";
 import { nextThemeQuestion } from "./lib/nextThemeQuestion.js";
 import { deleteAnswerRecordingDraft, listAnswerRecordingDrafts, saveAnswerRecordingDraft } from './lib/answerRecordingDraft.js';
@@ -3270,11 +3272,40 @@ function App() {
     && !new URLSearchParams(window.location.search).has('checkout')
     ? readCommercePurchaseIntent(window.localStorage) : null;
   const [writingQuestion, setWritingQuestion] = useState(null);
+  const [bookAnswerPhotos, setBookAnswerPhotos] = useState([]);
+  const [bookPhotoSaveState, setBookPhotoSaveState] = useState('idle');
+  const [bookPhotoCorrectionOpen, setBookPhotoCorrectionOpen] = useState(false);
+  const [bookPhotoFinishing, setBookPhotoFinishing] = useState(false);
+  const [bookBackOriginIndex, setBookBackOriginIndex] = useState(null);
+  const [bookSavedAnswerReview, setBookSavedAnswerReview] = useState(null);
+  const [bookVoiceCarryText, setBookVoiceCarryText] = useState(null);
+  const bookPhotoDraftRef = useRef(null);
   const [user, setUser] = useState(null);
   const [questionsDB, setQuestionsDB] = useState([]);
   const [notificationPref, setNotificationPref] = useState(null);
   const [progress, setProgress] = useState({ currentIndex: 0, total: 0 });
   const [foundation, setFoundation] = useState(null);
+  const bookQuestionId = questionsDB[progress.currentIndex]?.user_question_id;
+  const bookProjectId = foundation?.project?.id;
+  const bookPhotoEnabled = Boolean(user?.id && bookProjectId && bookQuestionId
+    && foundation?.project?.access_status === 'paid'
+    && canWriteStoryQuestion(questionsDB[progress.currentIndex])
+    && questionsDB[progress.currentIndex]?.onboarding_group !== 'trial_experience');
+  useEffect(() => {
+    bookPhotoDraftRef.current = null;
+    setBookAnswerPhotos([]);
+    setBookPhotoSaveState('idle');
+    setBookVoiceCarryText(null);
+    if (!bookPhotoEnabled) return undefined;
+    const adapter = new BookAnswerPhotoDraft({ client: supabaseClient,
+      userId: user.id, projectId: bookProjectId, questionId: bookQuestionId });
+    bookPhotoDraftRef.current = adapter;
+    let cancelled = false;
+    adapter.list().then(photos => {
+      if (!cancelled) { setBookAnswerPhotos(photos); setBookPhotoSaveState(photos.length ? 'saved' : 'idle'); }
+    }).catch(() => { if (!cancelled) setBookPhotoSaveState('failed'); });
+    return () => { cancelled = true; if (bookPhotoDraftRef.current === adapter) bookPhotoDraftRef.current = null; };
+  }, [bookPhotoEnabled, user?.id, bookProjectId, bookQuestionId]);
   const [familyPhotoContext, setFamilyPhotoContext] = useState(null);
   const [storyRequestSummary, setStoryRequestSummary] = useState(null);
   useEffect(() => {
@@ -6973,12 +7004,21 @@ const handleSaveAnswer = async (tag = null) => {
       }
 
       const isInitialStagedRecording = !isEditRecording && Boolean(voiceData.recordingAttemptId);
+      const stagedBookPhotoIds = bookPhotoEnabled ? bookAnswerPhotos.map(photo => photo.id) : [];
+      if (stagedBookPhotoIds.length && bookPhotoSaveState !== 'saved') {
+        throw new Error('写真の保存が完了していません。保存を確認してから進んでください。');
+      }
+      if ((stagedBookPhotoIds.length || bookVoiceCarryText) && !isInitialStagedRecording) {
+        throw new Error('録音と写真を一緒に確定する準備ができていません。録音を確認してください。');
+      }
       let stagedAnswerId = null;
       if (isInitialStagedRecording) {
-        const { data: committed, error: commitError } = await supabaseClient.rpc('commit_answer_recording_with_segments', {
+        const { data: committed, error: commitError } = await supabaseClient.rpc(stagedBookPhotoIds.length || bookVoiceCarryText
+          ? 'complete_book_recording_with_photos' : 'commit_answer_recording_with_segments', {
           input_attempt_id: voiceData.recordingAttemptId,
           input_base_text_revision: 0,
-          input_body: voiceData.editedText,
+          input_body: bookVoiceCarryText
+            ? `${bookVoiceCarryText.body}\n\n${voiceData.editedText || ''}` : voiceData.editedText,
           input_transcript_raw: voiceData.recordingTranscriptRaw || voiceData.transcript || '',
           input_transcript_clean: voiceData.transcriptClean || '',
           input_transcript_readable: voiceData.transcriptReadable || '',
@@ -6986,9 +7026,20 @@ const handleSaveAnswer = async (tag = null) => {
           input_selected_style: voiceData.selectedStyle || 'readable',
           input_segment_transcripts: voiceData.recordingSegmentTranscripts || [],
           input_allow_rewrite: false,
+          ...(stagedBookPhotoIds.length || bookVoiceCarryText ? { input_photo_ids: stagedBookPhotoIds } : {}),
+          ...(bookVoiceCarryText ? {
+            input_carry_body: bookVoiceCarryText.body,
+            input_carry_device_id: bookVoiceCarryText.deviceId,
+            input_carry_generation: bookVoiceCarryText.generation,
+            input_carry_edit_number: bookVoiceCarryText.editNumber,
+          } : {}),
         });
         if (commitError || committed?.status !== 'saved') {
           throw commitError || new Error(committed?.status || '音声を確定できませんでした');
+        }
+        if (bookVoiceCarryText) {
+          localStorage.removeItem(draftStorageKey(user.id, answerProjectId, Number(currentSeq)));
+          setBookVoiceCarryText(null);
         }
         if (voiceData.localRecordingDraftId) {
           await deleteAnswerRecordingDraft(voiceData.localRecordingDraftId)
@@ -7551,6 +7602,202 @@ setScene(1);
     chapter_description: "...",
     content: "問いを取得できませんでした"
   };
+  const advanceAfterBookAnswer = async (savedQuestion) => {
+    setWritingQuestion(null);
+            setQuestionsDB(current => current.map(question =>
+              question.user_question_id === savedQuestion?.user_question_id
+                ? { ...question, status: 'answered', answered_at: new Date().toISOString() }
+                : question
+            ));
+            if (bookBackOriginIndex !== null && progress.currentIndex < bookBackOriginIndex) {
+              setProgress(previous => ({ ...previous, currentIndex: bookBackOriginIndex }));
+              setBookBackOriginIndex(null);
+              setBookSavedAnswerReview(null);
+              setScene(1);
+              return;
+            }
+            const nextIndex = progress.currentIndex + 1;
+            const nextSeq = questionsDB[nextIndex]?.sequence_order || Number(savedQuestion.sequence_order) + 1;
+            const { error } = await supabaseClient.from('profiles')
+              .update({ current_sequence: nextSeq }).eq('id', user.id);
+            if (error) console.warn('text answer progress sync', error);
+            setProgress(previous => ({ ...previous,
+              currentIndex: Math.min(nextIndex, questionsDB.length - 1) }));
+            const nextQuestion = questionsDB[nextIndex] || null;
+            const chapterComplete = savedQuestion?.onboarding_group === "starting_conversation" &&
+              nextQuestion?.onboarding_group !== "starting_conversation";
+            const outlineComplete = savedQuestion?.onboarding_group === "life_outline" &&
+              nextQuestion?.onboarding_group !== "life_outline";
+            if (isFormalOnboardingQuestion(savedQuestion) && foundation?.project?.id &&
+                foundation.project.onboarding_status !== "completed") {
+              const onboardingUpdate = savedQuestion?.onboarding_group === "starting_motivation"
+                ? { onboarding_status: "life_outline_completed",
+                    current_onboarding_user_question_id: nextQuestion?.user_question_id || null,
+                    starting_motivation_completed_at: new Date().toISOString(),
+                    onboarding_ritual_step: "chapter_complete" }
+                : chapterComplete
+                  ? { onboarding_status: "life_outline_completed",
+                      current_onboarding_user_question_id: nextQuestion?.user_question_id || null,
+                      life_outline_completed_at: new Date().toISOString(),
+                      onboarding_ritual_step: "conversation_complete" }
+                  : outlineComplete
+                    ? { onboarding_status: "introduction_review",
+                        current_onboarding_user_question_id: nextQuestion?.user_question_id || null }
+                    : { onboarding_status: "in_progress",
+                        current_onboarding_user_question_id: nextQuestion?.user_question_id || null };
+              const { data: updatedProject, error: onboardingError } = await supabaseClient
+                .from("book_projects").update(onboardingUpdate)
+                .eq("id", foundation.project.id).select().single();
+              if (onboardingError) console.warn("written onboarding progress sync", onboardingError);
+              else if (updatedProject) setFoundation(previous => ({ ...previous, project: updatedProject }));
+            }
+            localStorage.setItem("koe_last_visit", Date.now().toString());
+            if (FREE_TRIAL_RETENTION_ENABLED && savedQuestion?.onboarding_group === "trial_experience") {
+              try { setTrialRetention(await loadFreeTrialRetention(foundation?.project?.id)); }
+              catch (retentionError) { console.warn("written trial retention sync", retentionError); }
+            }
+            if (hasRestrictedProjectAccess(foundation?.project) &&
+                isLastFreeTrialQuestion(questionsDB, savedQuestion)) {
+              if (!TRIAL_CONVERSION_ENABLED && ALLOW_FAMILY_NOTIFICATIONS && !import.meta.env.DEV &&
+                  foundation?.project?.onboarding_preferences?.family_invitation_id) {
+                try {
+                  await supabaseClient.functions.invoke("notify-family-story-inviter", {
+                    body: { projectId: foundation.project.id }
+                  });
+                  setReceivedFamilyInvitation(previous => previous ? {
+                    ...previous, status: "trial_completed",
+                    trial_completed_at: previous.trial_completed_at || new Date().toISOString()
+                  } : previous);
+                } catch (familyMilestoneError) {
+                  console.warn("family trial milestone notification error", familyMilestoneError);
+                }
+              }
+              replaceCommercialEntryUrl("trial");
+              setScene("trial_complete");
+              return;
+            }
+            if (savedQuestion?.onboarding_group === "starting_conversation") {
+              setScene(chapterComplete ? "starting_conversation_complete" : 1);
+              return;
+            }
+            if (savedQuestion?.onboarding_group === "starting_motivation") {
+              setScene("hajimari_complete");
+              return;
+            }
+            if (outlineComplete) {
+              setLifeOutlineReturnScene(null);
+              setScene("life_outline_summary");
+              setIsInitializing(false);
+              try { await generateLifeOutlineIntroduction(); }
+              catch (outlineError) { console.warn("written life outline summary", outlineError); }
+              return;
+            }
+            if (isFormalOnboardingQuestion(savedQuestion)) {
+              setScene(1);
+              return;
+            }
+            if (await finishThemeExtraQuestion(savedQuestion, nextIndex)) return;
+            if (Number(savedQuestion?.theme_order) > 0 &&
+              Number(nextQuestion?.theme_order) !== Number(savedQuestion?.theme_order)) {
+              await savePendingThemeTransition(Number(savedQuestion.theme_order));
+              setScene('theme_complete');
+            } else {
+              setSavedNotice('この文章を残しました');
+              setScene(1);
+            }
+  };
+
+  const loadBookSavedAnswerReview = async question => {
+    if (!question || !user?.id || !bookProjectId || question.status !== 'answered') {
+      setBookSavedAnswerReview(null);
+      return;
+    }
+    const { data: answer, error } = await supabaseClient.from('answers')
+      .select('id,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
+      .eq('user_id', user.id).eq('book_project_id', bookProjectId)
+      .eq('sequence_order', question.sequence_order).maybeSingle();
+    if (error) throw error;
+    if (!answer) { setBookSavedAnswerReview(null); return; }
+    const { data: assets, error: mediaError } = await supabaseClient.from('media_assets')
+      .select('id,asset_type,storage_path').eq('answer_id', answer.id)
+      .in('asset_type', ['photo', 'audio']).order('created_at');
+    if (mediaError) throw mediaError;
+    const media = await Promise.all((assets || []).map(async asset => {
+      const bucket = asset.asset_type === 'photo' ? 'photos' : 'audio';
+      const { data, error: signedError } = await supabaseClient.storage.from(bucket)
+        .createSignedUrl(asset.storage_path, 3600);
+      if (signedError) throw signedError;
+      return { ...asset, url: data.signedUrl };
+    }));
+    setBookSavedAnswerReview({ questionId: question.user_question_id, answer,
+      photos: media.filter(item => item.asset_type === 'photo'),
+      audio: media.filter(item => item.asset_type === 'audio') });
+  };
+  const stepBookQuestion = async direction => {
+    const nextIndex = progress.currentIndex + direction;
+    const next = questionsDB[nextIndex];
+    if (!next || next.onboarding_group !== currentQ.onboarding_group ||
+      (Number(currentQ.theme_order) > 0 && next.theme_order !== currentQ.theme_order)) {
+      if (direction < 0) setScene(!isFormalOnboardingQuestion(currentQ) && resolvedThemeResumeContext
+        ? 'theme_resume' : 0);
+      return;
+    }
+    if (direction < 0 && bookBackOriginIndex === null) setBookBackOriginIndex(progress.currentIndex);
+    setProgress(previous => ({ ...previous, currentIndex: nextIndex }));
+    try { await loadBookSavedAnswerReview(next); }
+    catch { setBookSavedAnswerReview(null); alert('前の回答を読み込めませんでした。もう一度お試しください。'); }
+    setScene(1);
+  };
+
+  const refreshBookAnswerPhotos = async () => {
+    const adapter = bookPhotoDraftRef.current;
+    if (!adapter) throw new Error('写真の保存先を確認できません');
+    const photos = await adapter.list();
+    setBookAnswerPhotos(photos);
+    setBookPhotoSaveState(photos.length ? 'saved' : 'idle');
+    return photos;
+  };
+  const addBookAnswerPhoto = async file => {
+    const adapter = bookPhotoDraftRef.current;
+    if (!adapter) throw new Error('写真の保存先を確認できません');
+    setBookPhotoSaveState('saving');
+    try {
+      await adapter.add(file, bookAnswerPhotos.length);
+      await refreshBookAnswerPhotos();
+    } catch (error) {
+      setBookPhotoSaveState('failed');
+      throw error;
+    }
+  };
+  const retryBookAnswerPhoto = async () => {
+    const adapter = bookPhotoDraftRef.current;
+    if (!adapter) return;
+    setBookPhotoSaveState('saving');
+    try {
+      if (adapter.pending?.file) await adapter.add(adapter.pending.file, bookAnswerPhotos.length);
+      await refreshBookAnswerPhotos();
+    } catch { setBookPhotoSaveState('failed'); }
+  };
+  const removeBookAnswerPhoto = async photo => {
+    const adapter = bookPhotoDraftRef.current;
+    if (!adapter || !photo?.id) return;
+    setBookPhotoSaveState('saving');
+    try { await adapter.remove(photo.id); await refreshBookAnswerPhotos(); }
+    catch { setBookPhotoSaveState('failed'); alert('写真を外せませんでした。もう一度お試しください。'); }
+  };
+  const finishPhotoOnlyBookAnswer = async () => {
+    if (!bookPhotoEnabled || bookPhotoSaveState !== 'saved' || bookPhotoFinishing || !bookAnswerPhotos.length) return;
+    setBookPhotoFinishing(true);
+    try {
+      await bookPhotoDraftRef.current.completePhotoOnly(Number(currentQ.sequence_order),
+        bookAnswerPhotos.map(photo => photo.id));
+      await advanceAfterBookAnswer(currentQ);
+    } catch (error) {
+      setBookPhotoSaveState('failed');
+      alert(error?.message || '写真の回答を確定できませんでした。');
+    } finally { setBookPhotoFinishing(false); }
+  };
+
   const resolvedThemeResumeContext = getThemeResumeContext(
     questionsDB,
     progress.currentIndex
@@ -7964,6 +8211,11 @@ if (getProjectRoleInviteTokenFromUrl()) {
       {scene === "trial_complete" && getEntryModeFromUrl() === 'trial' && new URLSearchParams(location.search).has('gift_three') && (
         <TrialCompletionConnected
           client={supabaseClient}
+          photos={bookAnswerPhotos}
+          photoSaveState={bookPhotoSaveState}
+          onPhotoRetry={retryBookAnswerPhoto}
+          onPhotoRemove={removeBookAnswerPhoto}
+          onPhoto={() => { setWritingQuestion(null); setBookPhotoCorrectionOpen(true); }}
           project={foundation?.project}
           person={foundation?.person}
           questions={getFreeTrialQuestions(questionsDB)}
@@ -9302,13 +9554,24 @@ if (getProjectRoleInviteTokenFromUrl()) {
           storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
           question={currentQ}
           userName={user?.name || "あなた"}
-          onBack={() => setScene(!isFormalOnboardingQuestion(currentQ) && !bookendKindForQuestion(currentQ) && resolvedThemeResumeContext ? "theme_resume" : 0)}
+          onBack={() => bookPhotoEnabled && progress.currentIndex > 0
+            ? void stepBookQuestion(-1)
+            : setScene(!isFormalOnboardingQuestion(currentQ) && !bookendKindForQuestion(currentQ) && resolvedThemeResumeContext ? "theme_resume" : 0)}
+          savedAnswer={bookSavedAnswerReview?.questionId === currentQ.user_question_id ? bookSavedAnswerReview : null}
+          onSavedAnswerNext={() => void stepBookQuestion(1)}
           onNext={() => {
             resetVoiceData();
             setScene(answerEntryScene("record", hasRecentMicCheck()));
           }}
           onWrite={canWriteStoryQuestion(currentQ)
             ? () => setWritingQuestion(currentQ) : null}
+          onPhoto={bookPhotoEnabled ? () => setBookPhotoCorrectionOpen(true) : null}
+          photos={bookAnswerPhotos}
+          photoSaveState={bookPhotoSaveState}
+          onPhotoRetry={retryBookAnswerPhoto}
+          onPhotoRemove={removeBookAnswerPhoto}
+          onPhotoFinish={finishPhotoOnlyBookAnswer}
+          photoFinishing={bookPhotoFinishing}
           onSkip={handleSkipQuestion}
           onEndToday={() => {
             setEndTodayHasSavedAnswer(false);
@@ -9316,114 +9579,27 @@ if (getProjectRoleInviteTokenFromUrl()) {
           }}
         />
       )}
+      <PhotoCorrectionFlow open={bookPhotoCorrectionOpen && bookPhotoEnabled}
+        awaitCompletion onClose={() => setBookPhotoCorrectionOpen(false)}
+        onComplete={addBookAnswerPhoto} />
       {writingQuestion && user?.id && foundation?.project?.id && (
         <WrittenAnswerEditor
           userId={user.id}
           projectId={foundation.project.id}
           question={writingQuestion}
+          answer={bookSavedAnswerReview?.questionId === writingQuestion.user_question_id
+            ? bookSavedAnswerReview.answer : null}
           themeLabel={recordingSectionLabel(writingQuestion)}
           progressLabel={`${getMainStoryProgress(questionsDB, progress.currentIndex).currentIndex + 1} / ${getMainStoryProgress(questionsDB, progress.currentIndex).total}`}
           client={supabaseClient}
+          photos={bookPhotoEnabled ? bookAnswerPhotos : []}
+          photoSaveState={bookPhotoSaveState}
+          onPhotoRetry={retryBookAnswerPhoto}
+          onPhoto={bookPhotoEnabled ? () => setBookPhotoCorrectionOpen(true) : null}
           onClose={() => setWritingQuestion(null)}
-          onVoice={() => { setWritingQuestion(null); resetVoiceData(); setScene(answerEntryScene("record", hasRecentMicCheck())); }}
-          onSaved={async () => {
-            const savedQuestion = writingQuestion;
-            setWritingQuestion(null);
-            setQuestionsDB(current => current.map(question =>
-              question.user_question_id === savedQuestion?.user_question_id
-                ? { ...question, status: 'answered', answered_at: new Date().toISOString() }
-                : question
-            ));
-            const nextIndex = progress.currentIndex + 1;
-            const nextSeq = questionsDB[nextIndex]?.sequence_order || Number(savedQuestion.sequence_order) + 1;
-            const { error } = await supabaseClient.from('profiles')
-              .update({ current_sequence: nextSeq }).eq('id', user.id);
-            if (error) console.warn('text answer progress sync', error);
-            setProgress(previous => ({ ...previous,
-              currentIndex: Math.min(nextIndex, questionsDB.length - 1) }));
-            const nextQuestion = questionsDB[nextIndex] || null;
-            const chapterComplete = savedQuestion?.onboarding_group === "starting_conversation" &&
-              nextQuestion?.onboarding_group !== "starting_conversation";
-            const outlineComplete = savedQuestion?.onboarding_group === "life_outline" &&
-              nextQuestion?.onboarding_group !== "life_outline";
-            if (isFormalOnboardingQuestion(savedQuestion) && foundation?.project?.id &&
-                foundation.project.onboarding_status !== "completed") {
-              const onboardingUpdate = savedQuestion?.onboarding_group === "starting_motivation"
-                ? { onboarding_status: "life_outline_completed",
-                    current_onboarding_user_question_id: nextQuestion?.user_question_id || null,
-                    starting_motivation_completed_at: new Date().toISOString(),
-                    onboarding_ritual_step: "chapter_complete" }
-                : chapterComplete
-                  ? { onboarding_status: "life_outline_completed",
-                      current_onboarding_user_question_id: nextQuestion?.user_question_id || null,
-                      life_outline_completed_at: new Date().toISOString(),
-                      onboarding_ritual_step: "conversation_complete" }
-                  : outlineComplete
-                    ? { onboarding_status: "introduction_review",
-                        current_onboarding_user_question_id: nextQuestion?.user_question_id || null }
-                    : { onboarding_status: "in_progress",
-                        current_onboarding_user_question_id: nextQuestion?.user_question_id || null };
-              const { data: updatedProject, error: onboardingError } = await supabaseClient
-                .from("book_projects").update(onboardingUpdate)
-                .eq("id", foundation.project.id).select().single();
-              if (onboardingError) console.warn("written onboarding progress sync", onboardingError);
-              else if (updatedProject) setFoundation(previous => ({ ...previous, project: updatedProject }));
-            }
-            localStorage.setItem("koe_last_visit", Date.now().toString());
-            if (FREE_TRIAL_RETENTION_ENABLED && savedQuestion?.onboarding_group === "trial_experience") {
-              try { setTrialRetention(await loadFreeTrialRetention(foundation?.project?.id)); }
-              catch (retentionError) { console.warn("written trial retention sync", retentionError); }
-            }
-            if (hasRestrictedProjectAccess(foundation?.project) &&
-                isLastFreeTrialQuestion(questionsDB, savedQuestion)) {
-              if (!TRIAL_CONVERSION_ENABLED && ALLOW_FAMILY_NOTIFICATIONS && !import.meta.env.DEV &&
-                  foundation?.project?.onboarding_preferences?.family_invitation_id) {
-                try {
-                  await supabaseClient.functions.invoke("notify-family-story-inviter", {
-                    body: { projectId: foundation.project.id }
-                  });
-                  setReceivedFamilyInvitation(previous => previous ? {
-                    ...previous, status: "trial_completed",
-                    trial_completed_at: previous.trial_completed_at || new Date().toISOString()
-                  } : previous);
-                } catch (familyMilestoneError) {
-                  console.warn("family trial milestone notification error", familyMilestoneError);
-                }
-              }
-              replaceCommercialEntryUrl("trial");
-              setScene("trial_complete");
-              return;
-            }
-            if (savedQuestion?.onboarding_group === "starting_conversation") {
-              setScene(chapterComplete ? "starting_conversation_complete" : 1);
-              return;
-            }
-            if (savedQuestion?.onboarding_group === "starting_motivation") {
-              setScene("hajimari_complete");
-              return;
-            }
-            if (outlineComplete) {
-              setLifeOutlineReturnScene(null);
-              setScene("life_outline_summary");
-              setIsInitializing(false);
-              try { await generateLifeOutlineIntroduction(); }
-              catch (outlineError) { console.warn("written life outline summary", outlineError); }
-              return;
-            }
-            if (isFormalOnboardingQuestion(savedQuestion)) {
-              setScene(1);
-              return;
-            }
-            if (await finishThemeExtraQuestion(savedQuestion, nextIndex)) return;
-            if (Number(savedQuestion?.theme_order) > 0 &&
-              Number(nextQuestion?.theme_order) !== Number(savedQuestion?.theme_order)) {
-              await savePendingThemeTransition(Number(savedQuestion.theme_order));
-              setScene('theme_complete');
-            } else {
-              setSavedNotice('この文章を残しました');
-              setScene(1);
-            }
-          }}
+          onVoice={carry => { setBookVoiceCarryText(carry); setWritingQuestion(null);
+            resetVoiceData(); setScene(answerEntryScene("record", hasRecentMicCheck())); }}
+          onSaved={() => advanceAfterBookAnswer(writingQuestion)}
         />
       )}
 
@@ -9434,6 +9610,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
   storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
   userName={user?.name || "あなた"}
   autoStart
+  referencePhotos={bookAnswerPhotos.map(photo => photo.url)}
   onBack={() => setScene(1)}
   onJourneyEvent={emitJourney}
 onComplete={handleRecordComplete}
@@ -9444,6 +9621,12 @@ onComplete={handleRecordComplete}
 
 <Scene3_5_VoiceCheck
   data={voiceData}
+  photos={bookAnswerPhotos}
+  carryText={bookVoiceCarryText?.body || ''}
+  onAddPhoto={bookPhotoEnabled ? () => setBookPhotoCorrectionOpen(true) : null}
+  canCommitMedia={!bookPhotoEnabled || (bookPhotoSaveState !== 'failed' && bookPhotoSaveState !== 'saving')}
+  photoSaveState={bookPhotoSaveState}
+  onPhotoRetry={retryBookAnswerPhoto}
   light={currentQ?.onboarding_group !== 'trial_experience'}
   isLifeOutline={currentQ?.onboarding_group === "life_outline"}
   isLastLifeOutline={
@@ -18765,6 +18948,15 @@ export function Scene1_MyPage({
   onBack,
   onNext,
   onWrite,
+  onPhoto,
+  photos = [],
+  photoSaveState = 'idle',
+  onPhotoRetry,
+  onPhotoRemove,
+  onPhotoFinish,
+  photoFinishing = false,
+  savedAnswer = null,
+  onSavedAnswerNext,
   onSkip,
   onEndToday
 }) {
@@ -18781,8 +18973,20 @@ export function Scene1_MyPage({
 
       <RecordingQuestionPrompt question={question} />
 
-      {brightAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
-        <AnswerEntryChoices onVoice={onNext} onWrite={onWrite} onPhoto={() => {}} photoDisabled />
+      {brightAnswer && savedAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
+        <AnswerReview body={savedAnswer.answer.transcript_edited || savedAnswer.answer.transcript_readable
+          || savedAnswer.answer.transcript_clean || savedAnswer.answer.transcript_raw || savedAnswer.answer.snippet || ''}
+          photos={savedAnswer.photos} audio={savedAnswer.audio}
+          showChoices={false} onFinish={onSavedAnswerNext} finishLabel="次の問いへ" canFinish>
+          {onWrite && <button type="button" onClick={onWrite} className="answer-light-secondary">文章を編集する</button>}
+        </AnswerReview>
+      </div> : brightAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
+        <AnswerPhotoStrip photos={photos} onOpen={photo => window.open(photo.url, '_blank', 'noopener,noreferrer')}
+          onRemove={onPhotoRemove} />
+        <AnswerEntryChoices onVoice={onNext} onWrite={onWrite} onPhoto={onPhoto} />
+        <AnswerSaveStatus state={photoSaveState} hasContent={photos.length > 0 || photoSaveState === 'failed'} onRetry={onPhotoRetry} />
+        {photos.length > 0 && <button type="button" className="answer-review__finish" onClick={onPhotoFinish}
+          disabled={photoSaveState !== 'saved' || photoFinishing}>この問いを終える</button>}
       </div> : <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
         <RecordingStartButton onClick={onNext} label="話して答える" />
         {onWrite && <button type="button" onClick={onWrite}
@@ -19771,6 +19975,12 @@ return (
 
 export function Scene3_5_VoiceCheck({
   data,
+  photos = [],
+  carryText = '',
+  onAddPhoto,
+  canCommitMedia = true,
+  photoSaveState = 'idle',
+  onPhotoRetry,
   light = false,
   isLifeOutline = false,
   isLastLifeOutline = false,
@@ -19894,6 +20104,11 @@ return (
     </div>
 
       <div className="flex-1 overflow-y-auto pb-6">
+        <AnswerPhotoStrip photos={photos} onOpen={photo => window.open(photo.url, '_blank', 'noopener,noreferrer')} />
+        {!canCommitMedia && <AnswerSaveStatus state={photoSaveState} onRetry={onPhotoRetry} />}
+        {onAddPhoto && <button type="button" onClick={onAddPhoto}
+          className="answer-light-secondary min-h-11 mb-3">写真を添える</button>}
+        {carryText && <div className="answer-review__summary mb-4"><p>{carryText}</p></div>}
         {voiceOnly && <p className="mb-5 text-white/65 text-[1rem] leading-loose">この録音はWebブックに残します。今の文章は変更しません。</p>}
         {data.wholeTextCandidate && <div className="glass-card p-5 mb-6">
           <h3 className="text-white text-lg mb-4">文章全体を整えた候補</h3>
@@ -20136,10 +20351,10 @@ return (
 
         <button
           onClick={onProceed}
-          disabled={hasUploadError || isProcessing || isPolishing || (!displayText && !allowEmptyTranscript)
+          disabled={!canCommitMedia || hasUploadError || isProcessing || isPolishing || (!displayText && !allowEmptyTranscript)
             || Boolean(data.wholeTextCandidate) || data.wholeTextPolishStatus === 'processing'}
           className={`btn-quiet w-full py-4 rounded-full text-white ${
-            hasUploadError || isProcessing || isPolishing || (!displayText && !allowEmptyTranscript)
+            !canCommitMedia || hasUploadError || isProcessing || isPolishing || (!displayText && !allowEmptyTranscript)
               || data.wholeTextCandidate || data.wholeTextPolishStatus === 'processing' ? "opacity-40" : ""
           }`}
         >

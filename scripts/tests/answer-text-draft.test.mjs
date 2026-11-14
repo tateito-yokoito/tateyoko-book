@@ -17,8 +17,10 @@ function fakeServer() {
   let answerBody = '';
   let offline = false;
   let failCommit = false;
+  let lastPhotoIds = [];
   return {
     get draft() { return draft; },
+    get lastPhotoIds() { return lastPhotoIds; },
     changeAnswer(body) { answerRevision++; answerBody = body; },
     set offline(value) { offline = value; },
     set failCommit(value) { failCommit = value; },
@@ -59,8 +61,9 @@ function fakeServer() {
           edit_number: 0, device_id: args.input_device_id };
         return { data: { status: 'discarded', draft } };
       }
-      if (name === 'save_answer_text') {
+      if (name === 'save_answer_text' || name === 'complete_book_answer_with_photos') {
         if (failCommit) return { error: new Error('save failed') };
+        if (name === 'complete_book_answer_with_photos') lastPhotoIds = args.input_photo_ids;
         if (!draft || draft.body !== args.input_body || draft.edit_number !== args.input_edit_number) {
           return { data: { status: 'draft_conflict' } };
         }
@@ -160,6 +163,23 @@ test('save failure retains the draft; success clears it after acknowledgement', 
   server.failCommit = false;
   const saved = await draft.save();
   assert.equal(saved.status, 'saved');
+  assert.equal(storage.getItem(draft.key), null);
+  draft.dispose();
+});
+
+test('a text answer with staged photos waits for the same acknowledged commit', async () => {
+  const server = fakeServer();
+  const storage = new MemoryStorage();
+  const draft = session(server, storage);
+  await draft.open();
+  draft.change('写真を見ながら思い出したこと');
+  server.failCommit = true;
+  await assert.rejects(draft.save('initial', ['photo-a']));
+  assert.equal(JSON.parse(storage.getItem(draft.key)).body, '写真を見ながら思い出したこと');
+  server.failCommit = false;
+  const saved = await draft.save('initial', ['photo-a']);
+  assert.equal(saved.status, 'saved');
+  assert.deepEqual(server.lastPhotoIds, ['photo-a']);
   assert.equal(storage.getItem(draft.key), null);
   draft.dispose();
 });

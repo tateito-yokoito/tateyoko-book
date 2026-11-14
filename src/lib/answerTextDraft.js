@@ -321,16 +321,18 @@ export class AnswerTextDraft {
     return this.snapshot();
   }
 
-  async save(reason = 'edit') {
+  async save(reason = 'edit', photoIds = []) {
     await this.flush();
     if (this.record.state !== 'active' || this.record.dirty || this.conflict) {
       throw new Error('下書きの同期を確認してから保存してください');
     }
     const savedEdit = this.record.editNumber;
     const savedBody = this.record.body;
-    const result = serverError(await this.client.rpc('save_answer_text', {
+    const result = serverError(await this.client.rpc(photoIds.length
+      ? 'complete_book_answer_with_photos' : 'save_answer_text', {
       input_project_id: this.projectId,
       input_sequence_order: this.sequenceOrder,
+      ...(photoIds.length ? { input_photo_ids: photoIds } : {}),
       input_device_id: this.record.deviceId,
       input_generation: this.record.generation,
       input_edit_number: savedEdit,

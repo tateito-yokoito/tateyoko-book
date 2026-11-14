@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnswerTextDraft } from './lib/answerTextDraft.js';
 import { AnswerTextCandidate, AnswerTextFields, AnswerTextLayout } from './AnswerTextShared.jsx';
-import { AnswerReview, AnswerSaveStatus, bookTextSaveState, canCompleteSavedAnswer } from './AnswerInputUI.jsx';
+import { AnswerPhotoStrip, AnswerReview, AnswerSaveStatus, bookTextSaveState, canCompleteSavedAnswer } from './AnswerInputUI.jsx';
 
 const trialStatusLabels = {
   unknown: '下書きを確認中', saved: '保存済み', device_only: '端末に保存・同期待ち',
@@ -10,7 +10,8 @@ const trialStatusLabels = {
 };
 
 export default function WrittenAnswerEditor({ userId, projectId, question,
-  answer = null, client, onClose, onSaved, onVoice, progressLabel = '', themeLabel = '' }) {
+  answer = null, client, onClose, onSaved, onVoice, onPhoto, photos = [], photoSaveState = 'idle',
+  onPhotoRetry, progressLabel = '', themeLabel = '' }) {
   const [snapshot, setSnapshot] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -94,14 +95,29 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
       setError(cause?.message || '下書きを保存できませんでした。');
     } finally { setBusy(false); }
   };
+  const continueWithVoice = async () => {
+    if (!draft || busy || !body.trim()) return;
+    try {
+      setBusy(true); setError('');
+      const result = await draft.flush();
+      if (!canCompleteSavedAnswer({ hasContent: Boolean(result.body?.trim()),
+        saveState: bookTextSaveState(result), dirty: result.dirty })) {
+        throw new Error('文章の保存を確認できませんでした。再試行してください。');
+      }
+      onVoice?.({ body: result.body, deviceId: result.deviceId,
+        generation: result.generation, editNumber: result.editNumber });
+    } catch (cause) { setError(cause?.message || '文章を保存できませんでした。'); }
+    finally { setBusy(false); }
+  };
 
   const save = async () => {
     if (!body.trim() || busy) return;
     try {
       setBusy(true); setError('');
-      if (!snapshot?.dirty && !changed) { await leave(); return; }
+      if (!snapshot?.dirty && !changed && photos.length === 0) { await leave(); return; }
       if (snapshot?.editNumber === 0) draft.change(body);
-      const result = await draft.save(restoreReason ? 'restore' : answer ? 'edit' : 'initial');
+      const result = await draft.save(restoreReason ? 'restore' : answer ? 'edit' : 'initial',
+        photos.map(photo => photo.id));
       // The controller retains any input made after the save request began.
       if (draft.record.dirty) {
         setError('保存中に書き足した文章が下書きとして残っています。もう一度保存してください。');
@@ -170,11 +186,14 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
 
   return <AnswerTextLayout question={question} theme={themeLabel} progress={progressLabel} onBack={() => void leave()}
     light={light}>
-        {light && review && !snapshot?.conflict ? <AnswerReview body={body} saveState={saveState}
-          onVoice={onVoice ? () => void leave(onVoice) : null} onWrite={() => setReview(false)}
+        {light && review && !snapshot?.conflict ? <AnswerReview body={body} photos={photos}
+          saveState={photoSaveState === 'failed' ? 'failed' : saveState}
+          onVoice={onVoice && !answer ? continueWithVoice : null} onWrite={() => setReview(false)}
+          onPhoto={onPhoto ? () => void leave(onPhoto) : null}
           onRetry={() => void draft.flush().catch(() => {})}
           onFinish={save} canFinish={canCompleteSavedAnswer({hasContent: Boolean(body.trim()),
-            saveState, dirty: snapshot?.dirty, busy})} /> :
+            saveState, pendingMedia: photoSaveState === 'saving' || photoSaveState === 'failed' ? 1 : 0,
+            dirty: snapshot?.dirty, busy})} /> :
         snapshot?.conflict ? <>
           <h3 className="text-lg mb-2">{snapshot.conflict.kind === 'answer' ? '確定した文章が更新されています' : '下書きが2つあります'}</h3>
           <p className="text-white/60 text-sm leading-relaxed mb-4">文章を見比べて、編集を続ける方を選んでください。選択だけでは本の文章は更新されません。</p>
@@ -195,7 +214,9 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
           onPolish={style => void polish(style)} onSave={light ? reviewDraft : save}
           saveLabel={light ? '回答を確認する' : '保存する'}
           onDiscard={() => changed ? setConfirmDiscard(true) : discard()}
-          beforeActions={versions && <div className="space-y-3 rounded-xl border border-white/20 p-4">
+          beforeActions={<><AnswerPhotoStrip photos={photos} onOpen={photo => window.open(photo.url, '_blank', 'noopener,noreferrer')} />
+            {photoSaveState === 'failed' && <AnswerSaveStatus state="failed" onRetry={onPhotoRetry} />}
+            {versions && <div className="space-y-3 rounded-xl border border-white/20 p-4">
               <h3 className="text-white/80">文章の履歴</h3>
               {versions.length === 0 && <p className="text-white/50">以前の文章はありません。</p>}
               {versions.map(version => <div key={version.id} className="border-t border-white/15 pt-3">
@@ -207,7 +228,7 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
                   setVersions(null);
                 }}>この文章を編集欄に入れる</button>
               </div>)}
-            </div>}>
+            </div>}</>}>
           {answer?.id && <button type="button" onClick={loadVersions} disabled={busy}
             className="min-h-10 text-white/60 text-sm underline">履歴</button>}
         </AnswerTextFields>}
