@@ -1,11 +1,11 @@
 {
   "site": "https://www.tateito-yokoito.jp/",
   "deployedAt": "2026-11-14",
-  "vercelDeploymentId": "dpl_F3ESnPJt35YGSfMKf1vNyjPLehZU",
+  "vercelDeploymentId": "dpl_4RM5KMv6XLuxD2767CWB4hUHZiKU",
   "sourceBranch": "codex/seasonal-memory-production",
-  "sourceCommit": "317d8194ab06810ef6d423f6ebcbdfd9aaab7155",
-  "mainJsAsset": "assets/app-Cq91mH5_.js",
-  "mainJsSha256": "5739d19b2420d0f84c481ce21471c878f3b418a77ad10ee09587a173ba094a34",
+  "sourceCommit": "18f455dda560a16e35fff7829b5fe447eb841e26",
+  "mainJsAsset": "assets/app-Uox-0on0.js",
+  "mainJsSha256": "c904c3a282d3de1db02955137bf988a0bbfb1cb20bf01cb97f74fd6b84d37f6e",
   "entryJsAsset": "assets/index-DXJ5i9Sz.js",
   "entryJsSha256": "c071f345c93051fa49b7391d004803a8a88749780b9f708e640274ce3e39002e"
 }
