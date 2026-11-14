@@ -3268,6 +3268,7 @@ function App() {
   const [bookSavedAnswerReview, setBookSavedAnswerReview] = useState(null);
   const [bookVoiceCarryText, setBookVoiceCarryText] = useState(null);
   const bookPhotoDraftRef = useRef(null);
+  const recordingExitGuardRef = useRef(null);
   const [user, setUser] = useState(null);
   const [questionsDB, setQuestionsDB] = useState([]);
   const [notificationPref, setNotificationPref] = useState(null);
@@ -3335,7 +3336,7 @@ function App() {
       if (!cancelled) setRecoverableRecordings(available.filter(Boolean));
     })();
     return () => { cancelled = true; };
-  }, [user?.id, foundation?.project?.id]);
+  }, [user?.id, foundation?.project?.id, scene]);
   useEffect(() => {
     if (!user?.id || !foundation?.project?.id) {
       setLocalRecordingDrafts([]);
@@ -3547,6 +3548,14 @@ function App() {
     returnQuestionIndex: null,
     editReturnScene: null
   });
+
+  useEffect(() => {
+    if (scene !== 3.5 || !voiceData.audioBlob ||
+      (voiceData.transcriptionStatus !== 'processing' && voiceData.transcriptionFailureStage !== 'upload')) return undefined;
+    const warn = event => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [scene, voiceData.audioBlob, voiceData.transcriptionStatus, voiceData.transcriptionFailureStage]);
 
   useEffect(() => {
     const checkoutReturn = getCheckoutReturnFromUrl();
@@ -4709,7 +4718,7 @@ const handleRecordComplete = async (txt, dur, url, blob, details = {}) => {
     alert("音声を取得できませんでした。ブラウザのマイク許可を確認して、もう一度お試しください。");
     resetVoiceData();
     setScene(3);
-    return;
+    return false;
   }
 
   const nextVoiceData = buildRecordedVoiceData(voiceData, txt, dur, url, blob);
@@ -4755,7 +4764,7 @@ const handleRecordComplete = async (txt, dur, url, blob, details = {}) => {
 
   setScene(3.5);
 
-  void handleTranscribeForReview(nextVoiceData);
+  return await handleTranscribeForReview(nextVoiceData);
 };
 
 
@@ -5198,6 +5207,9 @@ try {
   });
 }
 
+    // Only staged attempts are recoverable from the home screen. Trial and
+    // onboarding recordings remain on the review screen until formally saved.
+    return Boolean(useRecordingAttempt && paths.length > 0);
   } catch (error) {
     console.error(error);
 
@@ -5239,6 +5251,7 @@ try {
   }));
 
     setScene(3.5);
+    return false;
   }
 };
 
@@ -5844,13 +5857,13 @@ const handleLifeOutlineAddRecording = async (txt, dur, _url, blob, details = {})
   if (!introduction?.id) {
     alert("「私の歩み」を読み込んでから、もう一度お試しください。");
     setScene("life_outline_summary");
-    return;
+    return false;
   }
 
   if (additions.length >= MAX_LIFE_OUTLINE_ADDITIONS) {
     alert("語り足しはここまでです。文章の編集で仕上げられます。");
     setScene("life_outline_summary");
-    return;
+    return false;
   }
 
   setScene("life_outline_summary");
@@ -5956,6 +5969,7 @@ const handleLifeOutlineAddRecording = async (txt, dur, _url, blob, details = {})
           ? introduction.body_text
           : ""
     });
+    return true;
   } catch (error) {
     console.error("life outline add recording error", error);
     setLifeOutlineStatus("error");
@@ -5964,6 +5978,7 @@ const handleLifeOutlineAddRecording = async (txt, dur, _url, blob, details = {})
         ? error.message
         : "語り足した内容を反映できませんでした"
     );
+    return false;
   }
 };
 
@@ -7840,7 +7855,7 @@ setScene(1);
     (scene === 'project_role_invite_issue' && roleInviteReturnScene === 'support_project_home')
   );
 
-  const returnToHome = () => {
+  const finishReturningHome = (safeRecorded = false) => {
     const hasUnsavedVoice =
       [2, 3, 4].includes(scene) &&
       (
@@ -7850,7 +7865,7 @@ setScene(1);
       );
 
     if (
-      hasUnsavedVoice &&
+      hasUnsavedVoice && !safeRecorded &&
       !window.confirm("まだ保存していない録音があります。内容を破棄してホームへ戻りますか？")
     ) {
       return;
@@ -7865,6 +7880,17 @@ setScene(1);
     }
     setScene("home");
   };
+  const returnToHome = () => {
+    if (scene === 3.5 && voiceData.transcriptionStatus === 'processing') {
+      alert('音声を保存しています。完了するまでお待ちください。');
+      return;
+    }
+    if (recordingExitGuardRef.current) {
+      recordingExitGuardRef.current(() => finishReturningHome(true));
+      return;
+    }
+    finishReturningHome();
+  };
 
   return (
     <div className={`app-container ${scene === "family_invite_received" ? "app-container--family-invitation" : ""} ${TRIAL_CONVERSION_ENABLED && scene === "trial_complete" ? "app-container--trial-conversion" : ""} ${["onboarding_preferences", "notification_setup", "sharing_setup"].includes(scene) ? "app-container--desktop-setup" : ""} ${showSupportedStoryHeader ? "app-container--supported-story" : ""}`}>
@@ -7874,8 +7900,12 @@ setScene(1);
         name={supportContext.project.subject_name}
         role={supportContext.project.support_role}
         onReturn={() => {
-          setSupportContext(null);
-          setScene(foundation?.project ? "home" : "connections_home");
+          const leaveSupportedStory = () => {
+            setSupportContext(null);
+            setScene(foundation?.project ? "home" : "connections_home");
+          };
+          if (recordingExitGuardRef.current) recordingExitGuardRef.current(leaveSupportedStory);
+          else leaveSupportedStory();
         }}
       />}
       {showGlobalHome && !showSupportedStoryHeader && (
@@ -8993,6 +9023,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
     progress={{ currentIndex: 0, total: 1 }}
     userName={user?.name || "あなた"}
     autoStart
+    registerExitGuard={guard => { recordingExitGuardRef.current = guard; }}
     onComplete={handleLifeOutlineAddRecording}
   />
 )}
@@ -9432,6 +9463,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
           questionSet={supportContext.questionSet}
           onSaved={refreshSupportedProject}
           onBack={() => setScene("support_project_home")}
+          registerExitGuard={guard => { recordingExitGuardRef.current = guard; }}
         />
       )}
 
@@ -9620,6 +9652,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
   autoStart
   referencePhotos={bookAnswerPhotos.map(photo => photo.url)}
   onBack={() => setScene(1)}
+  registerExitGuard={guard => { recordingExitGuardRef.current = guard; }}
   onJourneyEvent={emitJourney}
 onComplete={handleRecordComplete}
 />
@@ -16656,7 +16689,8 @@ export function Scene_SupportRecordingAssist({
   project,
   questionSet = [],
   onSaved,
-  onBack
+  onBack,
+  registerExitGuard
 }) {
   const isFacilitator = project?.support_role === "facilitator";
   const storyQuestions = (questionSet || []).filter(question =>
@@ -16861,10 +16895,13 @@ export function Scene_SupportRecordingAssist({
       setReviewText(readable);
       setEssayText(essay);
       setPhase("review");
+      // The voice has not yet been adopted as a formal supporter answer.
+      return false;
     } catch (error) {
       console.error("supporter recording processing error", error);
       setErrorMessage("音声を保存できませんでした。通信を確認して、もう一度お試しください。");
       setPhase("error");
+      return false;
     }
   };
 
@@ -16921,6 +16958,7 @@ export function Scene_SupportRecordingAssist({
         progress={{ currentIndex: questionIndex, total: storyQuestions.length }}
         userName={project?.subject_name || "ご家族"}
         onBack={() => setPhase("question")}
+        registerExitGuard={registerExitGuard}
         onComplete={processRecording}
       />
     );
@@ -19227,6 +19265,7 @@ export function Scene_Recording({
   seasonalMode = false,
   referencePhotos = [],
   onBack,
+  registerExitGuard,
   onJourneyEvent = () => {},
   onComplete
 }) {
@@ -19241,6 +19280,9 @@ export function Scene_Recording({
   const stopRequestedRef = useRef(false);
   const stopReasonRef = useRef("manual");
   const completionSentRef = useRef(false);
+  const pendingExitRef = useRef(null);
+  const unsafeRecordingRef = useRef(false);
+  const exitGuardRef = useRef(null);
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [micTrackAvailable, setMicTrackAvailable] = useState(true);
   const [waveTick, setWaveTick] = useState(0);
@@ -19253,6 +19295,22 @@ export function Scene_Recording({
   const mimeTypeRef = useRef("");
   const streamRef = useRef(null);
   const recordingTimerRef = useRef(null);
+
+  useEffect(() => {
+    const warn = event => {
+      if (!unsafeRecordingRef.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, []);
+  useEffect(() => {
+    if (!registerExitGuard) return undefined;
+    const guard = destination => exitGuardRef.current?.(destination);
+    registerExitGuard(guard);
+    return () => registerExitGuard(null);
+  }, [registerExitGuard]);
 
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
@@ -19662,6 +19720,8 @@ mediaRef.current.onstop = () => {
         });
 
         if (!blob.size) {
+          unsafeRecordingRef.current = false;
+          pendingExitRef.current = null;
           console.warn("[recording-debug] empty blob detected", {
             runId: debugRunIdRef.current,
             duration: timeRef.current,
@@ -19691,13 +19751,19 @@ mediaRef.current.onstop = () => {
         ].filter(Boolean).join(" "));
 
         onJourneyEvent('recording_end');
-        onComplete(
+        Promise.resolve().then(() => onComplete(
           finalTranscript,
           timeRef.current,
           url,
           blob,
           { stopReason: stopReasonRef.current }
-        );
+        )).then(saved => {
+          if (saved === false) return;
+          unsafeRecordingRef.current = false;
+          const destination = pendingExitRef.current;
+          pendingExitRef.current = null;
+          destination?.();
+        }).catch(error => console.error('recording completion failed', error));
 
         stopWaveMonitor();
 
@@ -19711,6 +19777,7 @@ mediaRef.current.onstop = () => {
       };
 
 mediaRef.current.start(1000);
+unsafeRecordingRef.current = true;
 onJourneyEvent('recording_start');
 clockRef.current.start();
 
@@ -19820,7 +19887,7 @@ const pauseRecording = () => {
 const stop = (reason = "manual") => {
   if (stopRequestedRef.current) return;
   stopRequestedRef.current = true;
-  stopReasonRef.current = reason === "limit" ? "limit" : "manual";
+  stopReasonRef.current = reason === "limit" ? "limit" : reason === "exit" ? "exit" : "manual";
   logRecordingDebug("stop clicked", {
     speechExists: !!speechRef.current,
     suppressComplete: suppressCompleteRef.current
@@ -19882,14 +19949,24 @@ const stop = (reason = "manual") => {
   };
   // Stop immediately at the limit; retain the existing manual-stop settling delay.
   if (stopReasonRef.current === "limit") finishRecording();
+  else if (reason === 'exit') finishRecording();
   else setTimeout(finishRecording, 1200);
 };
+
+const requestSafeExit = destination => {
+  if (stopRequestedRef.current) return;
+  if (!unsafeRecordingRef.current) { destination?.(); return; }
+  if (!window.confirm('録音を止めて保存してから移動しますか？')) return;
+  pendingExitRef.current = destination;
+  stop('exit');
+};
+exitGuardRef.current = requestSafeExit;
 
 return (
 <StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4"
   surfaceClassName={seasonalMode || lightMode || question?.onboarding_group !== 'trial_experience' ? 'answer-light-recorder' : ''}
   background={QUESTION_BACKGROUND}>
-  <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} progressOverride={seasonalMode ? '1 / 1' : null} onBack={step === 0 || step === "checking_mic" || step === "mic_error" ? onBack : null} />
+  <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} progressOverride={seasonalMode ? '1 / 1' : null} onBack={onBack ? () => requestSafeExit(onBack) : null} />
 
   <RecordingQuestionPrompt question={question} />
 

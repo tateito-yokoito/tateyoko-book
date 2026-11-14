@@ -335,10 +335,11 @@ export default function SeasonalMemoryFlow({
         transcript_readable: polished.transcript_readable || raw,
         transcript_essay: polished.transcript_essay || raw,
         body: polished.transcript_readable || raw, tone: 'readable' });
-      if (await flush() !== true) return;
+      if (await flush() !== true) return false;
       setAudioToProcess(null);
       setPage('voice_review'); setSaveState('saved');
-    } catch (cause) { setSaveState('failed'); setError(cause.message); setPage('voice_review'); }
+      return true;
+    } catch (cause) { setSaveState('failed'); setError(cause.message); setPage('voice_review'); return false; }
   };
   const recordAudio = async (transcript, duration, _url, blob) => {
     setPage('processing'); setSaveState('saving'); setError('');
@@ -348,10 +349,11 @@ export default function SeasonalMemoryFlow({
     try {
       const path = await addMedia(file, 'audio', Math.max(1, Math.ceil(duration)));
       setAudioToProcess({path, transcript: transcript || ''});
-      await processAudio(path, transcript);
+      return await processAudio(path, transcript);
     } catch (cause) {
       setAudioToProcess({file, transcript: transcript || '', duration});
       setSaveState('failed'); setError(cause.message); setPage('voice_review');
+      return false;
     }
   };
   const proposePolish = async () => {
