@@ -67,6 +67,8 @@ const photoOnly = editionFromBookWork({
 assert.deepEqual(photoOnly.stories.map(story => story.id), ["written", "photo-only"]);
 const photoPage = buildBookPages(photoOnly).find(page => page.kind === "story-opener" && page.storyId === "photo-only");
 assert.equal(photoPage.question, "photo-onlyの問い");
+assert.ok(!buildBookPages(photoOnly).some(page => page.kind === "story-body" && page.storyId === "photo-only"),
+  "写真だけの回答に空の本文ページを増やさない");
 assert.equal(photoPage.photo.id, "kept");
 assert.deepEqual(photoPage.paragraphs, []);
 assert.match(renderBookPrintHtml(photoOnly), /photo-onlyの問い/);

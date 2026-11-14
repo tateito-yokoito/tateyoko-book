@@ -1,0 +1,670 @@
+{
+  "profile": {
+    "widthMm": 182,
+    "heightMm": 257,
+    "bodyCharsPerLine": 24,
+    "bodyLinesPerPage": 19,
+    "openerBodyLines": 7
+  },
+  "cases": [
+    {
+      "name": "01-photo-only-1-landscape",
+      "chars": 0,
+      "orientations": [
+        "landscape"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "colophon"
+        }
+      ],
+      "pdf": "01-photo-only-1-landscape.pdf"
+    },
+    {
+      "name": "02-photo-only-1-portrait",
+      "chars": 0,
+      "orientations": [
+        "portrait"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "colophon"
+        }
+      ],
+      "pdf": "02-photo-only-1-portrait.pdf"
+    },
+    {
+      "name": "03-photo-only-2-mixed",
+      "chars": 0,
+      "orientations": [
+        "landscape",
+        "portrait"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "photo"
+        },
+        {
+          "number": 5,
+          "kind": "colophon"
+        },
+        {
+          "number": 6,
+          "kind": "blank"
+        },
+        {
+          "number": 7,
+          "kind": "blank"
+        },
+        {
+          "number": 8,
+          "kind": "blank"
+        }
+      ],
+      "pdf": "03-photo-only-2-mixed.pdf"
+    },
+    {
+      "name": "04-photo-only-3-mixed",
+      "chars": 0,
+      "orientations": [
+        "landscape",
+        "portrait",
+        "landscape2"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "photo"
+        },
+        {
+          "number": 5,
+          "kind": "photo"
+        },
+        {
+          "number": 6,
+          "kind": "colophon"
+        },
+        {
+          "number": 7,
+          "kind": "blank"
+        },
+        {
+          "number": 8,
+          "kind": "blank"
+        }
+      ],
+      "pdf": "04-photo-only-3-mixed.pdf"
+    },
+    {
+      "name": "05-short-1-landscape",
+      "chars": 100,
+      "orientations": [
+        "landscape"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "story-body"
+        },
+        {
+          "number": 5,
+          "kind": "colophon"
+        },
+        {
+          "number": 6,
+          "kind": "blank"
+        },
+        {
+          "number": 7,
+          "kind": "blank"
+        },
+        {
+          "number": 8,
+          "kind": "blank"
+        }
+      ],
+      "pdf": "05-short-1-landscape.pdf"
+    },
+    {
+      "name": "06-short-1-portrait",
+      "chars": 100,
+      "orientations": [
+        "portrait"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "story-body"
+        },
+        {
+          "number": 5,
+          "kind": "colophon"
+        },
+        {
+          "number": 6,
+          "kind": "blank"
+        },
+        {
+          "number": 7,
+          "kind": "blank"
+        },
+        {
+          "number": 8,
+          "kind": "blank"
+        }
+      ],
+      "pdf": "06-short-1-portrait.pdf"
+    },
+    {
+      "name": "07-short-2-mixed",
+      "chars": 100,
+      "orientations": [
+        "portrait",
+        "landscape"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "story-body"
+        },
+        {
+          "number": 5,
+          "kind": "photo"
+        },
+        {
+          "number": 6,
+          "kind": "colophon"
+        },
+        {
+          "number": 7,
+          "kind": "blank"
+        },
+        {
+          "number": 8,
+          "kind": "blank"
+        }
+      ],
+      "pdf": "07-short-2-mixed.pdf"
+    },
+    {
+      "name": "08-short-3-mixed",
+      "chars": 100,
+      "orientations": [
+        "landscape",
+        "portrait",
+        "landscape2"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "story-body"
+        },
+        {
+          "number": 5,
+          "kind": "photo"
+        },
+        {
+          "number": 6,
+          "kind": "photo"
+        },
+        {
+          "number": 7,
+          "kind": "colophon"
+        },
+        {
+          "number": 8,
+          "kind": "blank"
+        }
+      ],
+      "pdf": "08-short-3-mixed.pdf"
+    },
+    {
+      "name": "09-medium-1-landscape",
+      "chars": 400,
+      "orientations": [
+        "landscape"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "story-body"
+        },
+        {
+          "number": 5,
+          "kind": "story-body"
+        },
+        {
+          "number": 6,
+          "kind": "colophon"
+        },
+        {
+          "number": 7,
+          "kind": "blank"
+        },
+        {
+          "number": 8,
+          "kind": "blank"
+        }
+      ],
+      "pdf": "09-medium-1-landscape.pdf"
+    },
+    {
+      "name": "10-medium-2-mixed",
+      "chars": 400,
+      "orientations": [
+        "portrait",
+        "landscape"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "story-body"
+        },
+        {
+          "number": 5,
+          "kind": "story-body"
+        },
+        {
+          "number": 6,
+          "kind": "photo"
+        },
+        {
+          "number": 7,
+          "kind": "colophon"
+        },
+        {
+          "number": 8,
+          "kind": "blank"
+        }
+      ],
+      "pdf": "10-medium-2-mixed.pdf"
+    },
+    {
+      "name": "11-medium-3-mixed",
+      "chars": 400,
+      "orientations": [
+        "landscape",
+        "portrait",
+        "landscape2"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "story-body"
+        },
+        {
+          "number": 5,
+          "kind": "story-body"
+        },
+        {
+          "number": 6,
+          "kind": "photo"
+        },
+        {
+          "number": 7,
+          "kind": "photo"
+        },
+        {
+          "number": 8,
+          "kind": "colophon"
+        }
+      ],
+      "pdf": "11-medium-3-mixed.pdf"
+    },
+    {
+      "name": "12-long-1-portrait",
+      "chars": 1000,
+      "orientations": [
+        "portrait"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "story-body"
+        },
+        {
+          "number": 5,
+          "kind": "story-body"
+        },
+        {
+          "number": 6,
+          "kind": "story-body"
+        },
+        {
+          "number": 7,
+          "kind": "story-body"
+        },
+        {
+          "number": 8,
+          "kind": "colophon"
+        }
+      ],
+      "pdf": "12-long-1-portrait.pdf"
+    },
+    {
+      "name": "13-long-2-mixed",
+      "chars": 1000,
+      "orientations": [
+        "landscape",
+        "portrait"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "story-body"
+        },
+        {
+          "number": 5,
+          "kind": "story-body"
+        },
+        {
+          "number": 6,
+          "kind": "story-body"
+        },
+        {
+          "number": 7,
+          "kind": "story-body"
+        },
+        {
+          "number": 8,
+          "kind": "photo"
+        },
+        {
+          "number": 9,
+          "kind": "colophon"
+        },
+        {
+          "number": 10,
+          "kind": "blank"
+        },
+        {
+          "number": 11,
+          "kind": "blank"
+        },
+        {
+          "number": 12,
+          "kind": "blank"
+        }
+      ],
+      "pdf": "13-long-2-mixed.pdf"
+    },
+    {
+      "name": "14-long-3-mixed",
+      "chars": 1000,
+      "orientations": [
+        "landscape",
+        "portrait",
+        "landscape2"
+      ],
+      "placement": "opener + after_full",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "story-body"
+        },
+        {
+          "number": 5,
+          "kind": "story-body"
+        },
+        {
+          "number": 6,
+          "kind": "story-body"
+        },
+        {
+          "number": 7,
+          "kind": "story-body"
+        },
+        {
+          "number": 8,
+          "kind": "photo"
+        },
+        {
+          "number": 9,
+          "kind": "photo"
+        },
+        {
+          "number": 10,
+          "kind": "colophon"
+        },
+        {
+          "number": 11,
+          "kind": "blank"
+        },
+        {
+          "number": 12,
+          "kind": "blank"
+        }
+      ],
+      "pdf": "14-long-3-mixed.pdf"
+    },
+    {
+      "name": "15-medium-3-half-manual",
+      "chars": 400,
+      "orientations": [
+        "landscape",
+        "portrait",
+        "landscape2"
+      ],
+      "placement": "opener + two after_half",
+      "pages": [
+        {
+          "number": 1,
+          "kind": "title"
+        },
+        {
+          "number": 2,
+          "kind": "contents"
+        },
+        {
+          "number": 3,
+          "kind": "story-opener"
+        },
+        {
+          "number": 4,
+          "kind": "story-body"
+        },
+        {
+          "number": 5,
+          "kind": "story-body"
+        },
+        {
+          "number": 6,
+          "kind": "photo-half"
+        },
+        {
+          "number": 7,
+          "kind": "colophon"
+        },
+        {
+          "number": 8,
+          "kind": "blank"
+        }
+      ],
+      "pdf": "15-medium-3-half-manual.pdf"
+    }
+  ]
+}

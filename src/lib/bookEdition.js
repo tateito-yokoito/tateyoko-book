@@ -147,6 +147,7 @@ export function buildBookPages(edition, profile = BOOK_PRINT_PROFILE) {
       sourceUserQuestionId: story.sourceUserQuestionId, question: story.question, photo: photoSlots.opener,
       paragraphs: hasOpeningPhoto ? [] : bodyPages.shift() });
     for (const [partIndex, bodyParagraphs] of bodyPages.entries()) {
+      if (!bodyParagraphs.length) continue;
       add({ kind: "story-body", storyId: story.id, partIndex, paragraphs: bodyParagraphs, ...theme });
     }
     for (const photo of photoSlots.afterFull) add({ kind: "photo", storyId: story.id, photo, ...theme });
