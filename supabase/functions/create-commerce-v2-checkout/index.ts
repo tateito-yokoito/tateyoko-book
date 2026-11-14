@@ -110,11 +110,15 @@ serve(async (request) => {
     const standardCount = integer(body.standardExtraCount ?? 0);
     const premiumCount = integer(body.premiumExtraCount ?? 0);
     const orderType = body.orderType === "gift" ? "gift" : "self";
+    const giftMode = body.giftMode;
     const projectId = orderType === "self" ? String(body.projectId || "") : null;
     const consultationId = method === "interview_staff" && body.consultationId
       ? String(body.consultationId) : null;
     const familyInvitationId = body.familyInvitationId ? String(body.familyInvitationId) : null;
-    if (body.includeGiftPackage === true || !["standard", "premium"].includes(edition)
+    if (body.includeGiftPackage === true
+      || (body.action === "checkout" && orderType === "gift"
+        && !["family_managed", "recipient_led"].includes(String(giftMode)))
+      || !["standard", "premium"].includes(edition)
       || !["self_or_family", "interview_staff"].includes(method)
       || !Number.isInteger(standardCount) || !Number.isInteger(premiumCount)
       || standardCount < 0 || standardCount > 30 || premiumCount < 0 || premiumCount > 30
@@ -188,13 +192,39 @@ serve(async (request) => {
       input_family_invitation_id: familyInvitationId,
     });
     if (createError) throw createError;
-    const order = created?.order;
+    let order = created?.order;
     if (!order || order.purchaser_user_id !== auth.user.id
       || order.quote_snapshot_v2?.amount_total !== quote.amount_total
       || order.quote_snapshot_v2?.edition !== quote.edition
       || order.quote_snapshot_v2?.production_method !== quote.production_method
       || JSON.stringify(order.quote_snapshot_v2?.lines) !== JSON.stringify(quote.lines)) {
       throw new Error("注文内容を確認できません");
+    }
+    if (orderType === "gift") {
+      const persistedMode = order.metadata?.gift_mode;
+      if (persistedMode && persistedMode !== giftMode) {
+        throw new Error("再試行のギフト制作方法が一致しません");
+      }
+      if (!persistedMode) {
+        // Persist the mode before a zero-yen finalization or Stripe session is
+        // possible. The conditional update prevents two concurrent retries
+        // with the same request key from changing each other's choice.
+        const { data: saved, error: saveError } = await admin.from("commerce_orders")
+          .update({ metadata: { ...order.metadata, gift_mode: giftMode } })
+          .eq("id", order.id).eq("purchaser_user_id", auth.user.id)
+          .eq("order_type", "gift").eq("status", "checkout_pending")
+          .is("metadata->>gift_mode", null).select("*").maybeSingle();
+        if (saveError) throw saveError;
+        if (saved) order = saved;
+        else {
+          const { data: current, error: readError } = await admin.from("commerce_orders")
+            .select("*").eq("id", order.id).single();
+          if (readError || current?.metadata?.gift_mode !== giftMode) {
+            throw new Error("ギフトの制作方法を確認できません");
+          }
+          order = current;
+        }
+      }
     }
     const { data: contract, error: contractError } = await admin.rpc("register_experience_contract", {
       input_order_id: order.id,

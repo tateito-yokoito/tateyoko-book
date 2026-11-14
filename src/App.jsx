@@ -56,6 +56,7 @@ import ThemeMorePicker from "./ThemeMorePicker.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
 import CommerceV2Purchase from "./CommerceV2Purchase.jsx";
 import PurchaseSelectionEntry from "./PurchaseSelectionEntry.jsx";
+import { giftPurchaseMode } from './lib/giftPurchaseMode.js';
 import ProjectRoleInvitePanel from './ProjectRoleInvitePanel.jsx';
 import CoManagerSharingPanel from './CoManagerSharingPanel.jsx';
 import { clearCommercePurchaseIntent, commercePurchaseReviewRequested, readCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
@@ -661,6 +662,25 @@ async function claimGiftForProject(token, projectId) {
   });
   if (error) throw error;
   return data;
+}
+
+async function loadUnclaimedManagedGift(userId) {
+  const { data: orders, error: orderError } = await supabaseClient.from('commerce_orders')
+    .select('id,metadata,status,created_at')
+    .eq('purchaser_user_id', userId).eq('order_type', 'gift')
+    .in('status', ['paid', 'zero_paid'])
+    .contains('metadata', { gift_mode: 'family_managed' })
+    .order('created_at', { ascending: false }).limit(50);
+  if (orderError) throw orderError;
+  if (!orders?.length) return null;
+  const { data: gifts, error: giftError } = await supabaseClient.from('gift_orders')
+    .select('commerce_order_id,claim_token,recipient_name,claimed_at')
+    .in('commerce_order_id', orders.map(order => order.id))
+    .is('claimed_at', null);
+  if (giftError) throw giftError;
+  const giftsByOrder = new Map((gifts || []).map(gift => [gift.commerce_order_id, gift]));
+  const order = orders.find(candidate => giftsByOrder.has(candidate.id));
+  return order ? { order, gift: giftsByOrder.get(order.id) } : null;
 }
 
 async function loadFamilyInvitePreview(token) {
@@ -3638,13 +3658,39 @@ if (!session) {
         let pendingManagedGift = null;
         try { pendingManagedGift = JSON.parse(window.localStorage.getItem(pendingManagedGiftKey) || 'null'); }
         catch { window.localStorage.removeItem(pendingManagedGiftKey); }
-        if (!checkoutReturn.sessionId && pendingManagedGift?.userId === session.user.id && pendingManagedGift?.order?.id
+        if (!checkoutReturn.sessionId && !getGiftClaimTokenFromUrl() && !purchaseSelection) {
+          try {
+            const pendingOrder = await loadUnclaimedManagedGift(session.user.id);
+            if (pendingOrder) {
+              setUser(currentUser);
+              setPurchaseResult({ ...pendingOrder, familyManaged: true });
+              setPurchaseStatus('paid');
+              setScene('gift_purchase_success');
+              return;
+            }
+          } catch (error) {
+            console.warn('managed gift recovery error', error);
+          }
+        }
+
+        // Existing Gift B orders did not persist gift_mode. Keep their local
+        // recovery key, but verify the gift is still unclaimed before showing
+        // the start screen again.
+        if (!checkoutReturn.sessionId && !getGiftClaimTokenFromUrl()
+          && pendingManagedGift?.userId === session.user.id && pendingManagedGift?.order?.id
           && pendingManagedGift?.gift?.claim_token) {
-          setUser(currentUser);
-          setPurchaseResult({ order: pendingManagedGift.order, gift: pendingManagedGift.gift, familyManaged: true });
-          setPurchaseStatus('paid');
-          setScene('gift_purchase_success');
-          return;
+          const { data: oldGift, error: oldGiftError } = await supabaseClient.from('gift_orders')
+            .select('claim_token,recipient_name,claimed_at')
+            .eq('commerce_order_id', pendingManagedGift.order.id).maybeSingle();
+          if (!oldGiftError && oldGift?.claim_token === pendingManagedGift.gift.claim_token
+            && !oldGift.claimed_at) {
+            setUser(currentUser);
+            setPurchaseResult({ order: pendingManagedGift.order, gift: oldGift, familyManaged: true });
+            setPurchaseStatus('paid');
+            setScene('gift_purchase_success');
+            return;
+          }
+          if (!oldGiftError) window.localStorage.removeItem(pendingManagedGiftKey);
         }
 
 const unstartedConnections = await loadUnstartedConnections(session.user.id);
@@ -6511,9 +6557,8 @@ useEffect(() => {
 const finishGiftCheckoutAsPaid = data => {
   setPurchaseFor("gift");
   const purchaseIntent = readCommercePurchaseIntent(window.localStorage);
-  const familyManaged = purchaseIntent?.purchaseFor === 'gift'
-    && purchaseIntent.giftMode === 'family_managed'
-    && purchaseIntent.recipientName === data.gift?.recipient_name;
+  const familyManaged = giftPurchaseMode(data.order, purchaseIntent,
+    data.gift?.recipient_name) === 'family_managed';
   setPurchaseResult({ order: data.order, gift: data.gift, familyManaged });
   if (familyManaged && data.order?.id && data.gift?.claim_token) {
     window.localStorage.setItem(pendingManagedGiftKey, JSON.stringify({

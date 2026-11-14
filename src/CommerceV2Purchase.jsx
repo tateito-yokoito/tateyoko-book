@@ -162,7 +162,8 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         action: 'checkout', requestKey: requestKey.current,
         expectedQuote: quote, orderType, projectId, edition,
         productionMethod: method, standardExtraCount, premiumExtraCount,
-        discountCode, gift, consultationId: approvedConsultation?.id || null,
+        discountCode, gift, giftMode: orderType === 'gift' ? giftMode : null,
+        consultationId: approvedConsultation?.id || null,
         familyInvitationId: approvedConsultation?.familyInvitationId || familyInvitation?.id || null,
       } });
       if (invokeError || !data?.success)
@@ -242,8 +243,8 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           {orderType === 'gift' && <div className="mt-5">
             <h3 className="text-lg font-semibold leading-7">どなたのスマホで作品づくりを進めますか？</h3>
             <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-[#e9ece5] p-1">
-              <button type="button" aria-pressed={giftMode === 'family_managed'} className={`rounded-lg px-2 py-3 text-sm ${giftMode === 'family_managed' ? 'bg-white font-bold shadow-sm' : ''}`} onClick={() => setGiftMode('family_managed')}>あなたのスマホ</button>
-              <button type="button" aria-pressed={giftMode === 'recipient_led'} className={`rounded-lg px-2 py-3 text-sm ${giftMode === 'recipient_led' ? 'bg-white font-bold shadow-sm' : ''}`} onClick={() => setGiftMode('recipient_led')}>贈り先の方のスマホ</button>
+              <button type="button" aria-pressed={giftMode === 'family_managed'} className={`rounded-lg px-2 py-3 text-sm ${giftMode === 'family_managed' ? 'bg-white font-bold shadow-sm' : ''}`} onClick={() => { setGiftMode('family_managed'); requestKey.current = newRequestKey(); }}>あなたのスマホ</button>
+              <button type="button" aria-pressed={giftMode === 'recipient_led'} className={`rounded-lg px-2 py-3 text-sm ${giftMode === 'recipient_led' ? 'bg-white font-bold shadow-sm' : ''}`} onClick={() => { setGiftMode('recipient_led'); requestKey.current = newRequestKey(); }}>贈り先の方のスマホ</button>
             </div>
             <div className="mt-3 rounded-xl border border-[#d7dbd0] bg-white px-4 py-4">
               <ul className="list-disc space-y-1 pl-5 text-sm leading-7">
