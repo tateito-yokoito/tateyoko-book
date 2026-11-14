@@ -7806,7 +7806,13 @@ setScene(1);
       await advanceAfterBookAnswer(currentQ);
     } catch (error) {
       setBookPhotoSaveState('failed');
-      alert(error?.message || '写真の回答を確定できませんでした。');
+      if (error?.message?.includes('Written draft must be included')) {
+        setBookPhotoSaveState('saved');
+        setWritingQuestion(currentQ);
+        alert('書きかけの文章があります。文章を確認してから、写真と一緒にこの問いを終えてください。');
+      } else {
+        alert(error?.message || '写真の回答を確定できませんでした。');
+      }
     } finally { setBookPhotoFinishing(false); }
   };
 

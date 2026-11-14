@@ -250,6 +250,14 @@ begin
     if outcome->>'status'<>'saved' then return outcome; end if;
     select * into a from public.answers where id=(outcome->>'answer_id')::uuid;
   else
+    -- A photo-only finish must not silently leave an active written draft
+    -- behind. The user can finish both together through save_answer_text.
+    if exists(select 1 from public.answer_text_drafts text_draft
+      where text_draft.user_id=uid and text_draft.book_project_id=input_project_id
+        and text_draft.sequence_order=input_sequence_order
+        and text_draft.state='active' and length(btrim(coalesce(text_draft.body,'')))>0) then
+      raise exception 'Written draft must be included' using errcode='40001';
+    end if;
     select * into a from public.answers where user_id=uid
       and sequence_order=input_sequence_order for update;
     if a.id is null then
