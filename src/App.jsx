@@ -3288,7 +3288,7 @@ function App() {
   const bookQuestionId = questionsDB[progress.currentIndex]?.user_question_id;
   const bookProjectId = foundation?.project?.id;
   const bookPhotoEnabled = Boolean(user?.id && bookProjectId && bookQuestionId
-    && foundation?.project?.access_status === 'paid'
+    && hasFullProjectAccess(foundation?.project)
     && canWriteStoryQuestion(questionsDB[progress.currentIndex])
     && questionsDB[progress.currentIndex]?.onboarding_group !== 'trial_experience');
   useEffect(() => {
@@ -7740,9 +7740,21 @@ setScene(1);
       (Number(currentQ.theme_order) > 0 && next.theme_order !== currentQ.theme_order)) {
       if (direction < 0) setScene(!isFormalOnboardingQuestion(currentQ) && resolvedThemeResumeContext
         ? 'theme_resume' : 0);
+      else if (bookBackOriginIndex !== null) {
+        setProgress(previous => ({ ...previous, currentIndex: bookBackOriginIndex }));
+        setBookBackOriginIndex(null);
+        setBookSavedAnswerReview(null);
+        setScene(1);
+      } else if (currentQ.onboarding_group === 'starting_conversation') {
+        setScene('starting_conversation_complete');
+      } else if (Number(currentQ.theme_order) > 0) {
+        setScene('theme_complete');
+      }
       return;
     }
     if (direction < 0 && bookBackOriginIndex === null) setBookBackOriginIndex(progress.currentIndex);
+    if (direction > 0 && bookBackOriginIndex !== null && nextIndex >= bookBackOriginIndex)
+      setBookBackOriginIndex(null);
     setProgress(previous => ({ ...previous, currentIndex: nextIndex }));
     try { await loadBookSavedAnswerReview(next); }
     catch { setBookSavedAnswerReview(null); alert('前の回答を読み込めませんでした。もう一度お試しください。'); }
