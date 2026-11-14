@@ -1,19 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnswerTextDraft } from './lib/answerTextDraft.js';
 import { AnswerTextCandidate, AnswerTextFields, AnswerTextLayout } from './AnswerTextShared.jsx';
+import { AnswerReview, AnswerSaveStatus, bookTextSaveState, canCompleteSavedAnswer } from './AnswerInputUI.jsx';
 
-const statusLabels = {
-  unknown: '下書きを確認中',
-  saved: '保存済み',
-  device_only: '端末に保存・同期待ち',
-  offline: 'オフライン・端末に保存',
-  discard_pending: '破棄済み・同期待ち',
-  discarded: '下書きを破棄済み',
-  conflict: '下書きの確認が必要',
+const trialStatusLabels = {
+  unknown: '下書きを確認中', saved: '保存済み', device_only: '端末に保存・同期待ち',
+  offline: 'オフライン・端末に保存', discard_pending: '破棄済み・同期待ち',
+  discarded: '下書きを破棄済み', conflict: '下書きの確認が必要',
 };
 
 export default function WrittenAnswerEditor({ userId, projectId, question,
-  answer = null, client, onClose, onSaved, progressLabel = '', themeLabel = '' }) {
+  answer = null, client, onClose, onSaved, onVoice, progressLabel = '', themeLabel = '' }) {
   const [snapshot, setSnapshot] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -22,6 +19,7 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [versions, setVersions] = useState(null);
   const [restoreReason, setRestoreReason] = useState(false);
+  const [review, setReview] = useState(false);
   const controller = useRef(null);
   const initialText = answer?.transcript_edited || answer?.transcript_readable
     || answer?.transcript_clean || answer?.transcript_raw || answer?.snippet || '';
@@ -54,13 +52,27 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
   const draft = controller.current;
   const body = snapshot?.state === 'active' ? snapshot.body || '' : '';
   const changed = body !== initialText;
-  const leave = () => {
-    if (draft?.record.state === 'active') void draft.flush().catch(() => {});
-    onClose();
+  const light = question?.onboarding_group !== 'trial_experience';
+  const saveState = bookTextSaveState(snapshot);
+  const leave = async (destination = onClose) => {
+    if (draft?.record.state === 'active' && draft.record.dirty) {
+      try {
+        const result = await draft.flush();
+        if (result.dirty || bookTextSaveState(result) !== 'saved') {
+          setError('下書きを保存できませんでした。再試行してから画面を移動してください。');
+          return;
+        }
+      } catch {
+        setError('下書きを保存できませんでした。再試行してから画面を移動してください。');
+        return;
+      }
+    }
+    destination?.();
   };
 
   const edit = value => {
     try {
+      setReview(false);
       draft.change(value);
       setError('');
     } catch (cause) {
@@ -68,11 +80,26 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
     }
   };
 
+  const reviewDraft = async () => {
+    if (!body.trim() || busy || !draft) return;
+    try {
+      setBusy(true); setError('');
+      const result = await draft.flush();
+      if (!canCompleteSavedAnswer({hasContent: Boolean(result.body?.trim()),
+        saveState: bookTextSaveState(result), dirty: result.dirty})) {
+        throw new Error('下書きの保存を確認できませんでした。再試行してください。');
+      }
+      setReview(true);
+    } catch (cause) {
+      setError(cause?.message || '下書きを保存できませんでした。');
+    } finally { setBusy(false); }
+  };
+
   const save = async () => {
     if (!body.trim() || busy) return;
     try {
       setBusy(true); setError('');
-      if (!snapshot?.dirty && !changed) { leave(); return; }
+      if (!snapshot?.dirty && !changed) { await leave(); return; }
       if (snapshot?.editNumber === 0) draft.change(body);
       const result = await draft.save(restoreReason ? 'restore' : answer ? 'edit' : 'initial');
       // The controller retains any input made after the save request began.
@@ -141,8 +168,14 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
     else setVersions(data || []);
   };
 
-  return <AnswerTextLayout question={question} theme={themeLabel} progress={progressLabel} onBack={leave}>
-        {snapshot?.conflict ? <>
+  return <AnswerTextLayout question={question} theme={themeLabel} progress={progressLabel} onBack={() => void leave()}
+    light={light}>
+        {light && review && !snapshot?.conflict ? <AnswerReview body={body} saveState={saveState}
+          onVoice={onVoice ? () => void leave(onVoice) : null} onWrite={() => setReview(false)}
+          onRetry={() => void draft.flush().catch(() => {})}
+          onFinish={save} canFinish={canCompleteSavedAnswer({hasContent: Boolean(body.trim()),
+            saveState, dirty: snapshot?.dirty, busy})} /> :
+        snapshot?.conflict ? <>
           <h3 className="text-lg mb-2">{snapshot.conflict.kind === 'answer' ? '確定した文章が更新されています' : '下書きが2つあります'}</h3>
           <p className="text-white/60 text-sm leading-relaxed mb-4">文章を見比べて、編集を続ける方を選んでください。選択だけでは本の文章は更新されません。</p>
           <div className="space-y-3">
@@ -155,9 +188,12 @@ export default function WrittenAnswerEditor({ userId, projectId, question,
           onUse={() => { edit(candidate.text); setCandidate(null); }}
           onDiscard={() => setCandidate(null)} /> : <AnswerTextFields
           value={body} onChange={edit} busy={busy}
-          status={statusLabels[snapshot?.remoteStatus || 'unknown']}
+          status={light ? <AnswerSaveStatus state={saveState} hasContent={Boolean(body.trim())}
+            onRetry={saveState === 'failed' ? () => void draft.flush().catch(() => {}) : null} />
+            : trialStatusLabels[snapshot?.remoteStatus || 'unknown']}
           showStyles={showStyles} onToggleStyles={() => setShowStyles(value => !value)}
-          onPolish={style => void polish(style)} onSave={save}
+          onPolish={style => void polish(style)} onSave={light ? reviewDraft : save}
+          saveLabel={light ? '回答を確認する' : '保存する'}
           onDiscard={() => changed ? setConfirmDiscard(true) : discard()}
           beforeActions={versions && <div className="space-y-3 rounded-xl border border-white/20 p-4">
               <h3 className="text-white/80">文章の履歴</h3>

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import QuestionFlowTopBar from './QuestionFlowTopBar.jsx';
+import { AnswerBodyEditor } from './AnswerInputUI.jsx';
 
-export function AnswerTextLayout({ question, theme, progress, onBack, children }) {
+export function AnswerTextLayout({ question, theme, progress, onBack, children, light = false }) {
   return createPortal(
-    <div className="fixed inset-0 z-[9999] bg-slate-950 text-white flex flex-col px-5 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-[calc(0.75rem+env(safe-area-inset-bottom))] overflow-y-auto">
+    <div className={`answer-text-layout fixed inset-0 z-[9999] flex flex-col px-5 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-[calc(0.75rem+env(safe-area-inset-bottom))] overflow-y-auto ${light ? 'answer-light answer-text-layout--light' : 'bg-slate-950 text-white'}`}>
       <div className="mx-auto w-full max-w-xl flex min-h-0 flex-1 flex-col">
         <QuestionFlowTopBar onBack={onBack} theme={theme || question?.theme_label || question?.chapter_label || ''} progress={progress} />
         <h2 className="text-center text-narrative text-[1.3rem] leading-[1.7] mt-7 mb-4 max-h-[20dvh] overflow-y-auto shrink-0">{question?.content || question?.question_text_snapshot}</h2>
@@ -30,15 +31,15 @@ export function AnswerTextCandidate({ candidate, onUse, onDiscard }) {
 }
 
 export function AnswerTextFields({ value, onChange, busy, status, onSave, onPolish, onDiscard,
-  showStyles, onToggleStyles, saveDisabled = false, inputDisabled = false, canPolish = true, beforeActions, children }) {
+  showStyles, onToggleStyles, saveDisabled = false, inputDisabled = false, canPolish = true, beforeActions, children,
+  saveLabel = '保存する' }) {
   return <>
     <div className="flex items-center justify-between gap-3 mb-2 shrink-0">
-      <p role="status" className="text-white/55 text-xs">{status}</p>
+      <div className="text-white/55 text-xs">{status}</div>
       {children}
     </div>
-    <textarea aria-label="回答の文章" value={value} onChange={event => onChange(event.target.value)} disabled={inputDisabled}
-      className="w-full min-h-[48dvh] flex-1 rounded-xl border border-white/20 bg-[#f5f3ed] p-5 text-[#24302d] text-lg leading-loose outline-none resize-y"
-      placeholder="ここに思い出を書く" />
+    <AnswerBodyEditor value={value} onChange={onChange} disabled={inputDisabled}
+      className="w-full min-h-[48dvh] flex-1 rounded-xl border border-white/20 bg-[#f5f3ed] p-5 text-[#24302d] text-lg leading-loose outline-none resize-y" />
     <div className="pt-3 space-y-2 shrink-0">
       {beforeActions}
       {canPolish && showStyles && <div role="group" aria-label="文章の整え方" className="grid grid-cols-3 gap-2">
@@ -51,7 +52,7 @@ export function AnswerTextFields({ value, onChange, busy, status, onSave, onPoli
           className="min-h-14 rounded-xl border border-white/30 disabled:opacity-40">✦ 整える</button>
         }
         <button type="button" onClick={onSave} disabled={busy || !value.trim() || saveDisabled}
-          className="min-h-14 rounded-xl bg-white text-slate-900 disabled:opacity-40">{busy ? '処理中…' : '保存する'}</button>
+          className="min-h-14 rounded-xl bg-white text-slate-900 disabled:opacity-40">{busy ? '処理中…' : saveLabel}</button>
       </div>
       {onDiscard && <button type="button" onClick={onDiscard} disabled={busy}
         className="w-full min-h-11 text-white/55 text-sm">保存せず終了</button>}

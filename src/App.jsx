@@ -32,6 +32,7 @@ import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
 import WrittenAnswerEditor from "./WrittenAnswerEditor.jsx";
 import { AnswerTextCandidate, AnswerTextFields, AnswerTextLayout } from "./AnswerTextShared.jsx";
+import { AnswerEntryChoices } from './AnswerInputUI.jsx';
 import QuestionFlowTopBar from "./QuestionFlowTopBar.jsx";
 import { nextThemeQuestion } from "./lib/nextThemeQuestion.js";
 import { deleteAnswerRecordingDraft, listAnswerRecordingDrafts, saveAnswerRecordingDraft } from './lib/answerRecordingDraft.js';
@@ -2389,19 +2390,29 @@ function getCurrentDeliveryQuestionIndex(questionSet, project, profile) {
   return findNextDeliveryQuestionIndex(questionSet, currentIndex);
 }
 
-async function markUserQuestionAnswered(userQuestionId) {
+async function markUserQuestionAnswered(userQuestionId, { strict = false } = {}) {
   if (!userQuestionId) return;
 
-  const { error } = await supabaseClient
+  const { data, error } = await supabaseClient
     .from("user_questions")
     .update({
       answered_at: new Date().toISOString(),
       status: "answered"
     })
-    .eq("id", userQuestionId);
+    .eq("id", userQuestionId).select('id').maybeSingle();
 
-  if (error) {
-    console.warn("answered_at update error", error);
+  if (error && !strict) {
+    console.warn('answered_at update error', error);
+    return;
+  }
+  if (error) throw error;
+  if (!strict) return;
+  if (!data?.id) {
+    const result = await supabaseClient.from('user_questions').select('status')
+      .eq('id', userQuestionId).maybeSingle();
+    if (result.error || result.data?.status !== 'answered') {
+      throw result.error || new Error('回答の進捗を更新できませんでした');
+    }
   }
 }
 
@@ -7142,9 +7153,9 @@ if (mediaStoragePaths.length > 0) {
 
   if (assetError) {
     console.error("media asset save error", assetError);
-    if (currentQ?.onboarding_group === "trial_experience") {
-      throw new Error("無料体験の音声を保存できませんでした。もう一度お試しください。");
-    }
+    throw new Error(currentQ?.onboarding_group === "trial_experience"
+      ? "無料体験の音声を保存できませんでした。もう一度お試しください。"
+      : "音声の情報を保存できませんでした。もう一度お試しください。");
   }
 }
 
@@ -7223,6 +7234,7 @@ if (oldTrialAudioPaths.length > 0) {
 
           if (photoAssetError) {
             console.error("photo media asset save error", photoAssetError);
+            throw new Error("写真の情報を保存できませんでした。もう一度お試しください。");
           }
         }
       }
@@ -7231,7 +7243,9 @@ if (oldTrialAudioPaths.length > 0) {
         setTrialRetention(await loadFreeTrialRetention(foundation?.project?.id));
       }
 
-      await markUserQuestionAnswered(currentQ?.user_question_id);
+      await markUserQuestionAnswered(currentQ?.user_question_id, {
+        strict: currentQ?.onboarding_group !== 'trial_experience',
+      });
       emitJourney('save_complete');
       setQuestionsDB(current => current.map(question =>
         question.user_question_id === currentQ?.user_question_id
@@ -9311,6 +9325,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
           progressLabel={`${getMainStoryProgress(questionsDB, progress.currentIndex).currentIndex + 1} / ${getMainStoryProgress(questionsDB, progress.currentIndex).total}`}
           client={supabaseClient}
           onClose={() => setWritingQuestion(null)}
+          onVoice={() => { setWritingQuestion(null); resetVoiceData(); setScene(answerEntryScene("record", hasRecentMicCheck())); }}
           onSaved={async () => {
             const savedQuestion = writingQuestion;
             setWritingQuestion(null);
@@ -9429,6 +9444,7 @@ onComplete={handleRecordComplete}
 
 <Scene3_5_VoiceCheck
   data={voiceData}
+  light={currentQ?.onboarding_group !== 'trial_experience'}
   isLifeOutline={currentQ?.onboarding_group === "life_outline"}
   isLastLifeOutline={
     currentQ?.onboarding_group === "life_outline" &&
@@ -11862,7 +11878,7 @@ function Scene_OnboardingPreferences({ projectId, initialValue, completedAt, onD
 
 function Scene_StartingConversationComplete({ onContinue }) {
   return (
-    <div className="flow-scene-shell fade-enter">
+    <div className="flow-scene-shell fade-enter answer-light-page">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
         <p className="text-[0.7rem] tracking-[0.28em] text-amber-100/42">
           はじまりの章
@@ -12090,7 +12106,7 @@ function ThemePreview({
 export function Scene_HajimariComplete({ onContinue, hasTrialStories = false }) {
   const [trialCarryDecision, setTrialCarryDecision] = useState(null);
   return (
-    <div className="flow-scene-shell fade-enter">
+    <div className="flow-scene-shell fade-enter answer-light-page">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
         <div>
           <h1 className="text-[1rem] leading-[2.1] text-white/92 text-narrative min-[360px]:text-[1.1rem]">
@@ -12132,7 +12148,7 @@ export function Scene_HajimariComplete({ onContinue, hasTrialStories = false }) 
 export function Scene_ThemeComplete({ completedTheme, hasNextTheme, hasExtraQuestions, selectedExtraCount = 0, extraStartBusy = false, onStartExtras, onMore, onRequestFamilyMemory, onContinue, onFinish }) {
   if (!completedTheme) return null;
   return (
-    <div className="flow-scene-shell fade-enter">
+    <div className="flow-scene-shell fade-enter answer-light-page">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col justify-center text-center">
         <div>
           <p className="text-[0.68rem] tracking-[0.22em] text-amber-100/40">テーマ {completedTheme.order} / {STORY_THEMES.length}</p>
@@ -12206,7 +12222,7 @@ function CarriedChildhoodTrialNotice({ theme, carriedTrial, onReview }) {
 export function Scene_ThemeIntro({ theme, isFirstTheme = false, carriedTrial, onReviewCarriedTrial, notificationLabel, onChangeDelivery, onWait, onContinue, onBack }) {
   if (!theme) return null;
   return (
-    <div className="flow-scene-shell fade-enter theme-screen">
+    <div className="flow-scene-shell fade-enter theme-screen answer-light-page">
       <div className="mx-auto w-full max-w-[520px]">
         {onBack && <button type="button" onClick={onBack} className="mb-3 flex min-h-11 items-center gap-1 text-sm text-white/70"><ChevronLeft size={18}/>前のテーマの終了画面へ</button>}
         <ThemePreview
@@ -12226,7 +12242,7 @@ export function Scene_ThemeIntro({ theme, isFirstTheme = false, carriedTrial, on
 function Scene_ThemeResume({ theme, questionNumber, carriedTrial, onReviewCarriedTrial, onResume, onHome }) {
   if (!theme) return null;
   return (
-    <div className="flow-scene-shell fade-enter theme-screen">
+    <div className="flow-scene-shell fade-enter theme-screen answer-light-page">
       <div className="mx-auto w-full max-w-[520px]">
         {onHome && <button type="button" onClick={onHome} className="mb-5 min-h-[44px] text-white/62 text-[1rem]">← ホームへ</button>}
         <ThemePreview
@@ -12243,7 +12259,7 @@ function Scene_ThemeResume({ theme, questionNumber, carriedTrial, onReviewCarrie
 
 function Scene_ThemeGuide({ onContinue }) {
   return (
-    <div className="flow-scene-shell fade-enter">
+    <div className="flow-scene-shell fade-enter answer-light-page">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
         <div className="flex-1 py-6">
           <div className="text-center">
@@ -16736,7 +16752,7 @@ export function Scene_SupportRecordingAssist({
   }
 
   if (phase === "writing" && nextQuestion) {
-    return <AnswerTextLayout question={nextQuestion} theme={recordingSectionLabel(nextQuestion)}
+    return <AnswerTextLayout question={nextQuestion} theme={recordingSectionLabel(nextQuestion)} light
       progress={`${questionIndex + 1} / ${storyQuestions.length}`} onBack={() => setPhase("question")}>
       {writtenCandidate ? <AnswerTextCandidate candidate={writtenCandidate}
         onUse={() => { writtenTextRef.current = writtenCandidate.text; setWrittenText(writtenCandidate.text); setWrittenCandidate(null); }}
@@ -16766,6 +16782,7 @@ export function Scene_SupportRecordingAssist({
         transcriptionStatus: recordingData?.transcript || reviewText ? "done" : "error",
         polishStatus: "done"
       }}
+      light
       onRetry={() => { setRecordingData(null); setPhase("recording"); }}
       onRetryTranscription={() => {
         if (recordingData?.audioBlob) processRecording(recordingData.transcript, recordingData.duration,
@@ -17689,7 +17706,9 @@ export function Scene_BookBuilder({
     .sort((a, b) => includedStoryIds.indexOf(a.id) - includedStoryIds.indexOf(b.id)),
   [bookStories, includedStoryIds]);
 
-  const previewEdition = useMemo(() => includedStories.some(answer => getStoryBody(answer).trim())
+  const previewEdition = useMemo(() => includedStories.some(answer => getStoryBody(answer).trim()
+      || (bookMediaByAnswerId[answer.id] || []).some(media => media.asset_type === 'photo'
+        && media.url && media.meta_json?.book_layout?.placement !== 'excluded'))
     ? editionFromBookWork({
         title: bookTitle,
         subtitle: bookSubtitle,
@@ -18643,7 +18662,7 @@ export function Scene_BookBuilder({
 
 function Scene0_Door({ onNext, onHome }) {
   return (
-    <div className="scene-door flex-1 flex flex-col fade-enter px-4">
+    <div className="scene-door answer-light-page flex-1 flex flex-col fade-enter px-4">
       {onHome && <div className="w-full pt-3">
         <button type="button" onClick={onHome} className="min-h-[44px] text-white/62 text-[1rem]">
           ← ホームへ
@@ -18751,23 +18770,27 @@ export function Scene1_MyPage({
 }) {
   const isFormalOnboarding = isFormalOnboardingQuestion(question);
   const isOnboardingQuestion = isFormalOnboarding;
+  const brightAnswer = question?.onboarding_group !== 'trial_experience';
 
   const sectionLabel = recordingSectionLabel(question);
 
   return (
-    <StorySkySurface className="question-flow-content h-full flex flex-col overflow-y-auto pb-4" skyOverride={skyOverride} background={QUESTION_BACKGROUND}>
+    <StorySkySurface className="question-flow-content h-full flex flex-col overflow-y-auto pb-4" skyOverride={skyOverride}
+      surfaceClassName={brightAnswer ? 'answer-light-recorder' : ''} background={QUESTION_BACKGROUND}>
       <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={onBack} />
 
       <RecordingQuestionPrompt question={question} />
 
-      <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
+      {brightAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
+        <AnswerEntryChoices onVoice={onNext} onWrite={onWrite} onPhoto={() => {}} photoDisabled />
+      </div> : <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
         <RecordingStartButton onClick={onNext} label="話して答える" />
         {onWrite && <button type="button" onClick={onWrite}
           className="recording-start-bar recording-start-bar--write" aria-label="書いて答える">
           <Pencil size={22} strokeWidth={1.7} aria-hidden="true" />
           <span>書いて答える</span>
         </button>}
-      </div>
+      </div>}
 
       {!isTokenMode() && (
         <div className="mt-5 flex items-center justify-center gap-3 pb-2">
@@ -19649,7 +19672,9 @@ const stop = (reason = "manual") => {
 };
 
 return (
-<StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4" surfaceClassName={seasonalMode ? 'sm-seasonal-recorder' : ''} background={QUESTION_BACKGROUND}>
+<StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4"
+  surfaceClassName={seasonalMode || question?.onboarding_group !== 'trial_experience' ? 'answer-light-recorder' : ''}
+  background={QUESTION_BACKGROUND}>
   <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} progressOverride={seasonalMode ? '1 / 1' : null} onBack={step === 0 || step === "checking_mic" || step === "mic_error" ? onBack : null} />
 
   <RecordingQuestionPrompt question={question} />
@@ -19676,7 +19701,7 @@ return (
         <MicAccessGuide onRetry={start} onContinue={onBack} continueLabel="問いに戻る" />
       )}
 
-      {step === "countdown" && !seasonalMode && (
+      {step === "countdown" && question?.onboarding_group === 'trial_experience' && !seasonalMode && (
         <div className="recording-countdown-slot text-center">
           <p className="text-white/82 text-[4.2rem] leading-none font-light">
             {countdown}
@@ -19684,7 +19709,7 @@ return (
          </div>
       )}
 
-      {step === "countdown" && seasonalMode && <div className="recording-control-dock sm-recording-countdown-dock mt-4">
+      {step === "countdown" && (seasonalMode || question?.onboarding_group !== 'trial_experience') && <div className="recording-control-dock sm-recording-countdown-dock mt-4">
         <div className="sm-recording-countdown-number" aria-live="polite">{countdown}</div>
         <div className="recording-status-row"><span className="recording-state-label">録音の準備中</span></div>
         <div className="recording-action-row">
@@ -19746,6 +19771,7 @@ return (
 
 export function Scene3_5_VoiceCheck({
   data,
+  light = false,
   isLifeOutline = false,
   isLastLifeOutline = false,
   allowEmptyTranscript = false,
@@ -19859,7 +19885,7 @@ export function Scene3_5_VoiceCheck({
     canAddMore;
 
 return (
-  <div className="h-full flex flex-col fade-enter px-4 pt-2 pb-8 overflow-hidden">
+  <div className={`h-full flex flex-col fade-enter px-4 pt-2 pb-8 overflow-hidden ${light ? 'answer-light answer-voice-review' : ''}`}>
 
     <div className="text-center mb-4">
       <p className="text-white/86 text-[1.02rem] text-narrative">

@@ -26,6 +26,6 @@ export function editionFromBookWork({
           bookLayout: photoBookLayout(item, index)
         })).filter(item => item.bookLayout.placement !== "excluded")
       };
-    }).filter(story => story.body)
+    }).filter(story => story.body || story.photos.some(photo => photo.bookLayout.placement !== "excluded"))
   });
 }

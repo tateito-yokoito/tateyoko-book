@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { editionFromBookWork } from "../../src/lib/bookEditionAdapter.js";
-import { buildBookPages } from "../../src/lib/bookEdition.js";
+import { buildBookPages, createBookEdition } from "../../src/lib/bookEdition.js";
 import { renderBookPrintHtml } from "../../src/lib/bookPrintHtml.js";
 
 const answers = [
@@ -48,4 +48,28 @@ const withoutQr = editionFromBookWork({
 });
 assert.ok(!buildBookPages(withoutQr).some(page => page.kind === "web-entry"));
 assert.ok(!renderBookPrintHtml(withoutQr).includes("QR未確定"));
+
+const photoOnly = editionFromBookWork({
+  title: "写真だけの本", includeWebBookQr: false,
+  answers: [
+    { id: "written", transcript_edited: "本文のある回答。" },
+    { id: "photo-only", transcript_edited: "" },
+    { id: "empty", transcript_edited: "" },
+    { id: "excluded-photo", transcript_edited: "" },
+  ],
+  questionForAnswer: answer => ({ content: `${answer.id}の問い` }),
+  mediaByAnswerId: {
+    "photo-only": [{ id: "kept", asset_type: "photo", url: "https://example.com/kept.jpg" }],
+    "excluded-photo": [{ id: "hidden", asset_type: "photo", url: "https://example.com/hidden.jpg",
+      meta_json: { book_layout: { placement: "excluded" } } }],
+  },
+});
+assert.deepEqual(photoOnly.stories.map(story => story.id), ["written", "photo-only"]);
+const photoPage = buildBookPages(photoOnly).find(page => page.kind === "story-opener" && page.storyId === "photo-only");
+assert.equal(photoPage.question, "photo-onlyの問い");
+assert.equal(photoPage.photo.id, "kept");
+assert.deepEqual(photoPage.paragraphs, []);
+assert.match(renderBookPrintHtml(photoOnly), /photo-onlyの問い/);
+assert.match(renderBookPrintHtml(photoOnly), /kept\.jpg/);
+assert.throws(() => createBookEdition({ title: "空回答", stories: [{ question: "空の問い" }] }), /no printable content/);
 console.log("book edition adapter: OK");

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, Camera, ChevronRight, Image, Lock, Mic, Pencil, Play } from 'lucide-react';
 import { STORY_THEMES } from './lib/storyThemes.js';
+import { AnswerBodyEditor, AnswerEntryChoices, AnswerPhotoStrip, AnswerReview, AnswerSaveStatus, canCompleteSavedAnswer } from './AnswerInputUI.jsx';
 import { SEASON_NAMES, hasSeasonalContent, invokeSeasonal, loadSeasonalMemories, markSeasonalWelcomeSeen, seasonalBoxes, seasonalSaveArgs, seasonalWelcomeSeen } from './lib/seasonalMemory.js';
 import './seasonal-memory.css';
 
@@ -468,31 +469,36 @@ export default function SeasonalMemoryFlow({
         {activeRecord.kind === 'life' ? <h1>{activeRecord.question_text}</h1> : <>
           <h1>{form.title.trim() || titleOf(activeRecord)}</h1>
           <label className="sm-title">題名をつける（任意）<input value={form.title} onChange={e => edit({title:e.target.value})} placeholder="題名をつける" /></label></>}
-        {activeMedia.length > 0 && <div className="sm-thumbs">{activeMedia.filter(m => m.kind==='photo').map(m =>
-          <img key={m.id} src={mediaUrls[m.id]} alt="" onClick={() => window.open(mediaUrls[m.id], '_blank')} />)}</div>}
-        {(form.body || activeMedia.some(m => m.kind==='audio')) && <div className="sm-summary">
-          {form.body && <p>{form.body.slice(0,180)}</p>}
-          {activeMedia.filter(m => m.kind==='audio').map(m => <audio key={m.id} src={mediaUrls[m.id]} controls />)}
+        <AnswerReview body={form.body}
+          photos={activeMedia.filter(m => m.kind==='photo').map(m => ({id:m.id,url:mediaUrls[m.id]})).filter(m => m.url)}
+          audio={activeMedia.filter(m => m.kind==='audio').map(m => ({id:m.id,url:mediaUrls[m.id]})).filter(m => m.url)}
+          onOpenPhoto={photo => window.open(photo.url, '_blank')}
+          onVoice={() => setPage('recording')} onWrite={() => setPage('writing')}
+          onPhoto={() => setPage('photos')} saveState={saveState}
+          onRetry={saveState === 'failed' && !conflictRef.current && editVersion.current > savedVersion.current ? flush : null}
+          finishLabel="この記録を終える" onFinish={finish}
+          canFinish={canCompleteSavedAnswer({
+            hasContent: hasSeasonalContent(activeRecord,activeMedia) || Boolean(form.body.trim()),
+            saveState: saveState === 'idle' && editVersion.current === savedVersion.current &&
+              (hasSeasonalContent(activeRecord,activeMedia) || Boolean(form.body.trim())) ? 'saved' : saveState,
+            pendingMedia: audioToProcess?.file ? 1 : 0,
+            dirty: editVersion.current > savedVersion.current,
+            busy,
+          })}>
+          {activeMedia.some(m => m.kind==='audio') && !form.transcript_raw && <div className="sm-summary">
           {!form.transcript_raw && activeMedia.some(m => m.kind==='audio') &&
             <button className="sm-secondary" type="button" onClick={() => processAudio(activeMedia.find(m => m.kind==='audio').storage_path)}>
               文字起こしを再開する
             </button>}
-        </div>}
-        <div className="sm-entry-grid"><button onClick={() => setPage('recording')}><Mic/>声で語る</button>
-          <button onClick={() => setPage('writing')}><Pencil/>書き込む</button>
-          <button className="wide" onClick={() => setPage('photos')}><Camera/>写真を添える</button></div>
-        <p className="sm-save-state" role="status">{saveState==='saving'?'保存中…':saveState==='saved'?'保存しました':saveState==='failed'?'保存できていません':''}</p>
-        {saveState==='failed' && (conflictRef.current
-          ? <button className="sm-retry" type="button" onClick={discardConflict}>端末の下書きを破棄して最新の記録を開く</button>
-          : editVersion.current > savedVersion.current && <button className="sm-retry" type="button" onClick={flush}>保存を再試行する</button>)}
-        <button className="sm-primary sm-finish" disabled={busy || saveState==='saving' || saveState==='failed' || !hasSeasonalContent(activeRecord,activeMedia) && !form.body.trim()}
-          onClick={finish}>この記録を終える</button>
+          </div>}
+          {saveState==='failed' && conflictRef.current && <button className="sm-retry" type="button" onClick={discardConflict}>端末の下書きを破棄して最新の記録を開く</button>}
+        </AnswerReview>
       </>}
       {page === 'writing' && activeRecord && <><h1>{titleOf(activeRecord)}</h1>
-        <div className="sm-thumbs">{activeMedia.filter(m=>m.kind==='photo').map(m=><img key={m.id} src={mediaUrls[m.id]} alt="" />)}</div>
-        <textarea value={form.body} onChange={e=>edit({body:e.target.value})} placeholder="ここに思い出を書く" aria-label="記録の文章" />
+        <AnswerPhotoStrip photos={activeMedia.filter(m=>m.kind==='photo').map(m=>({id:m.id,url:mediaUrls[m.id]})).filter(m=>m.url)} />
+        <AnswerBodyEditor value={form.body} onChange={value=>edit({body:value})} label="記録の文章" />
         <button className="sm-secondary" disabled={busy || !form.body.trim()} onClick={proposePolish}>✦ 整える</button>{proposal}
-        <p className="sm-save-state" role="status">{saveState==='saving'?'保存中…':saveState==='saved'?'保存しました':saveState==='failed'?'保存できていません':''}</p>
+        <AnswerSaveStatus state={saveState} />
         {saveState==='failed' && (conflictRef.current
           ? <button className="sm-retry" type="button" onClick={discardConflict}>端末の下書きを破棄して最新の記録を開く</button>
           : editVersion.current > savedVersion.current && <button className="sm-retry" type="button" onClick={flush}>保存を再試行する</button>)}

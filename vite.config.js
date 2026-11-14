@@ -11,6 +11,7 @@ export default defineConfig({
         giftThreeQuestions: 'gift-three-questions.html',
         supportConsultation: 'support-consultation/index.html',
         generalInquiry: 'contact/index.html',
+        answerUiReview: 'answer-ui-review.html',
       },
     },
   },

@@ -13,14 +13,19 @@ export function snapshotToWebBook(snapshot = {}) {
   const unique = rows => [...new Map(rows.map(row => [row.id,row])).values()];
   snapshot = {...snapshot, ...Object.fromEntries(['answers','questions','media'].map(key => [key,unique([...(snapshot[key]||[]),...(snapshot.web_intro?.[key]||[])])]))};
   const questions = new Map((snapshot.questions || []).map(q => [q.id, q]));
-  const items = (snapshot.answers || []).map((a, index) => {
+  const items = (snapshot.answers || []).flatMap((a, index) => {
     const q = questions.get(a.user_question_id) || {};
     const media = (snapshot.media || []).filter(m => m.answer_id === a.id);
-    return { order: index + 1, sourceSequenceOrder: a.sequence_order ?? q.sequence_order, sourceAnswerId: a.id, mainFormat: a.meta_json?.main_response_format || 'audio', ...questionIdentity(q),
+    const transcript = finishedText(a);
+    const audio = media.filter(m => m.asset_type === 'audio').sort(compareMediaChronologically).map((m, assetIndex) => ({ assetIndex, videoId: m.meta_json?.video_id, url: m.url, durationSeconds: m.meta_json?.duration_seconds }));
+    const photos = media.filter(m => m.asset_type === 'photo' && m.meta_json?.book_layout?.placement !== 'excluded')
+      .map((m, assetIndex) => ({ assetIndex, url: m.url, caption: m.meta_json?.caption || '' }));
+    const hasVideo = (snapshot.videos || []).some(v => v.source_answer_id === a.id && (v.video_storage_path || v.url));
+    if (q.status === 'skipped' || !(transcript || audio.length || photos.length || hasVideo)) return [];
+    return [{ order: index + 1, sourceSequenceOrder: a.sequence_order ?? q.sequence_order, sourceAnswerId: a.id, mainFormat: a.meta_json?.main_response_format || 'audio', ...questionIdentity(q),
       chapterTitle: q.chapter_title_snapshot || q.chapter || '',
-      question: q.custom_question_text || q.question_text_snapshot || '', transcript: finishedText(a),
-      audio: media.filter(m => m.asset_type === 'audio').sort(compareMediaChronologically).map((m, assetIndex) => ({ assetIndex, videoId: m.meta_json?.video_id, url: m.url, durationSeconds: m.meta_json?.duration_seconds })),
-      photos: media.filter(m => m.asset_type === 'photo').map((m, assetIndex) => ({ assetIndex, url: m.url, caption: m.meta_json?.caption || '' })) };
+      question: q.custom_question_text || q.question_text_snapshot || '', transcript,
+      audio, photos }];
   });
   const videos = (snapshot.videos || []).filter(v => v.video_storage_path || v.url).map((v, videoIndex) => ({
     videoIndex, sourceAnswerId: v.source_answer_id, slot: v.metadata?.milestone_key,

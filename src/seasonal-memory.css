@@ -77,19 +77,4 @@
 .approved-home:has(.sm-home) .ah-content>.ah-group h2{color:#34473e}
 .approved-home:has(.sm-home) .ah-row{background:#fffdf8;color:#26352f;border-color:#d9d9ce}
 .story-sky-surface.question-background-navy.sm-seasonal-recorder{background:#f5f2ea;color:#26352f}
-.story-sky-surface.sm-seasonal-recorder>.story-sky-backdrop{display:none}
-.story-sky-surface.question-background-navy.sm-seasonal-recorder>.story-sky-content.question-flow-content{max-width:480px;background:#f5f2ea;color:#26352f}
-.sm-seasonal-recorder .question-flow-top-bar button,.sm-seasonal-recorder .question-flow-top-bar span{color:#3c584b}
-.story-sky-surface.sm-seasonal-recorder .story-sky-content.question-flow-content>header.question-flow-top-bar p{color:#8d5c48}
-.story-sky-surface.sm-seasonal-recorder .story-sky-content.question-flow-content .reading-question>.recording-question-card p{color:#26352f}
-.sm-seasonal-recorder .reading-question .recording-question-hint,.sm-seasonal-recorder .reading-question .recording-question-hint p:not(.recording-question-hint-label){color:#53665b}
-.sm-seasonal-recorder .recording-state-label,.sm-seasonal-recorder .recording-status-row>span:last-child{color:#345347}
-.sm-seasonal-recorder .recording-start-bar{background:#284c40;color:#fff}
-.sm-seasonal-recorder .recording-action-button{background:#fffdf8;border-color:#a6b7a9;color:#284c40}
-.sm-seasonal-recorder .recording-action-button--stop{background:#284c40;border-color:#284c40;color:#fff}
-.sm-seasonal-recorder .recording-action-button:disabled{opacity:.55}
-.sm-seasonal-recorder .sm-recording-countdown-dock{position:relative}
-.sm-seasonal-recorder .sm-recording-countdown-number{position:absolute;left:0;right:0;bottom:100%;margin-bottom:4px;pointer-events:none;color:#9ba99b;font:normal 72px/1 'Noto Serif JP','Yu Mincho',serif;text-align:center}
-.sm-seasonal-recorder .sm-recording-photos img{border:1px solid #c4d2c5}
-.sm-seasonal-recorder .text-white\/38,.sm-seasonal-recorder .text-white\/70{color:#53665b}
 @media(max-width:359px){.sm-flow main{padding-left:15px;padding-right:15px}.sm-entry-grid button{font-size:15px}.sm-home-box{padding:16px}}

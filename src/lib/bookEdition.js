@@ -66,7 +66,15 @@ export function createBookEdition({
   }
   const normalizedStories = stories.map((story, index) => {
     const body = text(story.body);
-    if (!body) throw new Error(`Story ${index + 1} has no body`);
+    const photos = (story.photos || []).filter(photo => photo?.url || photo?.path).map((photo, photoIndex) => ({
+      id: text(photo.id) || `photo-${photoIndex + 1}`,
+      url: text(photo.url || photo.path),
+      caption: text(photo.caption),
+      bookLayout: photoBookLayout(photo, photoIndex)
+    }));
+    if (!body && !photos.some(photo => photo.bookLayout.placement !== "excluded")) {
+      throw new Error(`Story ${index + 1} has no printable content`);
+    }
     return {
       id: text(story.id) || `story-${index + 1}`,
       sourceUserQuestionId: text(story.sourceUserQuestionId),
@@ -76,12 +84,7 @@ export function createBookEdition({
       themeOrder: story.themeOrder != null && Number.isInteger(Number(story.themeOrder)) && Number(story.themeOrder) >= 0
         && Number(story.themeOrder) <= 9 ? Number(story.themeOrder) : null,
       body,
-      photos: (story.photos || []).filter(photo => photo?.url || photo?.path).map((photo, photoIndex) => ({
-        id: text(photo.id) || `photo-${photoIndex + 1}`,
-        url: text(photo.url || photo.path),
-        caption: text(photo.caption),
-        bookLayout: photoBookLayout(photo, photoIndex)
-      }))
+      photos
     };
   });
   if (!normalizedStories.length) throw new Error("The book needs at least one story");

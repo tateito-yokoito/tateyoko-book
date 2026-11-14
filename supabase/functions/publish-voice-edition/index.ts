@@ -241,7 +241,18 @@ serve(async (req) => {
     const questionsById = new Map((questionRows || []).map((question) => [question.id, question]));
     const audioByAnswerId = groupAndSortMedia(audioRows || []);
     const photosByAnswerId = groupAndSortMedia(photoRows || []);
-    const publishableAnswers = answers;
+    // A photo-only answer is a story; an empty or skipped question is not.
+    // Keep the selected snapshot order for all existing text answers.
+    const publishableAnswers = answers.filter((answer: any) => {
+      const question: any = questionsById.get(answer.user_question_id);
+      const hasText = Boolean(pickPublishedTranscript(answer));
+      const hasBookPhoto = (photosByAnswerId.get(answer.id) || []).some((photo: any) =>
+        photo.meta_json?.book_layout?.placement !== "excluded");
+      const hasAudio = (audioByAnswerId.get(answer.id) || []).length > 0;
+      const hasVideo = (videoRows || []).some((video: any) =>
+        video.source_answer_id === answer.id && video.video_storage_path);
+      return question?.status !== "skipped" && (hasText || hasAudio || hasBookPhoto || hasVideo);
+    });
     if (publishableAnswers.length === 0 && (videoRows || []).length === 0) {
       throw new HttpError("公開できる音声またはビデオがありません", 409);
     }

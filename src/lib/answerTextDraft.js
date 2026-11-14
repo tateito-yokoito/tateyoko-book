@@ -47,6 +47,7 @@ export class AnswerTextDraft {
     this.serverEditNumber = 0;
     this.conflict = null;
     this.remoteStatus = 'unknown';
+    this.syncPhase = 'idle';
     this.record = readLocalAnswerDraft(storage, this.key) || {
       state: 'active', body: initialText, baseTextRevision: initialTextRevision,
       generation: 0, editNumber: 0, deviceId: crypto.randomUUID(), dirty: false,
@@ -54,7 +55,7 @@ export class AnswerTextDraft {
   }
 
   snapshot() {
-    return { ...this.record, remoteStatus: this.remoteStatus, conflict: this.conflict };
+    return { ...this.record, remoteStatus: this.remoteStatus, syncPhase: this.syncPhase, conflict: this.conflict };
   }
 
   emit() { this.onChange(this.snapshot()); }
@@ -65,6 +66,7 @@ export class AnswerTextDraft {
       .eq('user_id', this.userId).eq('sequence_order', this.sequenceOrder).maybeSingle();
     if (error) {
       this.remoteStatus = 'offline';
+      this.syncPhase = 'failed';
       this.emit();
       return this.snapshot();
     }
@@ -121,6 +123,7 @@ export class AnswerTextDraft {
     requireStorageWrite(this.storage, this.key, next);
     this.record = next;
     this.remoteStatus = 'device_only';
+    this.syncPhase = 'waiting';
     this.scheduleSync();
     this.emit();
   }
@@ -137,6 +140,8 @@ export class AnswerTextDraft {
       const record = { ...this.record };
       if (!record.dirty || record.state !== 'active' || this.conflict) return this.snapshot();
       try {
+        this.syncPhase = 'saving';
+        this.emit();
         const payload = serverError(await this.client.rpc('sync_answer_text_draft', {
           input_project_id: this.projectId,
           input_sequence_order: this.sequenceOrder,
@@ -150,6 +155,7 @@ export class AnswerTextDraft {
         if (payload.status !== 'saved') {
           this.conflict = payload.draft || { status: payload.status };
           this.remoteStatus = 'conflict';
+          this.syncPhase = 'idle';
           this.emit();
           return this.snapshot();
         }
@@ -158,11 +164,14 @@ export class AnswerTextDraft {
           this.record = { ...this.record, dirty: false };
           requireStorageWrite(this.storage, this.key, this.record);
           this.remoteStatus = 'saved';
+          this.syncPhase = 'idle';
         } else if (this.record.state === 'active') {
+          this.syncPhase = 'waiting';
           this.scheduleSync();
         }
       } catch (error) {
         this.remoteStatus = 'device_only';
+        this.syncPhase = 'failed';
         this.emit();
         throw error;
       }

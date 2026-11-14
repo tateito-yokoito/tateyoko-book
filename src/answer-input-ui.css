@@ -1,0 +1,92 @@
+.answer-light {
+  --answer-paper: #f5f2ea;
+  --answer-surface: #fffdf8;
+  --answer-ink: #26352f;
+  --answer-muted: #53665b;
+  --answer-green: #284c40;
+  --answer-line: #c9cfc5;
+  background: var(--answer-paper);
+  color: var(--answer-ink);
+  font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', sans-serif;
+}
+.answer-entry-choices {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;width:100%}
+.answer-entry-choices button {display:flex;align-items:center;justify-content:center;gap:8px;min-height:58px;padding:8px;border:1px solid var(--answer-line,#c9cfc5);border-radius:10px;background:var(--answer-surface,#fffdf8);color:var(--answer-green,#284c40);font:500 1rem/1.5 'Noto Sans JP',sans-serif;cursor:pointer}
+.answer-entry-choices button:disabled {opacity:.5;cursor:default}
+.answer-entry-choices button:focus-visible,.answer-photo-strip button:focus-visible {outline:3px solid #ad5a41;outline-offset:2px}
+.answer-entry-choices button svg {width:20px;height:20px;flex:none}
+.answer-entry-choices .answer-entry-choices__photo {grid-column:1/-1}
+.answer-photo-strip {display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:thin}
+.answer-photo-strip button {flex:none;border:0;padding:0;background:transparent;cursor:pointer}
+.answer-photo-strip img {display:block;width:88px;height:78px;object-fit:cover;border:1px solid var(--answer-line,#c9cfc5);border-radius:7px}
+.answer-save-status {min-height:24px;color:var(--answer-muted,#53665b);font-size:.8rem;line-height:1.5}
+.answer-save-status--failed,.answer-save-status--conflict {color:#8a392c}
+.answer-save-status button {display:block;min-height:40px;padding:4px 0;border:0;background:none;color:var(--answer-green,#284c40);text-decoration:underline;cursor:pointer}
+.answer-review{display:grid;gap:15px}
+.answer-review__summary{padding:14px 16px;border:1px solid var(--answer-line,#c9cfc5);border-radius:10px;background:var(--answer-surface,#fffdf8);color:var(--answer-ink,#26352f);line-height:1.8}
+.answer-review__summary p{margin:0;white-space:pre-wrap}
+.answer-review__summary audio{display:block;width:100%;margin-top:8px}
+.answer-review__finish{width:100%;min-height:56px;border:0;border-radius:10px;background:var(--answer-green,#284c40);color:#fff;font-size:1rem;cursor:pointer}
+.answer-review__finish:disabled{opacity:.45;cursor:default}
+@media(max-width:359px){.answer-entry-choices button{font-size:.92rem;gap:5px}}
+
+/* One light answer surface for the existing recorder in both products. */
+.story-sky-surface.answer-light-recorder>.story-sky-backdrop{display:none}
+.story-sky-surface.answer-light-recorder>.story-sky-content.question-flow-content{max-width:480px;background:#f5f2ea;color:#26352f}
+.answer-light-recorder .question-flow-top-bar button,.answer-light-recorder .question-flow-top-bar span{color:#3c584b}
+.story-sky-surface.answer-light-recorder .story-sky-content.question-flow-content>header.question-flow-top-bar p{color:#8d5c48}
+.story-sky-surface.answer-light-recorder .story-sky-content.question-flow-content .reading-question>.recording-question-card p{color:#26352f}
+.answer-light-recorder .reading-question .recording-question-hint,.answer-light-recorder .reading-question .recording-question-hint p:not(.recording-question-hint-label){color:#53665b}
+.answer-light-recorder .recording-state-label,.answer-light-recorder .recording-status-row>span:last-child{color:#345347}
+.answer-light-recorder .recording-start-bar{background:#284c40;color:#fff}
+.answer-light-recorder .recording-action-button{background:#fffdf8;border-color:#a6b7a9;color:#284c40}
+.answer-light-recorder .recording-action-button--stop{background:#284c40;border-color:#284c40;color:#fff}
+.answer-light-recorder .recording-action-button:disabled{opacity:.55}
+.answer-light-recorder .sm-recording-countdown-dock{position:relative}
+.answer-light-recorder .sm-recording-countdown-number{position:absolute;left:0;right:0;bottom:100%;margin-bottom:4px;pointer-events:none;color:#9ba99b;font:normal 72px/1 'Noto Serif JP','Yu Mincho',serif;text-align:center}
+.answer-light-recorder .sm-recording-photos img{border:1px solid #c4d2c5}
+.answer-light-recorder .text-white\/38,.answer-light-recorder .text-white\/70{color:#53665b}
+.answer-light-recorder .recording-control-dock--choice .answer-entry-choices{max-width:480px}
+.answer-light-recorder .recording-control-dock--choice .answer-entry-choices button{min-height:58px}
+.answer-light-recorder .question-flow-content .text-white\/42{color:#64716b}
+
+/* The BOOK writing editor keeps its draft controller and AI actions. */
+.answer-text-layout--light{--answer-paper:#f5f2ea;--answer-surface:#fffdf8;--answer-ink:#26352f;--answer-muted:#53665b;--answer-green:#284c40}
+.answer-text-layout--light .question-flow-top-bar{color:#3c584b}
+.answer-text-layout--light .question-flow-top-bar button,.answer-text-layout--light .question-flow-top-bar span,.answer-text-layout--light .question-flow-top-bar p{color:#3c584b}
+.answer-text-layout--light h2,.answer-text-layout--light h3{color:#26352f}
+.answer-text-layout--light [class*="text-white"],.answer-text-layout--light [class*="text-amber"]{color:#53665b}
+.answer-text-layout--light [class*="border-white"]{border-color:#c9cfc5}
+.answer-text-layout--light textarea{background:#fffdf8;border-color:#aebdaf;color:#26352f}
+.answer-text-layout--light button{color:#284c40}
+.answer-text-layout--light button.bg-white{background:#284c40;color:#fff}
+.answer-text-layout--light [role="dialog"]>div{background:#fffdf8;color:#26352f}
+.answer-text-layout--light [role="dialog"] button.bg-white{background:#284c40;color:#fff}
+
+/* Chapter screens share the same paper and readable type as seasonal answers. */
+.app-container:has(> .answer-light-page){max-width:none;padding:0;background:#f5f2ea;color:#26352f}
+.answer-light-page{min-height:100dvh;background:#f5f2ea;color:#26352f;font-family:'Noto Sans JP',sans-serif}
+.answer-light-page [class*="text-white"],.answer-light-page [class*="text-amber"]{color:#53665b}
+.answer-light-page h1,.answer-light-page h2{color:#26352f}
+.answer-light-page .glass-card,.answer-light-page .theme-choice-card{background:#fffdf8;border-color:#d9d9ce;color:#26352f;box-shadow:none}
+.answer-light-page .theme-preview>div:first-child p,.answer-light-page .theme-preview>p,.answer-light-page .theme-preview>aside p:last-child,.answer-light-page .theme-preview #theme-delivery-choice-title{color:#53665b}
+.answer-light-page .theme-preview h2,.answer-light-page .theme-choice-card button>span:nth-child(2)>span:first-child,.answer-light-page .theme-choice-cards>button>span:nth-child(2){color:#26352f}
+.answer-light-page .theme-preview>aside{background:#fffdf8;border-color:#aac3af}
+.answer-light-page .theme-choice-card button>span:nth-child(2)>span+span,.answer-light-page .theme-choice-card>button+button{color:#53665b}
+.answer-light-page .theme-preview .theme-choice-card{border-color:#c9cfc5}
+.answer-light-page .theme-preview button.bg-white,.answer-light-page .theme-preview button.bg-\[\#f5f3ed\],.answer-light-page button.answer-light-primary{background:#284c40;color:#fff}
+.answer-light-page .theme-preview>figure{border-color:#d9d9ce}
+.answer-light-page .theme-preview [class*="border-white"],.answer-light-page [class*="border-white"]{border-color:#c9cfc5}
+.answer-light-page .theme-preview .theme-choice-card button>span:first-child{color:#53665b}
+.answer-light-page button{min-height:44px}
+
+.app-container:has(.answer-voice-review){background:#f5f2ea;color:#26352f}
+.answer-voice-review{min-height:100%;color:#26352f}
+.answer-voice-review [class*="text-white"],.answer-voice-review [class*="text-amber"]{color:#53665b}
+.answer-voice-review [class*="border-white"]{border-color:#c9cfc5}
+.answer-voice-review .glass-card{background:#fffdf8;border:1px solid #d9d9ce;color:#26352f;box-shadow:none}
+.answer-voice-review .glass-card button{color:#284c40}
+.answer-voice-review .glass-card button.bg-white\/15{background:#e5ece4;border-color:#72917f;color:#284c40}
+.answer-voice-review .glass-card textarea{background:#eef2eb;border:1px solid #a9bdab;border-radius:9px;padding:12px;color:#26352f}
+.answer-voice-review button.btn-quiet,.answer-voice-review button.recording-start-bar{background:#284c40;color:#fff}
+.answer-voice-review [role="status"]{color:#53665b}
+.answer-voice-review [role="alert"]{color:#8a392c}
