@@ -5138,6 +5138,7 @@ const firstData = {
       : "「静かな時間が流れていました」",
 
   transcriptionStatus: "done",
+  transcriptionFailureStage: null,
   transcriptionError: "",
   polishStatus: "processing",
   polishError: ""
