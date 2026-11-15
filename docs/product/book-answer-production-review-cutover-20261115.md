@@ -1,5 +1,7 @@
 # BOOK回答・代表者本番レビューの反映準備（2026-11-15）
 
+> 2026-11-16 更新: この文書は反映前の計画と当時の停止条件を記録したもの。実際のBOOK反映結果は [book-answer-production-review-release-20261116.md](book-answer-production-review-release-20261116.md) を参照。直前バックアップ後、承認済みのSQL 3件・`publish-voice-edition`・`0530423` の本番画面のみ反映した。先行案内のDB・Edge・画面は別作業として本番未反映。
+
 候補ブランチ `codex/book-answer-shared-design`。比較基準は最新 `origin/main` = `9335598`、記録済み本番画面ソース = `18f455d`。本番サイトの公開HTMLに記録済みの `app-Uox-0on0.js` と `index-DXJ5i9Sz.js` が含まれることを読み取り確認。候補は両方の子孫であり、別の本番専用コミットを落とさない。今回、本番DB・Edge・HP・Stripe、mainには書き込んでいない。
 
 ## 反映対象と既存データ
