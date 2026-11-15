@@ -6602,11 +6602,35 @@ useEffect(() => {
   })();
 }, [user?.id, foundation?.project?.id, foundation?.project?.access_status]);
 
-const finishGiftCheckoutAsPaid = data => {
+const finishGiftCheckoutAsPaid = async data => {
   setPurchaseFor("gift");
   const purchaseIntent = readCommercePurchaseIntent(window.localStorage);
   const familyManaged = giftPurchaseMode(data.order, purchaseIntent,
     data.gift?.recipient_name) === 'family_managed';
+  // Reopening a paid Checkout return must resume the already claimed Gift B
+  // project. Showing the unclaimed start screen would attempt a second claim.
+  if (familyManaged && data.gift?.claimed_at && data.gift?.recipient_project_id) {
+    const projects = await loadSupportedStoryProjects({ required: true });
+    const selected = projects.find(project => project.book_project_id === data.gift.recipient_project_id);
+    if (!selected) throw new Error('購入済みの作品を開けませんでした');
+    const [bookData, notificationData] = await Promise.all([
+      loadSupporterBookData(selected),
+      loadNotificationPreference(user.id, selected.book_project_id)
+    ]);
+    setSupportedProjects(projects);
+    setSupportContext({ project: selected, ...bookData });
+    setSupportNotificationPref(notificationData || null);
+    window.localStorage.removeItem(pendingManagedGiftKey);
+    clearCommercePurchaseIntent(window.localStorage);
+    setPurchaseStatus('paid');
+    setPurchaseError('');
+    replaceCommercialEntryUrl('purchased');
+    const resumeUrl = new URL(window.location.href);
+    resumeUrl.searchParams.set('support_project', selected.book_project_id);
+    window.history.replaceState({}, '', resumeUrl.toString());
+    setScene('support_project_home');
+    return;
+  }
   setPurchaseResult({ order: data.order, gift: data.gift, familyManaged });
   if (familyManaged && data.order?.id && data.gift?.claim_token) {
     window.localStorage.setItem(pendingManagedGiftKey, JSON.stringify({
@@ -6705,7 +6729,7 @@ useEffect(() => {
       }
 
       if (data.orderType === "gift") {
-        finishGiftCheckoutAsPaid(data);
+        await finishGiftCheckoutAsPaid(data);
         return;
       }
 
