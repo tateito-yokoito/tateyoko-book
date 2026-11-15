@@ -8,6 +8,8 @@
 
 `supabase/migrations/20261115000100_scope_recording_commit_to_book_project.sql` はこの検索条件に `book_project_id=t.book_project_id` を追加する。既存関数の引数・権限・版管理・再送判定・音声登録は維持し、表、インデックス、回答行には触れない。文章・写真・季節の各経路もこのmigrationでは変更しない。
 
+反映前の本番 `pg_get_functiondef` を再取得し、関数本文を空白正規化したうえで候補と比較した。候補本文は、上記の検索条件1か所を除き本番定義と一致した。本番では読み取りだけ行い、候補を適用していない。
+
 隔離TESTは本番と違い、全作品を通じて `(user_id,sequence_order)` を一意にする旧制約が残っていた。隔離TESTでのみ、その制約を外し、本番と同じ旧回答用の部分一意インデックスを追加してから候補関数を適用した。既存回答行は更新していない。このTEST専用の制約整合を本番migrationに含めない。
 
 | 確認 | 結果 | 証跡・範囲 |
@@ -25,7 +27,7 @@
 
 隔離TESTの既存本人アカウントは公開済み作品のホームに入るため、未購入者の購入開始試験には使えない。別のTEST用メールアドレスを確認済みだが、登録・決済操作は未実施。
 
-現時点の隔離TESTには、正規の新購入導線が呼ぶ `commerce-purchase-handoff`、`create-commerce-v2-checkout` のEdge Functions、および `commerce_purchase_handoffs` 表が存在しない。ローカル環境でも `VITE_COMMERCE_V2_ENABLED` は未設定。したがって、このTESTで現行のHP商品選択→認証→見積→Stripeの実E2Eを完了したとはいえない。旧Checkout、DB上で購入済みにした作品、0円BOOK完成を、今回のStripeテスト決済の代わりには数えない。
+現時点の隔離TESTには、正規の新購入導線が呼ぶ `commerce-purchase-handoff`、`create-commerce-v2-checkout` のEdge Functions、`commerce_purchase_handoffs` 表、`get_commerce_v2_quote` と `create_commerce_v2_order` のDB関数が存在しない。ローカル環境でも `VITE_COMMERCE_V2_ENABLED` は未設定。したがって、このTESTで現行のHP商品選択→認証→見積→Stripeの実E2Eを完了したとはいえない。旧Checkout、DB上で購入済みにした作品、0円BOOK完成を、今回のStripeテスト決済の代わりには数えない。
 
 | 経路 | 現状 |
 | --- | --- |
