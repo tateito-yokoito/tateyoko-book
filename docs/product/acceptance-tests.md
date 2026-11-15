@@ -5,8 +5,8 @@
 | 領域 | 受け入れ条件 | 既存の主なテスト |
 | --- | --- | --- |
 | 無料3問 | 1/3〜3/3の表示と質問・保存内容が一致。終了後に共通購入へ進み、購入済み受取人を再購入へ誘導しない。 | `guest-trial-claim.test.mjs`, `trial-written-retention.test.mjs`; モバイルE2E要確認 |
-| 商品・請求 | HPと無料体験後が同じ商品選択・認証・最終確認・Stripe開始を使用。35,000円／65,000円、オプション、割引と見積・請求額が一致し、旧注文は保持。 | `commerce-v2.test.mjs`, `commerce-v2-checkout-gate.test.mjs`, `delivery-entry.test.mjs`; Stripe test mode E2E要確認 |
-| ギフトA/B | 購入済み作品に接続し、基本商品を二重購入させない。A受取人は本編、B代理制作は同じ5段階の仕上げへ進む。 | `gift-purchase-mode.test.mjs`, `gift-purchase-intent.test.mjs`; 実決済E2Eは未検証 |
+| 商品・請求 | HPと無料体験後が同じ商品選択・認証・最終確認・Stripe開始を使用。35,000円／65,000円、オプション、割引と見積・請求額が一致し、旧注文は保持。 | `commerce-v2.test.mjs`, `commerce-v2-checkout-gate.test.mjs`, `delivery-entry.test.mjs`; スタンダード35,000円の本人・ギフトA/BのStripe TEST実決済と制作開始は[検証済み](./commerce-v2-stripe-test-e2e-20261115.md)。プレミアム・追加オプション・無料3問起点は未実施。 |
+| ギフトA/B | 購入済み作品に接続し、基本商品を二重購入させない。A受取人は本編、B代理制作は同じ5段階の仕上げへ進む。 | `gift-purchase-mode.test.mjs`, `gift-purchase-intent.test.mjs`; A受取人・B購入者の制作開始はStripe TEST実決済で[確認](./commerce-v2-stripe-test-e2e-20261115.md)。両経路の仕上げ・公開は未実施。 |
 | 権限・非公開 | 制作管理者・共同管理者は最終確定可、お手伝い中は最終確定・追加決済不可。非公開の語り・写真・音声・動画をお手伝い中がUI・API・DB・Storageから取得・変更できない。 | `helper-private-access.test.mjs`, `book-completion-role.test.mjs`; 認証付きE2E要確認 |
 | BOOK完成 | 0円は直接確定、追加決済は成功時のみ作品版・注文・配送先を一括確定。失敗・中断は編集可。Webhook重複でも二重確定・二重請求なし。 | `book-completion-role.test.mjs`, `bookshelf-pending.test.mjs`; DB/Stripe test mode E2E要確認 |
 | 公開と本棚 | 完成確認中は閲覧専用・Webブック非公開。公開後は本棚から閲覧・再生でき、通知は成功時一回のみ。完成原本は編集不能。 | `book-publication-notice.test.mjs`, `bookshelf-pending.test.mjs`, `book-pdf-server.test.mjs` |
