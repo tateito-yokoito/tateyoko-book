@@ -11,4 +11,5 @@
 .gi-privacy{font-size:13px;line-height:1.7;margin:0}.gi-error{color:#a6472d;font-size:14px;margin:0}.gi-main button,.gi-back{display:block;width:100%;padding:16px 20px;border:0;border-radius:5px;background:#28473e;color:#fffefa;text-align:center;font:600 16px/1.5 'Noto Sans JP',sans-serif;text-decoration:none;cursor:pointer}
 .gi-main button:disabled{opacity:.6;cursor:default}.gi-id{overflow-wrap:anywhere;background:#fffefa;border:1px solid #ced1c6;padding:16px}.gi-back{width:fit-content;margin-top:38px}
 .gi-honeypot{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}.gi-footer{padding:24px max(24px,calc((100vw - 1120px)/2));border-top:1px solid #ced1c6;font-size:13px}
+.gi-main .launch-consent{display:flex;align-items:flex-start;gap:12px;font-weight:400;line-height:1.7}.gi-main .launch-consent input{width:22px;height:22px;flex:none;margin:2px 0 0;accent-color:#28473e}
 @media(max-width:700px){.gi-header{height:72px;padding:15px 22px}.gi-header img{width:160px}.gi-main{padding:42px 0 70px}.gi-lead{margin-bottom:30px}}

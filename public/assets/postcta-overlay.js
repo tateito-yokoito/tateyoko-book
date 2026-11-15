@@ -5813,7 +5813,7 @@ function Od() {
     ] })
   ] });
 }
-const Md = "/?app=1&entry=trial", Dd = "/?app=1&entry=purchase", Id = [
+const Md = "/?app=1&entry=trial", Dd = "/early-access/", Id = [
   ["無料3問の後、勝手に課金されますか？", "自動課金はありません。無料の3問にカード登録は不要です。続けたいと思ったときに、ご自身で購入を選べます。"],
   ["完成までどのくらいかかりますか？", "語る量やペースによって異なります。1〜3ヶ月を目安に、ゆっくりなら最長1年間取り組めます。製本・発送の時期は、内容が確定してからご案内します。"],
   ["途中で休んでも大丈夫ですか？", "一度に語り終える必要はありません。無理のないペースで進められます。利用期間などの条件は、お申し込み時の案内をご確認ください。"],
@@ -5850,11 +5850,11 @@ function Fd() {
           /* @__PURE__ */ g.jsx("span", { "aria-hidden": "true", children: "→" })
         ] }),
         /* @__PURE__ */ g.jsxs("a", { className: "hp-button hp-final-gift", href: Dd, children: [
-          "商品を選んで購入する ",
+          "先行案内を受け取る ",
           /* @__PURE__ */ g.jsx("span", { "aria-hidden": "true", children: "→" })
         ] })
       ] }),
-      /* @__PURE__ */ g.jsx("p", { className: "hp-note", children: "無料3問はカード登録不要・自動課金なし" })
+      /* @__PURE__ */ g.jsx("p", { className: "hp-note", children: "無料3問はカード登録不要・自動課金なし。正式リリース時に、優先してご案内します。" })
     ] }) })
   ] });
 }

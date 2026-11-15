@@ -5,6 +5,7 @@
 | 領域 | 受け入れ条件 | 既存の主なテスト |
 | --- | --- | --- |
 | 無料3問 | 1/3〜3/3の表示と質問・保存内容が一致。終了後に共通購入へ進み、購入済み受取人を再購入へ誘導しない。 | `guest-trial-claim.test.mjs`, `trial-written-retention.test.mjs`; モバイルE2E要確認 |
+| 正式リリース前の先行案内 | HPの購入CTAは先行案内フォームへ進む。必須項目・同意・重複防止・任意理由・管理者による一覧/CSV確認が可能。匿名で注文・作品を作らず、既存ユーザー導線を維持。一般向けCheckoutはサーバー側で停止。 | 隔離TEST HTTPSの登録・再登録・理由送信とDB行/RLSを確認。本番ゲート閉鎖と本番反映は未確認。 |
 | 商品・請求 | HPと無料体験後が同じ商品選択・認証・最終確認・Stripe開始を使用。35,000円／65,000円、オプション、割引と見積・請求額が一致し、旧注文は保持。 | `commerce-v2.test.mjs`, `commerce-v2-checkout-gate.test.mjs`, `delivery-entry.test.mjs`; スタンダード35,000円の本人・ギフトA/BのStripe TEST実決済と制作開始は[検証済み](./commerce-v2-stripe-test-e2e-20261115.md)。プレミアム・追加オプション・無料3問起点は未実施。 |
 | ギフトA/B | 購入済み作品に接続し、基本商品を二重購入させない。A受取人は本編、B代理制作は同じ5段階の仕上げへ進む。 | `gift-purchase-mode.test.mjs`, `gift-purchase-intent.test.mjs`; A受取人・B購入者の制作開始はStripe TEST実決済で[確認](./commerce-v2-stripe-test-e2e-20261115.md)。両経路の仕上げ・公開は未実施。 |
 | 権限・非公開 | 制作管理者・共同管理者は最終確定可、お手伝い中は最終確定・追加決済不可。非公開の語り・写真・音声・動画をお手伝い中がUI・API・DB・Storageから取得・変更できない。 | `helper-private-access.test.mjs`, `book-completion-role.test.mjs`; 認証付きE2E要確認 |
