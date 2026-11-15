@@ -25,12 +25,18 @@ function fakeServer() {
     set offline(value) { offline = value; },
     set failCommit(value) { failCommit = value; },
     from(table) {
-      return { select: () => ({ eq: () => ({ eq: () => ({
-        maybeSingle: async () => offline ? { error: new Error('offline') }
-          : { data: table === 'answers'
+      const filters = {};
+      const query = {
+        eq(column, value) { filters[column] = value; return query; },
+        async maybeSingle() {
+          if (offline) return { error: new Error('offline') };
+          assert.equal(filters.book_project_id, identity.projectId);
+          return { data: table === 'answers'
             ? { transcript_edited: answerBody, text_revision: answerRevision }
-            : draft ? { ...draft, book_project_id: identity.projectId } : null },
-      }) }) }) };
+            : draft ? { ...draft, book_project_id: identity.projectId } : null };
+        },
+      };
+      return { select: () => query };
     },
     async rpc(name, args) {
       if (offline) return { error: new Error('offline') };

@@ -63,7 +63,8 @@ export class AnswerTextDraft {
   async open() {
     const { data, error } = await this.client.from('answer_text_drafts')
       .select('book_project_id,body,base_text_revision,generation,edit_number,device_id,state,updated_at')
-      .eq('user_id', this.userId).eq('sequence_order', this.sequenceOrder).maybeSingle();
+      .eq('user_id', this.userId).eq('book_project_id', this.projectId)
+      .eq('sequence_order', this.sequenceOrder).maybeSingle();
     if (error) {
       this.remoteStatus = 'offline';
       this.syncPhase = 'failed';
@@ -344,7 +345,8 @@ export class AnswerTextDraft {
       if (result.status === 'answer_conflict') {
         const { data, error } = await this.client.from('answers')
           .select('transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
-          .eq('user_id', this.userId).eq('sequence_order', this.sequenceOrder).maybeSingle();
+          .eq('user_id', this.userId).eq('book_project_id', this.projectId)
+          .eq('sequence_order', this.sequenceOrder).maybeSingle();
         if (error) throw error;
         this.conflict = {
           kind: 'answer', body: data?.transcript_edited || data?.transcript_readable
@@ -354,7 +356,8 @@ export class AnswerTextDraft {
       } else {
         const { data, error } = await this.client.from('answer_text_drafts')
           .select('body,base_text_revision,generation,edit_number,device_id,state')
-          .eq('user_id', this.userId).eq('sequence_order', this.sequenceOrder).maybeSingle();
+          .eq('user_id', this.userId).eq('book_project_id', this.projectId)
+          .eq('sequence_order', this.sequenceOrder).maybeSingle();
         if (error) throw error;
         this.conflict = data || result;
       }
