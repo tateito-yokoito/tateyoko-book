@@ -19,6 +19,7 @@ const cli=process.env.QA_SUPABASE_CLI;
 const raw=cli?execFileSync(cli,['projects','api-keys','--project-ref',ref,'--output','json'],{encoding:'utf8',stdio:['ignore','pipe','pipe']}):null;
 const anon=raw?JSON.parse(raw.slice(raw.indexOf('['))).find(k=>k.name==='anon')?.api_key:process.env.RELEASE_SUPABASE_ANON_KEY;
 assert.ok(anon,'Production anon key is required');
+process.env.RELEASE_EXCLUDE_REVIEW_ENTRY='true';
 for(const key of Object.keys(process.env))if(key.startsWith('VITE_'))delete process.env[key];
 Object.assign(process.env,{
  VITE_PUBLIC_TEST_MODE:'false',VITE_SUPABASE_URL:`https://${ref}.supabase.co`,VITE_SUPABASE_ANON_KEY:anon,
@@ -91,6 +92,7 @@ for(const route of config.headers||[])for(const header of route.headers||[]){
 fs.writeFileSync(path.join(outDir,'vercel.json'),JSON.stringify(config,null,2));
 const files=filesUnder(outDir);
 assert.ok(files.every(p=>!/(?:private|\.env|\.map$)/i.test(path.relative(outDir,p))));
+assert.ok(!files.some(p=>path.relative(outDir,p)==='answer-ui-review.html'),'Review-only page in production artifact');
 const code=files.filter(p=>/\.(js|html|json)$/.test(p)).map(p=>fs.readFileSync(p,'utf8')).join('\n');
 // The client retains a TEST-only URL comparison to block test invitations.
 // The release configuration and embedded client key must still point to production.
