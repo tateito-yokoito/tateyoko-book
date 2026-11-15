@@ -40,7 +40,7 @@
 
 **実施可能:** 本番/TEST定義とコードの読み取り比較、影響範囲の特定、バックアップ/適用/復旧計画、ローカルの静的テスト。購入系TESTの変更や実決済は未実施。
 
-**現接続で残る確認:** 追加3価格の現行税区分、Stripe TESTのtest API keyとWebhook署名secretがTEST Edge設定と対応すること、当日分を復元できるバックアップ。管理画面で商品・Webhook・Secret名・定期バックアップは確認できたが、Secret値は表示していない。確認できるまでTEST購入環境の準備完了とも実決済E2E合格とも扱わない。
+**現接続で残る確認:** 追加3価格の税区分と現TEST宛Webhookの署名付き受信は下記の追記で確認済み。Stripe TESTのAPI keyがTEST Edge設定と対応すること、適用直前の暗号化論理バックアップと復元手段は未確認。Secret値は表示していない。確認できるまでTEST購入環境の準備完了とも実決済E2E合格とも扱わない。
 
 ## 2026-11-15 実行結果と次の適用単位
 
@@ -67,3 +67,9 @@ Stripe Dashboardのサンドボックス商品一覧で、Phase 2 TESTの基本2
 同資料に記されたWebhook宛先は旧隔離ブランチ `gmyqqcnbuiaghbrxnkaz` であり、今回のTEST `zpswxefgfabzvxdbtyvq` とは異なる。現行Stripe TEST画面には別のアクティブな送信先 `tateito-yokoito-test-commerce-v2` があり、今回のTESTの `/functions/v1/stripe-webhook` に向いている。`checkout.session.completed` など必要な7イベントを購読している。TEST Supabaseには `STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`APP_URL`、`EXPERIENCE_COMMERCE_MODE`、`EXPERIENCE_COMMERCE_SUPABASE_URL`、`EXPERIENCE_CHECKOUT_ENABLED` の名前が存在する。ただし秘密値は閲覧せず、対応するtest key/当該送信先の署名secretかは未照合。`COMMERCE_V2_CHECKOUT_ENABLED` は存在せず、Checkout開始前にTESTだけへ設定が必要。Stripe画面では現送信先の過去の失敗配信も表示されたため、有効署名の配信確認を合格ゲートから外さない。古い宛先を今回のTESTへ向けたものとみなさず、秘密値を表示・転記しない。
 
 次の実行順は、(1) 現TEST宛先・秘密設定の存在確認、(2) 直前の制限付きバックアップ取得と復元方法確認、(3) TEST SQLを上記単位で段階適用、(4) TEST Edgeの新規2件だけを配置、(5) 公開見積4ケース、(6) 注文キーと署名付きWebhookの冪等性確認。**実カード試験と別TESTアドレスの登録・ログインは、このゲートを通るまで開始しない。**
+
+## 2026-11-15 安全確認の追記
+
+- Stripe TESTの現行PriceオブジェクトをStripe Shellの読み取りコマンドで確認した。`standard_extra_v2` は `price_1UVo4KFMGRId8JGGV6sa1Pfn`・5,000円、`premium_extra_v2` は `price_1UVo4wFMGRId8JGG1ULb8Tgr`・35,000円、`interview_support_v1` は `price_1UVo5NFMGRId8JGGwfSSKHWR`・20,000円。いずれも `livemode=false`、JPY、一回払い、`tax_behavior=inclusive`。候補SQLの `commerce_products.amount_jpy` と `get_commerce_v2_quote` の `tax_included=true`、Checkout共通コードの税込価格照合と一致する。
+- Stripe TEST Shellから `checkout.session.expired` のサンプルをトリガーした。現在のTEST宛先 `tateito-yokoito-test-commerce-v2` への配信は2026-11-15 18:47 JSTにHTTP 200・`{"received":true}`。イベント `evt_1Uc01xFMGRId8JGGoanuTthF` のreceiptをTEST DBで1件確認し、総件数は72から73へ増加した。Webhookコードは署名検証に失敗するとDB処理前にHTTP 400を返すため、**現時点の署名Secretとの対応は確認済み**。これはサンプルの正常受信であり、V2注文の支払反映・再送冪等性の合格ではない。
+- **適用停止:** 既存TESTの定期物理バックアップは適用直前の論理バックアップではない。現在のMacには `pg_dump`/`psql`/Supabase CLIとDB接続資格情報がなく、Supabase連携にもバックアップ取得機能がない。購入関連の既存注文・作品・receipt、および関数・ポリシー・トリガーを暗号化して保管し、復元を検証する手段が揃わないため、TEST SQL・Edgeを適用していない。Storageは変更していない。
