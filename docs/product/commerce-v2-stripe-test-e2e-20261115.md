@@ -1,5 +1,7 @@
 # 購入V2・Stripe TEST実決済E2E（2026-11-15）
 
+TEST HTTPSへの候補配信とHP入口・戻りURLの後続確認は [購入V2・TEST HTTPS入口と決済後復帰](./commerce-v2-https-return-e2e-20261115.md) を参照。
+
 対象: レビュー用ブランチ `codex/book-answer-shared-design`、画面候補 `a9f6b15`、Supabase隔離TEST `zpswxefgfabzvxdbtyvq`、Stripeサンドボックス。本人・ギフトA・ギフトBは架空名とTESTアカウントで各1件購入した。商品選択はローカル候補画面から開始しており、HP上の購入ボタンからの入口は今回未実施。認証コード、カード情報、Checkout session ID、受取トークンは記録しない。本番DB・本番Stripe・mainは変更していない。
 
 | 経路 | 実決済・Webhook/DB | 購入後の実画面 | 判定 |

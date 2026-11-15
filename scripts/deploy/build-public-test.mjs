@@ -16,6 +16,7 @@ const settings={
  VITE_PUBLIC_TEST_MODE:'true',VITE_SUPABASE_URL:TEST_SUPABASE_URL,VITE_SUPABASE_ANON_KEY:anon,
  VITE_EXPERIENCE_V2_TEST_ONLY:'true',VITE_EXPERIENCE_V2_ENABLED:'true',
  VITE_TRIAL_CONVERSION_ENABLED:'true',VITE_EXPERIENCE_NOTIFICATIONS_ENABLED:'false',
+ VITE_COMMERCE_V2_ENABLED:'true',
  VITE_FAMILY_CONNECTION_TEST:'true',
  VITE_BOOK_PDF_ENABLED:'true',VITE_BOOK_PRODUCTION_V2_ENABLED:'true'
 };
@@ -48,7 +49,24 @@ for(const relative of entryAssets){
  const source=path.join(root,'public',relative);assert.ok(fs.existsSync(source),`Missing entry asset: ${relative}`);
  const dest=path.join(outDir,relative);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(source,dest);
 }
-fs.copyFileSync('scripts/deploy/public-test.vercel.json',path.join(outDir,'vercel.json'));
+// The live HP embeds its existing product section. Keep the same public files
+// in the TEST artifact so both HP purchase buttons can be exercised there.
+for(const relative of [
+ 'product-section-nov8-after.html','product-section-nov8-preview.css',
+ 'product-section-nov8-refined.css','product-section-nov8-pc-balance.css',
+ 'support-consultation-inline.css','assets/product-comparison-media.js',
+ 'assets/product-comparison-media.css','assets/product-plan-comparison-fallback.jpg',
+ 'assets/product-plan-comparison.mp4',
+ 'assets/book-webbook-cover-shared-scene-20261024.png'
+]){
+ const source=path.join(root,'public',relative);assert.ok(fs.existsSync(source),`Missing landing product asset: ${relative}`);
+ const dest=path.join(outDir,relative);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(source,dest);
+}
+const config=JSON.parse(fs.readFileSync('scripts/deploy/public-test.vercel.json','utf8'));
+for(const route of config.headers||[])for(const header of route.headers||[]){
+ if(header.key==='Content-Security-Policy')header.value=header.value.replace("frame-ancestors 'none'","frame-ancestors 'self'");
+}
+fs.writeFileSync(path.join(outDir,'vercel.json'),JSON.stringify(config,null,2));
 fs.cpSync('public/pwa',path.join(outDir,'pwa'),{recursive:true});
 fs.copyFileSync('public/pwa-sw.js',path.join(outDir,'pwa-sw.js'));
 const files=filesUnder(outDir);
