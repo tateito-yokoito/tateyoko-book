@@ -60,7 +60,8 @@ import ThemeMorePicker from "./ThemeMorePicker.jsx";
 import FamilyStoryInviteFlow from "./FamilyStoryInviteFlow.jsx";
 import CommerceV2Purchase from "./CommerceV2Purchase.jsx";
 import PurchaseSelectionEntry from "./PurchaseSelectionEntry.jsx";
-import { giftPurchaseMode } from './lib/giftPurchaseMode.js';
+import { claimedManagedGiftProject, giftPurchaseMode } from './lib/giftPurchaseMode.js';
+import { preserveCheckoutReturnForAuth, purchasedSupportProjectUrl } from './lib/checkoutReturnNavigation.js';
 import ProjectRoleInvitePanel from './ProjectRoleInvitePanel.jsx';
 import CoManagerSharingPanel from './CoManagerSharingPanel.jsx';
 import { clearCommercePurchaseIntent, commercePurchaseReviewRequested, readCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
@@ -515,9 +516,6 @@ function getAuthReturnUrlFromCurrentLocation() {
   const journeyLink = params.get("journey_link");
   if (journeyLink) url.searchParams.set("journey_link", journeyLink);
 
-  const purchaseFor = params.get("purchase_for");
-  if (purchaseFor) url.searchParams.set("purchase_for", purchaseFor);
-
   const giftClaim = params.get("gift");
   if (giftClaim) url.searchParams.set("gift", giftClaim);
 
@@ -527,20 +525,7 @@ function getAuthReturnUrlFromCurrentLocation() {
   const giftThree = params.get("gift_three");
   if (giftThree) url.searchParams.set("gift_three", giftThree);
 
-  const checkoutStatus = params.get("checkout");
-  if (checkoutStatus) url.searchParams.set("checkout", checkoutStatus);
-
-  const checkoutSessionId = params.get("session_id");
-  if (checkoutSessionId) url.searchParams.set("session_id", checkoutSessionId);
-
-  const checkoutContext = params.get("checkout_context");
-  if (checkoutContext) url.searchParams.set("checkout_context", checkoutContext);
-  const checkoutPremium = params.get("checkout_premium");
-  if (checkoutPremium) url.searchParams.set("checkout_premium", checkoutPremium);
-  const familyInviteCheckout = params.get("family_invite_checkout");
-  if (familyInviteCheckout) url.searchParams.set("family_invite_checkout", familyInviteCheckout);
-
-  return url.toString();
+  return preserveCheckoutReturnForAuth(params.toString(), url).toString();
 }
 
 function formatYen(value) {
@@ -6609,10 +6594,9 @@ const finishGiftCheckoutAsPaid = async data => {
     data.gift?.recipient_name) === 'family_managed';
   // Reopening a paid Checkout return must resume the already claimed Gift B
   // project. Showing the unclaimed start screen would attempt a second claim.
-  if (familyManaged && data.gift?.claimed_at && data.gift?.recipient_project_id) {
+  if (familyManaged && data.gift?.claimed_at) {
     const projects = await loadSupportedStoryProjects({ required: true });
-    const selected = projects.find(project => project.book_project_id === data.gift.recipient_project_id);
-    if (!selected) throw new Error('購入済みの作品を開けませんでした');
+    const selected = claimedManagedGiftProject(data.gift, projects);
     const [bookData, notificationData] = await Promise.all([
       loadSupporterBookData(selected),
       loadNotificationPreference(user.id, selected.book_project_id)
@@ -6624,10 +6608,7 @@ const finishGiftCheckoutAsPaid = async data => {
     clearCommercePurchaseIntent(window.localStorage);
     setPurchaseStatus('paid');
     setPurchaseError('');
-    replaceCommercialEntryUrl('purchased');
-    const resumeUrl = new URL(window.location.href);
-    resumeUrl.searchParams.set('support_project', selected.book_project_id);
-    window.history.replaceState({}, '', resumeUrl.toString());
+    window.history.replaceState({}, '', purchasedSupportProjectUrl(window.location.href, selected.book_project_id).toString());
     setScene('support_project_home');
     return;
   }

@@ -179,7 +179,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           if (!data.order?.id || !data.gift?.claim_token || !onCompleted) {
             throw new Error('贈り物の購入内容を確認できませんでした');
           }
-          onCompleted(data);
+          await onCompleted(data);
           return;
         }
         if (isReview) {

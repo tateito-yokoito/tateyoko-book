@@ -9,3 +9,11 @@ export function giftPurchaseMode(order, purchaseIntent = null, recipientName = n
     && purchaseIntent.recipientName === recipientName) return 'family_managed';
   return 'recipient_led';
 }
+
+export function claimedManagedGiftProject(gift, supportedProjects) {
+  if (!gift?.claimed_at) return null;
+  if (!gift.recipient_project_id) throw new Error('購入済みの作品を開けませんでした');
+  const project = supportedProjects.find(item => item.book_project_id === gift.recipient_project_id);
+  if (!project) throw new Error('購入済みの作品を開けませんでした');
+  return project;
+}
