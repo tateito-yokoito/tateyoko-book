@@ -1,6 +1,6 @@
 # 購入V2・隔離TEST差分と実決済前ゲート（2026-11-15）
 
-対象は Supabase TEST `zpswxefgfabzvxdbtyvq` とレビュー候補 `a63db03`。本番 `wquxjeqkumossjxehdop` は定義の読み取りだけ。TEST購入系DB・Edge・Webhook、Stripe、画面コードはこの調査で変更していない。別TESTアドレスの登録・ログイン・決済もしていない。
+対象は Supabase TEST `zpswxefgfabzvxdbtyvq` とレビュー用ブランチ `codex/book-answer-shared-design`。本番 `wquxjeqkumossjxehdop` は定義の読み取りだけ。TEST購入系DB・Edge・Webhook、Stripe、画面コードはこの調査で変更していない。別TESTアドレスの登録・ログイン・決済もしていない。
 
 ## 確定した差分
 
@@ -11,7 +11,7 @@
 | 認証引き継ぎ | `commerce_purchase_handoffs` とEdge `commerce-purchase-handoff` がない | 商品選択から認証後の同一注文経路を維持する表・Edge。 |
 | Checkout | `create-commerce-v2-checkout` がない | TEST向けEdgeと共有コード。`APP_URL`、TEST Supabase URL、test key、`COMMERCE_V2_CHECKOUT_ENABLED`、`EXPERIENCE_CHECKOUT_ENABLED`、`EXPERIENCE_COMMERCE_MODE=test` を確認する。 |
 | 決済反映 | TEST `stripe-webhook` v69、`sync-checkout-session` v67。候補とは内容が違う | 既存の署名・領収・旧注文処理を保持し、V2初回購入の実際の呼出し経路に必要な差分だけを取り込む。版番号だけで上書き判断しない。 |
-| Stripe・Web設定 | TEST Stripe商品・価格、Webhook endpoint、署名secret、Edge secretの存在は未確認。ローカルのV2画面フラグは未設定 | TEST専用URL・test modeの設定を確認してから画面ゲートを有効化する。 |
+| Stripe・Web設定 | Phase 2 TEST商品5件と現TEST宛先のアクティブWebhookを確認。EdgeのStripe関連Secret名は存在するが値の対応は未照合。ローカルのV2画面フラグは未設定 | TEST専用URL・test mode・署名secretとの対応を確認してから画面ゲートを有効化する。 |
 
 比較根拠: 本番/TESTの `commerce_products`、`commerce_environment`、`information_schema`、`pg_proc`、migration履歴、Edge一覧と稼働ソースを読み取り照合。TESTには注文58件、作品107件、Stripe event receipt 72件が存在する。個別行や秘密値は取得・保存しない。正本は `supabase/migrations/20261031125930_phase2_product_commerce_v2_20261031.sql`、`20261107010000_commerce_purchase_handoffs.sql`、`20261107160000_interview_support_pay_before_consultation.sql` と現在の購入V2 Edgeソース。977行のV2初期migration全文を現行TESTへ無審査で適用しない。
 
@@ -40,7 +40,7 @@
 
 **実施可能:** 本番/TEST定義とコードの読み取り比較、影響範囲の特定、バックアップ/適用/復旧計画、ローカルの静的テスト。購入系TESTの変更や実決済は未実施。
 
-**現接続では未確認:** Stripe test Dashboardの5価格、Webhook endpointとイベント、test API key/署名secretの設定、TEST Edge secretsの存在、TEST管理バックアップ/PITRと復元手段。接続ツールにはStripe管理機能とSupabase secret一覧/設定機能がなく、現在のブラウザにも対象管理画面の認証済みタブがない。秘密値をチャット・ログ・GitHubに出さず、権限のある管理画面または安全なCLI環境でこれらを照合する必要がある。確認できるまでTEST購入環境の準備完了とも実決済E2E合格とも扱わない。
+**現接続で残る確認:** 追加3価格の現行税区分、Stripe TESTのtest API keyとWebhook署名secretがTEST Edge設定と対応すること、当日分を復元できるバックアップ。管理画面で商品・Webhook・Secret名・定期バックアップは確認できたが、Secret値は表示していない。確認できるまでTEST購入環境の準備完了とも実決済E2E合格とも扱わない。
 
 ## 2026-11-15 実行結果と次の適用単位
 
