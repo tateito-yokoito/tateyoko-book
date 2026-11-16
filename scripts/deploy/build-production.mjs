@@ -56,6 +56,10 @@ for (const relative of [...fs.readFileSync('index.html','utf8').matchAll(/(?:src
 fs.cpSync(path.join(root,'public/assets'),path.join(outDir,'assets'),{recursive:true,force:false});
 fs.cpSync(path.join(root,'public/pwa'),path.join(outDir,'pwa'),{recursive:true});
 fs.copyFileSync(path.join(root,'public/pwa-sw.js'),path.join(outDir,'pwa-sw.js'));
+// Compile the shared post-CTA component for this production environment rather
+// than copying a previously built TEST artifact.
+await build({configFile:'vite.postcta-overlay.config.js',envDir:false,
+ build:{outDir:path.join(outDir,'assets'),emptyOutDir:false}});
 // The landing page embeds this existing product information section. Include
 // only its explicit dependencies; publicDir remains disabled for the release.
 for(const relative of ['product-section-nov8-after.html','product-section-nov8-preview.css','product-section-nov8-refined.css','product-section-nov8-pc-balance.css','support-consultation-inline.css']){

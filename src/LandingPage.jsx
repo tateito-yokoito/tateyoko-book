@@ -7,11 +7,12 @@ import "./hp-nenrin-focused-release.css";
 import StoryIntro from './landing/StoryIntro.jsx';
 import SupportConsultationInline from './SupportConsultationInline.jsx';
 import { startHpAnalytics } from './lib/hpAnalytics.js';
+import { publicPurchaseHref, publicPurchaseLabel, publicPurchaseNote } from './lib/publicPurchaseCta.js';
 
 const LOGIN = "/?app=1&entry=login";
 const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true'
   ? '/?guest_trial=1' : '/?app=1&entry=trial';
-const PURCHASE = "/early-access/";
+const PURCHASE = publicPurchaseHref;
 const GIFT_PURCHASE = PURCHASE;
 const EMAIL = "sugawara@saltlight.co.jp";
 const GA4_MEASUREMENT_ID = import.meta.env.VITE_GA4_MEASUREMENT_ID;
@@ -199,10 +200,10 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
             </div>
             <div className="hp-hero-start-actions">
               <a className="hp-button" href={reviewOnly ? '#hp-review-notice' : TRIAL}>登録不要の無料3問を試す <span aria-hidden="true">↗</span></a>
-              <a className="hp-hero-purchase-link hp-hero-purchase-button" href={reviewOnly ? '#hp-review-notice' : PURCHASE}>先行案内を受け取る <span aria-hidden="true">→</span></a><p className="hp-note">正式リリース時に、優先してご案内します。</p>
+              <a className="hp-hero-purchase-link hp-hero-purchase-button" href={reviewOnly ? '#hp-review-notice' : PURCHASE}>{publicPurchaseLabel} <span aria-hidden="true">→</span></a><p className="hp-note">{publicPurchaseNote}</p>
             </div>
           </div>
-        </div> : <><p>スマホに届く質問に、つぶやくだけ。<br /><strong>あなたの人生が、家族に残る物語になる。</strong></p><div className="hp-hero-start"><p className="hp-hero-start-description">自分や大切な人の歩みと想いを、問いに声や文章で答えながら記録。写真・声・動画も添えて、ブックとWebブックに仕上げます。</p><p className="hp-hero-start-after">家族と分かち合い、完成後も季節ごとに記録を重ねていけます。</p><div className="hp-hero-start-actions"><a className="hp-button" href={reviewOnly ? '#hp-review-notice' : TRIAL}>登録不要の無料3問を試す <span aria-hidden="true">↗</span></a><a className="hp-hero-purchase-link" href={reviewOnly ? '#hp-review-notice' : PURCHASE}>先行案内を受け取る <span aria-hidden="true">→</span></a></div><p className="hp-note">正式リリース時に、優先してご案内します。</p></div></>}
+        </div> : <><p>スマホに届く質問に、つぶやくだけ。<br /><strong>あなたの人生が、家族に残る物語になる。</strong></p><div className="hp-hero-start"><p className="hp-hero-start-description">自分や大切な人の歩みと想いを、問いに声や文章で答えながら記録。写真・声・動画も添えて、ブックとWebブックに仕上げます。</p><p className="hp-hero-start-after">家族と分かち合い、完成後も季節ごとに記録を重ねていけます。</p><div className="hp-hero-start-actions"><a className="hp-button" href={reviewOnly ? '#hp-review-notice' : TRIAL}>登録不要の無料3問を試す <span aria-hidden="true">↗</span></a><a className="hp-hero-purchase-link" href={reviewOnly ? '#hp-review-notice' : PURCHASE}>{publicPurchaseLabel} <span aria-hidden="true">→</span></a></div><p className="hp-note">{publicPurchaseNote}</p></div></>}
         </div>
       </section>
 
@@ -248,7 +249,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
             <p className="hp-v4-scene-tag-label">こんなときに</p>
             <ul className="hp-v4-scene-tags"><li>還暦・古希</li><li>退職祝い</li><li>誕生日</li><li>母の日・父の日</li><li>親孝行ギフト</li></ul>
             <p className="hp-v4-scene-assist"><strong>あなたの端末から、語りや仕上げのお手伝いもできます。</strong></p>
-            <a className="hp-v4-scene-action" href={reviewOnly ? '#hp-review-notice' : PURCHASE}>先行案内を受け取る <span aria-hidden="true">→</span></a>
+            <a className="hp-v4-scene-action" href={reviewOnly ? '#hp-review-notice' : PURCHASE}>{publicPurchaseLabel} <span aria-hidden="true">→</span></a>
           </article>
           <article className="hp-v4-scene-card hp-v4-scene-you">
             <p className="hp-v4-scene-label" lang="en">For You</p>

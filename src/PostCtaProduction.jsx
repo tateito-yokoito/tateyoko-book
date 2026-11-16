@@ -1,10 +1,11 @@
 import React from "react";
 import { StoryOrigin } from "./landing/StoryIntro.jsx";
 import "./postcta-preview.css";
+import { publicPurchaseHref, publicPurchaseLabel, publicPurchaseNote } from './lib/publicPurchaseCta.js';
 
 const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === "true"
   ? "/?guest_trial=1" : "/?app=1&entry=trial";
-const PURCHASE = "/early-access/";
+const PURCHASE = publicPurchaseHref;
 
 const FAQS = [
   ["無料3問の後、勝手に課金されますか？", "自動課金はありません。無料の3問にカード登録は不要です。続けたいと思ったときに、ご自身で購入を選べます。"],
@@ -30,8 +31,8 @@ export default function PostCtaProduction() {
     <section className="hp-final hp-dark hp-section" aria-labelledby="final-title"><div className="hp-shell">
       <h2 id="final-title">まずは、3問。</h2>
       <p>人生を語るって、どんな感じだろう。<br />声で気軽に試してみてください。</p>
-      <div className="hp-final-actions"><a className="hp-button" href={TRIAL}>3問を試してみる <span aria-hidden="true">→</span></a><a className="hp-button hp-final-gift" href={PURCHASE}>先行案内を受け取る <span aria-hidden="true">→</span></a></div>
-      <p className="hp-note">無料3問はカード登録不要・自動課金なし。正式リリース時に、優先してご案内します。</p>
+      <div className="hp-final-actions"><a className="hp-button" href={TRIAL}>3問を試してみる <span aria-hidden="true">→</span></a><a className="hp-button hp-final-gift" href={PURCHASE}>{publicPurchaseLabel} <span aria-hidden="true">→</span></a></div>
+      <p className="hp-note">無料3問はカード登録不要・自動課金なし。{publicPurchaseNote}</p>
     </div></section>
   </>;
 }

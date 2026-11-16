@@ -9,6 +9,32 @@ const json = (body: Record<string, unknown>, status = 200) => new Response(JSON.
 });
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+async function sendConfirmation(email: string, requestKey: string) {
+  const key = Deno.env.get('RESEND_API_KEY')?.trim();
+  if (!key) return false;
+  const from = Deno.env.get('GENERAL_INQUIRY_FROM')?.trim()
+    || '縦糸横糸 <hello@tateito-yokoito.jp>';
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json',
+      'Idempotency-Key': `launch-interest-${requestKey}` },
+    body: JSON.stringify({ from, to: email,
+      subject: '【縦糸横糸】先行案内登録を受け付けました',
+      text: [
+        '縦糸横糸の先行案内へのご登録を受け付けました。',
+        '',
+        '正式リリース時に、このメールアドレスへ優先してご案内します。',
+        'この登録によって購入や課金は発生しません。',
+        '',
+        'お心当たりがない場合は、このメールを破棄してください。',
+        '縦糸横糸｜年輪 nenrin',
+      ].join('\n'),
+    }),
+  });
+  if (!response.ok) throw new Error(`confirmation_mail_http_${response.status}`);
+  return true;
+}
+
 serve(async request => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
@@ -56,9 +82,15 @@ serve(async request => {
       purchase_intent: purchaseIntent, consent_at: new Date().toISOString(), ip_hash: ipHash,
     }).select('id').single();
     // Duplicate email or retry: acknowledge without exposing the existing record.
-    if (error?.code === '23505') return json({ success: true, accepted: true, canAddReason: false });
+    if (error?.code === '23505') return json({ success: true, accepted: true, canAddReason: false,
+      confirmationEmailSent: false });
     if (error) throw error;
-    return json({ success: true, accepted: true, canAddReason: Boolean(data) });
+    // The saved registration is authoritative. A mail failure never rolls it back.
+    let confirmationEmailSent = false;
+    try { confirmationEmailSent = await sendConfirmation(email, requestKey); }
+    catch (mailError) { console.error('launch interest confirmation error',
+      mailError instanceof Error ? mailError.message : 'unknown'); }
+    return json({ success: true, accepted: true, canAddReason: Boolean(data), confirmationEmailSent });
   } catch (error) {
     console.error('launch interest intake error', error instanceof Error ? error.message : 'unknown');
     return json({ success: false, error: '登録できませんでした。時間をおいて再度お試しください' }, 500);

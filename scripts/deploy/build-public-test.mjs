@@ -69,6 +69,10 @@ for(const route of config.headers||[])for(const header of route.headers||[]){
 fs.writeFileSync(path.join(outDir,'vercel.json'),JSON.stringify(config,null,2));
 fs.cpSync('public/pwa',path.join(outDir,'pwa'),{recursive:true});
 fs.copyFileSync('public/pwa-sw.js',path.join(outDir,'pwa-sw.js'));
+// Build the same CTA component with TEST's purchase destination. The checked-in
+// production overlay is not reused for the TEST deployment.
+await build({configFile:'vite.postcta-overlay.config.js',envDir:false,
+ build:{outDir:path.join(outDir,'assets'),emptyOutDir:false}});
 const files=filesUnder(outDir);
 assert.ok(files.every(p=>!/(?:private|\.env|sourcemap|AdminReview|\.map$)/i.test(path.relative(outDir,p))));
 const code=files.filter(p=>/\.(js|html|json)$/.test(p)).map(p=>fs.readFileSync(p,'utf8')).join('\n');

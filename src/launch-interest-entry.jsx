@@ -15,6 +15,7 @@ function LaunchInterestPage() {
   const [registered, setRegistered] = useState(false);
   const [canAddReason, setCanAddReason] = useState(false);
   const [reasonSaved, setReasonSaved] = useState(false);
+  const [confirmationEmailSent, setConfirmationEmailSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const key = useRef(crypto.randomUUID());
@@ -39,6 +40,7 @@ function LaunchInterestPage() {
     try {
       const result = await send({ action: 'register', email: email.trim(), interestFor, purchaseIntent, consent });
       setCanAddReason(result.canAddReason === true);
+      setConfirmationEmailSent(result.confirmationEmailSent === true);
       setRegistered(true);
     } catch (cause) { setError(cause.message); lock.current = false; }
     finally { setBusy(false); lock.current = false; }
@@ -57,6 +59,7 @@ function LaunchInterestPage() {
       {registered ? <section className="gi-complete" role="status">
         <h1>登録を受け付けました。</h1>
         <p>正式リリース時に、優先してご案内します。</p>
+        {confirmationEmailSent && <p>確認メールをお送りしました。</p>}
         {canAddReason && !reasonSaved && <form onSubmit={saveReason}>
           <label>よろしければ、興味を持った理由をお聞かせください（任意）<textarea value={reason} onChange={event => setReason(event.target.value)} maxLength="1000" rows="4" /></label>
           {error && <p className="gi-error" role="alert">{error}</p>}
