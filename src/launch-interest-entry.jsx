@@ -13,8 +13,6 @@ function LaunchInterestPage() {
   const [website, setWebsite] = useState('');
   const [reason, setReason] = useState('');
   const [registered, setRegistered] = useState(false);
-  const [canAddReason, setCanAddReason] = useState(false);
-  const [reasonSaved, setReasonSaved] = useState(false);
   const [confirmationEmailSent, setConfirmationEmailSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -38,19 +36,11 @@ function LaunchInterestPage() {
     }
     lock.current = true; setBusy(true); setError('');
     try {
-      const result = await send({ action: 'register', email: email.trim(), interestFor, purchaseIntent, consent });
-      setCanAddReason(result.canAddReason === true);
+      const result = await send({ action: 'register', email: email.trim(), interestFor, purchaseIntent,
+        reason: reason.trim(), consent });
       setConfirmationEmailSent(result.confirmationEmailSent === true);
       setRegistered(true);
     } catch (cause) { setError(cause.message); lock.current = false; }
-    finally { setBusy(false); lock.current = false; }
-  }
-  async function saveReason(event) {
-    event.preventDefault();
-    if (lock.current || !reason.trim()) return;
-    lock.current = true; setBusy(true); setError('');
-    try { await send({ action: 'reason', reason: reason.trim() }); setReasonSaved(true); }
-    catch (cause) { setError(cause.message); lock.current = false; }
     finally { setBusy(false); lock.current = false; }
   }
   return <div className="gi-page">
@@ -60,23 +50,18 @@ function LaunchInterestPage() {
         <h1>登録を受け付けました。</h1>
         <p>正式リリース時に、優先してご案内します。</p>
         {confirmationEmailSent && <p>確認メールをお送りしました。</p>}
-        {canAddReason && !reasonSaved && <form onSubmit={saveReason}>
-          <label>よろしければ、興味を持った理由をお聞かせください（任意）<textarea value={reason} onChange={event => setReason(event.target.value)} maxLength="1000" rows="4" /></label>
-          {error && <p className="gi-error" role="alert">{error}</p>}
-          <button type="submit" disabled={busy || !reason.trim()}>{busy ? '送信中…' : '理由を送る'}</button>
-        </form>}
-        {reasonSaved && <p>お聞かせいただき、ありがとうございます。</p>}
         <a className="gi-back" href="/">トップへ戻る</a>
       </section> : <>
         <h1>先行案内を受け取る</h1>
         <p className="gi-lead">正式リリース時に、優先してご案内します。</p>
         <form onSubmit={register}>
           <label>メールアドレス <span>必須</span><input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} maxLength="254" required /></label>
-          <label>関心対象 <span>必須</span><select value={interestFor} onChange={event => setInterestFor(event.target.value)} required><option value="">選択してください</option><option value="self">自分</option><option value="family">親・家族</option><option value="both">両方</option></select></label>
-          <label>利用意向 <span>必須</span><select value={purchaseIntent} onChange={event => setPurchaseIntent(event.target.value)} required><option value="">選択してください</option><option value="updates">案内希望</option><option value="considering">購入を前向きに検討</option></select></label>
+          <label>誰の人生や想いを残してみたいですか？ <span>必須</span><select value={interestFor} onChange={event => setInterestFor(event.target.value)} required><option value="">選択してください</option><option value="self">自分</option><option value="family">親・家族</option><option value="both">両方</option></select></label>
+          <label>利用意向 <span>必須</span><select value={purchaseIntent} onChange={event => setPurchaseIntent(event.target.value)} required><option value="">選択してください</option><option value="considering">利用したい</option><option value="updates">興味があるのでリリース案内が欲しい</option></select></label>
+          <label>興味を持っていただいた経緯や、ご質問など（任意）<textarea value={reason} onChange={event => setReason(event.target.value)} maxLength="1000" rows="4" /></label>
           <label className="gi-honeypot" aria-hidden="true">ウェブサイト<input tabIndex="-1" autoComplete="off" value={website} onChange={event => setWebsite(event.target.value)} /></label>
           <label className="launch-consent"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} required />正式リリース時の案内メールを受け取ることに同意します。</label>
-          <p className="gi-privacy">登録情報は先行案内の送付と関心の把握に使用します。購入は成立せず、自動課金もありません。<a href="/?info=privacy">個人情報の取り扱い</a></p>
+          <p className="gi-privacy">登録情報は先行案内の送付、関心の把握、ご質問への対応に使用します。購入は成立せず、自動課金もありません。<a href="/?info=privacy">個人情報の取り扱い</a></p>
           {error && <p className="gi-error" role="alert">{error}</p>}
           <button type="submit" disabled={busy}>{busy ? '登録中…' : '先行案内を受け取る'}</button>
         </form>

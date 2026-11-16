@@ -9,3 +9,11 @@
 - `scripts/deploy/build-production.mjs` と `build-public-test.mjs` は、同じpostCTA部品を各環境向けにビルドする。古いビルド済みCTAをもう一方の環境へコピーしない。
 
 本番の一般向け購入再開は本反映の対象外。既存購入済みユーザーの制作・閲覧導線は維持する。
+
+## フォーム文言・任意コメントの更新
+
+- 「関心対象」を「誰の人生や想いを残してみたいですか？」へ変更。値 `self` / `family` / `both` は維持する。
+- 「利用意向」の選択肢を「利用したい」「興味があるのでリリース案内が欲しい」へ変更。既存の `considering` / `updates` に対応させ、過去の登録行を変更しない。
+- 任意コメント「興味を持っていただいた経緯や、ご質問など（任意）」を登録フォーム内へ移動し、既存の `launch_interest.reason` に同時保存する。DB migrationは不要。旧画面の登録後コメント送信APIは互換性のため維持する。
+- 隔離TESTでは新フォームから架空アドレスを登録し、DB上で `family`・`considering`・任意コメント・同意を同一行に確認。本番では新フォームの表示と、一般向けCheckoutのHTTP 503を確認した。今回、本番に追加の架空登録は作成していない。
+- TEST Edge `submit-launch-interest` v4、TEST Vercel `dpl_D2TcwYks2HpzC5pYtHCGzRB8FfbY`、本番Edge v2、本番Vercel `dpl_AeGoEJFhFV4C4wXoSNVUNYzvbzs3` を反映。既存のTEST購入入口と本番購入ゲートは変更していない。

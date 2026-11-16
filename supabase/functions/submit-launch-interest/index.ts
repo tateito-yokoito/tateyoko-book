@@ -63,9 +63,11 @@ serve(async request => {
     const email = String(input.email || '').trim().toLowerCase();
     const interestFor = String(input.interestFor || '');
     const purchaseIntent = String(input.purchaseIntent || '');
+    const reason = String(input.reason || '').trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254
       || !['self', 'family', 'both'].includes(interestFor)
       || !['updates', 'considering'].includes(purchaseIntent)
+      || reason.length > 1000
       || input.consent !== true) return json({ success: false, error: '入力内容と同意を確認してください' }, 400);
     const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-real-ip')
       || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
@@ -79,7 +81,8 @@ serve(async request => {
     if ((count || 0) >= 5) return json({ success: false, error: '送信が多いため、時間をおいてお試しください' }, 429);
     const { data, error } = await admin.from('launch_interest').insert({
       request_key: requestKey, email, interest_for: interestFor,
-      purchase_intent: purchaseIntent, consent_at: new Date().toISOString(), ip_hash: ipHash,
+      purchase_intent: purchaseIntent, reason: reason || null,
+      consent_at: new Date().toISOString(), ip_hash: ipHash,
     }).select('id').single();
     // Duplicate email or retry: acknowledge without exposing the existing record.
     if (error?.code === '23505') return json({ success: true, accepted: true, canAddReason: false,
