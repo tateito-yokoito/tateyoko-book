@@ -1,13 +1,12 @@
 import React from 'react';
 
-const asset = '/site/hp-story-preview/';
-const waysImage = asset + 'ways-to-preserve-reference.jpg';
+const waysImage = '/site/hp-story-preview/ways-to-preserve-reference.jpg';
 
 export default function StoryIntro({ nov8Preview = false }) {
   return <>
     <section className="hp-v4-memory" id="memory" aria-labelledby="memory-title">
       <div className="hp-shell hp-v4-memory-heading"><h2 id="memory-title">写真は、残る。<br />想いはどうだろう。</h2></div>
-      <figure className="hp-v4-record"><img src={asset + 'records-photos-and-phone.png'} alt="古いアルバム、たくさんの写真、写真一覧を表示するスマートフォン" width="1024" height="1536" loading="lazy" /></figure>
+      <figure className="hp-v4-record"><img src="/site/hp-story-preview/records-photos-and-phone.png" alt="古いアルバム、たくさんの写真、写真一覧を表示するスマートフォン" width="1024" height="1536" loading="lazy" /></figure>
       {nov8Preview ? <div className="hp-v4-question-cards hp-shell" id="loved-one" aria-label="親と自分の人生への問いかけ">
         <article className="hp-v4-question-card hp-v4-question-card-parent">
           <div className="hp-v4-question-card-content">
@@ -30,8 +29,8 @@ export default function StoryIntro({ nov8Preview = false }) {
       </div> : <>
       <div className="hp-v4-moments-copy hp-shell"><p>どんな気持ち<br className="hp-mobile-break" />だったんだろう。</p><p>何を思って<br className="hp-mobile-break" />いたんだろう。</p></div>
       <div className="hp-v4-moments hp-shell" aria-label="過去と今の、語られなかった想い">
-        <figure><img src={asset + 'past-family-photograph.png'} alt="旅先で母と子どもを撮影する父親の後ろ姿" width="1024" height="1536" loading="lazy" /></figure>
-        <figure><img src={asset + 'present-mother-daughter.png'} alt="台所で一緒に料理をする母と成人した娘" width="1024" height="1536" loading="lazy" /></figure>
+        <figure><img src="/site/hp-story-preview/past-family-photograph.png" alt="旅先で母と子どもを撮影する父親の後ろ姿" width="1024" height="1536" loading="lazy" /></figure>
+        <figure><img src="/site/hp-story-preview/present-mother-daughter.png" alt="台所で一緒に料理をする母と成人した娘" width="1024" height="1536" loading="lazy" /></figure>
       </div>
       <div className="hp-v4-questions hp-shell" id="loved-one"><h2>いつか聞こう。<br />いつか残そう。</h2><p className="hp-v4-question-end">でも、今日の言葉は、<br />今日しか残せない。</p></div>
       </>}
@@ -101,8 +100,8 @@ export function StoryOrigin() {
               <p>最初のページには家紋が貼られていましたが、その先はすべて白紙だったのです。</p>
             </div>
             <div className="hp-origin-photo-stack">
-              <figure className="hp-origin-book"><img src={asset + 'origin-family-history-open-20261023.jpg'} alt="家紋が貼られたページと、白紙のままの家系図のページ" width="1024" height="768" loading="lazy" /></figure>
-              <figure className="hp-origin-grandparents-photo"><img src={asset + 'grandparents.jpg'} alt="創業者の祖父母の写真" width="1102" height="713" loading="lazy" /></figure>
+              <figure className="hp-origin-book"><img src="/site/hp-story-preview/origin-family-history-open-20261023.jpg" alt="家紋が貼られたページと、白紙のままの家系図のページ" width="1024" height="768" loading="lazy" /></figure>
+              <figure className="hp-origin-grandparents-photo"><img src="/site/hp-story-preview/grandparents.jpg" alt="創業者の祖父母の写真" width="1102" height="713" loading="lazy" /></figure>
             </div>
             <div className="hp-origin-closing">
               <p>祖父は、どんな想いでこの冊子を用意したのか。<br />何を残したかったのか。</p>
@@ -129,7 +128,7 @@ export function StoryOrigin() {
             <p>そんな願いを、「縦糸∞横糸」に込めています。</p>
           </div>
           <div className="hp-origin-vision-person">
-            <figure><img src={asset + 'founder-and-son-landscape-20261022.png'} alt="創業者・菅原英俊と息子" width="1402" height="1122" loading="lazy" /></figure>
+            <figure><img src="/site/hp-story-preview/founder-and-son-landscape-20261022.png" alt="創業者・菅原英俊と息子" width="1402" height="1122" loading="lazy" /></figure>
           </div>
           <address className="hp-origin-vision-signature"><span>株式会社SaltLight 代表取締役</span><strong>菅原英俊</strong></address>
         </div>

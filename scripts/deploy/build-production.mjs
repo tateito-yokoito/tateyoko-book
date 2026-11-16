@@ -34,6 +34,15 @@ const root=process.cwd(),outDir=path.join(root,'output/production-stage');
 const filesUnder=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?filesUnder(path.join(dir,e.name)):[path.join(dir,e.name)]);
 const sources=filesUnder(path.join(root,'src')).filter(p=>/\.(jsx?|css)$/.test(p));
 const text=sources.map(p=>fs.readFileSync(p,'utf8')).join('\n')+fs.readFileSync('index.html','utf8');
+// HP media must use complete /site/... URLs. The asset collector below cannot
+// see paths assembled from a directory prefix and a filename.
+for(const source of sources.filter(p=>p.includes(`${path.sep}landing${path.sep}`)||p.endsWith(`${path.sep}LandingPage.jsx`))){
+ const content=fs.readFileSync(source,'utf8');
+ assert.doesNotMatch(content,/\b(?:const|let|var)\s+\w+\s*=\s*['"`]\/site\/[A-Za-z0-9_.\/-]+\/['"`]\s*;/,
+  `Use complete /site/... media URLs in ${path.relative(root,source)}`);
+ assert.doesNotMatch(content,/<img\b[^>]*\bsrc=\{[^}]*\+[^}]*\}/,
+  `Use complete /site/... image URLs in ${path.relative(root,source)}`);
+}
 await build({envDir:false,build:{outDir,emptyOutDir:true,sourcemap:false},publicDir:false,plugins:[{
  name:'release-public-module',resolveId(id){if(id==='/assets/product-comparison-media.js')return path.join(root,'public/assets/product-comparison-media.js');}
 }]});
