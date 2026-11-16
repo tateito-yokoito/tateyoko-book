@@ -14,6 +14,7 @@ const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true'
   ? '/?guest_trial=1' : '/?app=1&entry=trial';
 const PURCHASE = publicPurchaseHref;
 const GIFT_PURCHASE = PURCHASE;
+const COMPANY_SITE = "https://saltlight.co.jp/";
 const EMAIL = "sugawara@saltlight.co.jp";
 const GA4_MEASUREMENT_ID = import.meta.env.VITE_GA4_MEASUREMENT_ID;
 const GA4_CONFIGURED = /^G-[A-Z0-9]+$/.test(GA4_MEASUREMENT_ID || '');
@@ -179,7 +180,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
     <header className="hp-header">
       <a href="#top" aria-label="縦糸横糸 トップへ"><img src="/brand-logo-official.svg" alt="縦糸横糸" width="200" height="48" /></a>
       <div className="hp-header-actions"><a href={reviewOnly ? "#hp-review-notice" : LOGIN}>ログイン</a><button id="hp-menu-toggle" aria-label={menu ? "メニューを閉じる" : "メニューを開く"} aria-expanded={menu} aria-controls="hp-nav" onClick={() => setMenu(!menu)}>{menu ? "閉じる ×" : "メニュー ☰"}</button></div>
-      {menu && <nav id="hp-nav" aria-label="メインメニュー">{[["#experience", "縦糸横糸とは"], ["#works", "二つの作品"], ["#price", "料金"], ["#support", "制作のお手伝い"], ["#faq", "よくある質問"]].map(([href,label]) => <a key={href} href={href} onClick={() => setMenu(false)}>{label}<span aria-hidden="true">↗</span></a>)}</nav>}
+      {menu && <nav id="hp-nav" aria-label="メインメニュー">{[["#experience", "縦糸横糸とは"], ["#works", "二つの作品"], ["#price", "料金"], ["#support", "制作のお手伝い"], ["#faq", "よくある質問"]].map(([href,label]) => <a key={href} href={href} onClick={() => setMenu(false)}>{label}<span aria-hidden="true">↗</span></a>)}<a className="hp-company-link" href={COMPANY_SITE}>運営会社<span aria-hidden="true">↗</span></a></nav>}
     </header>
 
     <main id="hp-main">
@@ -346,7 +347,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
       </section>
       <section className="hp-final hp-dark hp-section"><div className="hp-shell"><img src="/brand-logo-symbol.svg" alt="" width="52" height="52" /><h2>まずは、三つだけ。</h2><p>幼い頃のことを、<br />少し話してみませんか。</p><TrialLink reviewOnly={reviewOnly} /><p className="hp-note">約10分・カード登録不要・自動課金なし。</p></div></section>
     </main>
-    <footer className="hp-footer hp-shell"><a href="#top"><img src="/brand-logo-official.svg" alt="縦糸横糸" width="200" height="48" /></a><div><a href="/contact/?source=hp">お問い合わせ</a><button onClick={() => setPanel("privacy")}>プライバシー</button><button onClick={() => setPanel("commerce")}>特定商取引法に基づく表記</button></div><p>© 縦糸横糸</p></footer>
+    <footer className="hp-footer hp-shell"><a href="#top"><img src="/brand-logo-official.svg" alt="縦糸横糸" width="200" height="48" /></a><div><a className="hp-company-footer-link" href={COMPANY_SITE}>運営会社</a><a href="/contact/?source=hp">お問い合わせ</a><button onClick={() => setPanel("privacy")}>プライバシー</button><button onClick={() => setPanel("commerce")}>特定商取引法に基づく表記</button></div><p>© 縦糸横糸</p></footer>
     {panel && <InformationDialog reviewOnly={reviewOnly} panel={panel} close={() => setPanel(null)} />}
     {monitorApplicationOpen && <MonitorApplicationDialog reviewOnly={reviewOnly} close={() => setMonitorApplicationOpen(false)} />}
     {zoomedProduct && <ProductImageDialog product={zoomedProduct} close={() => setZoomedProduct(null)} />}
