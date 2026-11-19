@@ -4,6 +4,8 @@
 
 ## ブランドと資産
 
+- 新しい「家族の場所」の画面デザインは、ユーザー承認済みの [家族のチカラ Ver1.0・10画面モック](./design-references/family-power-v1.0-approved-10-screens.png) を視覚上の正本とする。[現行6画面モックとの差分と修正順](./family-power-v1-design-gap-20261119.md) を参照。これは今後の設計基準であり、現行アプリの実装済み状態を示すものではない。
+
 - ロゴは `src/BrandLogo.jsx` を通し、`public/brand-logo-lockup-kyokasho.svg` と暗背景用 `public/brand-logo-lockup-kyokasho-on-dark.svg` を使う。画面ごとに別のロゴを複製しない。シンボル単独の使用条件は要確認。
 - 本人ホーム上部には既存の「毎日変わる空」（`src/home/StorySkySurface.jsx`）を用いる。制作中・完成確認中・公開後で空を共通にし、下の主カードを状態で切り替える。
 - 既存の Noto Serif JP（大きな見出し）と Noto Sans JP（操作・本文）を尊重する。シニアが読める文字サイズ・コントラスト、約44px以上のタップ領域を優先する。
