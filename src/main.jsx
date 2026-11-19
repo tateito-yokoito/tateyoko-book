@@ -24,6 +24,7 @@ import FamilyPhotoStoryFlow from './FamilyPhotoStoryFlow.jsx';
 import FamilySubjectStories from './FamilySubjectStories.jsx';
 import FamilyThemeFlow from './FamilyThemeFlow.jsx';
 import FamilyDeliverySettings from './FamilyDeliverySettings.jsx';
+import FamilyPlaceApp from './FamilyPlaceApp.jsx';
 
 const AdminReview = import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
   ? null : React.lazy(() => import('./admin/AdminReview.jsx'));
@@ -101,6 +102,14 @@ function PurchaseHandoffGate({ token }) {
 
 function RootScreen() {
   const params = new URLSearchParams(window.location.search);
+  // The person-centred free app is isolated until its questions and TEST
+  // security checks are approved. Existing BOOK entry points stay unchanged.
+  if (params.get('app') === 'family_place') {
+    if (import.meta.env.DEV || import.meta.env.VITE_FAMILY_PLACE_ENABLED === 'true') {
+      return <FamilyPlaceApp />;
+    }
+    return <main className="min-h-screen p-8">家族の場所は準備中です。</main>;
+  }
   const canonicalUrl = canonicalPurchaseUrl(window.location);
   if (canonicalUrl) return <CanonicalPurchaseRedirect url={canonicalUrl} />;
   const purchaseIntent = params.get('entry') === 'purchase'

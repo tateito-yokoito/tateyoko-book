@@ -1006,7 +1006,7 @@ commaWords.forEach(word => {
 const DEV_LOGIN_EMAIL = import.meta.env.VITE_DEV_LOGIN_EMAIL || "";
 const DEV_LOGIN_PASSWORD = import.meta.env.VITE_DEV_LOGIN_PASSWORD || "";
 
-async function ensureProfileExists(sessionUser, registrationData = {}) {
+export async function ensureProfileExists(sessionUser, registrationData = {}) {
   // LINE does not require an email address. Keep the name entered just before
   // the OAuth redirect, but never apply that draft to a non-LINE account.
   if (hasLineIdentity(sessionUser)) {

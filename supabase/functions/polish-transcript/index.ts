@@ -4,6 +4,7 @@ import { requireExperienceProcessing } from "../_shared/experience-access.ts";
 import { requireFamilyProjectAccess, familyPendingVoiceScope } from "../_shared/family-access.ts";
 import { assertHelperAnswerVisible } from "../_shared/helper-private-access.ts";
 import { editableSeasonalMemory } from "../_shared/seasonal-memory-access.ts";
+import { editableFreeStory } from "../_shared/free-story-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,23 +48,27 @@ serve(async (req) => {
 
     const serviceClient = createClient(supabaseUrl, serviceRoleKey);
     const body = await req.json();
+    const freeStoryId = String(body.freeStoryId || "").trim();
     const seasonalRecordId = String(body.seasonalRecordId || "").trim();
-    const answerId = seasonalRecordId || String(body.answerId || "").trim();
+    if (freeStoryId && seasonalRecordId) throw new Error("Forbidden");
+    const answerId = freeStoryId || seasonalRecordId || String(body.answerId || "").trim();
     const transcriptRaw = String(body.transcriptRaw || "").trim();
     const questionText = String(body.questionText || "").trim();
     const bookProjectId = String(body.bookProjectId || "").trim();
     const mode = body.mode === "life_outline" ? "life_outline" : "answer";
 
     if (!answerId) throw new Error("answerId is required");
-    const pendingVoice = seasonalRecordId ? null : await familyPendingVoiceScope(serviceClient, body, user.id);
-    if (seasonalRecordId) {
+    const pendingVoice = seasonalRecordId || freeStoryId ? null : await familyPendingVoiceScope(serviceClient, body, user.id);
+    if (freeStoryId) {
+      await editableFreeStory(serviceClient, freeStoryId, user.id);
+    } else if (seasonalRecordId) {
       await editableSeasonalMemory(authClient, serviceClient, seasonalRecordId, bookProjectId);
     } else if (bookProjectId && !pendingVoice) {
       await requireProjectAccess(serviceClient, bookProjectId, user.id);
       await assertHelperAnswerVisible(serviceClient, bookProjectId, user.id, answerId, true);
     }
 
-    if (!seasonalRecordId && !pendingVoice) await requireExperienceProcessing(serviceClient, bookProjectId, user.id, answerId, String(body.userQuestionId || ""));
+    if (!seasonalRecordId && !freeStoryId && !pendingVoice) await requireExperienceProcessing(serviceClient, bookProjectId, user.id, answerId, String(body.userQuestionId || ""));
 
     if (!transcriptRaw) {
       return jsonResponse({
