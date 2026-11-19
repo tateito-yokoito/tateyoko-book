@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>縦糸∞横糸｜家族の場所からBOOKまで・画面モック</title>
+  <style>
+    :root { color-scheme: light; --paper:#f7f5ed; --cream:#fffdf7; --ink:#243c32; --sub:#68776b; --green:#315a3e; --soft:#e8eee5; --line:#d9ded2; --gold:#a97d4b; --navy:#152239; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#e7eae3; color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif; }
+    button,input { font:inherit; }
+    button { cursor:pointer; }
+    button:focus-visible,input:focus-visible { outline:3px solid #8eb49b; outline-offset:2px; }
+    .review { max-width:1120px; min-height:100vh; margin:auto; padding:32px 20px 54px; display:grid; grid-template-columns:240px minmax(320px,390px) minmax(220px,1fr); align-items:start; gap:28px; }
+    .rail,.context { position:sticky; top:28px; }
+    .rail h1 { font-family:"Yu Mincho","Hiragino Mincho ProN",serif; font-size:25px; font-weight:500; line-height:1.4; margin:0 0 10px; }
+    .rail p,.context p { color:#546356; font-size:14px; line-height:1.75; }
+    .rail ol { list-style:none; padding:0; margin:24px 0 0; display:grid; gap:7px; }
+    .rail li button { width:100%; min-height:45px; text-align:left; padding:10px 12px; border:1px solid transparent; border-radius:13px; color:var(--ink); background:transparent; }
+    .rail li button.current { background:var(--cream); border-color:#c8d5c7; font-weight:700; box-shadow:0 5px 16px #263c3020; }
+    .rail li span { color:var(--gold); margin-right:8px; font-variant-numeric:tabular-nums; }
+    .stage { display:flex; flex-direction:column; align-items:center; gap:12px; }
+    .phone { width:100%; height:740px; overflow:auto; scrollbar-width:thin; background:var(--paper); border:8px solid #293331; border-radius:37px; box-shadow:0 24px 55px #1c332830; }
+    .phone::-webkit-scrollbar { width:5px; }.phone::-webkit-scrollbar-thumb { background:#b8c7b8; border-radius:5px; }
+    .status { height:31px; display:flex; justify-content:space-between; align-items:center; padding:7px 19px 0; font-size:12px; font-weight:700; color:var(--ink); }
+    .screen { min-height:calc(100% - 31px); }
+    .top { min-height:53px; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:4px 17px 9px; background:var(--cream); border-bottom:1px solid var(--line); }
+    .top strong { font-size:17px; font-family:"Yu Mincho","Hiragino Mincho ProN",serif; font-weight:600; }
+    .top button,.back { border:0; color:var(--ink); background:transparent; padding:9px 4px; min-height:42px; }
+    .top .spacer { width:35px; }
+    .content { padding:23px 19px 38px; }
+    .eyebrow { margin:0 0 8px; color:#a17548; font-size:12px; letter-spacing:.12em; }
+    h2 { font-family:"Yu Mincho","Hiragino Mincho ProN",serif; font-size:25px; font-weight:500; line-height:1.48; margin:0 0 11px; }
+    h3 { font-size:17px; line-height:1.5; margin:0 0 10px; }
+    p { line-height:1.75; margin:0 0 16px; }
+    .muted { font-size:13px; color:var(--sub); }
+    .card { background:var(--cream); border:1px solid var(--line); border-radius:17px; padding:17px; margin:0 0 13px; }
+    .card.compact { padding:13px 16px; }
+    .card h3 { margin-bottom:4px; }
+    button.card { display:block; width:100%; text-align:left; color:inherit; font-weight:inherit; }
+    .card p:last-child { margin-bottom:0; }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .row-left { display:flex; align-items:center; gap:10px; min-width:0; }
+    .chip { display:inline-flex; align-items:center; justify-content:center; border-radius:999px; padding:4px 9px; color:var(--green); background:var(--soft); font-size:11px; white-space:nowrap; }
+    .btn { border:1px solid var(--line); background:var(--cream); color:var(--green); border-radius:12px; min-height:48px; padding:11px 16px; font-weight:700; }
+    .btn.primary { color:#fff; background:var(--green); border-color:var(--green); }
+    .btn.subtle { background:transparent; border:0; text-decoration:underline; font-weight:500; }
+    .btn.full { width:100%; }
+    .actions { display:grid; gap:9px; margin:17px 0; }
+    .two { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .field { display:block; margin:16px 0; font-weight:700; font-size:14px; }
+    .field input { width:100%; margin-top:8px; padding:13px 14px; border:1px solid #bdcabc; border-radius:11px; background:#fff; color:var(--ink); min-height:47px; }
+    .sky { height:141px; background:linear-gradient(0deg,#edf2e8,#d9e8e5); background-image:linear-gradient(0deg,#203d2944,#ffffff08),url('/site/approved-skies/sky-020-96d557d3b3eb.webp'); background-size:cover; background-position:center 42%; }
+    .sky-title { padding:18px 19px 4px; font-family:"Yu Mincho","Hiragino Mincho ProN",serif; font-size:22px; }
+    .person { display:flex; gap:12px; align-items:center; }
+    .avatar { display:grid; place-items:center; flex:none; width:53px; height:53px; border-radius:50%; color:#4c654d; background:#dfe8d9; font-size:24px; }
+    .avatar.small { width:39px; height:39px; font-size:18px; }
+    .person strong { display:block; margin-bottom:3px; }
+    .mini-tree { margin:10px 0 15px; padding:12px; border-radius:15px; background:#edf1e8; text-align:center; }
+    .tree-people { display:flex; justify-content:center; align-items:center; gap:9px; }
+    .tree-node { padding:9px 12px; border:1px solid #cbd7c7; border-radius:12px; background:#fffdf9; font-size:13px; }
+    .tree-line { width:1px; height:20px; margin:auto; background:#94aa91; }
+    .cover { width:66px; height:84px; border-radius:4px 9px 9px 4px; flex:none; background:linear-gradient(130deg,#d1e0d6,#91b1a8); border-left:7px solid #577966; box-shadow:2px 3px 7px #0002; padding:12px 5px; color:#20392e; text-align:center; font-family:"Yu Mincho",serif; font-size:13px; }
+    .cover.rose { background:linear-gradient(130deg,#eedacb,#d3ad99); border-left-color:#a98776; }
+    .tabs { display:flex; position:sticky; top:0; z-index:2; background:var(--paper); border-bottom:1px solid var(--line); }
+    .tabs button { flex:1; padding:12px 4px; border:0; background:transparent; color:#67766a; min-height:44px; }
+    .tabs button.active { color:var(--green); font-weight:700; border-bottom:3px solid #5f8a53; }
+    .bottom { display:flex; position:sticky; bottom:0; width:100%; background:#fffdf9; border-top:1px solid var(--line); }
+    .bottom span { flex:1; text-align:center; padding:13px 2px; font-size:11px; color:var(--green); }
+    .note { padding:12px 14px; background:#edf1e9; border-radius:11px; color:#506453; font-size:12px; line-height:1.6; }
+    .life-row { padding:13px 0; border-bottom:1px solid var(--line); font-size:14px; }
+    .price { display:block; font-size:23px; margin:7px 0; }
+    .selected { border:2px solid #6d9870; background:#eff5ed; }
+    .dark .status,.dark .screen { background:var(--navy); color:#f3f3ea; }
+    .dark .top { background:var(--navy); color:#f3f3ea; border-color:#45556a; }
+    .dark .top button { color:#f3f3ea; }
+    .dark .card { background:#1b2c43; color:#f3f3ea; border-color:#405169; }
+    .dark .muted { color:#c5cccf; }
+    .dark .btn { background:#ecede6; color:#17283b; border-color:#ecede6; }
+    .dark .btn.subtle { background:transparent; color:#e6e8e0; }
+    .dark .sky { background-image:linear-gradient(0deg,#152239a8,#15223910),url('/site/approved-skies/sky-020-96d557d3b3eb.webp'); }
+    .context { border-left:1px solid #c7d2c8; padding-left:22px; }
+    .context h2 { font-family:inherit; font-size:16px; font-weight:700; margin:0 0 9px; }
+    .context ul { padding-left:18px; font-size:14px; line-height:1.75; color:#526052; }
+    .jump { display:flex; gap:8px; }
+    .jump button { flex:1; min-height:40px; border:1px solid #bfcbbf; color:#345642; background:#f9faf6; border-radius:9px; }
+    @media(max-width:850px) { .review { grid-template-columns:minmax(0,390px); justify-content:center; gap:14px; padding:18px 12px 40px; } .rail,.context { position:static; } .rail h1 { font-size:19px; } .rail p { margin:0; } .rail ol { display:flex; overflow-x:auto; margin:10px 0; gap:5px; } .rail li { flex:none; } .rail li button { white-space:nowrap; padding:6px 9px; min-height:40px; } .context { border:0; padding:0; } .phone { height:min(740px,78vh); min-height:570px; } }
+  </style>
+</head>
+<body>
+  <main class="review">
+    <aside class="rail">
+      <h1>家族の場所から、人生の一冊へ</h1>
+      <p>6画面の遷移確認用モック。操作は疑似動作で、保存・購入・決済は行いません。</p>
+      <nav aria-label="画面一覧"><ol id="steps"></ol></nav>
+    </aside>
+    <div class="stage">
+      <div class="phone" id="phone" aria-live="polite"></div>
+      <div class="jump"><button id="previous" type="button">← 前の画面</button><button id="next" type="button">次の画面 →</button></div>
+    </div>
+    <aside class="context"><h2 id="contextTitle"></h2><p id="contextText"></p><ul id="contextList"></ul></aside>
+  </main>
+  <script>
+    const labels=['家族ホーム','家族を登録','人物の人生','BOOKを選ぶ','BOOK制作ホーム','完成後の人物'];
+    const contexts=[
+      ['無料の入口','アカウント登録直後。自分は表示し、BOOK作品は作成しない。',['家族を1人登録して記録を始める','家系図・思い出・招待の入口を見せる']],
+      ['人物の登録','最小項目だけで家族に人物を追加する。',['名前と関係を先に登録','詳しいプロフィールは後から']],
+      ['人物を起点にする','人生の語りはBOOKを買わずに始められる構想。',['無料枠・鍵の具体条件は未確定','現行の無料3問とは別の保存先']],
+      ['購入の接続','現行スタンダード／プレミアムの共通購入画面へ渡す設計。',['選択した人物に購入権利を結び付ける','このモックでは決済しない']],
+      ['既存制作モード','既存の制作ホームと回答・仕上げ機能を再利用する。',['対象人物と作品を明示','家族の場所へ戻れる']],
+      ['完成後の継続','固定された版を人物に並べ、追加語りを別に蓄積する構想。',['Ver.2.0は将来案の表示例','増刷と新版の注文を区別する']]
+    ];
+    const state={screen:0,person:'山田 太郎',relation:'父',added:false,edition:'standard',personTab:'人生'};
+    const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const head=(title,back=true)=>`<div class="status"><span>9:41</span><span>●●● ▰</span></div><header class="top">${back?'<button type="button" data-go="0" aria-label="家族ホームへ戻る">←</button>':'<span class="spacer"></span>'}<strong>${title}</strong><span class="spacer"></span></header>`;
+    const foot=()=>'<nav class="bottom" aria-label="家族の場所"><span>ホーム</span><span>人生の物語</span><span>家族</span><span>思い出</span></nav>';
+    const personCard=()=>`<div class="card"><div class="person"><div class="avatar">人</div><div><strong>${escapeHtml(state.person)}</strong><span class="muted">${escapeHtml(state.relation)}・プロフィールは後から編集できます</span></div></div></div>`;
+    function page(){ switch(state.screen){
+      case 0: return `${head('縦糸∞横糸',false)}<div class="screen"><div class="sky"></div><div class="content"><p class="eyebrow">家族の場所</p><h2>家族のチカラは、<br>人生を照らす。</h2><p class="muted">家族の記録を、ここから少しずつ。</p><h3>家族の人たち</h3><div class="card"><div class="person"><div class="avatar">私</div><div><strong>あなた</strong><span class="muted">ご自身のページ</span></div></div></div>${state.added?personCard():''}<div class="actions"><button class="btn primary full" data-go="1">＋ 家族を1人登録する</button>${state.added?'<button class="btn full" data-go="2">'+escapeHtml(state.person)+'のページを見る</button>':''}</div><div class="mini-tree"><strong>家系図</strong><div class="tree-line"></div><div class="tree-people"><span class="tree-node">あなた</span>${state.added?'<span class="tree-node">'+escapeHtml(state.person)+'</span>':''}</div></div><div class="two"><button class="btn" data-action="tree">家系図を見る</button><button class="btn" data-action="memory">思い出を残す</button></div></div>${foot()}</div>`;
+      case 1: return `${head('家族を登録')}<div class="screen"><div class="content"><p class="eyebrow">はじめの一人</p><h2>誰のことから<br>残しますか？</h2><p class="muted">名前と関係だけで始められます。詳しいことは後から足せます。</p><form id="personForm"><label class="field">お名前<input id="personName" required value="${escapeHtml(state.person)}" autocomplete="off"></label><label class="field">あなたとの関係<input id="personRelation" required value="${escapeHtml(state.relation)}" autocomplete="off"></label><button class="btn primary full" type="submit">家族に追加する</button></form><p class="note">登録すると、この人物のページと家系図に表示されます。</p></div></div>`;
+      case 2: return `${head(state.person)}<div class="screen"><div class="content"><div class="person"><div class="avatar">人</div><div><strong>${escapeHtml(state.person)}</strong><div class="muted">${escapeHtml(state.relation)}・プロフィールを見る ›</div></div></div></div><div class="tabs" role="tablist" aria-label="人物ページ">${['人生','思い出','年表'].map(t=>`<button type="button" data-tab="${t}" class="${state.personTab===t?'active':''}" aria-selected="${state.personTab===t}">${t}</button>`).join('')}</div><div class="content">${state.personTab==='人生'?`<p class="eyebrow">人生の語り</p><h2>この人の物語を、<br>少しずつ。</h2><div class="card"><h3>まずは無料で語りを残す</h3><p class="muted">購入前でも、この人の人生の語りを記録できます。</p><button class="btn primary full" data-action="free">＋ 無料の語りを始める</button></div><div class="card compact"><div class="row"><strong>子どもの頃</strong><span>›</span></div><div class="muted">まだ語りはありません</div></div><button class="btn full" data-go="3">この人のBOOKを作る</button>`:`<h2>${state.personTab}</h2><p class="muted">ここに${state.personTab==='思い出'?'この人物がタグ付けされた思い出カード':'プロフィール由来の出来事と思い出'}が表示されます。</p><button class="btn full" data-tab="人生">人生を見る</button>`}</div>${foot()}</div>`;
+      case 3: return `${head('この人のBOOKを作る')}<div class="screen"><div class="content"><p class="eyebrow">対象人物：${escapeHtml(state.person)}</p><h2>人生の物語を、<br>一冊に。</h2><p class="muted">商品を選んだ後、既存の認証・最終確認・決済へ進む構成です。</p><div class="card ${state.edition==='standard'?'selected':''}" data-edition="standard" role="button" tabindex="0"><div class="row"><h3>スタンダード</h3><span class="chip">${state.edition==='standard'?'選択中':'選ぶ'}</span></div><strong class="price">35,000円</strong><p class="muted">BOOKとWebブック</p></div><div class="card ${state.edition==='premium'?'selected':''}" data-edition="premium" role="button" tabindex="0"><div class="row"><h3>プレミアム</h3><span class="chip">${state.edition==='premium'?'選択中':'選ぶ'}</span></div><strong class="price">65,000円</strong><p class="muted">上質な仕立てのBOOKとWebブック</p></div><div class="actions"><button class="btn primary full" data-go="4">購入後の制作画面を見る</button><button class="btn subtle" data-go="2">人物ページへ戻る</button></div><p class="note">設計モックです。商品説明と決済は既存の共通購入画面を使い、ここでは実行しません。</p></div></div>`;
+      case 4: return `${head('BOOK制作｜'+state.person)}<div class="screen"><div class="sky"></div><div class="content"><p class="eyebrow">制作中・${escapeHtml(state.person)}のVer.1.0</p><h2>物語を、<br>少しずつ形に。</h2><div class="card"><h3>次の問い</h3><p>幼い頃、どんなところに住んでいましたか？</p><button class="btn primary full" data-action="answer">次の問いに答える →</button></div><button class="card compact" data-action="photo">写真から語る <span style="float:right">›</span></button><button class="card compact" data-action="questions">問いの一覧 <span style="float:right">›</span></button><h3 style="margin-top:23px">これまでの語り</h3><button class="card compact" data-action="stories">語りを見る <span style="float:right">›</span></button><button class="card compact" data-action="builder">本に仕上げる <span style="float:right">›</span></button><button class="btn subtle full" data-go="0">家族の場所へ戻る</button></div></div>`;
+      case 5: return `${head(state.person)}<div class="screen"><div class="content"><div class="person"><div class="avatar">人</div><div><strong>${escapeHtml(state.person)}</strong><div class="muted">${escapeHtml(state.relation)}・プロフィールを見る ›</div></div></div></div><div class="tabs"><button class="active">人生</button><button data-go="2">思い出</button><button data-go="2">年表</button></div><div class="content"><p class="eyebrow">完成した人生の物語</p><div class="card"><div class="row-left"><div class="cover">人生の<br>物語</div><div><h3>Ver.1.0</h3><p class="muted">完成済み・内容を固定</p><button class="btn" data-action="webbook">Webブックを読む</button></div></div></div><div class="card"><div class="row-left"><div class="cover rose">人生の<br>物語</div><div><h3>Ver.2.0</h3><p class="muted">将来の新版表示例・未実装</p><button class="btn" data-action="edition">新版の構想を見る</button></div></div></div><h3>テーマ別の語り</h3><div class="life-row">子どもの頃 <span style="float:right">7件　›</span></div><div class="life-row">家族への想い <span style="float:right">6件　›</span></div><div class="actions"><button class="btn primary full" data-action="later">＋ 新しい語りを追加する</button><button class="btn subtle" data-go="0">家族ホームへ</button></div></div>${foot()}</div>`;
+    }}
+    function render(){
+      const steps=document.getElementById('steps');steps.innerHTML=labels.map((name,i)=>`<li><button type="button" data-go="${i}" class="${i===state.screen?'current':''}" aria-current="${i===state.screen?'step':'false'}"><span>${i+1}</span>${name}</button></li>`).join('');
+      const phone=document.getElementById('phone');phone.classList.toggle('dark',state.screen===4);phone.innerHTML=page();phone.scrollTop=0;
+      document.getElementById('contextTitle').textContent=contexts[state.screen][0];document.getElementById('contextText').textContent=contexts[state.screen][1];document.getElementById('contextList').innerHTML=contexts[state.screen][2].map(s=>`<li>${escapeHtml(s)}</li>`).join('');
+      document.getElementById('previous').disabled=state.screen===0;document.getElementById('next').disabled=state.screen===5;
+    }
+    function go(n){ state.screen=Math.max(0,Math.min(5,Number(n)));render(); }
+    document.addEventListener('click',e=>{const to=e.target.closest('[data-go]');if(to){go(to.dataset.go);return;}const tab=e.target.closest('[data-tab]');if(tab){state.personTab=tab.dataset.tab;render();return;}const edition=e.target.closest('[data-edition]');if(edition){state.edition=edition.dataset.edition;render();return;}const action=e.target.closest('[data-action]');if(action){alert('設計モックです。この操作は本番実装または既存のBOOK制作画面への接続時に確認します。');}});
+    document.addEventListener('keydown',e=>{const edition=e.target.closest('[data-edition]');if(edition&&(e.key==='Enter'||e.key===' ')){e.preventDefault();state.edition=edition.dataset.edition;render();}});
+    document.addEventListener('submit',e=>{if(e.target.id!=='personForm')return;e.preventDefault();state.person=document.getElementById('personName').value.trim()||'家族';state.relation=document.getElementById('personRelation').value.trim()||'家族';state.added=true;go(0);});
+    document.getElementById('previous').addEventListener('click',()=>go(state.screen-1));document.getElementById('next').addEventListener('click',()=>go(state.screen+1));
+    render();
+  </script>
+</body>
+</html>
