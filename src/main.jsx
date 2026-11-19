@@ -24,12 +24,13 @@ import FamilyPhotoStoryFlow from './FamilyPhotoStoryFlow.jsx';
 import FamilySubjectStories from './FamilySubjectStories.jsx';
 import FamilyThemeFlow from './FamilyThemeFlow.jsx';
 import FamilyDeliverySettings from './FamilyDeliverySettings.jsx';
-import FamilyPlaceApp from './FamilyPlaceApp.jsx';
 
 const AdminReview = import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
   ? null : React.lazy(() => import('./admin/AdminReview.jsx'));
 const guestTrialEnabled = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true';
 const GuestTrialFlow = guestTrialEnabled ? React.lazy(() => import('./GuestTrialFlow.jsx')) : null;
+const FamilyPlaceApp = import.meta.env.DEV || import.meta.env.VITE_FAMILY_PLACE_ENABLED === 'true'
+  ? React.lazy(() => import('./FamilyPlaceApp.jsx')) : null;
 
 function shouldOpenApplication() {
   const params = new URLSearchParams(window.location.search);
@@ -105,8 +106,8 @@ function RootScreen() {
   // The person-centred free app is isolated until its questions and TEST
   // security checks are approved. Existing BOOK entry points stay unchanged.
   if (params.get('app') === 'family_place') {
-    if (import.meta.env.DEV || import.meta.env.VITE_FAMILY_PLACE_ENABLED === 'true') {
-      return <FamilyPlaceApp />;
+    if (FamilyPlaceApp) {
+      return <React.Suspense fallback={<p>家族の場所を準備しています…</p>}><FamilyPlaceApp /></React.Suspense>;
     }
     return <main className="min-h-screen p-8">家族の場所は準備中です。</main>;
   }
