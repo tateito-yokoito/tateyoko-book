@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>縦糸∞横糸｜承認済み・現行・改善案の比較</title>
+  <style>
+    :root { --ivory:#fbf8ef; --paper:#fffdf8; --ink:#242820; --muted:#6e7167; --olive:#5c8125; --deep:#315b24; --line:#e8e5d8; --shadow:0 3px 11px #4d45271c; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:#283128; background:#f2f0e8; font-family:-apple-system,BlinkMacSystemFont,'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif; }
+    button { font:inherit; cursor:pointer; }
+    .review-head { max-width:1092px; margin:0 auto; padding:26px 20px 12px; }
+    .review-head h1 { margin:0 0 7px; font-size:23px; letter-spacing:.035em; }
+    .review-head p { margin:0 0 14px; font-size:13px; line-height:1.6; color:#626d5c; }
+    .switch { display:flex; gap:8px; flex-wrap:wrap; }
+    .switch a { padding:9px 16px; border-radius:99px; background:#fffdf8; border:1px solid #d5ddcf; color:#365538; text-decoration:none; font-weight:700; font-size:13px; }
+    .switch a.active { background:#3e682b; color:white; }
+    .columns { display:grid; grid-template-columns:repeat(3,320px); gap:20px; justify-content:center; align-items:start; padding:10px 16px 28px; }
+    .panel-head { height:54px; }
+    .panel-head strong { display:block; font-size:16px; }
+    .panel-head small { color:#657261; font-size:11px; }
+    .phone { width:320px; height:610px; overflow:hidden; border-radius:23px; background:var(--ivory); box-shadow:0 15px 32px #4b573626; position:relative; }
+    .approved-image { position:absolute; top:-6px; width:1620px; height:auto; max-width:none; }
+    .approved-image.home { left:-8px; }
+    .approved-image.person { left:-344px; }
+    .approved-phone:after { content:""; position:absolute; bottom:0; left:0; right:0; height:76px; background:#fffaf0; }
+    .current-frame { display:block; width:414px; height:900px; border:0; transform:translate(-10px,-145px) scale(.82); transform-origin:top left; pointer-events:none; }
+    .note { margin:11px 0 0; color:#576352; font-size:12px; line-height:1.5; }
+    .after { color:var(--ink); font-size:12px; height:610px; overflow:hidden; background:linear-gradient(180deg,#fffdf7,#fbf8ef); }
+    .status { height:28px; display:flex; align-items:center; justify-content:space-between; padding:2px 16px 0; font-size:11px; font-weight:700; }
+    .app-head { height:49px; padding:5px 15px; display:flex; align-items:center; justify-content:space-between; gap:8px; background:#fffdf9; }
+    .app-head .brand { font-family:'Yu Mincho','Hiragino Mincho ProN',serif; font-size:20px; font-weight:700; letter-spacing:.02em; }
+    .app-head .title { font-size:16px; font-weight:700; }
+    .icon { display:inline-flex; align-items:center; justify-content:center; color:var(--olive); width:21px; height:21px; flex:none; }
+    .icon svg { width:100%; height:100%; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+    .head-icons { display:flex; align-items:center; gap:9px; }
+    .hero { height:125px; border-radius:16px 16px 0 0; margin:0 8px; position:relative; overflow:hidden; background:linear-gradient(180deg,#fff8ec 0%,#f7e8dc 48%,#cae1e8 72%); }
+    .hero:before { content:''; position:absolute; inset:auto -10% 0; height:57%; background:linear-gradient(150deg,#92bdd2,#276391 58%,#568eaa); clip-path:polygon(0 74%,14% 53%,31% 73%,45% 33%,61% 68%,76% 21%,100% 59%,100% 100%,0 100%); }
+    .hero:after { content:''; position:absolute; inset:auto -10% 0; height:34%; background:linear-gradient(140deg,#c5cc74,#77a342 42%,#b9c46b 69%,#5c903d); clip-path:polygon(0 65%,22% 44%,41% 73%,59% 29%,77% 58%,100% 36%,100% 100%,0 100%); }
+    .hero h2 { position:relative; z-index:1; margin:10px 0 0; text-align:center; font-family:'Yu Mincho','Hiragino Mincho ProN',serif; font-size:22px; line-height:1.35; color:#181d17; text-shadow:0 1px 5px #ffffffd0; }
+    .after-content { padding:10px 15px 55px; }
+    .section-line { display:flex; align-items:center; justify-content:space-between; gap:6px; margin:0 0 8px; }
+    .section-line h3 { font-size:15px; margin:0; }
+    .section-line span { font-size:11px; font-weight:700; }
+    .shelf { display:flex; gap:7px; }
+    .book-tile { flex:1; min-width:0; }
+    .book-cover { height:91px; border-radius:6px 6px 3px 3px; padding:10px 4px 4px; box-shadow:var(--shadow); background:linear-gradient(#ffffff3b,#ffffff00 45%),url('../site/hp-story-preview/past-family-photograph.png') center 28%/cover; text-align:center; font-weight:700; color:#172b27; font-size:11px; line-height:1.25; text-shadow:0 1px 3px #fff; }
+    .book-cover.pink { background-image:linear-gradient(#ffe9de50,#f0c0b233),url('../site/hp-renewal/nenrin/spring-school.jpg'); background-position:center,center 40%; }
+    .book-cover.sepia { background-image:linear-gradient(#f6ebd344,#c7b29020),url('../site/hp-story-preview/grandparents.jpg'); background-position:center,43% center; filter:sepia(.14); }
+    .book-status { margin:5px auto 0; padding:3px 5px; border-radius:99px; display:block; width:max-content; background:#edf0db; color:#42672b; font-size:10px; font-weight:700; }
+    .book-status.done { color:#fff; background:var(--olive); }
+    .cta { display:block; width:100%; min-height:32px; margin:8px 0 0; border:0; border-radius:99px; background:linear-gradient(#79a637,#547f1e); color:#fff; box-shadow:0 3px 7px #5d7b3033; font-weight:700; font-size:13px; }
+    .quick { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-top:9px; }
+    .quick > div { min-height:48px; padding:4px 2px; background:#fffef9; border:1px solid #e9e9dc; border-radius:10px; box-shadow:var(--shadow); text-align:center; font-size:10px; font-weight:700; }
+    .quick .icon { display:flex; margin:0 auto 1px; width:17px; height:17px; }
+    .self-card { padding:7px 9px; margin:8px 0 0; background:#fffefa; border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); font-size:11px; }
+    .self-card b { display:block; font-size:12px; }
+    .tabbar { position:absolute; bottom:0; left:0; right:0; height:43px; display:grid; grid-template-columns:repeat(4,1fr); background:#fffcf4; border-top:1px solid #e6e5d8; }
+    .tabbar div { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0; font-size:9px; font-weight:700; }
+    .tabbar .icon { width:15px; height:15px; }
+    .person-header { padding:0 15px 7px; display:flex; gap:12px; align-items:center; }
+    .portrait { width:73px; height:73px; flex:none; border-radius:50%; background:url('../../docs/product/design-references/family-power-v1.0-approved-10-screens.png') -366px -72px/1620px auto no-repeat; box-shadow:0 2px 8px #69614938; }
+    .person-header h2 { margin:0 0 2px; font-size:17px; line-height:1.25; }
+    .person-header small { color:#5b6255; font-size:10px; }
+    .person-header p { margin:4px 0 0; font-size:10px; line-height:1.4; }
+    .profile-button { margin:0 auto 7px; width:170px; height:27px; display:block; border:1px solid #e3e9d6; border-radius:99px; color:#496d2b; background:#f5f8e9; font-weight:700; font-size:10px; }
+    .person-tabs { height:33px; display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid #eee9db; }
+    .person-tabs div { display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; }
+    .person-tabs .active { color:var(--deep); border-bottom:3px solid #739b3c; }
+    .person-body { padding:8px 13px 14px; }
+    .webbook-card { display:flex; gap:9px; padding:7px; border:1px solid #e9e8dc; border-radius:11px; background:var(--paper); box-shadow:var(--shadow); }
+    .webbook-cover { width:69px; height:85px; flex:none; border-radius:4px; background:linear-gradient(#9ac7e6aa,#4a834c66),url('../site/hp-story-preview/past-family-photograph.png') center 29%/cover; box-shadow:0 2px 6px #0003; display:flex; align-items:flex-start; justify-content:center; padding-top:8px; font-family:'Yu Mincho',serif; font-weight:700; font-size:11px; text-align:center; }
+    .webbook-card strong { display:block; font-size:11px; line-height:1.3; }
+    .webbook-card small { display:block; margin-top:5px; font-size:10px; }
+    .read { margin:7px 0 0 48px; padding:5px 14px; border:0; border-radius:99px; background:linear-gradient(#709b32,#4c781c); color:#fff; font-weight:700; font-size:10px; }
+    .topic-title { margin:10px 0 4px; font-size:13px; font-weight:700; }
+    .topic-row { display:flex; align-items:center; gap:7px; height:29px; padding:0 6px; border-bottom:1px solid #eae8dc; background:#fffdfa; font-size:11px; font-weight:700; }
+    .topic-row:first-of-type { border-radius:9px 9px 0 0; }
+    .topic-row .icon { width:17px; height:17px; }
+    .topic-row small { margin-left:auto; font-size:10px; }
+    .add-story { margin-top:8px; width:100%; height:28px; border:1px solid #a4bb73; border-radius:99px; color:#4b742b; background:#fbf9ec; font-size:11px; font-weight:700; }
+    .under-note { max-width:1092px; margin:0 auto; padding:0 20px 28px; font-size:12px; line-height:1.7; color:#596554; }
+    @media(max-width:1040px) { .columns { grid-template-columns:320px; } .panel-head { height:auto; margin-bottom:7px; } .review-head { max-width:360px; } .under-note { max-width:360px; } }
+  </style>
+</head>
+<body>
+  <header class="review-head">
+    <h1>家族のチカラ Ver1.0｜代表2画面の比較</h1>
+    <p>同じ端末幅で、承認済みデザイン・現行6画面モック・改善案を見比べます。改善案は独立した疑似画面です。</p>
+    <nav class="switch" aria-label="比較画面"><a id="homeLink" href="?view=home">① 家族ホーム</a><a id="personLink" href="?view=person">② 人物ページ・人生</a></nav>
+  </header>
+  <main class="columns">
+    <section><div class="panel-head"><strong>1　承認済み Ver1.0</strong><small>10画面合成画像から該当箇所を表示</small></div><div class="phone approved-phone"><img id="approved" class="approved-image" src="../../docs/product/design-references/family-power-v1.0-approved-10-screens.png" alt="承認済みモックの該当画面"></div><p class="note" id="referenceNote"></p></section>
+    <section><div class="panel-head"><strong>2　現行モック</strong><small>2026-11-19の6画面版をそのまま表示</small></div><div class="phone"><iframe id="current" class="current-frame" title="現行モック" src="family-place-book-journey-20261119.html"></iframe></div><p class="note" id="currentNote"></p></section>
+    <section><div class="panel-head"><strong>3　デザイン改善案</strong><small>機能を接続しない独立したレビュー画面</small></div><div class="phone"><div id="after" class="after"></div></div><p class="note" id="afterNote"></p></section>
+  </main>
+  <p class="under-note">代替素材：風景・肖像・表紙には既存リポジトリ内の画像を使用。承認済み画像の個別写真・アイコン原本は未入手です。ホームの初回状態と人物の完成済み状態の内容差は、デザインの正本からの仕様変更を意味しません。</p>
+  <script>
+    const icons={home:'<path d="m2 10 8-7 8 7v8H2z"/><path d="M7 18v-6h6v6"/>',bell:'<path d="M5 14V8a5 5 0 0 1 10 0v6l2 2H3z"/><path d="M8 18h4"/>',gear:'<circle cx="10" cy="10" r="3"/><path d="M10 1v2m0 14v2M1 10h2m14 0h2M3.6 3.6 5 5m10 10 1.4 1.4m0-12.8L15 5M5 15l-1.4 1.4"/>',tree:'<circle cx="10" cy="4" r="2"/><circle cx="4" cy="16" r="2"/><circle cx="16" cy="16" r="2"/><path d="M10 6v5M4 14v-3h12v3"/>',book:'<path d="M2 3c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1zM10 4v14"/>',people:'<circle cx="7" cy="6" r="2"/><circle cx="14" cy="6" r="2"/><path d="M2 18v-3a5 5 0 0 1 10 0v3M10 18v-3a5 5 0 0 1 8 0v3"/>',memory:'<rect x="2" y="3" width="16" height="14" rx="2"/><circle cx="7" cy="8" r="1"/><path d="m4 15 4-4 3 2 3-3 4 5"/>',brief:'<rect x="2" y="6" width="16" height="12" rx="2"/><path d="M7 6V3h6v3M2 11h16"/>',play:'<circle cx="10" cy="10" r="8"/><path d="m8 6 5 4-5 4z"/>'};
+    const icon=(name)=>`<span class="icon" aria-hidden="true"><svg viewBox="0 0 20 20">${icons[name]}</svg></span>`;
+    const nav=`<div class="tabbar"><div>${icon('home')}ホーム</div><div>${icon('book')}人生の物語</div><div>${icon('people')}家族</div><div>${icon('memory')}思い出</div></div>`;
+    const home=`<div class="status"><span>9:41</span><span>▮▮▮ ◕ ▰</span></div><div class="app-head"><div class="head-icons">${icon('home')}<strong class="brand">縦糸∞横糸</strong></div><div class="head-icons">${icon('bell')}${icon('gear')}</div></div><div class="hero"><h2>家族のチカラは、<br>人生を照らす。</h2></div><div class="after-content"><div class="section-line"><h3>家族の人生の物語</h3><span>すべて見る ›</span></div><div class="shelf"><div class="book-tile"><div class="book-cover">お父さんの<br>人生</div><span class="book-status done">完成</span></div><div class="book-tile"><div class="book-cover pink">お母さんの<br>人生</div><span class="book-status">制作中</span></div><div class="book-tile"><div class="book-cover sepia">祖父の<br>人生</div><span class="book-status">これから</span></div></div><button class="cta">＋ 人生の物語をつくる</button><div class="quick"><div>${icon('tree')}家系図</div><div>${icon('book')}家族年表</div><div>${icon('memory')}家族の思い出</div></div><div class="self-card"><b>家族の人たち</b>あなた　·　＋ 家族を1人登録する</div></div>${nav}`;
+    const topic=(symbol,name,count)=>`<div class="topic-row">${icon(symbol)}<span>${name}</span><small>${count}件　›</small></div>`;
+    const person=`<div class="status"><span>9:41</span><span>▮▮▮ ◕ ▰</span></div><div class="app-head"><span style="font-size:24px">‹</span><span class="title">山田 太郎さん</span><span style="font-size:20px">···</span></div><div class="person-header"><div class="portrait" role="img" aria-label="承認済みモックから切り出した人物写真"></div><div><h2>山田 太郎</h2><small>（やまだ たろう）<br>1935年4月10日生（83歳）</small><p>家族を大切にし、挑戦を続けた<br>やさしく頼もしい父です。</p></div></div><button class="profile-button">♙　プロフィールを見る　›</button><div class="person-tabs"><div class="active">人生</div><div>思い出</div><div>年表</div></div><div class="person-body"><div class="webbook-card"><div class="webbook-cover">人生の<br>物語</div><div><strong>太郎さんの人生の物語<br>（Webブック）</strong><small>2024年12月 完成</small><button class="read">読む</button></div></div><div class="topic-title">テーマ別の語り</div>${topic('people','子どもの頃',7)}${topic('brief','仕事と挑戦',5)}${topic('people','家族への想い',6)}${topic('book','人生の知恵',4)}<button class="add-story">＋ 新しい語りを追加する</button></div>`;
+    const view=new URLSearchParams(location.search).get('view')==='person'?'person':'home';
+    document.getElementById('homeLink').classList.toggle('active',view==='home');document.getElementById('personLink').classList.toggle('active',view==='person');
+    document.getElementById('approved').className='approved-image '+view;
+    document.getElementById('after').innerHTML=view==='home'?home:person;
+    document.getElementById('referenceNote').textContent=view==='home'?'承認済み①。3冊が並ぶ、作品のある家族の状態。':'承認済み②。完成済みWebブックと語りのある人物。';
+    document.getElementById('currentNote').textContent=view==='home'?'現行1は初回登録直後のため、BOOKがまだない。':'現行6の完成後の人物ページを表示。';
+    document.getElementById('afterNote').textContent=view==='home'?'承認済みの世界観で作品のある状態を視覚確認。初回登録状態への適用は要判断。':'写真・表紙・テーマの密度を合わせた視覚案。下部ナビの表示条件は要判断。';
+    document.getElementById('current').addEventListener('load',()=>{try{document.getElementById('current').contentWindow.go(view==='home'?0:5)}catch(e){document.getElementById('currentNote').textContent+=' 別ドメインでは現行画面の切替に制約があります。'}});
+  </script>
+</body>
+</html>
