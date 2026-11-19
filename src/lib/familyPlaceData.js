@@ -94,7 +94,13 @@ export async function familyPlaceStories(client, personId) {
     .select('id,family_id,person_id,question_slot,question_key,question_text,body,transcript_raw,transcript_readable,transcript_essay,visibility,revision,created_at,updated_at')
     .eq('person_id', personId).order('question_slot');
   if (error) throw error;
-  return data || [];
+  if (!data?.length) return [];
+  const { data: media, error: mediaError } = await client.from('family_free_story_media')
+    .select('story_id').in('story_id', data.map(item => item.id));
+  if (mediaError) throw mediaError;
+  const counts = new Map();
+  for (const item of media || []) counts.set(item.story_id, (counts.get(item.story_id) || 0) + 1);
+  return data.map(item => ({ ...item, media_count: counts.get(item.id) || 0 }));
 }
 
 export async function getOrCreateFamilyPlaceStory(client, userId, person, question, visibility) {
@@ -126,6 +132,16 @@ export async function saveFamilyPlaceStory(client, story, values) {
       revision: story.revision + 1, updated_at: new Date().toISOString(),
     }).eq('id', story.id).eq('revision', story.revision)
     .select('*').maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('別の端末で変更されました。再読み込みして確認してください');
+  return data;
+}
+
+export async function setFamilyPlaceStoryVisibility(client, story, visibility) {
+  if (!['private', 'family'].includes(visibility)) throw new Error('公開範囲を選んでください');
+  const { data, error } = await client.from('family_free_stories')
+    .update({ visibility, revision: story.revision + 1, updated_at: new Date().toISOString() })
+    .eq('id', story.id).eq('revision', story.revision).select('*').maybeSingle();
   if (error) throw error;
   if (!data) throw new Error('別の端末で変更されました。再読み込みして確認してください');
   return data;

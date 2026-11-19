@@ -7,6 +7,7 @@ import {
   ensureFamilyPlace, familyPlacePeople, addFamilyPlacePerson, updateFamilyPlacePerson,
   familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories,
   getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, addFamilyPlaceMedia,
+  setFamilyPlaceStoryVisibility,
 } from './lib/familyPlaceData.js';
 import './family-place.css';
 
@@ -208,6 +209,18 @@ export default function FamilyPlaceApp() {
       flushText().catch(cause => setError(cause.message || '文章を保存できませんでした'));
     }, 700);
   };
+  const changeVisibility = async next => {
+    if (next === activeStory?.visibility) return;
+    setError('');
+    try {
+      clearTimeout(saveTimer.current);
+      if (textRef.current !== savedTextRef.current || savePromiseRef.current) await flushText();
+      setSaveState('saving');
+      const updated = await setFamilyPlaceStoryVisibility(supabaseClient, storyRef.current, next);
+      storyRef.current = updated; setActiveStory(updated);
+      setSaveState('saved');
+    } catch (cause) { setSaveState('failed'); setError(cause.message || '公開範囲を変更できませんでした'); }
+  };
   const saveMedia = async (file, kind, seconds) => {
     setError('');
     clearTimeout(saveTimer.current);
@@ -323,10 +336,10 @@ export default function FamilyPlaceApp() {
       </div>
       {activeTab === 'life' && <section className="fp-section">
         <h2>人生の語り</h2>
-        {!stories.some(row => row.body || row.transcript_raw) && <div className="fp-card fp-empty-story">
+        {!stories.some(row => row.body || row.transcript_raw || row.media_count) && <div className="fp-card fp-empty-story">
           <BookOpen/><strong>人生の語りは、これから</strong>
           <p>思い出したことから、声・文章・写真で残せます。</p></div>}
-        {stories.filter(row => row.body || row.transcript_raw).map(row =>
+        {stories.filter(row => row.body || row.transcript_raw || row.media_count).map(row =>
           <button className="fp-card fp-story-row" key={row.id}
             onClick={() => openStory(testQuestions[row.question_slot-1])}>
             <span>{row.visibility === 'private' && <LockKeyhole size={15}/>}
@@ -392,6 +405,10 @@ export default function FamilyPlaceApp() {
       <h1>{activeStory.question_text}</h1>
       <p className="fp-note">保存先：{person.display_name}さんの人物ページ
         {activeStory.visibility === 'private' ? '・🔒自分だけ' : '・家族の場所'}</p>
+      {person.id === selfId && <label className="fp-visibility">この語りの公開範囲
+        <select value={activeStory.visibility} disabled={saveState === 'saving'} onChange={event => changeVisibility(event.target.value)}>
+          <option value="private">🔒自分だけ</option><option value="family">家族に共有</option>
+        </select></label>}
       {media.length===0 && !body && <AnswerEntryChoices
         onVoice={() => setScreen('recording')}
         onWrite={() => document.querySelector('.answer-body-editor')?.focus()}
