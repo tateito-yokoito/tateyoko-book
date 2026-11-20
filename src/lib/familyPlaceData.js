@@ -108,19 +108,18 @@ export async function getOrCreateFamilyPlaceStory(client, userId, person, questi
     .eq('person_id', person.id).eq('question_slot', question.slot).maybeSingle();
   if (existing.error) throw existing.error;
   if (existing.data) return existing.data;
-  const { data, error } = await client.from('family_free_stories').insert({
+  // A story SELECT policy checks the stored row. Read it in the next request;
+  // INSERT ... RETURNING cannot see it through that policy in the same command.
+  const { error } = await client.from('family_free_stories').insert({
     family_id: person.family_id, person_id: person.id,
     question_slot: question.slot, question_key: question.id,
     question_text: question.text, visibility, created_by: userId,
-  }).select('*').single();
-  if (error?.code === '23505') {
-    const retry = await client.from('family_free_stories').select('*')
-      .eq('person_id', person.id).eq('question_slot', question.slot).single();
-    if (retry.error || !retry.data) throw retry.error || error;
-    return retry.data;
-  }
-  if (error || !data) throw error || new Error('記録を始められませんでした');
-  return data;
+  });
+  if (error && error.code !== '23505') throw error;
+  const saved = await client.from('family_free_stories').select('*')
+    .eq('person_id', person.id).eq('question_slot', question.slot).single();
+  if (saved.error || !saved.data) throw saved.error || new Error('記録を開けませんでした');
+  return saved.data;
 }
 
 export async function saveFamilyPlaceStory(client, story, values) {
