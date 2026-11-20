@@ -20,6 +20,7 @@ export default function FamilyPlaceApp() {
   const [user, setUser] = useState(null);
   const [familyId, setFamilyId] = useState(null);
   const [people, setPeople] = useState([]);
+  const [homeStoryCounts, setHomeStoryCounts] = useState({});
   const [selfId, setSelfId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [screen, setScreen] = useState('home');
@@ -62,8 +63,12 @@ export default function FamilyPlaceApp() {
         .eq('user_id', currentUser.id).eq('role', 'self').limit(1),
     ]);
     if (links.error) throw links.error;
+    const storyLists = await Promise.all(persons.map(item => familyPlaceStories(supabaseClient, item.id)));
+    const counts = Object.fromEntries(persons.map((item, index) => [item.id,
+      storyLists[index].filter(row => row.body || row.transcript_raw || row.media_count).length]));
     setFamilyId(id);
     setPeople(persons);
+    setHomeStoryCounts(counts);
     setSelfId(links.data?.[0]?.person_id || null);
   }, []);
   const loadPerson = useCallback(async personId => {
@@ -301,14 +306,18 @@ export default function FamilyPlaceApp() {
     {screen === 'home' && <main>
       <section className="fp-hero"><h1>家族のチカラは、<br/>人生を照らす。</h1><small>背景はレビュー用の仮素材です</small></section>
       <section className="fp-section"><h2>家族の人生の物語</h2>
-        <div className="fp-card fp-empty-book"><BookOpen/><div><strong>家族の物語は、ここから</strong>
-          <p>人物を登録すると、その人の記録がここに並びます。</p></div></div>
+        <div className="fp-card fp-empty-book"><BookOpen/><div><strong>{Object.values(homeStoryCounts).some(Boolean)
+          ? '家族の語りが少しずつ残っています' : '家族の物語は、ここから'}</strong>
+          <p>{Object.values(homeStoryCounts).some(Boolean)
+            ? '人物ページから保存した語りを読み返せます。'
+            : '人物を登録すると、その人の記録がここに並びます。'}</p></div></div>
         <p className="fp-note">BOOK作品は、購入・制作を始めるまで作成されません。</p>
       </section>
       <section className="fp-section"><h2>家族の人たち</h2>
         {people.map(item => <button className="fp-card fp-person-row" key={item.id}
           onClick={() => openPerson(item.id)}><span className="fp-avatar">{item.display_name.slice(0,1)}</span>
-          <span><strong>{item.display_name}</strong><small>人物ページを見る</small></span><span>›</span></button>)}
+          <span><strong>{item.display_name}</strong><small>{homeStoryCounts[item.id]
+            ? `人生の語り ${homeStoryCounts[item.id]}件` : '人物ページを見る'}</small></span><span>›</span></button>)}
         {!people.length && <p className="fp-note">まずは自分か家族を一人登録しましょう。</p>}
         <button className="fp-primary" onClick={() => setScreen('add-person')}><Plus/>自分・家族を登録する</button>
       </section>
