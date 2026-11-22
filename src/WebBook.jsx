@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Play, Pause, Volume2, ChevronDown, ArrowLeft } from 'lucide-react';
+import { Play, Pause, Volume2, ChevronDown, ArrowLeft, LibraryBig } from 'lucide-react';
 import { webBookSections, webBookStorySequence, webBookAudioSequence } from './lib/webBook.js';
 import './web-book.css';
 import CoverPhotoFrame from './CoverPhotoFrame.jsx';
@@ -19,7 +19,7 @@ const creationDate = value => {
 
 // Same presentation for an authorized draft preview and an immutable published work.
 // This component has no DB client and cannot publish, edit, or change sharing.
-export default function WebBook({ publication, resolveAsset, previewLabel, onClose }) {
+export default function WebBook({ publication, resolveAsset, previewLabel, onClose, returnHref }) {
   const sections = webBookSections(publication);
   const createdOn = creationDate(publication.publishedAt);
   const sequence = useMemo(()=>webBookStorySequence(publication),[publication]);
@@ -97,6 +97,7 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
   };
   const row = item => <div className="wb-question" key={item.order}>{item.audio?.length ? button(item,0,null,`${item.question}を聴く`):null}<button className="wb-title-button" onClick={() => openStory(item)}>{item.question || item.chapterTitle}</button><small>{time(audioTotal(item.audio))}</small></div>;
   return <div className={`wb ${showFixed?'wb-has-player':''}`}>
+    {returnHref && <div className="wb-return-bar"><a href={returnHref}><LibraryBig size={18} aria-hidden="true"/>本棚へ</a></div>}
     {previewLabel&&<aside className="wb-preview">{previewLabel}{onClose&&<button onClick={onClose}>確認を終える</button>}</aside>}
     <header className="wb-header"><img src="/brand-logo-official.svg" alt="縦糸横糸"/><span>Webブック</span></header>
     <main>

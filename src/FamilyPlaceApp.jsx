@@ -22,24 +22,55 @@ const testQuestions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) =>
 const emptyPersonDraft = () => ({ family_name: '', given_name: '',
   birth_year: '', birth_month: '', birth_day: '' });
 
+function YearSelect({ value, onChange, allowFuture = false }) {
+  const currentYear = new Date().getFullYear();
+  const latestYear = Math.max(allowFuture ? 2200 : currentYear, Number(value) || 0);
+  return <select value={value || ''} onChange={event => onChange(event.target.value)}>
+    <option value="">未登録</option>
+    {Array.from({ length: latestYear - 1799 }, (_, index) => latestYear - index)
+      .map(year => <option value={year} key={year}>{year}年</option>)}
+  </select>;
+}
+
 function BirthDateFields({ value, onChange }) {
   const year = Number(value.birth_year) || 0;
   const month = Number(value.birth_month) || 0;
   const days = year && month ? new Date(year, month, 0).getDate() : 0;
-  const lastYear = Math.max(new Date().getFullYear(), year);
   return <fieldset className="fp-birth-date">
     <legend>生年月日（分かる範囲で）</legend>
     <div className="fp-date">
-      <label>年<select value={value.birth_year || ''} onChange={event => onChange({
-        ...value, birth_year: event.target.value, birth_month: '', birth_day: '',
-      })}><option value="">未登録</option>{Array.from({length:lastYear-1799},(_,index) =>
-        <option value={lastYear-index} key={lastYear-index}>{lastYear-index}年</option>)}</select></label>
+      <label>年<YearSelect value={value.birth_year} onChange={next => onChange({
+        ...value, birth_year: next, birth_month: '', birth_day: '',
+      })}/></label>
       <label>月<select value={value.birth_month || ''} disabled={!year} onChange={event => onChange({
         ...value, birth_month: event.target.value, birth_day: '',
       })}><option value="">未登録</option>{Array.from({length:12},(_,index) =>
         <option value={index+1} key={index+1}>{index+1}月</option>)}</select></label>
       <label>日<select value={value.birth_day || ''} disabled={!month} onChange={event => onChange({
         ...value, birth_day: event.target.value,
+      })}><option value="">未登録</option>{Array.from({length:days},(_,index) =>
+        <option value={index+1} key={index+1}>{index+1}日</option>)}</select></label>
+    </div>
+    <p className="fp-note">年だけ、または年月だけでも登録できます。</p>
+  </fieldset>;
+}
+
+function EventDateFields({ value, onChange }) {
+  const year = Number(value.event_year) || 2000;
+  const month = Number(value.event_month) || 0;
+  const days = month ? new Date(year, month, 0).getDate() : 0;
+  return <fieldset className="fp-birth-date">
+    <legend>出来事の年月日（分かる範囲で）</legend>
+    <div className="fp-date">
+      <label>年<YearSelect value={value.event_year} allowFuture onChange={next => onChange({
+        ...value, event_year: next, event_day: '',
+      })}/></label>
+      <label>月<select value={value.event_month || ''} onChange={event => onChange({
+        ...value, event_month: event.target.value, event_day: '',
+      })}><option value="">未登録</option>{Array.from({length:12},(_,index) =>
+        <option value={index+1} key={index+1}>{index+1}月</option>)}</select></label>
+      <label>日<select value={value.event_day || ''} disabled={!month} onChange={event => onChange({
+        ...value, event_day: event.target.value,
       })}><option value="">未登録</option>{Array.from({length:days},(_,index) =>
         <option value={index+1} key={index+1}>{index+1}日</option>)}</select></label>
     </div>
@@ -82,6 +113,14 @@ export default function FamilyPlaceApp() {
   const pendingAudioRef = useRef(null);
   const guardRef = useRef(null);
   const personLoadEpoch = useRef(0);
+  const shelfReturnPerson = useRef((() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') === 'books' ? params.get('person') : null;
+  })());
+  const shelfReturnPublication = useRef((() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') === 'books' ? params.get('publication') : null;
+  })());
   const person = people.find(item => item.id === selectedId) || null;
 
   const loadHome = useCallback(async currentUser => {
@@ -139,6 +178,46 @@ export default function FamilyPlaceApp() {
     if (!selectedId) return;
     loadPerson(selectedId).catch(cause => setError(cause.message || '人物を開けませんでした'));
   }, [selectedId, loadPerson]);
+  useEffect(() => {
+    const id = shelfReturnPerson.current;
+    if (!id || screen !== 'home' || !people.some(item => item.id === id)) return;
+    shelfReturnPerson.current = null;
+    setSelectedId(id);
+    setActiveTab('books');
+    setScreen('person');
+    const url = new URL(window.location.href);
+    url.searchParams.delete('person');
+    url.searchParams.delete('tab');
+    window.history.replaceState({}, '', url);
+  }, [people, screen]);
+  useEffect(() => {
+    const publicId = shelfReturnPublication.current;
+    if (!publicId || !familyId || screen !== 'home') return;
+    let live = true;
+    Promise.all(people.map(async item => {
+      try { return (await familyPlacePublishedBooks(supabaseClient, item.id))
+        .some(book => book.public_id === publicId) ? item.id : null; }
+      catch { return null; }
+    })).then(matches => {
+      if (!live) return;
+      shelfReturnPublication.current = null;
+      const url = new URL(window.location.href);
+      url.searchParams.delete('publication');
+      url.searchParams.delete('tab');
+      window.history.replaceState({}, '', url);
+      const id = matches.find(Boolean);
+      if (!id) {
+        setError('このWebブックに対応する人物を、現在の家族一覧で見つけられませんでした。');
+        return;
+      }
+      setSelectedId(id);
+      setActiveTab('books');
+      setScreen('person');
+    }).catch(() => {
+      if (live) setError('本棚を開けませんでした。もう一度お試しください。');
+    });
+    return () => { live = false; };
+  }, [familyId, people, screen]);
   useEffect(() => {
     const warn = event => {
       if (!pendingAudioRef.current && textRef.current === savedTextRef.current) return;
@@ -395,8 +474,8 @@ export default function FamilyPlaceApp() {
         <label>旧姓（任意）<input value={profile?.maiden_name || ''}
           onChange={event => setProfile({...profile,maiden_name:event.target.value})}/></label>
         <BirthDateFields value={profile || emptyPersonDraft()} onChange={setProfile}/>
-        <label>没年（分かる場合）<input type="number" min="1800" max="2200" value={profile?.death_year || ''}
-          onChange={event => setProfile({...profile,death_year:event.target.value})}/></label>
+        <label>没年（分かる場合）<YearSelect value={profile?.death_year} onChange={next =>
+          setProfile({...profile,death_year:next})}/></label>
         <label>紹介（任意）<textarea value={profile?.notes || ''}
           onChange={event => setProfile({...profile,notes:event.target.value})}/></label>
         <button className="fp-primary" disabled={busy}>プロフィールを保存する</button>
@@ -416,12 +495,7 @@ export default function FamilyPlaceApp() {
         </select></label>
         <label>出来事<input required maxLength={120} value={factDraft.label}
           onChange={event => setFactDraft({...factDraft,label:event.target.value})}/></label>
-        <div className="fp-date"><label>年<input type="number" min="1800" max="2200" value={factDraft.event_year || ''}
-          onChange={event => setFactDraft({...factDraft,event_year:event.target.value})}/></label>
-          <label>月<input type="number" min="1" max="12" value={factDraft.event_month || ''}
-          onChange={event => setFactDraft({...factDraft,event_month:event.target.value})}/></label>
-          <label>日<input type="number" min="1" max="31" value={factDraft.event_day || ''}
-          onChange={event => setFactDraft({...factDraft,event_day:event.target.value})}/></label></div>
+        <EventDateFields value={factDraft} onChange={setFactDraft}/>
         <label>補足（任意）<textarea value={factDraft.detail || ''}
           onChange={event => setFactDraft({...factDraft,detail:event.target.value})}/></label>
         <button className="fp-primary" disabled={busy}>出来事を保存する</button>

@@ -173,10 +173,13 @@ function RootScreen() {
   }
 
   if (params.has("voice")) {
+    const publicId = params.get("voice") || "";
     return (
       <PublishedWebBook
         supabaseClient={adminSupabaseClient}
-        publicId={params.get("voice") || ""}
+        publicId={publicId}
+        returnHref={/^[a-f0-9]{48}$/i.test(publicId)
+          ? `/?app=family_place&publication=${encodeURIComponent(publicId)}&tab=books` : null}
       />
     );
   }
