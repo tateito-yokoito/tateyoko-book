@@ -104,7 +104,8 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
         if (pair.some(node => !node) || pair[0].row !== pair[1].row
           || pair.some(node => node.bottom >= edge.end.top)
           || Math.abs(pair[0].x-pair[1].x) <= pair[0].radius+pair[1].radius) continue;
-        coupleChildren.set(childId, { parents:pair, child:edge.end });
+        coupleChildren.set(childId, { parents:pair, child:edge.end,
+          pairKey:[...parentIds].sort().join(':') });
       }
       const separateEdges = parentEdges.filter(edge => !coupleChildren.has(edge.row.person_b_id));
       const lanes = new Map();
@@ -135,17 +136,26 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
           { x:targetX,y:lanes.get(key) }, { x:targetX,y:targetY },
         ]) };
       });
-      coupleChildren.forEach(({ parents, child }, childId) => {
+      const coupleChildCounts = new Map();
+      coupleChildren.forEach(({ pairKey }) => {
+        coupleChildCounts.set(pairKey,(coupleChildCounts.get(pairKey) || 0)+1);
+      });
+      coupleChildren.forEach(({ parents, child, pairKey }, childId) => {
         const [left,right] = parents[0].x < parents[1].x ? parents : [...parents].reverse();
         const gapStart = left.x+left.radius;
         const gapEnd = right.x-right.radius;
-        const jointX = (gapStart+gapEnd)/2;
+        const singleChildInGap = coupleChildCounts.get(pairKey) === 1
+          && child.x >= gapStart+6 && child.x <= gapEnd-6;
+        const jointX = singleChildInGap ? child.x : (gapStart+gapEnd)/2;
+        const jointY = jointX > (gapStart+gapEnd)/2 ? right.middle : left.middle;
         const laneY = (Math.max(left.rowBottom,right.rowBottom)+child.rowTop)/2;
         const targetY = child.nameTop-7;
-        next.push({ id:`couple-child-${childId}`, kind:'parent_child', d:roundedRelationPath([
-          { x:jointX,y:left.middle }, { x:jointX,y:laneY },
-          { x:child.x,y:laneY }, { x:child.x,y:targetY },
-        ]) });
+        next.push({ id:`couple-child-${childId}`, kind:'parent_child', d:singleChildInGap
+          ? `M ${jointX} ${jointY} V ${targetY}`
+          : roundedRelationPath([
+            { x:jointX,y:jointY }, { x:jointX,y:laneY },
+            { x:child.x,y:laneY }, { x:child.x,y:targetY },
+          ]) });
       });
       relations.filter(row => row.relation_type === 'spouse').forEach(row => {
         const a = nodes.get(row.person_a_id); const b = nodes.get(row.person_b_id);
