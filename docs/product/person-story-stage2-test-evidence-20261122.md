@@ -16,8 +16,8 @@
 | 項目 | 結果 | 根拠・範囲 |
 | --- | --- | --- |
 | 無料1問の本文からBOOK回答への接続 | 成功（DB） | 隔離TESTの認証ロール・ロールバック付きトランザクションで、本編開始済み状態の `TY_Q01` に接続できること、回答本文一致と質問状態 `answered` を確認。架空fixtureと本編開始状態は残していない。 |
-| BOOK側本文編集 → 年輪原本 | 成功（DB） | BOOK `answers.transcript_edited` の更新後、`family_free_stories.body` が一致。 |
-| 年輪側の鍵変更 → BOOK回答 | 成功（DB） | 原本 `visibility=private` とBOOK `access_override=private_forever` の一致を確認。 |
+| BOOK側本文編集 → 年輪原本 | 成功（DB） | 本編 `TY_Q01` の `answers.transcript_edited` を認証ロールで更新後、`family_free_stories.body` が一致。 |
+| 年輪側の本文・鍵変更 → BOOK回答 | 成功（DB） | 本編 `TY_Q01` の認証ロール検証で、原本本文・BOOK本文の一致と `visibility=private`／`access_override=private_forever` の一致を確認。 |
 | 同一問いの再接続／既存回答との競合 | 成功（DB） | 再接続は同じ回答ID・1行のまま。内容の異なる既存回答には `conflict` を返し、両本文は不変。 |
 | 鍵付き原本の収録除外 | 成功（DB） | 隔離TESTの本編開始済み状態をロールバック付きfixtureで作り、収録候補1件から鍵変更後0件・原本／BOOK鍵一致・再選択拒否を確認。既存TEST作品の本編開始状態は変更を残していない。 |
 | 共同管理者の同意前後 | 成功（DB） | 同意前は鍵付き原本・投影回答を取得できず、同意記録後に取得可能。`get_co_manager_stories` の件数も同意前0／後1。 |
