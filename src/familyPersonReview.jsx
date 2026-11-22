@@ -9,7 +9,7 @@ function Review() {
   const params = new URLSearchParams(location.search);
   const capture = params.has('capture');
   const [state, setState] = useState(params.get('state') || 'empty');
-  const [tab, setTab] = useState('life');
+  const [tab, setTab] = useState('ring');
   const [notice, setNotice] = useState('');
   const person = { id: 'preview-person', display_name: '山田 太郎',
     birth_year: state === 'empty' ? null : 1935,
@@ -29,7 +29,7 @@ function Review() {
   ];
   return <div className={`fp-review-stage${capture ? ' is-capture' : ''}`}>
     {!capture && <div className="fp-review-controls"><strong>人物ページ｜スマホ基準 390 × 844</strong>
-      <label>表示状態 <select aria-label="レビュー状態" value={state} onChange={event=>{setState(event.target.value);setTab('life');}}>
+      <label>表示状態 <select aria-label="レビュー状態" value={state} onChange={event=>{setState(event.target.value);setTab('ring');}}>
         <option value="empty">人物登録直後</option><option value="stories">記録あり</option>
       </select></label></div>}
     <div className="fp-review-phone">

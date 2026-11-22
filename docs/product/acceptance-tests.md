@@ -4,13 +4,15 @@
 
 | 領域 | 受け入れ条件 | 既存の主なテスト |
 | --- | --- | --- |
+| 人物ページ4タブ | 年輪に本人が閲覧可能な無料の語り、本棚に対象人物IDと一致する閲覧可能な公開済みBOOKのみを表示する。未登録・未完成作品は空状態。複数冊は選択でき、Webブックは既存の固定 `/?voice=` URLで開く。無関係者には本棚の作品を返さない。 | 隔離TESTの認証付き画面・`list_family_place_person_books` 権限確認。無料語りとBOOK回答の原本統合は次段階で別途検証。 |
+| 年輪原本と完成作品 | 無料3問とBOOK対応問いが同じ人物原本・メディア・鍵を参照する。鍵付きの存在・件数・本文・ファイルを無権限者から隠し、収録候補から除外する。完成時の固定内容は原本の追記・編集・鍵変更で変わらない。 | **未実装・未検証**。既存の作品別回答と公開スナップショットとの接続設計が必要。 |
 | 無料3問 | 1/3〜3/3の表示と質問・保存内容が一致。終了後に共通購入へ進み、購入済み受取人を再購入へ誘導しない。 | `guest-trial-claim.test.mjs`, `trial-written-retention.test.mjs`; モバイルE2E要確認 |
 | 正式リリース前の先行案内 | 本番HPの購入CTAは先行案内フォームへ進む。「誰の人生や想いを残してみたいですか？」と新しい利用意向の2択を表示し、任意コメントを登録時に保存する。新規登録時に確認メールが届く。必須項目・同意・重複防止・管理者による一覧/CSV確認が可能。匿名で注文・作品を作らず、既存ユーザー導線を維持。一般向けCheckoutはサーバー側で停止。隔離TEST HPの購入CTAは既存の購入経路を開く。 | 本番の新フォーム表示を確認。TESTで任意コメント付き登録を行い、選択肢・コメント・同意のDB保存を確認。本番での確認メール到着は変更前の登録で確認済みで、今回のメール処理は変更していない。一般向けCheckoutは503を確認。今回の追加決済は未実施。[反映記録](./launch-interest-production-release-20261116.md)。 |
 | 商品・請求 | HPと無料体験後が同じ商品選択・認証・最終確認・Stripe開始を使用。35,000円／65,000円、オプション、割引と見積・請求額が一致し、旧注文は保持。 | `commerce-v2.test.mjs`, `commerce-v2-checkout-gate.test.mjs`, `delivery-entry.test.mjs`; スタンダード35,000円の本人・ギフトA/BのStripe TEST実決済と制作開始は[検証済み](./commerce-v2-stripe-test-e2e-20261115.md)。プレミアム・追加オプション・無料3問起点は未実施。 |
 | ギフトA/B | 購入済み作品に接続し、基本商品を二重購入させない。A受取人は本編、B代理制作は同じ5段階の仕上げへ進む。 | `gift-purchase-mode.test.mjs`, `gift-purchase-intent.test.mjs`; A受取人・B購入者の制作開始はStripe TEST実決済で[確認](./commerce-v2-stripe-test-e2e-20261115.md)。両経路の仕上げ・公開は未実施。 |
 | 権限・非公開 | 制作管理者・共同管理者は最終確定可、お手伝い中は最終確定・追加決済不可。非公開の語り・写真・音声・動画をお手伝い中がUI・API・DB・Storageから取得・変更できない。 | `helper-private-access.test.mjs`, `book-completion-role.test.mjs`; 認証付きE2E要確認 |
 | BOOK完成 | 0円は直接確定、追加決済は成功時のみ作品版・注文・配送先を一括確定。失敗・中断は編集可。Webhook重複でも二重確定・二重請求なし。 | `book-completion-role.test.mjs`, `bookshelf-pending.test.mjs`; DB/Stripe test mode E2E要確認 |
-| 公開と本棚 | 完成確認中は閲覧専用・Webブック非公開。公開後は本棚から閲覧・再生でき、通知は成功時一回のみ。完成原本は編集不能。 | `book-publication-notice.test.mjs`, `bookshelf-pending.test.mjs`, `book-pdf-server.test.mjs` |
+| 公開と本棚 | 完成確認中は閲覧専用・Webブック非公開。公開後は本棚から閲覧・再生でき、通知は成功時一回のみ。完成時の**収録スナップショット**は編集不能。 | `book-publication-notice.test.mjs`, `bookshelf-pending.test.mjs`, `book-pdf-server.test.mjs` |
 | 季節の記憶箱 | 公開当日から利用可。JSTの季節境界、1季節1件、前季猶予、写真だけの確定、空箱終了、自動確定、保存失敗時の誤表示防止。 | `seasonal-memory.test.mjs`; 端末・通信切断E2Eの証跡要確認 |
 | 記憶のかけら・カギ | 一覧・詳細・写真・音声を閲覧可。カギ付き記録は本人だけが見られ、家族は直URL・Storage経由でも取得不可。 | `seasonal-memory.test.mjs`; 多ユーザーRLS・Storage E2E要確認 |
 | 回帰 | 本人購入・ギフトA/Bの質問回答、写真から語る、BOOK仕上げ、Webブック閲覧を維持。 | `npm run test:answer-ui`, `unified-app-release.test.mjs` 等 |

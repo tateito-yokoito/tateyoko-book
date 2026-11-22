@@ -17,6 +17,15 @@ export async function familyPlacePeople(client, familyId) {
   return data || [];
 }
 
+export async function familyPlacePublishedBooks(client, personId) {
+  const { data, error } = await client.rpc('list_family_place_person_books', {
+    input_person_id: personId,
+  });
+  if (error) throw error;
+  return (data || []).filter(row => row.public_id)
+    .sort((a, b) => (Date.parse(b.published_at) || 0) - (Date.parse(a.published_at) || 0));
+}
+
 export async function addFamilyPlacePerson(client, familyId, name, isSelf) {
   const { data, error } = await client.rpc('create_family_place_person', {
     input_family_id: familyId,

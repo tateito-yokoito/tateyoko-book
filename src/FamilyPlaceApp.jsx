@@ -6,7 +6,7 @@ import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
 import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
 import {
-  ensureFamilyPlace, familyPlacePeople, addFamilyPlacePerson, updateFamilyPlacePerson,
+  ensureFamilyPlace, familyPlacePeople, familyPlacePublishedBooks, addFamilyPlacePerson, updateFamilyPlacePerson,
   familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories,
   getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, addFamilyPlaceMedia,
   setFamilyPlaceStoryVisibility,
@@ -30,6 +30,8 @@ export default function FamilyPlaceApp() {
   const [factDraft, setFactDraft] = useState(null);
   const [facts, setFacts] = useState([]);
   const [stories, setStories] = useState([]);
+  const [publishedBooks, setPublishedBooks] = useState([]);
+  const [booksStatus, setBooksStatus] = useState('loading');
   const [newName, setNewName] = useState('');
   const [newIsSelf, setNewIsSelf] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -41,7 +43,7 @@ export default function FamilyPlaceApp() {
   const [recordingError, setRecordingError] = useState('');
   const [photoOpen, setPhotoOpen] = useState(false);
   const [storyQuestion, setStoryQuestion] = useState(null);
-  const [activeTab, setActiveTab] = useState('life');
+  const [activeTab, setActiveTab] = useState('ring');
   const storyRef = useRef(null);
   const textRef = useRef('');
   const savedTextRef = useRef('');
@@ -49,6 +51,7 @@ export default function FamilyPlaceApp() {
   const savePromiseRef = useRef(null);
   const pendingAudioRef = useRef(null);
   const guardRef = useRef(null);
+  const personLoadEpoch = useRef(0);
   const person = people.find(item => item.id === selectedId) || null;
 
   const loadHome = useCallback(async currentUser => {
@@ -74,12 +77,19 @@ export default function FamilyPlaceApp() {
     setSelfId(links.data?.[0]?.person_id || null);
   }, []);
   const loadPerson = useCallback(async personId => {
-    const [nextFacts, nextStories] = await Promise.all([
+    const epoch = ++personLoadEpoch.current;
+    setBooksStatus('loading');
+    const [nextFacts, nextStories, bookResult] = await Promise.all([
       familyPlaceFacts(supabaseClient, personId),
       familyPlaceStories(supabaseClient, personId),
+      familyPlacePublishedBooks(supabaseClient, personId)
+        .then(data => ({ data })).catch(error => ({ error })),
     ]);
+    if (epoch !== personLoadEpoch.current) return;
     setFacts(nextFacts);
     setStories(nextStories);
+    if (bookResult.error) { setPublishedBooks([]); setBooksStatus('error'); }
+    else { setPublishedBooks(bookResult.data); setBooksStatus('ready'); }
   }, []);
   useEffect(() => {
     let live = true;
@@ -111,7 +121,9 @@ export default function FamilyPlaceApp() {
   useEffect(() => () => clearTimeout(saveTimer.current), []);
 
   const openPerson = id => {
-    setError(''); setSelectedId(id); setActiveTab('life'); setScreen('person');
+    personLoadEpoch.current++;
+    setError(''); setSelectedId(id); setActiveTab('ring');
+    setPublishedBooks([]); setBooksStatus('loading'); setScreen('person');
   };
   const goHome = async () => {
     if (screen === 'recording' && guardRef.current) {
@@ -317,6 +329,7 @@ export default function FamilyPlaceApp() {
         <button className="fp-primary" disabled={busy}>登録して人物ページを見る</button>
       </form></main>}
     {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories}
+      books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}
       facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
       onTabChange={setActiveTab} onBack={goHome} onProfile={startProfile}
       onOpenStory={openStory} busy={busy}

@@ -3,9 +3,13 @@ import { BookOpen, ChevronLeft, ChevronRight, LockKeyhole, Plus, UserRound } fro
 import './family-person-page.css';
 
 const hasAnswer = row => Boolean(row.body || row.transcript_raw || row.media_count);
+const bookDate = value => value ? new Intl.DateTimeFormat('ja-JP', {
+  year: 'numeric', month: 'long', timeZone: 'Asia/Tokyo',
+}).format(new Date(value)) : '';
 
-export default function FamilyPersonPage({ person, stories = [], facts = [], questions = [],
-  activeTab = 'life', onTabChange, onBack, onProfile, onOpenStory, onAddFact, busy = false }) {
+export default function FamilyPersonPage({ person, stories = [], books = [], booksStatus = 'ready',
+  facts = [], questions = [], activeTab = 'ring', onTabChange, onBack, onProfile,
+  onOpenStory, onAddFact, onRetryBooks, busy = false }) {
   const [showQuestions, setShowQuestions] = useState(false);
   const saved = stories.filter(hasAnswer);
   const timeline = [...facts];
@@ -29,14 +33,12 @@ export default function FamilyPersonPage({ person, stories = [], facts = [], que
     </section>
     <button type="button" className="fp-person-profile" onClick={onProfile}><UserRound aria-hidden="true"/>プロフィールを見る・編集する<ChevronRight aria-hidden="true"/></button>
     <div className="fp-person-tabs" role="tablist" aria-label="人物ページ">
-      {[['life','人生'],['memories','思い出'],['timeline','年表']].map(([key,label]) =>
+      {[['ring','年輪'],['books','本棚'],['memories','思い出'],['timeline','年表']].map(([key,label]) =>
         <button type="button" key={key} role="tab" aria-selected={activeTab===key}
           onClick={() => onTabChange(key)}>{label}</button>)}
     </div>
-    {activeTab === 'life' && <section className="fp-person-content" role="tabpanel">
-      <div className="fp-person-book-empty"><span className="fp-person-book-icon"><BookOpen/></span>
-        <div><strong>人生の物語</strong><small>この人物ページで、語りを少しずつ残せます。</small></div></div>
-      <h2>人生の語り</h2>
+    {activeTab === 'ring' && <section className="fp-person-content" role="tabpanel">
+      <h2>年輪</h2><p className="fp-person-section-note">人生の語りを、少しずつ残していく場所です。</p>
       {saved.length ? <div className="fp-person-stories">{saved.map(row =>
         <button type="button" className="fp-person-story" key={row.id}
           onClick={() => onOpenStory(questions[row.question_slot-1])}>
@@ -49,6 +51,21 @@ export default function FamilyPersonPage({ person, stories = [], facts = [], que
           onClick={() => onOpenStory(question)}>{question.slot}問目：{question.text}<ChevronRight aria-hidden="true"/></button>)}
         <p>質問文は暫定です。</p>
       </div>}
+    </section>}
+    {activeTab === 'books' && <section className="fp-person-content" role="tabpanel">
+      <h2>本棚</h2>
+      {booksStatus === 'loading' ? <p className="fp-person-story-empty" role="status">本棚を読み込んでいます。</p>
+        : booksStatus === 'error' ? <div className="fp-person-story-empty" role="alert">本棚を読み込めませんでした。<button type="button" onClick={onRetryBooks}>もう一度試す</button></div>
+        : books.length ? <div className="fp-person-books">{books.map(book =>
+          <article className="fp-person-book" key={book.publication_id}>
+            <span className="fp-person-book-icon" aria-hidden="true"><BookOpen/></span>
+            <div className="fp-person-book-copy"><strong>{book.title || '人生の物語'}</strong>
+              {book.subtitle && <small>{book.subtitle}</small>}
+              {book.published_at && <time>{bookDate(book.published_at)} 公開</time>}
+              <a href={`/?voice=${encodeURIComponent(book.public_id)}`}>Webブックを読む<ChevronRight aria-hidden="true"/></a>
+            </div>
+          </article>)}</div>
+          : <div className="fp-person-story-empty">この人物の完成したBOOKは、まだありません。</div>}
     </section>}
     {activeTab === 'memories' && <section className="fp-person-content" role="tabpanel">
       <h2>思い出</h2><div className="fp-person-story-empty">この人物の思い出は、まだありません。</div>
