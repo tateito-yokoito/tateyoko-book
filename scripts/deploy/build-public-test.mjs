@@ -75,8 +75,9 @@ for(const route of config.headers||[])for(const header of route.headers||[]){
 fs.writeFileSync(path.join(outDir,'vercel.json'),JSON.stringify(config,null,2));
 fs.cpSync('public/pwa',path.join(outDir,'pwa'),{recursive:true});
 fs.copyFileSync('public/pwa-sw.js',path.join(outDir,'pwa-sw.js'));
-// Keep the same authenticated app in a phone-size frame for owner review.
+// Keep the phone-size desktop frame and direct phone entry for owner review.
 fs.copyFileSync('family-place-mobile.html',path.join(outDir,'family-place-mobile.html'));
+fs.copyFileSync('public/family-place-mobile-redirect.js',path.join(outDir,'family-place-mobile-redirect.js'));
 // Build the same CTA component with TEST's purchase destination. The checked-in
 // production overlay is not reused for the TEST deployment.
 await build({configFile:'vite.postcta-overlay.config.js',envDir:false,
