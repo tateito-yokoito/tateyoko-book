@@ -75,7 +75,7 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
       {saved.length ? <div className="fp-person-stories">{saved.map(row =>
         <button type="button" className="fp-person-story" key={row.id}
           onClick={() => onOpenStory(questions[row.question_slot-1])}>
-          <BookOpen aria-hidden="true"/><span><strong>{row.question_text}</strong><small>{row.visibility === 'private' && <LockKeyhole size={12} aria-label="自分だけ"/>}保存した語りを見る</small></span><ChevronRight aria-hidden="true"/>
+          <BookOpen aria-hidden="true"/><span><strong>{row.visibility === 'private' && <LockKeyhole size={13} aria-label="自分だけ"/>}{row.question_text}</strong></span><ChevronRight aria-hidden="true"/>
         </button>)}</div> : <div className="fp-person-story-empty">まだ語りはありません。<br/>声・文章・写真から、好きな方法で始められます。</div>}
       <button type="button" className="fp-person-add-story" onClick={() => setShowQuestions(current => !current)}>
         <Plus aria-hidden="true"/>{saved.length ? '新しい語りを追加する' : '最初の語りを残す'}</button>
