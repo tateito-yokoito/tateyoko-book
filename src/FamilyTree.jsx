@@ -61,9 +61,10 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
   const center = people.find(item => item.id === centerId) || null;
   const { parents, spouses, siblings, children } = treeNeighbors(centerId, people, relations);
   useEffect(() => {
-    if (!promptPersonId || suggestionShown.current) return;
-    const next = suggestions.find(item => !item.status && [item.person_a_id,item.person_b_id,item.child_id]
-      .includes(promptPersonId));
+    if (suggestionShown.current) return;
+    const pending = suggestions.filter(item => !item.status);
+    const next = pending.find(item => promptPersonId
+      && [item.person_a_id,item.person_b_id,item.child_id].includes(promptPersonId)) || pending[0];
     if (next) { suggestionShown.current = true; setSuggestionToConfirm(next); }
   }, [promptPersonId,suggestions]);
   useLayoutEffect(() => {
