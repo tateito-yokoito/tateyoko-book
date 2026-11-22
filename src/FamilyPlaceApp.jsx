@@ -215,7 +215,9 @@ export default function FamilyPlaceApp() {
     if (!person || !user) return;
     setBusy(true); setError('');
     try {
-      const visibility = person.id === selfId ? 'private' : 'family';
+      // Only new stories use this default; opening an existing story keeps
+      // its stored visibility, including a previously set private key.
+      const visibility = 'family';
       const row = await getOrCreateFamilyPlaceStory(supabaseClient, user.id, person, question, visibility);
       const items = await familyPlaceMedia(supabaseClient, row.id);
       storyRef.current = row; setActiveStory(row); setStoryQuestion(question);
