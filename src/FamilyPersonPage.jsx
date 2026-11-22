@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, LockKeyhole, Plus, UserRound } from 'lucide-react';
+import FamilyAvatar from './FamilyAvatar.jsx';
 import WebBookCover, { publicationCoverImageUrl } from './WebBookCover.jsx';
 import './family-person-page.css';
 
@@ -53,8 +54,7 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
     </header>
     <section className="fp-person-intro">
       <div className="fp-person-portrait" aria-label={person.portrait_url ? undefined : 'プロフィール写真未登録'}>
-        {person.portrait_url ? <img src={person.portrait_url} alt={`${person.display_name}さんの写真`}/>
-          : <UserRound aria-hidden="true"/>}
+        <FamilyAvatar person={person}/>
       </div>
       <div className="fp-person-intro-copy">
         <h1>{person.display_name}</h1>

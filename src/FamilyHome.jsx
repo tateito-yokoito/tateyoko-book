@@ -1,9 +1,10 @@
 import React from 'react';
 import { Bell, BookOpen, ChevronRight, Home, Image, Network, Plus, Settings, Users } from 'lucide-react';
+import FamilyAvatar from './FamilyAvatar.jsx';
 import './family-place-home.css';
 
 /** The same home is used by the authenticated app and its isolated visual review. */
-export default function FamilyHome({ people = [], storyCounts = {}, onAddPerson, onOpenPerson }) {
+export default function FamilyHome({ people = [], storyCounts = {}, onAddPerson, onOpenPerson, onTree }) {
   const hasStories = people.some(person => Number(storyCounts[person.id]) > 0);
   return <div className="fp-home-shell">
     <header className="fp-home-header">
@@ -23,15 +24,14 @@ export default function FamilyHome({ people = [], storyCounts = {}, onAddPerson,
         </div>
         <button type="button" className="fp-home-primary" onClick={onAddPerson}><Plus aria-hidden="true"/>自分・家族を登録する</button>
         <div className="fp-home-shortcuts" aria-label="家族の機能">
-          <div><Network aria-hidden="true"/><strong>家系図</strong></div>
+          <button type="button" onClick={onTree}><Network aria-hidden="true"/><strong>家系図</strong></button>
           <div><BookOpen aria-hidden="true"/><strong>家族年表</strong></div>
           <div><Image aria-hidden="true"/><strong>家族の思い出</strong></div>
         </div>
         <h2 className="fp-home-people-title">家族の人たち</h2>
         {people.length ? <div className="fp-home-people-list">{people.map(person =>
           <button type="button" className="fp-home-person" key={person.id} onClick={() => onOpenPerson(person.id)}>
-            <span className="fp-home-avatar" aria-hidden="true">{person.portrait_url
-              ? <img src={person.portrait_url} alt=""/> : person.display_name.slice(0, 1)}</span>
+            <span className="fp-home-avatar" aria-hidden="true"><FamilyAvatar person={person}/></span>
             <span className="fp-home-person-copy"><strong>{person.display_name}</strong></span>
             <ChevronRight aria-hidden="true"/>
           </button>)}</div> : <p className="fp-home-people-empty">まだ家族は登録されていません。<br/>自分か家族を一人登録して、家族の場所を始めましょう。</p>}

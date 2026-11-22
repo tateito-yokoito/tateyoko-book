@@ -5,8 +5,10 @@ import { AnswerBodyEditor, AnswerEntryChoices, AnswerReview, AnswerSaveStatus } 
 import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
 import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
+import FamilyTree from './FamilyTree.jsx';
 import {
   ensureFamilyPlace, familyPlacePeople, familyPlacePublishedBooks, addFamilyPlacePerson, updateFamilyPlacePerson,
+  familyPlaceRelations, saveFamilyPlaceRelation, removeFamilyPlaceRelation,
   personNameParts, uploadFamilyPlacePortrait, familyPlacePortraitUrl,
   familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories,
   getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, addFamilyPlaceMedia,
@@ -20,7 +22,7 @@ const testQuestions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) =>
   ({ id: question.id, slot: index + 1, text: question.content }));
 
 const emptyPersonDraft = () => ({ family_name: '', given_name: '',
-  birth_year: '', birth_month: '', birth_day: '' });
+  birth_year: '', birth_month: '', birth_day: '', gender: '' });
 
 function YearSelect({ value, onChange, allowFuture = false }) {
   const currentYear = new Date().getFullYear();
@@ -82,6 +84,10 @@ export default function FamilyPlaceApp() {
   const [user, setUser] = useState(null);
   const [familyId, setFamilyId] = useState(null);
   const [people, setPeople] = useState([]);
+  const [relations, setRelations] = useState([]);
+  const [treeCenterId, setTreeCenterId] = useState(null);
+  const [newPersonAnchorId, setNewPersonAnchorId] = useState(null);
+  const [newPersonRelation, setNewPersonRelation] = useState('');
   const [homeStoryCounts, setHomeStoryCounts] = useState({});
   const [selfId, setSelfId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
@@ -137,10 +143,11 @@ export default function FamilyPlaceApp() {
     const id = await ensureFamilyPlace(supabaseClient, currentUser,
       currentUser.user_metadata?.display_name
         ? `${currentUser.user_metadata.display_name}さんの家族` : null);
-    const [persons, links] = await Promise.all([
+    const [persons, links, nextRelations] = await Promise.all([
       familyPlacePeople(supabaseClient, id),
       supabaseClient.from('user_person_links').select('person_id')
-        .eq('user_id', currentUser.id).eq('role', 'self').limit(1),
+        .eq('user_id', currentUser.id).eq('role', 'self'),
+      familyPlaceRelations(supabaseClient, id),
     ]);
     if (links.error) throw links.error;
     const portraits = await Promise.all(persons.map(async item => {
@@ -156,8 +163,9 @@ export default function FamilyPlaceApp() {
       storyLists[index].filter(row => row.body || row.transcript_raw || row.media_count).length]));
     setFamilyId(id);
     setPeople(persons.map((item, index) => ({ ...item, portrait_url: portraits[index] })));
+    setRelations(nextRelations);
     setHomeStoryCounts(counts);
-    setSelfId(links.data?.[0]?.person_id || null);
+    setSelfId(links.data?.find(link => persons.some(item => item.id === link.person_id))?.person_id || null);
   }, []);
   const loadPerson = useCallback(async personId => {
     const epoch = ++personLoadEpoch.current;
@@ -279,15 +287,54 @@ export default function FamilyPlaceApp() {
     setScreen('person');
     if (person) await loadPerson(person.id);
   };
+  const openTree = () => {
+    setTreeCenterId(current => current && people.some(item => item.id === current)
+      ? current : selfId || people[0]?.id || null);
+    setScreen('tree'); setError('');
+  };
+  const startAddPerson = (anchorId = null, relation = '') => {
+    setNewPerson({ ...emptyPersonDraft(), gender: relation === 'father' ? 'male'
+      : relation === 'mother' ? 'female' : '' });
+    setNewPersonAnchorId(anchorId);
+    setNewPersonRelation(relation === 'self' ? '' : relation);
+    setNewIsSelf(relation === 'self');
+    setScreen('add-person'); setError('');
+  };
+  const linkExisting = async otherId => {
+    setBusy(true); setError('');
+    try {
+      await saveFamilyPlaceRelation(supabaseClient,familyId,newPersonAnchorId || selfId,
+        otherId,newPersonRelation);
+      await loadHome(user);
+      setScreen(newPersonAnchorId ? 'tree' : 'home');
+    } catch (cause) { setError(cause.message || '関係を保存できませんでした'); }
+    finally { setBusy(false); }
+  };
+  const editRelation = async (id, anchorId, otherId, role) => {
+    setBusy(true); setError('');
+    try { await saveFamilyPlaceRelation(supabaseClient,familyId,anchorId,otherId,role,id);
+      await loadHome(user); return true;
+    } catch (cause) { setError(cause.message || '関係を変更できませんでした'); return false; }
+    finally { setBusy(false); }
+  };
+  const unlinkRelation = async id => {
+    setBusy(true); setError('');
+    try { await removeFamilyPlaceRelation(supabaseClient,id);
+      await loadHome(user); return true;
+    } catch (cause) { setError(cause.message || '関係を解除できませんでした'); return false; }
+    finally { setBusy(false); }
+  };
   const createPerson = async event => {
     event.preventDefault();
     if (!familyId || !(newPerson.family_name.trim() || newPerson.given_name.trim())) return;
     setBusy(true); setError('');
     try {
-      const id = await addFamilyPlacePerson(supabaseClient, familyId, newPerson, newIsSelf);
+      const id = await addFamilyPlacePerson(supabaseClient, familyId, newPerson, newIsSelf,
+        newPersonRelation ? newPersonAnchorId || selfId : null, newPersonRelation || null);
       await loadHome(user);
-      setNewPerson(emptyPersonDraft()); setNewIsSelf(false);
-      openPerson(id);
+      setNewPerson(emptyPersonDraft()); setNewIsSelf(false); setNewPersonRelation('');
+      if (newPersonAnchorId) { setTreeCenterId(newPersonAnchorId); setScreen('tree'); }
+      else openPerson(id);
     } catch (cause) { setError(cause.message || '登録できませんでした'); }
     finally { setBusy(false); }
   };
@@ -296,7 +343,7 @@ export default function FamilyPlaceApp() {
     setProfile({ ...personNameParts(person), birth_year: person.birth_year || '',
       birth_month: person.birth_month || '', birth_day: person.birth_day || '',
       death_year: person.death_year || '', maiden_name: person.maiden_name || '',
-      notes: person.notes || '' });
+      notes: person.notes || '', gender: person.gender || '' });
     setScreen('profile');
   };
   const saveProfile = async event => {
@@ -456,21 +503,41 @@ export default function FamilyPlaceApp() {
       }}>音声保存を再試行する</button>}</div>}
   </div>;
   return <div className="fp-app">
-    {screen !== 'home' && screen !== 'person' && <header className="fp-header">
+    {screen !== 'home' && screen !== 'person' && screen !== 'tree' && <header className="fp-header">
       <button onClick={() => screen === 'story' ? leaveStory()
           : screen === 'profile' ? setScreen('person')
+          : screen === 'add-person' && newPersonAnchorId ? setScreen('tree')
           : screen === 'person' ? goHome() : setScreen('home')}><ChevronLeft/>戻る</button>
       <span>{person?.display_name || '家族の場所'}</span>
     </header>}
     {error && <p className="fp-error" role="alert">{error}</p>}
     {screen === 'home' && <FamilyHome people={people} storyCounts={homeStoryCounts}
-      onAddPerson={() => setScreen('add-person')} onOpenPerson={openPerson}/>}
+      onAddPerson={() => startAddPerson()} onOpenPerson={openPerson} onTree={openTree}/>}
+    {screen === 'tree' && <FamilyTree people={people} relations={relations} selfId={selfId}
+      centerId={treeCenterId || selfId || people[0]?.id} onCenter={setTreeCenterId}
+      onAdd={startAddPerson} onOpenPerson={openPerson} onHome={goHome}
+      onEditRelation={editRelation} onRemoveRelation={unlinkRelation}/>}
     {screen === 'add-person' && <main className="fp-section"><h1>家族を登録する</h1>
       <form onSubmit={createPerson} className="fp-form">
         <label>どなたを登録しますか？<select value={newIsSelf ? 'self' : 'family'}
-          onChange={event => setNewIsSelf(event.target.value === 'self')}>
+          onChange={event => { setNewIsSelf(event.target.value === 'self');
+            if (event.target.value === 'self') setNewPersonRelation(''); }}>
           <option value="family">家族</option><option value="self" disabled={Boolean(selfId)}>自分</option>
         </select></label>
+        {!newIsSelf && selfId && !newPersonAnchorId && <label>自分との関係（任意）<select
+          value={newPersonRelation} onChange={event => {
+            const relation = event.target.value;
+            setNewPersonRelation(relation);
+            if (relation === 'father' || relation === 'mother') setNewPerson(current => ({
+              ...current, gender: relation === 'father' ? 'male' : 'female',
+            }));
+          }}>
+          <option value="">その他・未設定</option><option value="father">父</option>
+          <option value="mother">母</option><option value="spouse">配偶者</option>
+          <option value="child">子</option>
+        </select></label>}
+        {newPersonAnchorId && <p className="fp-note">{people.find(item => item.id===newPersonAnchorId)?.display_name}さんの
+          {({father:'父',mother:'母',spouse:'配偶者',child:'子ども'})[newPersonRelation]}として追加します。</p>}
         <div className="fp-name-fields">
           <label>姓<input maxLength={100} required={!newPerson.given_name.trim()} autoComplete="family-name" value={newPerson.family_name}
             onChange={event => setNewPerson({...newPerson,family_name:event.target.value})}/></label>
@@ -478,9 +545,22 @@ export default function FamilyPlaceApp() {
             onChange={event => setNewPerson({...newPerson,given_name:event.target.value})}/></label>
         </div>
         <BirthDateFields value={newPerson} onChange={setNewPerson}/>
+        <label>性別（任意）<select value={newPerson.gender || ''}
+          disabled={newPersonRelation === 'father' || newPersonRelation === 'mother'}
+          onChange={event => setNewPerson({...newPerson,gender:event.target.value})}>
+          <option value="">未登録</option><option value="female">女性</option><option value="male">男性</option>
+        </select></label>
         <p className="fp-note">詳しいプロフィールは後から追加できます。</p>
-        <button className="fp-primary" disabled={busy}>登録して人物ページを見る</button>
-      </form></main>}
+        <button className="fp-primary" disabled={busy}>{newPersonAnchorId ? '登録して家系図を見る' : '登録して人物ページを見る'}</button>
+      </form>
+      {newPersonRelation && (newPersonAnchorId || selfId) && people.some(item => item.id !== (newPersonAnchorId || selfId)) &&
+        <section className="fp-existing-link"><h2>すでに登録済みですか？</h2>
+          <p className="fp-note">同じ人物を作り直さず、関係だけを追加できます。</p>
+          {people.filter(item => item.id !== (newPersonAnchorId || selfId)).map(item =>
+            <button type="button" disabled={busy} key={item.id} onClick={() => linkExisting(item.id)}>
+              {item.display_name}さんと結ぶ</button>)}
+        </section>}
+    </main>}
     {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories}
       supabaseClient={supabaseClient}
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}
@@ -518,6 +598,10 @@ export default function FamilyPlaceApp() {
           setProfile({...profile,death_year:next})}/></label>
         <label>紹介（任意）<textarea value={profile?.notes || ''}
           onChange={event => setProfile({...profile,notes:event.target.value})}/></label>
+        <label>性別（任意）<select value={profile?.gender || ''}
+          onChange={event => setProfile({...profile,gender:event.target.value})}>
+          <option value="">未登録</option><option value="female">女性</option><option value="male">男性</option>
+        </select></label>
         <button className="fp-primary" disabled={busy}>プロフィールを保存する</button>
       </form>
       <h2>人生の出来事</h2>
@@ -576,10 +660,10 @@ export default function FamilyPlaceApp() {
       <PhotoCorrectionFlow open={photoOpen} awaitCompletion title="写真を添える"
         onClose={() => setPhotoOpen(false)} onComplete={addPhoto}/>
     </main>}
-    {screen === 'home' ? <FamilyHomeNav onHome={goHome} onStories={goHome} onFamily={goHome}/> : screen === 'person' ? null : <nav className="fp-bottom">
+    {screen === 'home' ? <FamilyHomeNav onHome={goHome} onStories={goHome} onFamily={openTree}/> : screen === 'person' ? null : <nav className="fp-bottom">
       <button onClick={goHome}><Home/>ホーム</button>
       <button onClick={() => {setScreen('home');setSelectedId(null);}}><BookOpen/>人生の物語</button>
-      <button onClick={() => {setScreen('home');setSelectedId(null);}}><Users/>家族</button>
+      <button onClick={openTree}><Users/>家族</button>
       <button disabled><Image/>思い出</button>
     </nav>}
   </div>;

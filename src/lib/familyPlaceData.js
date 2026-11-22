@@ -11,7 +11,7 @@ export async function ensureFamilyPlace(client, user, label) {
 
 export async function familyPlacePeople(client, familyId) {
   const { data, error } = await client.from('persons')
-    .select('id,family_id,display_name,family_name,given_name,birth_year,birth_month,birth_day,death_year,notes,maiden_name,portrait_storage_path,created_at')
+    .select('id,family_id,display_name,family_name,given_name,birth_year,birth_month,birth_day,death_year,gender,notes,maiden_name,portrait_storage_path,created_at')
     .eq('family_id', familyId).order('created_at');
   if (error) throw error;
   return data || [];
@@ -38,8 +38,8 @@ export function personNameParts(person) {
     : { family_name: parts[0] || '', given_name: '' };
 }
 
-export async function addFamilyPlacePerson(client, familyId, fields, isSelf) {
-  const { data, error } = await client.rpc('create_family_place_person_profile', {
+export async function addFamilyPlacePerson(client, familyId, fields, isSelf, anchorId = null, relation = null) {
+  const { data, error } = await client.rpc('create_family_tree_person', {
     input_family_id: familyId,
     input_family_name: fields.family_name.trim(),
     input_given_name: fields.given_name.trim(),
@@ -47,6 +47,9 @@ export async function addFamilyPlacePerson(client, familyId, fields, isSelf) {
     input_birth_year: fields.birth_year ? Number(fields.birth_year) : null,
     input_birth_month: fields.birth_month ? Number(fields.birth_month) : null,
     input_birth_day: fields.birth_day ? Number(fields.birth_day) : null,
+    input_gender: fields.gender || null,
+    input_anchor_id: anchorId,
+    input_relation: relation,
   });
   if (error || !data) throw error || new Error('人物を登録できませんでした');
   return data;
@@ -65,11 +68,46 @@ export async function updateFamilyPlacePerson(client, personId, fields, portrait
     death_year: fields.death_year ? Number(fields.death_year) : null,
     maiden_name: fields.maiden_name?.trim() || null,
     notes: fields.notes?.trim() || null,
+    gender: fields.gender || null,
   };
   if (portraitStoragePath !== undefined) payload.portrait_storage_path = portraitStoragePath;
   const { data, error } = await client.from('persons').update(payload)
     .eq('id', personId).select('id').single();
   if (error || !data) throw error || new Error('プロフィールを保存できませんでした');
+}
+
+export async function familyPlaceRelations(client, familyId) {
+  const { data, error } = await client.from('family_person_relations')
+    .select('id,family_id,person_a_id,person_b_id,relation_type')
+    .eq('family_id', familyId).order('created_at');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function saveFamilyPlaceRelation(client, familyId, anchorId, otherId, role, existingId = null) {
+  if (!anchorId || !otherId || anchorId === otherId) throw new Error('異なる人物を選んでください');
+  let personA = anchorId; let personB = otherId;
+  let relationType = 'parent_child';
+  if (role === 'father' || role === 'mother' || role === 'parent') {
+    personA = otherId; personB = anchorId;
+  } else if (role === 'spouse') {
+    relationType = 'spouse';
+    [personA, personB] = [anchorId, otherId].sort();
+  } else if (role !== 'child') throw new Error('関係を選んでください');
+  const payload = { family_id: familyId, person_a_id: personA,
+    person_b_id: personB, relation_type: relationType };
+  const query = existingId
+    ? client.from('family_person_relations').update(payload).eq('id', existingId)
+    : client.from('family_person_relations').insert(payload);
+  const { data, error } = await query.select('id').single();
+  if (error || !data) throw error || new Error('関係を保存できませんでした');
+  return data.id;
+}
+
+export async function removeFamilyPlaceRelation(client, relationId) {
+  const { data, error } = await client.from('family_person_relations')
+    .delete().eq('id', relationId).select('id').single();
+  if (error || !data) throw error || new Error('関係を解除できませんでした');
 }
 
 export async function uploadFamilyPlacePortrait(client, userId, personId, file) {
