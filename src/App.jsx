@@ -9383,6 +9383,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
       {scene === "private_story_settings" && (
         <Scene_PrivateStorySettings
           user={user}
+          projectId={foundation?.project?.id || null}
           questionSet={questionsDB}
           onBack={() => setScene("sharing_privacy")}
         />
@@ -15862,7 +15863,7 @@ export function Scene_SharingPrivacySettings({
   );
 }
 
-export function Scene_PrivateStorySettings({ user, questionSet = [], onBack, storyAccess = null, productionContext = false }) {
+export function Scene_PrivateStorySettings({ user, projectId = null, questionSet = [], onBack, storyAccess = null, productionContext = false }) {
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
@@ -15883,10 +15884,12 @@ export function Scene_PrivateStorySettings({ user, questionSet = [], onBack, sto
           if (live) setStories(rows);
           return;
         }
+        if (!user?.id || !projectId) return;
         const { data, error } = await supabaseClient
           .from("answers")
           .select("id, sequence_order, transcript_edited, transcript_readable, transcript_clean, access_override, created_at")
           .eq("user_id", user.id)
+          .eq("book_project_id", projectId)
           .order("sequence_order", { ascending: true });
         if (error) throw error;
         if (live) setStories(data || []);
@@ -15902,7 +15905,7 @@ export function Scene_PrivateStorySettings({ user, questionSet = [], onBack, sto
     };
     load();
     return () => { live = false; privacyViewEpoch.current++; };
-  }, [user?.id, storyAccess]);
+  }, [user?.id, projectId, storyAccess]);
 
   const togglePrivate = async story => {
     if (privacySaveLock.current) return;
@@ -15917,12 +15920,14 @@ export function Scene_PrivateStorySettings({ user, questionSet = [], onBack, sto
         if (privacyViewEpoch.current === epoch) setStories(rows);
         return;
       }
-      const { error } = await supabaseClient
+      const { data, error } = await supabaseClient
         .from("answers")
         .update({ access_override: nextValue })
         .eq("id", story.id)
-        .eq("user_id", user.id);
-      if (error) throw error;
+        .eq("user_id", user.id)
+        .eq("book_project_id", projectId)
+        .select("id");
+      if (error || data?.length !== 1) throw error || new Error("private story update was not acknowledged");
       if (privacyViewEpoch.current !== epoch) return;
       setStories(prev => prev.map(item => item.id === story.id ? { ...item, access_override: nextValue } : item));
     } catch (error) {
