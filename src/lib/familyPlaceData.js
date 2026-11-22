@@ -93,6 +93,21 @@ export async function familyPlaceRelations(client, familyId) {
   return data || [];
 }
 
+export async function familyRelationDecisions(client, familyId) {
+  const { data,error } = await client.from('family_relation_suggestions')
+    .select('kind,person_a_id,person_b_id,status').eq('family_id',familyId);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function saveFamilyRelationDecision(client, familyId, suggestion, status) {
+  const { data,error } = await client.from('family_relation_suggestions').upsert({
+    family_id:familyId,kind:suggestion.kind,person_a_id:suggestion.person_a_id,
+    person_b_id:suggestion.person_b_id,status,
+  }, { onConflict:'family_id,kind,person_a_id,person_b_id' }).select('id').single();
+  if (error || !data) throw error || new Error('関係の確認を保存できませんでした');
+}
+
 export async function saveFamilyPlaceRelation(client, familyId, anchorId, otherId, role, existingId = null) {
   if (!anchorId || !otherId || anchorId === otherId) throw new Error('異なる人物を選んでください');
   let personA = anchorId; let personB = otherId;

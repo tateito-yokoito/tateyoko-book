@@ -174,12 +174,15 @@ function RootScreen() {
 
   if (params.has("voice")) {
     const publicId = params.get("voice") || "";
+    const shelfPerson = params.get('family_shelf') || '';
+    const shelfOrigin = params.get('origin') === 'tree' ? 'tree' : 'home';
     return (
       <PublishedWebBook
         supabaseClient={adminSupabaseClient}
         publicId={publicId}
         returnHref={/^[a-f0-9]{48}$/i.test(publicId)
-          ? `/?app=family_place&publication=${encodeURIComponent(publicId)}&tab=books` : null}
+          && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(shelfPerson)
+          ? `/?app=family_place&person=${encodeURIComponent(shelfPerson)}&tab=books&origin=${shelfOrigin}` : null}
       />
     );
   }

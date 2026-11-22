@@ -44,14 +44,15 @@ function PublishedBookThumbnail({ book, supabaseClient }) {
 
 export default function FamilyPersonPage({ person, stories = [], books = [], booksStatus = 'ready',
   facts = [], questions = [], activeTab = 'ring', onTabChange, onBack, onProfile,
-  onOpenStory, onAddFact, onRetryBooks, supabaseClient, busy = false }) {
+  onOpenStory, onAddFact, onRetryBooks, supabaseClient, busy = false,
+  backLabel = 'ホーム', entryOrigin = 'home' }) {
   const [showQuestions, setShowQuestions] = useState(false);
   const saved = stories.filter(hasAnswer);
   const timeline = [...facts];
   const age = currentPersonAge(person);
   return <main className="fp-person-page">
     <header className="fp-person-topbar">
-      <button type="button" onClick={onBack} aria-label="家族ホームへ戻る"><ChevronLeft/></button>
+      <button type="button" onClick={onBack} aria-label={`${backLabel}へ戻る`}><ChevronLeft/><span>{backLabel}</span></button>
       <strong>{person.display_name}さん</strong><span aria-hidden="true"/>
     </header>
     <section className="fp-person-intro">
@@ -98,7 +99,8 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
             <div className="fp-person-book-copy"><strong>{book.title || '人生の物語'}</strong>
               {book.subtitle && <small>{book.subtitle}</small>}
               {book.published_at && <time>{bookDate(book.published_at)} 公開</time>}
-              <a href={`/?voice=${encodeURIComponent(book.public_id)}`}>Webブックを読む<ChevronRight aria-hidden="true"/></a>
+              <a href={`/?voice=${encodeURIComponent(book.public_id)}&family_shelf=${encodeURIComponent(person.id)}&origin=${entryOrigin}`}>
+                Webブックを読む<ChevronRight aria-hidden="true"/></a>
             </div>
           </article>)}</div>
           : <div className="fp-person-story-empty">この人物の完成したBOOKは、まだありません。</div>}

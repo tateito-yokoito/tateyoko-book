@@ -6,10 +6,13 @@ import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
 import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
 import FamilyTree from './FamilyTree.jsx';
+import FamilyRelationshipEditor from './FamilyRelationshipEditor.jsx';
+import { familyRelationSuggestions } from './lib/familyTreeModel.js';
 import PortraitCropEditor from './PortraitCropEditor.jsx';
 import {
   ensureFamilyPlace, familyPlacePeople, familyPlacePublishedBooks, addFamilyPlacePerson, updateFamilyPlacePerson,
-  familyPlaceRelations, saveFamilyPlaceRelation, removeFamilyPlaceRelation,
+  familyPlaceRelations, familyRelationDecisions, saveFamilyRelationDecision,
+  saveFamilyPlaceRelation, removeFamilyPlaceRelation,
   personNameParts, uploadFamilyPlacePortrait, downloadFamilyPlacePortrait, familyPlacePortraitUrl,
   familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories,
   getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, addFamilyPlaceMedia,
@@ -107,13 +110,21 @@ export default function FamilyPlaceApp() {
   const [familyId, setFamilyId] = useState(null);
   const [people, setPeople] = useState([]);
   const [relations, setRelations] = useState([]);
+  const [relationDecisions, setRelationDecisions] = useState([]);
+  const [promptAfterChange, setPromptAfterChange] = useState(null);
   const [treeCenterId, setTreeCenterId] = useState(null);
+  const treeViewRef = useRef((() => {
+    try { return JSON.parse(sessionStorage.getItem('tateyoko.familyTreeReturn.v1')) || {}; }
+    catch { return {}; }
+  })());
+  const restoreTreeScrollRef = useRef(false);
   const [newPersonAnchorId, setNewPersonAnchorId] = useState(null);
   const [newPersonRelation, setNewPersonRelation] = useState('');
   const [existingPersonId, setExistingPersonId] = useState('');
   const [homeStoryCounts, setHomeStoryCounts] = useState({});
   const [selfId, setSelfId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const [personEntry, setPersonEntry] = useState('home');
   const [screen, setScreen] = useState('home');
   const [profile, setProfile] = useState(null);
   const [profileReturnToTree, setProfileReturnToTree] = useState(false);
@@ -159,9 +170,13 @@ export default function FamilyPlaceApp() {
     return params.get('tab') === 'books' ? params.get('publication') : null;
   })());
   const person = people.find(item => item.id === selectedId) || null;
+  const relationshipSuggestions = familyRelationSuggestions(people,relations,relationDecisions);
 
   useLayoutEffect(() => {
-    if (screen === 'profile' || screen === 'person' || screen === 'tree') window.scrollTo(0, 0);
+    if (screen === 'tree' && restoreTreeScrollRef.current) {
+      window.scrollTo(0, Number(treeViewRef.current.scrollY) || 0);
+      restoreTreeScrollRef.current = false;
+    } else if (screen === 'profile' || screen === 'person' || screen === 'tree') window.scrollTo(0, 0);
   }, [screen]);
 
   useEffect(() => () => { if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview); }, [profilePhotoPreview]);
@@ -175,11 +190,12 @@ export default function FamilyPlaceApp() {
     const id = await ensureFamilyPlace(supabaseClient, currentUser,
       currentUser.user_metadata?.display_name
         ? `${currentUser.user_metadata.display_name}さんの家族` : null);
-    const [persons, links, nextRelations] = await Promise.all([
+    const [persons, links, nextRelations, nextDecisions] = await Promise.all([
       familyPlacePeople(supabaseClient, id),
       supabaseClient.from('user_person_links').select('person_id')
         .eq('user_id', currentUser.id).eq('role', 'self'),
       familyPlaceRelations(supabaseClient, id),
+      familyRelationDecisions(supabaseClient, id),
     ]);
     if (links.error) throw links.error;
     const portraits = await Promise.all(persons.map(async item => {
@@ -196,6 +212,7 @@ export default function FamilyPlaceApp() {
     setFamilyId(id);
     setPeople(persons.map((item, index) => ({ ...item, portrait_url: portraits[index] })));
     setRelations(nextRelations);
+    setRelationDecisions(nextDecisions);
     setHomeStoryCounts(counts);
     setSelfId(links.data?.find(link => persons.some(item => item.id === link.person_id))?.person_id || null);
   }, []);
@@ -238,10 +255,15 @@ export default function FamilyPlaceApp() {
     shelfReturnPerson.current = null;
     setSelectedId(id);
     setActiveTab('books');
+    const origin = new URLSearchParams(window.location.search).get('origin');
+    setPersonEntry(origin === 'tree' ? 'tree' : 'home');
+    if (origin === 'tree' && people.some(item => item.id === treeViewRef.current.centerId))
+      setTreeCenterId(treeViewRef.current.centerId);
     setScreen('person');
     const url = new URL(window.location.href);
     url.searchParams.delete('person');
     url.searchParams.delete('tab');
+    url.searchParams.delete('origin');
     window.history.replaceState({}, '', url);
   }, [people, screen]);
   useEffect(() => {
@@ -292,9 +314,16 @@ export default function FamilyPlaceApp() {
     setMedia(items);
   };
 
-  const openPerson = id => {
+  const rememberTreeView = () => {
+    treeViewRef.current = { ...treeViewRef.current, centerId:treeCenterId, scrollY:window.scrollY };
+    sessionStorage.setItem('tateyoko.familyTreeReturn.v1', JSON.stringify(treeViewRef.current));
+  };
+  const returnToTree = () => { restoreTreeScrollRef.current = true; setScreen('tree'); };
+  const openPerson = (id, entry = 'home') => {
+    if (entry === 'tree' && screen === 'tree') rememberTreeView();
     personLoadEpoch.current++;
     setProfileReturnToTree(false);
+    setPersonEntry(entry);
     setError(''); setSelectedId(id); setActiveTab('ring');
     setPublishedBooks([]); setBooksStatus('loading'); setScreen('person');
   };
@@ -321,8 +350,9 @@ export default function FamilyPlaceApp() {
     if (person) await loadPerson(person.id);
   };
   const openTree = () => {
-    setTreeCenterId(current => current && people.some(item => item.id === current)
-      ? current : selfId || people[0]?.id || null);
+    const centerId = selfId || people[0]?.id || null;
+    setTreeCenterId(centerId);
+    treeViewRef.current = { centerId, scrollLeft:null, scrollY:0 };
     setScreen('tree'); setError('');
   };
   const startAddPerson = (anchorId = null, relation = '') => {
@@ -341,16 +371,17 @@ export default function FamilyPlaceApp() {
       if (!anchorId || !newPersonRelation) throw new Error('先に関係を選んでください');
       await saveFamilyPlaceRelation(supabaseClient,familyId,anchorId,otherId,newPersonRelation);
       await loadHome(user);
+      setPromptAfterChange(otherId);
       setTreeCenterId(anchorId);
       setScreen('tree');
     } catch (cause) { setError(cause.message || '関係を保存できませんでした'); }
     finally { setBusy(false); }
   };
-  const editRelation = async (id, anchorId, otherId, role) => {
+  const saveRelationship = async (anchorId, otherId, role, relationId = null) => {
     setBusy(true); setError('');
-    try { await saveFamilyPlaceRelation(supabaseClient,familyId,anchorId,otherId,role,id);
-      await loadHome(user); return true;
-    } catch (cause) { setError(cause.message || '関係を変更できませんでした'); return false; }
+    try { await saveFamilyPlaceRelation(supabaseClient,familyId,anchorId,otherId,role,relationId);
+      await loadHome(user); setPromptAfterChange(anchorId); return true;
+    } catch (cause) { setError(cause.message || '関係を保存できませんでした'); return false; }
     finally { setBusy(false); }
   };
   const unlinkRelation = async id => {
@@ -360,6 +391,28 @@ export default function FamilyPlaceApp() {
     } catch (cause) { setError(cause.message || '関係を解除できませんでした'); return false; }
     finally { setBusy(false); }
   };
+  const answerRelationshipSuggestion = async (suggestion, answer) => {
+    setBusy(true); setError('');
+    try {
+      if (answer === 'yes') {
+        const anchor = suggestion.kind === 'shared_child_spouse'
+          ? suggestion.person_a_id : suggestion.person_b_id;
+        const other = suggestion.kind === 'shared_child_spouse'
+          ? suggestion.person_b_id : suggestion.person_a_id;
+        await saveFamilyPlaceRelation(supabaseClient,familyId,anchor,other,
+          suggestion.kind === 'shared_child_spouse' ? 'spouse' : 'parent');
+      } else {
+        await saveFamilyRelationDecision(supabaseClient,familyId,suggestion,
+          answer === 'no' ? 'declined' : 'later');
+      }
+      await loadHome(user);
+      setPromptAfterChange(null);
+      return true;
+    } catch (cause) {
+      setError(cause.message || '関係の確認を保存できませんでした');
+      return false;
+    } finally { setBusy(false); }
+  };
   const createPerson = async event => {
     event.preventDefault();
     if (!familyId || !(newPerson.family_name.trim() || newPerson.given_name.trim())) return;
@@ -368,6 +421,7 @@ export default function FamilyPlaceApp() {
       const id = await addFamilyPlacePerson(supabaseClient, familyId, newPerson, newIsSelf,
         newPersonRelation ? newPersonAnchorId || selfId : null, newPersonRelation || null);
       await loadHome(user);
+      setPromptAfterChange(id);
       setNewPerson(emptyPersonDraft()); setNewIsSelf(false); setNewPersonRelation('');
       if (newPersonAnchorId) { setTreeCenterId(newPersonAnchorId); setScreen('tree'); }
       else openPerson(id);
@@ -376,6 +430,7 @@ export default function FamilyPlaceApp() {
   };
   const startProfile = (target = person, fromTree = false) => {
     if (!target) return;
+    if (fromTree && screen === 'tree') rememberTreeView();
     if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
     setProfilePhotoFile(null); setProfilePhotoPreview(null); setPortraitCandidate(null);
     setPortraitCandidateIsNew(false); setPortraitSourceFile(null); setPortraitSourceIsNew(false);
@@ -430,7 +485,8 @@ export default function FamilyPlaceApp() {
       await loadHome(user);
       if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
       setProfilePhotoFile(null); setProfilePhotoPreview(null); setPortraitSourceFile(null);
-      setScreen(profileReturnToTree ? 'tree' : 'person');
+      if (profileReturnToTree) returnToTree();
+      else setScreen('person');
     } catch (cause) {
       if (!committed && uploadedPaths.length) await supabaseClient.storage.from('family-person-portraits')
         .remove(uploadedPaths).catch(() => {});
@@ -583,11 +639,11 @@ export default function FamilyPlaceApp() {
     {screen !== 'home' && screen !== 'person' && screen !== 'tree' &&
       <header className={`fp-header ${screen === 'profile' && profileReturnToTree ? 'fp-header-from-tree' : ''}`}>
       <button onClick={() => screen === 'story' ? leaveStory()
-          : screen === 'profile' ? setScreen(profileReturnToTree ? 'tree' : 'person')
+          : screen === 'profile' ? (profileReturnToTree ? returnToTree() : setScreen('person'))
           : screen === 'add-person' && newPersonAnchorId ? setScreen('tree')
           : screen === 'person' ? goHome() : setScreen('home')}><ChevronLeft/>{screen === 'profile' && profileReturnToTree ? '家系図に戻る' : '戻る'}</button>
       {screen === 'profile' && profileReturnToTree
-        ? <button className="fp-header-person-link" onClick={() => openPerson(person.id)}>
+        ? <button className="fp-header-person-link" onClick={() => openPerson(person.id, 'tree')}>
           この人の個人ページを開く<ChevronRight/></button>
         : <span>{person?.display_name || '家族の場所'}</span>}
     </header>}
@@ -596,10 +652,14 @@ export default function FamilyPlaceApp() {
       onAddPerson={() => startAddPerson()} onOpenPerson={openPerson} onTree={openTree}/>}
     {screen === 'tree' && <FamilyTree people={people} relations={relations} selfId={selfId}
       centerId={treeCenterId || selfId || people[0]?.id} onCenter={setTreeCenterId}
-      onAdd={startAddPerson} onOpenPerson={openPerson} onEditProfile={id => {
+      onAdd={startAddPerson} onOpenPerson={id => openPerson(id, 'tree')} onEditProfile={id => {
         startProfile(people.find(item => item.id === id), true);
-      }} onHome={goHome}
-      onEditRelation={editRelation} onRemoveRelation={unlinkRelation}/>}
+      }} onHome={goHome} restoreScrollLeft={treeViewRef.current.centerId === treeCenterId
+        ? treeViewRef.current.scrollLeft : null}
+      onScrollLeft={scrollLeft => { treeViewRef.current.scrollLeft = scrollLeft;
+        treeViewRef.current.centerId = treeCenterId; }}
+      suggestions={relationshipSuggestions} promptPersonId={promptAfterChange}
+      onAnswerSuggestion={answerRelationshipSuggestion} busy={busy}/>}
     {screen === 'add-person' && <main className="fp-section"><h1>家族を登録する</h1>
       <form onSubmit={createPerson} className="fp-form">
         {!newIsSelf && selfId && !newPersonAnchorId && <label>自分との関係（任意）<select
@@ -641,7 +701,9 @@ export default function FamilyPlaceApp() {
       supabaseClient={supabaseClient}
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}
       facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
-      onTabChange={setActiveTab} onBack={goHome} onProfile={() => startProfile()}
+      onTabChange={setActiveTab} onBack={personEntry === 'tree' ? returnToTree : goHome}
+      backLabel={personEntry === 'tree' ? '家系図' : 'ホーム'} entryOrigin={personEntry}
+      onProfile={() => startProfile()}
       onOpenStory={openStory} busy={busy}
       onAddFact={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}/>}
     {screen === 'profile' && person && <main className="fp-section"><h1>プロフィール</h1>
@@ -694,6 +756,10 @@ export default function FamilyPlaceApp() {
         </select></label>
         <button className="fp-primary" disabled={busy}>プロフィールを保存する</button>
       </form>
+      <FamilyRelationshipEditor person={person} people={people} relations={relations}
+        suggestions={relationshipSuggestions} busy={busy}
+        onSave={(otherId,role,relationId) => saveRelationship(person.id,otherId,role,relationId)}
+        onRemove={unlinkRelation} onAnswer={answerRelationshipSuggestion}/>
       <h2>人生の出来事</h2>
       {facts.map(item => <button className="fp-card fp-fact" key={item.id} onClick={() => setFactDraft(item)}>
         {item.event_year || '年未登録'}　{item.label}　›</button>)}

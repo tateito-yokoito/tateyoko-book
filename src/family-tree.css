@@ -27,7 +27,9 @@
 /* One centered generation layout for every selected person. Lines are drawn
    from saved relationships only; sharing a child never creates a spouse line. */
 .ft-graph{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}
-.ft-board{position:relative;display:flex;flex-direction:column;align-items:center;gap:68px;width:max-content;min-width:100%;margin-inline:auto;padding:0 12px 8px}
+.ft-graph{touch-action:pan-x pan-y}
+.ft-board-scale{position:relative;margin-inline:auto}
+.ft-board{position:relative;display:flex;flex-direction:column;align-items:center;gap:68px;width:max-content;min-width:0;margin-inline:0;padding:0 12px 8px;transform-origin:top left}
 .ft-board .ft-generation{position:relative;z-index:1;display:flex;justify-content:center;align-items:flex-start;gap:22px;width:max-content;max-width:none;min-width:0;margin:0}
 .ft-connections{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:0}
 .ft-connection{fill:none;stroke:#788875;stroke-width:2;stroke-linecap:round}
