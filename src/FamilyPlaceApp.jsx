@@ -6,6 +6,7 @@ import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
 import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
 import FamilyTree from './FamilyTree.jsx';
+import PortraitCropEditor from './PortraitCropEditor.jsx';
 import {
   ensureFamilyPlace, familyPlacePeople, familyPlacePublishedBooks, addFamilyPlacePerson, updateFamilyPlacePerson,
   familyPlaceRelations, saveFamilyPlaceRelation, removeFamilyPlaceRelation,
@@ -21,7 +22,7 @@ import './family-place.css';
 const testQuestions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) =>
   ({ id: question.id, slot: index + 1, text: question.content }));
 
-const emptyPersonDraft = () => ({ family_name: '', given_name: '',
+const emptyPersonDraft = () => ({ family_name: '', given_name: '', family_name_kana: '', given_name_kana: '',
   birth_year: '', birth_month: '', birth_day: '', gender: '' });
 
 function YearSelect({ value, onChange, allowFuture = false }) {
@@ -88,6 +89,7 @@ export default function FamilyPlaceApp() {
   const [treeCenterId, setTreeCenterId] = useState(null);
   const [newPersonAnchorId, setNewPersonAnchorId] = useState(null);
   const [newPersonRelation, setNewPersonRelation] = useState('');
+  const [existingPersonId, setExistingPersonId] = useState('');
   const [homeStoryCounts, setHomeStoryCounts] = useState({});
   const [selfId, setSelfId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
@@ -95,6 +97,7 @@ export default function FamilyPlaceApp() {
   const [profile, setProfile] = useState(null);
   const [profilePhotoFile, setProfilePhotoFile] = useState(null);
   const [profilePhotoPreview, setProfilePhotoPreview] = useState(null);
+  const [portraitCandidate, setPortraitCandidate] = useState(null);
   const portraitUrlsRef = useRef(new Map());
   const [factDraft, setFactDraft] = useState(null);
   const [facts, setFacts] = useState([]);
@@ -297,16 +300,19 @@ export default function FamilyPlaceApp() {
       : relation === 'mother' ? 'female' : '' });
     setNewPersonAnchorId(anchorId);
     setNewPersonRelation(relation === 'self' ? '' : relation);
-    setNewIsSelf(relation === 'self');
+    setNewIsSelf(relation === 'self' || (!selfId && !anchorId));
+    setExistingPersonId('');
     setScreen('add-person'); setError('');
   };
   const linkExisting = async otherId => {
     setBusy(true); setError('');
     try {
-      await saveFamilyPlaceRelation(supabaseClient,familyId,newPersonAnchorId || selfId,
-        otherId,newPersonRelation);
+      const anchorId = newPersonAnchorId || selfId;
+      if (!anchorId || !newPersonRelation) throw new Error('先に関係を選んでください');
+      await saveFamilyPlaceRelation(supabaseClient,familyId,anchorId,otherId,newPersonRelation);
       await loadHome(user);
-      setScreen(newPersonAnchorId ? 'tree' : 'home');
+      setTreeCenterId(anchorId);
+      setScreen('tree');
     } catch (cause) { setError(cause.message || '関係を保存できませんでした'); }
     finally { setBusy(false); }
   };
@@ -339,8 +345,10 @@ export default function FamilyPlaceApp() {
     finally { setBusy(false); }
   };
   const startProfile = () => {
-    setProfilePhotoFile(null); setProfilePhotoPreview(null);
-    setProfile({ ...personNameParts(person), birth_year: person.birth_year || '',
+    if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
+    setProfilePhotoFile(null); setProfilePhotoPreview(null); setPortraitCandidate(null);
+    setProfile({ ...personNameParts(person), family_name_kana: person.family_name_kana || '',
+      given_name_kana: person.given_name_kana || '', birth_year: person.birth_year || '',
       birth_month: person.birth_month || '', birth_day: person.birth_day || '',
       death_year: person.death_year || '', maiden_name: person.maiden_name || '',
       notes: person.notes || '', gender: person.gender || '' });
@@ -355,6 +363,7 @@ export default function FamilyPlaceApp() {
       await updateFamilyPlacePerson(supabaseClient, person.id, profile,
         newPortraitPath || undefined);
       await loadHome(user);
+      if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
       setProfilePhotoFile(null); setProfilePhotoPreview(null);
       setScreen('person');
     } catch (cause) {
@@ -502,6 +511,9 @@ export default function FamilyPlaceApp() {
         await onRecorded('', 0, '', blob);
       }}>音声保存を再試行する</button>}</div>}
   </div>;
+  const relationAnchorId = newPersonAnchorId || selfId;
+  const unlinkedPeople = relationAnchorId ? people.filter(item => item.id !== relationAnchorId
+    && !relations.some(relation => relation.person_a_id === item.id || relation.person_b_id === item.id)) : [];
   return <div className="fp-app">
     {screen !== 'home' && screen !== 'person' && screen !== 'tree' && <header className="fp-header">
       <button onClick={() => screen === 'story' ? leaveStory()
@@ -519,11 +531,6 @@ export default function FamilyPlaceApp() {
       onEditRelation={editRelation} onRemoveRelation={unlinkRelation}/>}
     {screen === 'add-person' && <main className="fp-section"><h1>家族を登録する</h1>
       <form onSubmit={createPerson} className="fp-form">
-        <label>どなたを登録しますか？<select value={newIsSelf ? 'self' : 'family'}
-          onChange={event => { setNewIsSelf(event.target.value === 'self');
-            if (event.target.value === 'self') setNewPersonRelation(''); }}>
-          <option value="family">家族</option><option value="self" disabled={Boolean(selfId)}>自分</option>
-        </select></label>
         {!newIsSelf && selfId && !newPersonAnchorId && <label>自分との関係（任意）<select
           value={newPersonRelation} onChange={event => {
             const relation = event.target.value;
@@ -538,14 +545,30 @@ export default function FamilyPlaceApp() {
         </select></label>}
         {newPersonAnchorId && <p className="fp-note">{people.find(item => item.id===newPersonAnchorId)?.display_name}さんの
           {({father:'父',mother:'母',spouse:'配偶者',child:'子ども'})[newPersonRelation]}として追加します。</p>}
+        {unlinkedPeople.length > 0 && <div className="fp-existing-link">
+          <label>登録済みの家族から選ぶ<select value={existingPersonId}
+            onChange={event => setExistingPersonId(event.target.value)}>
+            <option value="">名前を選ぶ</option>
+            {unlinkedPeople.map(item => <option value={item.id} key={item.id}>{item.display_name}</option>)}
+          </select></label>
+          <button type="button" disabled={busy || !existingPersonId || !newPersonRelation}
+            onClick={() => linkExisting(existingPersonId)}>選んだ家族を家系図に結ぶ</button>
+        </div>}
+        {unlinkedPeople.length > 0 && <p className="fp-note">新しく登録する場合は、下に入力してください。</p>}
         <div className="fp-name-fields">
           <label>姓<input maxLength={100} required={!newPerson.given_name.trim()} autoComplete="family-name" value={newPerson.family_name}
             onChange={event => setNewPerson({...newPerson,family_name:event.target.value})}/></label>
           <label>名<input maxLength={100} required={!newPerson.family_name.trim()} autoComplete="given-name" value={newPerson.given_name}
             onChange={event => setNewPerson({...newPerson,given_name:event.target.value})}/></label>
         </div>
+        <div className="fp-name-fields">
+          <label>姓のふりがな<input maxLength={100} inputMode="text" value={newPerson.family_name_kana}
+            onChange={event => setNewPerson({...newPerson,family_name_kana:event.target.value})}/></label>
+          <label>名のふりがな<input maxLength={100} inputMode="text" value={newPerson.given_name_kana}
+            onChange={event => setNewPerson({...newPerson,given_name_kana:event.target.value})}/></label>
+        </div>
         <BirthDateFields value={newPerson} onChange={setNewPerson}/>
-        <label>性別（任意）<select value={newPerson.gender || ''}
+        <label>性別<select value={newPerson.gender || ''}
           disabled={newPersonRelation === 'father' || newPersonRelation === 'mother'}
           onChange={event => setNewPerson({...newPerson,gender:event.target.value})}>
           <option value="">未登録</option><option value="female">女性</option><option value="male">男性</option>
@@ -553,13 +576,6 @@ export default function FamilyPlaceApp() {
         <p className="fp-note">詳しいプロフィールは後から追加できます。</p>
         <button className="fp-primary" disabled={busy}>{newPersonAnchorId ? '登録して家系図を見る' : '登録して人物ページを見る'}</button>
       </form>
-      {newPersonRelation && (newPersonAnchorId || selfId) && people.some(item => item.id !== (newPersonAnchorId || selfId)) &&
-        <section className="fp-existing-link"><h2>すでに登録済みですか？</h2>
-          <p className="fp-note">同じ人物を作り直さず、関係だけを追加できます。</p>
-          {people.filter(item => item.id !== (newPersonAnchorId || selfId)).map(item =>
-            <button type="button" disabled={busy} key={item.id} onClick={() => linkExisting(item.id)}>
-              {item.display_name}さんと結ぶ</button>)}
-        </section>}
     </main>}
     {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories}
       supabaseClient={supabaseClient}
@@ -580,16 +596,34 @@ export default function FamilyPlaceApp() {
           <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy}
             onChange={event => {
               const file = event.target.files?.[0] || null;
-              setProfilePhotoFile(file);
-              setProfilePhotoPreview(file ? URL.createObjectURL(file) : null);
+              event.target.value = '';
+              if (!file) return;
+              if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 20 * 1024 * 1024) {
+                setError('JPEG・PNG・WebPの画像（20MB以下）を選んでください');
+                return;
+              }
+              setError(''); setPortraitCandidate(file);
             }}/>
-          <small>JPEG・PNG・WebP、5MBまで</small>
+          <small>JPEG・PNG・WebP（20MB以下）。丸のガイドで位置と大きさを調整できます。</small>
         </label>
+        {portraitCandidate && <PortraitCropEditor file={portraitCandidate}
+          onCancel={() => setPortraitCandidate(null)} onConfirm={file => {
+            if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
+            setProfilePhotoFile(file);
+            setProfilePhotoPreview(URL.createObjectURL(file));
+            setPortraitCandidate(null);
+          }}/>}
         <div className="fp-name-fields">
           <label>姓<input maxLength={100} required={!profile?.given_name?.trim()} autoComplete="family-name" value={profile?.family_name || ''}
             onChange={event => setProfile({...profile,family_name:event.target.value})}/></label>
           <label>名<input maxLength={100} required={!profile?.family_name?.trim()} autoComplete="given-name" value={profile?.given_name || ''}
             onChange={event => setProfile({...profile,given_name:event.target.value})}/></label>
+        </div>
+        <div className="fp-name-fields">
+          <label>姓のふりがな<input maxLength={100} value={profile?.family_name_kana || ''}
+            onChange={event => setProfile({...profile,family_name_kana:event.target.value})}/></label>
+          <label>名のふりがな<input maxLength={100} value={profile?.given_name_kana || ''}
+            onChange={event => setProfile({...profile,given_name_kana:event.target.value})}/></label>
         </div>
         <label>旧姓（任意）<input value={profile?.maiden_name || ''}
           onChange={event => setProfile({...profile,maiden_name:event.target.value})}/></label>
@@ -598,7 +632,7 @@ export default function FamilyPlaceApp() {
           setProfile({...profile,death_year:next})}/></label>
         <label>紹介（任意）<textarea value={profile?.notes || ''}
           onChange={event => setProfile({...profile,notes:event.target.value})}/></label>
-        <label>性別（任意）<select value={profile?.gender || ''}
+        <label>性別<select value={profile?.gender || ''}
           onChange={event => setProfile({...profile,gender:event.target.value})}>
           <option value="">未登録</option><option value="female">女性</option><option value="male">男性</option>
         </select></label>

@@ -11,7 +11,7 @@ export async function ensureFamilyPlace(client, user, label) {
 
 export async function familyPlacePeople(client, familyId) {
   const { data, error } = await client.from('persons')
-    .select('id,family_id,display_name,family_name,given_name,birth_year,birth_month,birth_day,death_year,gender,notes,maiden_name,portrait_storage_path,created_at')
+    .select('id,family_id,display_name,family_name,given_name,family_name_kana,given_name_kana,birth_year,birth_month,birth_day,death_year,gender,notes,maiden_name,portrait_storage_path,created_at')
     .eq('family_id', familyId).order('created_at');
   if (error) throw error;
   return data || [];
@@ -39,7 +39,7 @@ export function personNameParts(person) {
 }
 
 export async function addFamilyPlacePerson(client, familyId, fields, isSelf, anchorId = null, relation = null) {
-  const { data, error } = await client.rpc('create_family_tree_person', {
+  const { data, error } = await client.rpc('create_family_tree_person_with_kana', {
     input_family_id: familyId,
     input_family_name: fields.family_name.trim(),
     input_given_name: fields.given_name.trim(),
@@ -50,6 +50,8 @@ export async function addFamilyPlacePerson(client, familyId, fields, isSelf, anc
     input_gender: fields.gender || null,
     input_anchor_id: anchorId,
     input_relation: relation,
+    input_family_name_kana: fields.family_name_kana?.trim() || null,
+    input_given_name_kana: fields.given_name_kana?.trim() || null,
   });
   if (error || !data) throw error || new Error('人物を登録できませんでした');
   return data;
@@ -61,6 +63,8 @@ export async function updateFamilyPlacePerson(client, personId, fields, portrait
   const payload = {
     family_name: familyName || null,
     given_name: givenName || null,
+    family_name_kana: fields.family_name_kana?.trim() || null,
+    given_name_kana: fields.given_name_kana?.trim() || null,
     display_name: [familyName,givenName].filter(Boolean).join(' '),
     birth_year: fields.birth_year ? Number(fields.birth_year) : null,
     birth_month: fields.birth_month ? Number(fields.birth_month) : null,

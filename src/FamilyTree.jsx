@@ -25,8 +25,9 @@ function PersonNode({ item, label, onCenter, onEdit, center = false }) {
   return <div className={`ft-node ${center ? 'is-center' : ''}`}>
     <button type="button" className="ft-node-main" onClick={() => onCenter(person.id)}
       aria-label={`${person.display_name}さんを中心にする`}>
-      <FamilyAvatar person={person}/><span><small>{label}</small><strong>{person.display_name}</strong></span>
-      {!center && <ChevronRight aria-hidden="true"/>}
+      <strong className="ft-person-name">{person.display_name}</strong>
+      <small>{label}</small>
+      <span className="ft-avatar-ring"><FamilyAvatar person={person}/></span>
     </button>
     {item.relation && <button type="button" className="ft-edit" onClick={() => onEdit(item)}>関係を直す</button>}
   </div>;
@@ -53,23 +54,25 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
       <div className="ft-context"><span>{center.display_name}さんを中心に表示</span>
         {selfId && centerId !== selfId && <button type="button" onClick={() => onCenter(selfId)}><RotateCcw/>自分を中心に戻る</button>}</div>
       <section className="ft-graph" aria-label={`${center.display_name}さんの家系図`}>
-        <div className="ft-generation ft-parents">
+        {parents.length > 0 && <div className="ft-generation ft-parents">
           {parents.map(item => <PersonNode key={item.relation.id} item={item} label={roleName(item)} onCenter={onCenter} onEdit={chooseEdit}/>)}
-          <button type="button" className="ft-add" onClick={() => onAdd(centerId,'father')}><Plus/>父を追加</button>
-          <button type="button" className="ft-add" onClick={() => onAdd(centerId,'mother')}><Plus/>母を追加</button>
-        </div>
-        <div className="ft-line" aria-hidden="true"/>
-        <div className="ft-generation ft-middle">
-          <PersonNode item={center} label="中心の人物" center onCenter={onCenter} onEdit={chooseEdit}/>
+        </div>}
+        {parents.length > 0 && <div className="ft-line" aria-hidden="true"/>}
+        <div className={`ft-generation ft-middle ${spouses.length ? 'has-spouse' : ''}`}>
+          <PersonNode item={center} label={centerId === selfId ? '自分' : '中心の人物'} center onCenter={onCenter} onEdit={chooseEdit}/>
           {spouses.map(item => <PersonNode key={item.relation.id} item={item} label="配偶者" onCenter={onCenter} onEdit={chooseEdit}/>)}
-          <button type="button" className="ft-add" onClick={() => onAdd(centerId,'spouse')}><Plus/>配偶者を追加</button>
         </div>
-        <div className="ft-line" aria-hidden="true"/>
-        <div className="ft-generation ft-children">
+        {children.length > 0 && <div className="ft-line" aria-hidden="true"/>}
+        {children.length > 0 && <div className="ft-generation ft-children">
           {children.map(item => <PersonNode key={item.relation.id} item={item} label="子ども" onCenter={onCenter} onEdit={chooseEdit}/>)}
-          <button type="button" className="ft-add" onClick={() => onAdd(centerId,'child')}><Plus/>子どもを追加</button>
-        </div>
+        </div>}
       </section>
+      <div className="ft-add-actions" aria-label="家族を追加する">
+        <button type="button" onClick={() => onAdd(centerId,'father')}><Plus/>父を追加</button>
+        <button type="button" onClick={() => onAdd(centerId,'mother')}><Plus/>母を追加</button>
+        <button type="button" onClick={() => onAdd(centerId,'spouse')}><Plus/>配偶者を追加</button>
+        <button type="button" onClick={() => onAdd(centerId,'child')}><Plus/>子どもを追加</button>
+      </div>
       <button type="button" className="ft-life" onClick={() => onOpenPerson(centerId)}>
         <FamilyAvatar person={center}/><span><strong>{center.display_name}さんの人生を見る</strong><small>プロフィールと年輪へ</small></span><ChevronRight/>
       </button>
