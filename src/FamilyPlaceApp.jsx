@@ -24,7 +24,27 @@ const testQuestions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) =>
   ({ id: question.id, slot: index + 1, text: question.content }));
 
 const emptyPersonDraft = () => ({ family_name: '', given_name: '', family_name_kana: '', given_name_kana: '',
-  birth_year: '', birth_month: '', birth_day: '', gender: '' });
+  maiden_name: '', maiden_name_kana: '', birth_year: '', birth_month: '', birth_day: '', gender: '' });
+
+function PersonNameFields({ value, onChange }) {
+  const field = (label, key, autoComplete, required = false) => <label>{label}<input
+    maxLength={100} required={required} autoComplete={autoComplete} value={value?.[key] || ''}
+    onChange={event => onChange({ ...value, [key]: event.target.value })}/></label>;
+  return <>
+    <div className="fp-name-fields">
+      {field('姓', 'family_name', 'family-name', !value?.given_name?.trim())}
+      {field('姓のふりがな', 'family_name_kana')}
+    </div>
+    <div className="fp-name-fields">
+      {field('名', 'given_name', 'given-name', !value?.family_name?.trim())}
+      {field('名のふりがな', 'given_name_kana')}
+    </div>
+    <div className="fp-name-fields">
+      {field('旧姓', 'maiden_name')}
+      {field('旧姓のふりがな', 'maiden_name_kana')}
+    </div>
+  </>;
+}
 
 function YearSelect({ value, onChange, allowFuture = false }) {
   const currentYear = new Date().getFullYear();
@@ -356,6 +376,7 @@ export default function FamilyPlaceApp() {
       given_name_kana: person.given_name_kana || '', birth_year: person.birth_year || '',
       birth_month: person.birth_month || '', birth_day: person.birth_day || '',
       death_year: person.death_year || '', maiden_name: person.maiden_name || '',
+      maiden_name_kana: person.maiden_name_kana || '',
       notes: person.notes || '', gender: person.gender || '' });
     setScreen('profile');
   };
@@ -590,18 +611,7 @@ export default function FamilyPlaceApp() {
             onClick={() => linkExisting(existingPersonId)}>選んだ家族を家系図に結ぶ</button>
         </div>}
         {unlinkedPeople.length > 0 && <p className="fp-note">新しく登録する場合は、下に入力してください。</p>}
-        <div className="fp-name-fields">
-          <label>姓<input maxLength={100} required={!newPerson.given_name.trim()} autoComplete="family-name" value={newPerson.family_name}
-            onChange={event => setNewPerson({...newPerson,family_name:event.target.value})}/></label>
-          <label>名<input maxLength={100} required={!newPerson.family_name.trim()} autoComplete="given-name" value={newPerson.given_name}
-            onChange={event => setNewPerson({...newPerson,given_name:event.target.value})}/></label>
-        </div>
-        <div className="fp-name-fields">
-          <label>姓のふりがな<input maxLength={100} inputMode="text" value={newPerson.family_name_kana}
-            onChange={event => setNewPerson({...newPerson,family_name_kana:event.target.value})}/></label>
-          <label>名のふりがな<input maxLength={100} inputMode="text" value={newPerson.given_name_kana}
-            onChange={event => setNewPerson({...newPerson,given_name_kana:event.target.value})}/></label>
-        </div>
+        <PersonNameFields value={newPerson} onChange={setNewPerson}/>
         <BirthDateFields value={newPerson} onChange={setNewPerson}/>
         <label>性別<select value={newPerson.gender || ''}
           disabled={newPersonRelation === 'father' || newPersonRelation === 'mother'}
@@ -657,20 +667,7 @@ export default function FamilyPlaceApp() {
             setPortraitSourceIsNew(portraitCandidateIsNew);
             setPortraitCandidate(null);
           }}/>}
-        <div className="fp-name-fields">
-          <label>姓<input maxLength={100} required={!profile?.given_name?.trim()} autoComplete="family-name" value={profile?.family_name || ''}
-            onChange={event => setProfile({...profile,family_name:event.target.value})}/></label>
-          <label>名<input maxLength={100} required={!profile?.family_name?.trim()} autoComplete="given-name" value={profile?.given_name || ''}
-            onChange={event => setProfile({...profile,given_name:event.target.value})}/></label>
-        </div>
-        <div className="fp-name-fields">
-          <label>姓のふりがな<input maxLength={100} value={profile?.family_name_kana || ''}
-            onChange={event => setProfile({...profile,family_name_kana:event.target.value})}/></label>
-          <label>名のふりがな<input maxLength={100} value={profile?.given_name_kana || ''}
-            onChange={event => setProfile({...profile,given_name_kana:event.target.value})}/></label>
-        </div>
-        <label>旧姓（任意）<input value={profile?.maiden_name || ''}
-          onChange={event => setProfile({...profile,maiden_name:event.target.value})}/></label>
+        <PersonNameFields value={profile} onChange={setProfile}/>
         <BirthDateFields value={profile || emptyPersonDraft()} onChange={setProfile}/>
         <label>没年（分かる場合）<YearSelect value={profile?.death_year} onChange={next =>
           setProfile({...profile,death_year:next})}/></label>
