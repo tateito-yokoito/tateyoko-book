@@ -18,6 +18,7 @@ export default defineConfig({
           familyHomeComparison: 'family-home-comparison.html',
           familyPersonReview: 'family-person-review.html',
           familyPersonComparison: 'family-person-comparison.html',
+          familyPlaceMobile: 'family-place-mobile.html',
         } : {}),
       },
     },

@@ -1,5 +1,7 @@
 # 人物ページ4タブ・第1段階の実装記録
 
+PCでもスマホ幅で見る入口：`https://tateyoko-book-test-hei8kzcdj-tateito-yokoito.vercel.app/family-place-mobile.html`（実アプリ、メール認証が必要）。人物ページの表示部品だけをすぐ確認する場合は `https://tateyoko-book-test-hei8kzcdj-tateito-yokoito.vercel.app/family-person-review.html`（保存しないレビュー用データ）。
+
 ## 変更
 
 実際の `FamilyPlaceApp` の人物ページを **年輪｜本棚｜思い出｜年表** に変更。年輪には人物の既存無料3問の保存済み回答と回答入口を表示する。本棚は既存 `list_voice_library()` で閲覧権限を認められた公開作品を人物IDで絞り、既存 `/?voice=公開ID` に接続する。公開Webブック本体、印刷QR、購入・制作処理は変更しない。複数の公開版は新しい順に表示する。[スマートフォン幅の比較画像](design-references/family-person-four-tabs-stage1-20261122.png)。

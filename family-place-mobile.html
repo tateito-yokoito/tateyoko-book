@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>隔離TEST｜家族アプリ・スマホ表示</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #e8e7df; color: #263321;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", sans-serif; }
+    .review { display: grid; justify-content: center; gap: 12px; padding: 20px; }
+    .review > p { width: 400px; max-width: 100%; margin: 0; font-size: 13px; }
+    .phone { width: 400px; height: 854px; max-width: 100%; overflow: hidden;
+      border: 5px solid #fff; border-radius: 26px; background: #fffdf7;
+      box-shadow: 0 12px 30px #33402732; }
+    .phone iframe { display: block; width: 100%; height: 100%; border: 0; }
+    @media (max-width: 430px) {
+      body { background: #fffdf7; }
+      .review { display: block; padding: 0; }
+      .review > p { display: none; }
+      .phone { width: 100%; height: 100dvh; max-width: none; border: 0;
+        border-radius: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="review">
+    <p>隔離TESTの実アプリをスマートフォン幅（390 × 844）で表示しています。</p>
+    <div class="phone"><iframe src="/?app=family_place" title="縦糸∞横糸 家族アプリ"></iframe></div>
+  </main>
+</body>
+</html>
