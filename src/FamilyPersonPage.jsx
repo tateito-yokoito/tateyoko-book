@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, LockKeyhole, Plus, UserRound } from 'lucide-react';
 import FamilyAvatar from './FamilyAvatar.jsx';
 import WebBookCover, { publicationCoverImageUrl } from './WebBookCover.jsx';
+import { currentPersonAge } from './lib/personAge.js';
 import './family-person-page.css';
 
 const hasAnswer = row => Boolean(row.body || row.transcript_raw || row.media_count);
@@ -47,6 +48,7 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
   const [showQuestions, setShowQuestions] = useState(false);
   const saved = stories.filter(hasAnswer);
   const timeline = [...facts];
+  const age = currentPersonAge(person);
   return <main className="fp-person-page">
     <header className="fp-person-topbar">
       <button type="button" onClick={onBack} aria-label="家族ホームへ戻る"><ChevronLeft/></button>
@@ -57,7 +59,8 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
         <FamilyAvatar person={person}/>
       </div>
       <div className="fp-person-intro-copy">
-        <h1>{person.display_name}</h1>
+        <div className="fp-person-name-line"><h1>{person.display_name}</h1>
+          {age !== null && <span className="fp-person-age">{age}歳</span>}</div>
         {(person.birth_year || person.death_year) && <p className="fp-person-dates">
           {person.birth_year ? `${person.birth_year}年${person.birth_month ? `${person.birth_month}月${person.birth_day ? `${person.birth_day}日` : ''}` : ''}生まれ` : '生年未登録'}
           {person.death_year ? `・${person.death_year}年逝去` : ''}</p>}
