@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronRight, Plus, RotateCcw, Users } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Pencil, Plus, RotateCcw, Users } from 'lucide-react';
 import FamilyAvatar from './FamilyAvatar.jsx';
 import { treeNeighbors } from './lib/familyTreeModel.js';
 import './family-tree.css';
@@ -11,7 +11,7 @@ function roleName(item) {
   return item.person.gender === 'female' ? '母' : item.person.gender === 'male' ? '父' : '親';
 }
 
-function PersonNode({ item, label, onCenter, onEdit, center = false }) {
+function PersonNode({ item, label, onCenter, onEdit, onEditProfile, center = false }) {
   const person = item.person || item;
   return <div className={`ft-node ${center ? 'is-center' : ''}`} data-person-id={person.id}>
     <button type="button" className="ft-node-main" onClick={() => onCenter(person.id)}
@@ -20,13 +20,16 @@ function PersonNode({ item, label, onCenter, onEdit, center = false }) {
       <small>{label}</small>
       <span className="ft-avatar-ring"><FamilyAvatar person={person}/></span>
     </button>
+    {center && <button type="button" className="ft-profile-edit" onClick={() => onEditProfile(person)}
+      aria-label={`${person.display_name}さんのプロフィールを編集する`} title="プロフィールを編集する"><Pencil/></button>}
     {item.relation && <button type="button" className="ft-edit" onClick={() => onEdit(item)}>関係を直す</button>}
   </div>;
 }
 
 export default function FamilyTree({ people, relations, selfId, centerId, onCenter, onAdd,
-  onOpenPerson, onHome, onEditRelation, onRemoveRelation }) {
+  onOpenPerson, onEditProfile, onHome, onEditRelation, onRemoveRelation }) {
   const [editing, setEditing] = useState(null);
+  const [profileToConfirm, setProfileToConfirm] = useState(null);
   const [role, setRole] = useState('parent');
   const [paths, setPaths] = useState([]);
   const graphRef = useRef(null);
@@ -109,7 +112,8 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
             {parents.map(item => <PersonNode key={item.relation.id} item={item} label={roleName(item)} onCenter={onCenter} onEdit={chooseEdit}/>)}
           </div>}
           <div className="ft-generation ft-middle">
-            <PersonNode item={center} label={centerId === selfId ? '自分' : '中心の人物'} center onCenter={onCenter} onEdit={chooseEdit}/>
+            <PersonNode item={center} label={centerId === selfId ? '自分' : '中心の人物'} center
+              onCenter={onCenter} onEdit={chooseEdit} onEditProfile={setProfileToConfirm}/>
             {spouses.map(item => <PersonNode key={item.relation.id} item={item} label="配偶者" onCenter={onCenter} onEdit={chooseEdit}/>)}
             {siblings.map(item => <PersonNode key={item.person.id} item={item} label="兄弟姉妹" onCenter={onCenter} onEdit={chooseEdit}/>)}
           </div>
@@ -146,6 +150,17 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
         }}>この関係を解除する</button>
         <button type="button" className="ft-cancel" onClick={() => setEditing(null)}>閉じる</button>
       </form>
+    </div>}
+    {profileToConfirm && <div className="ft-editor-backdrop" onClick={() => setProfileToConfirm(null)}>
+      <div className="ft-editor" role="dialog" aria-modal="true" aria-labelledby="ft-profile-confirm-title"
+        onClick={event => event.stopPropagation()}>
+        <h2 id="ft-profile-confirm-title">{profileToConfirm.display_name}さんのプロフィールを編集しますか？</h2>
+        <button type="button" className="ft-primary" onClick={() => {
+          onEditProfile(profileToConfirm.id);
+          setProfileToConfirm(null);
+        }}>プロフィールを編集する</button>
+        <button type="button" className="ft-cancel" onClick={() => setProfileToConfirm(null)}>キャンセル</button>
+      </div>
     </div>}
   </main>;
 }

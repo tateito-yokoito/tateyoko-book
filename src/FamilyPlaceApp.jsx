@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { BookOpen, ChevronLeft, Home, Image, Users } from 'lucide-react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { BookOpen, ChevronLeft, ChevronRight, Home, Image, Users } from 'lucide-react';
 import { Scene_Login, Scene_Recording, PhotoCorrectionFlow, ensureProfileExists, supabaseClient } from './App.jsx';
 import { AnswerBodyEditor, AnswerEntryChoices, AnswerReview, AnswerSaveStatus } from './AnswerInputUI.jsx';
 import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
@@ -116,6 +116,7 @@ export default function FamilyPlaceApp() {
   const [selectedId, setSelectedId] = useState(null);
   const [screen, setScreen] = useState('home');
   const [profile, setProfile] = useState(null);
+  const [profileReturnToTree, setProfileReturnToTree] = useState(false);
   const [profilePhotoFile, setProfilePhotoFile] = useState(null);
   const [profilePhotoPreview, setProfilePhotoPreview] = useState(null);
   const [portraitCandidate, setPortraitCandidate] = useState(null);
@@ -158,6 +159,10 @@ export default function FamilyPlaceApp() {
     return params.get('tab') === 'books' ? params.get('publication') : null;
   })());
   const person = people.find(item => item.id === selectedId) || null;
+
+  useLayoutEffect(() => {
+    if (screen === 'profile' || screen === 'person' || screen === 'tree') window.scrollTo(0, 0);
+  }, [screen]);
 
   useEffect(() => () => { if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview); }, [profilePhotoPreview]);
   useEffect(() => () => { portraitUrlsRef.current.forEach(url => URL.revokeObjectURL(url)); }, []);
@@ -289,6 +294,7 @@ export default function FamilyPlaceApp() {
 
   const openPerson = id => {
     personLoadEpoch.current++;
+    setProfileReturnToTree(false);
     setError(''); setSelectedId(id); setActiveTab('ring');
     setPublishedBooks([]); setBooksStatus('loading'); setScreen('person');
   };
@@ -368,16 +374,19 @@ export default function FamilyPlaceApp() {
     } catch (cause) { setError(cause.message || '登録できませんでした'); }
     finally { setBusy(false); }
   };
-  const startProfile = () => {
+  const startProfile = (target = person, fromTree = false) => {
+    if (!target) return;
     if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
     setProfilePhotoFile(null); setProfilePhotoPreview(null); setPortraitCandidate(null);
     setPortraitCandidateIsNew(false); setPortraitSourceFile(null); setPortraitSourceIsNew(false);
-    setProfile({ ...personNameParts(person), family_name_kana: person.family_name_kana || '',
-      given_name_kana: person.given_name_kana || '', birth_year: person.birth_year || '',
-      birth_month: person.birth_month || '', birth_day: person.birth_day || '',
-      death_year: person.death_year || '', maiden_name: person.maiden_name || '',
-      maiden_name_kana: person.maiden_name_kana || '',
-      notes: person.notes || '', gender: person.gender || '' });
+    setSelectedId(target.id);
+    setProfileReturnToTree(fromTree);
+    setProfile({ ...personNameParts(target), family_name_kana: target.family_name_kana || '',
+      given_name_kana: target.given_name_kana || '', birth_year: target.birth_year || '',
+      birth_month: target.birth_month || '', birth_day: target.birth_day || '',
+      death_year: target.death_year || '', maiden_name: target.maiden_name || '',
+      maiden_name_kana: target.maiden_name_kana || '',
+      notes: target.notes || '', gender: target.gender || '' });
     setScreen('profile');
   };
   const adjustPortrait = async () => {
@@ -421,7 +430,7 @@ export default function FamilyPlaceApp() {
       await loadHome(user);
       if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
       setProfilePhotoFile(null); setProfilePhotoPreview(null); setPortraitSourceFile(null);
-      setScreen('person');
+      setScreen(profileReturnToTree ? 'tree' : 'person');
     } catch (cause) {
       if (!committed && uploadedPaths.length) await supabaseClient.storage.from('family-person-portraits')
         .remove(uploadedPaths).catch(() => {});
@@ -571,19 +580,25 @@ export default function FamilyPlaceApp() {
   const unlinkedPeople = relationAnchorId ? people.filter(item => item.id !== relationAnchorId
     && !relations.some(relation => relation.person_a_id === item.id || relation.person_b_id === item.id)) : [];
   return <div className="fp-app">
-    {screen !== 'home' && screen !== 'person' && screen !== 'tree' && <header className="fp-header">
+    {screen !== 'home' && screen !== 'person' && screen !== 'tree' &&
+      <header className={`fp-header ${screen === 'profile' && profileReturnToTree ? 'fp-header-from-tree' : ''}`}>
       <button onClick={() => screen === 'story' ? leaveStory()
-          : screen === 'profile' ? setScreen('person')
+          : screen === 'profile' ? setScreen(profileReturnToTree ? 'tree' : 'person')
           : screen === 'add-person' && newPersonAnchorId ? setScreen('tree')
-          : screen === 'person' ? goHome() : setScreen('home')}><ChevronLeft/>戻る</button>
-      <span>{person?.display_name || '家族の場所'}</span>
+          : screen === 'person' ? goHome() : setScreen('home')}><ChevronLeft/>{screen === 'profile' && profileReturnToTree ? '家系図に戻る' : '戻る'}</button>
+      {screen === 'profile' && profileReturnToTree
+        ? <button className="fp-header-person-link" onClick={() => openPerson(person.id)}>
+          この人の個人ページを開く<ChevronRight/></button>
+        : <span>{person?.display_name || '家族の場所'}</span>}
     </header>}
     {error && <p className="fp-error" role="alert">{error}</p>}
     {screen === 'home' && <FamilyHome people={people} storyCounts={homeStoryCounts}
       onAddPerson={() => startAddPerson()} onOpenPerson={openPerson} onTree={openTree}/>}
     {screen === 'tree' && <FamilyTree people={people} relations={relations} selfId={selfId}
       centerId={treeCenterId || selfId || people[0]?.id} onCenter={setTreeCenterId}
-      onAdd={startAddPerson} onOpenPerson={openPerson} onHome={goHome}
+      onAdd={startAddPerson} onOpenPerson={openPerson} onEditProfile={id => {
+        startProfile(people.find(item => item.id === id), true);
+      }} onHome={goHome}
       onEditRelation={editRelation} onRemoveRelation={unlinkRelation}/>}
     {screen === 'add-person' && <main className="fp-section"><h1>家族を登録する</h1>
       <form onSubmit={createPerson} className="fp-form">
@@ -626,7 +641,7 @@ export default function FamilyPlaceApp() {
       supabaseClient={supabaseClient}
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}
       facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
-      onTabChange={setActiveTab} onBack={goHome} onProfile={startProfile}
+      onTabChange={setActiveTab} onBack={goHome} onProfile={() => startProfile()}
       onOpenStory={openStory} busy={busy}
       onAddFact={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}/>}
     {screen === 'profile' && person && <main className="fp-section"><h1>プロフィール</h1>
