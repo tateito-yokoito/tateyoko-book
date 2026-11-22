@@ -7,7 +7,7 @@ import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
 import {
   ensureFamilyPlace, familyPlacePeople, familyPlacePublishedBooks, addFamilyPlacePerson, updateFamilyPlacePerson,
-  personNameParts,
+  personNameParts, uploadFamilyPlacePortrait, familyPlacePortraitUrl,
   familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories,
   getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, addFamilyPlaceMedia,
   setFamilyPlaceStoryVisibility, revokeFamilyPlaceMediaUrls,
@@ -87,6 +87,9 @@ export default function FamilyPlaceApp() {
   const [selectedId, setSelectedId] = useState(null);
   const [screen, setScreen] = useState('home');
   const [profile, setProfile] = useState(null);
+  const [profilePhotoFile, setProfilePhotoFile] = useState(null);
+  const [profilePhotoPreview, setProfilePhotoPreview] = useState(null);
+  const portraitUrlsRef = useRef(new Map());
   const [factDraft, setFactDraft] = useState(null);
   const [facts, setFacts] = useState([]);
   const [stories, setStories] = useState([]);
@@ -123,6 +126,9 @@ export default function FamilyPlaceApp() {
   })());
   const person = people.find(item => item.id === selectedId) || null;
 
+  useEffect(() => () => { if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview); }, [profilePhotoPreview]);
+  useEffect(() => () => { portraitUrlsRef.current.forEach(url => URL.revokeObjectURL(url)); }, []);
+
   const loadHome = useCallback(async currentUser => {
     // Scene_Login handles both email OTP and LINE. On an OAuth return the
     // session can exist before Scene_Login mounts, so finish the same profile
@@ -137,11 +143,19 @@ export default function FamilyPlaceApp() {
         .eq('user_id', currentUser.id).eq('role', 'self').limit(1),
     ]);
     if (links.error) throw links.error;
+    const portraits = await Promise.all(persons.map(async item => {
+      const path = item.portrait_storage_path;
+      if (!path) return null;
+      if (portraitUrlsRef.current.has(path)) return portraitUrlsRef.current.get(path);
+      const url = await familyPlacePortraitUrl(supabaseClient, path);
+      if (url) portraitUrlsRef.current.set(path, url);
+      return url;
+    }));
     const storyLists = await Promise.all(persons.map(item => familyPlaceStories(supabaseClient, item.id)));
     const counts = Object.fromEntries(persons.map((item, index) => [item.id,
       storyLists[index].filter(row => row.body || row.transcript_raw || row.media_count).length]));
     setFamilyId(id);
-    setPeople(persons);
+    setPeople(persons.map((item, index) => ({ ...item, portrait_url: portraits[index] })));
     setHomeStoryCounts(counts);
     setSelfId(links.data?.[0]?.person_id || null);
   }, []);
@@ -278,6 +292,7 @@ export default function FamilyPlaceApp() {
     finally { setBusy(false); }
   };
   const startProfile = () => {
+    setProfilePhotoFile(null); setProfilePhotoPreview(null);
     setProfile({ ...personNameParts(person), birth_year: person.birth_year || '',
       birth_month: person.birth_month || '', birth_day: person.birth_day || '',
       death_year: person.death_year || '', maiden_name: person.maiden_name || '',
@@ -286,11 +301,20 @@ export default function FamilyPlaceApp() {
   };
   const saveProfile = async event => {
     event.preventDefault(); setBusy(true); setError('');
+    let newPortraitPath = null;
     try {
-      await updateFamilyPlacePerson(supabaseClient, person.id, profile);
+      if (profilePhotoFile) newPortraitPath = await uploadFamilyPlacePortrait(
+        supabaseClient, user.id, person.id, profilePhotoFile);
+      await updateFamilyPlacePerson(supabaseClient, person.id, profile,
+        newPortraitPath || undefined);
       await loadHome(user);
+      setProfilePhotoFile(null); setProfilePhotoPreview(null);
       setScreen('person');
-    } catch (cause) { setError(cause.message || '保存できませんでした'); }
+    } catch (cause) {
+      if (newPortraitPath) await supabaseClient.storage.from('family-person-portraits')
+        .remove([newPortraitPath]).catch(() => {});
+      setError(cause.message || '保存できませんでした');
+    }
     finally { setBusy(false); }
   };
   const saveFact = async event => {
@@ -466,6 +490,21 @@ export default function FamilyPlaceApp() {
       onAddFact={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}/>}
     {screen === 'profile' && person && <main className="fp-section"><h1>プロフィール</h1>
       <form className="fp-form" onSubmit={saveProfile}>
+        <label className="fp-profile-photo">プロフィール画像（任意）
+          <span className="fp-profile-photo-picker">
+            {(profilePhotoPreview || person.portrait_url) ? <img
+              src={profilePhotoPreview || person.portrait_url} alt="選択中のプロフィール画像"/>
+              : <span className="fp-profile-photo-empty" aria-hidden="true">写真</span>}
+            <span>写真を選ぶ</span>
+          </span>
+          <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy}
+            onChange={event => {
+              const file = event.target.files?.[0] || null;
+              setProfilePhotoFile(file);
+              setProfilePhotoPreview(file ? URL.createObjectURL(file) : null);
+            }}/>
+          <small>JPEG・PNG・WebP、5MBまで</small>
+        </label>
         <div className="fp-name-fields">
           <label>姓<input maxLength={100} required={!profile?.given_name?.trim()} autoComplete="family-name" value={profile?.family_name || ''}
             onChange={event => setProfile({...profile,family_name:event.target.value})}/></label>

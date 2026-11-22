@@ -30,7 +30,8 @@ export default function FamilyHome({ people = [], storyCounts = {}, onAddPerson,
         <h2 className="fp-home-people-title">家族の人たち</h2>
         {people.length ? <div className="fp-home-people-list">{people.map(person =>
           <button type="button" className="fp-home-person" key={person.id} onClick={() => onOpenPerson(person.id)}>
-            <span className="fp-home-avatar" aria-hidden="true">{person.display_name.slice(0, 1)}</span>
+            <span className="fp-home-avatar" aria-hidden="true">{person.portrait_url
+              ? <img src={person.portrait_url} alt=""/> : person.display_name.slice(0, 1)}</span>
             <span className="fp-home-person-copy"><strong>{person.display_name}</strong></span>
             <ChevronRight aria-hidden="true"/>
           </button>)}</div> : <p className="fp-home-people-empty">まだ家族は登録されていません。<br/>自分か家族を一人登録して、家族の場所を始めましょう。</p>}

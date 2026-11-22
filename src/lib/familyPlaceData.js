@@ -11,7 +11,7 @@ export async function ensureFamilyPlace(client, user, label) {
 
 export async function familyPlacePeople(client, familyId) {
   const { data, error } = await client.from('persons')
-    .select('id,family_id,display_name,family_name,given_name,birth_year,birth_month,birth_day,death_year,notes,maiden_name,created_at')
+    .select('id,family_id,display_name,family_name,given_name,birth_year,birth_month,birth_day,death_year,notes,maiden_name,portrait_storage_path,created_at')
     .eq('family_id', familyId).order('created_at');
   if (error) throw error;
   return data || [];
@@ -52,7 +52,7 @@ export async function addFamilyPlacePerson(client, familyId, fields, isSelf) {
   return data;
 }
 
-export async function updateFamilyPlacePerson(client, personId, fields) {
+export async function updateFamilyPlacePerson(client, personId, fields, portraitStoragePath = undefined) {
   const familyName = fields.family_name.trim();
   const givenName = fields.given_name.trim();
   const payload = {
@@ -66,9 +66,29 @@ export async function updateFamilyPlacePerson(client, personId, fields) {
     maiden_name: fields.maiden_name?.trim() || null,
     notes: fields.notes?.trim() || null,
   };
+  if (portraitStoragePath !== undefined) payload.portrait_storage_path = portraitStoragePath;
   const { data, error } = await client.from('persons').update(payload)
     .eq('id', personId).select('id').single();
   if (error || !data) throw error || new Error('プロフィールを保存できませんでした');
+}
+
+export async function uploadFamilyPlacePortrait(client, userId, personId, file) {
+  const extension = { 'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp' }[file?.type];
+  if (!extension || !file.size || file.size > 5_000_000) {
+    throw new Error('5MB以下のJPEG・PNG・WebP画像を選んでください');
+  }
+  const path = `${userId}/${personId}/${crypto.randomUUID()}.${extension}`;
+  const { error } = await client.storage.from('family-person-portraits')
+    .upload(path, file, { contentType:file.type, upsert:false });
+  if (error) throw error;
+  return path;
+}
+
+export async function familyPlacePortraitUrl(client, path) {
+  if (!path) return null;
+  const { data, error } = await client.storage.from('family-person-portraits').download(path);
+  if (error || !data) return null;
+  return URL.createObjectURL(data);
 }
 
 export async function familyPlaceFacts(client, personId) {

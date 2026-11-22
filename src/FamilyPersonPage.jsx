@@ -52,7 +52,7 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
       <strong>{person.display_name}さん</strong><span aria-hidden="true"/>
     </header>
     <section className="fp-person-intro">
-      <div className="fp-person-portrait" aria-label="プロフィール写真未登録">
+      <div className="fp-person-portrait" aria-label={person.portrait_url ? undefined : 'プロフィール写真未登録'}>
         {person.portrait_url ? <img src={person.portrait_url} alt={`${person.display_name}さんの写真`}/>
           : <UserRound aria-hidden="true"/>}
       </div>
