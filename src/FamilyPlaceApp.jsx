@@ -458,6 +458,7 @@ export default function FamilyPlaceApp() {
         <button className="fp-primary" disabled={busy}>登録して人物ページを見る</button>
       </form></main>}
     {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories}
+      supabaseClient={supabaseClient}
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}
       facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
       onTabChange={setActiveTab} onBack={goHome} onProfile={startProfile}

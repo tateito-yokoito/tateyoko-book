@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, LockKeyhole, Plus, UserRound } from 'lucide-react';
+import WebBookCover, { publicationCoverImageUrl } from './WebBookCover.jsx';
 import './family-person-page.css';
 
 const hasAnswer = row => Boolean(row.body || row.transcript_raw || row.media_count);
@@ -7,9 +8,41 @@ const bookDate = value => value ? new Intl.DateTimeFormat('ja-JP', {
   year: 'numeric', month: 'long', timeZone: 'Asia/Tokyo',
 }).format(new Date(value)) : '';
 
+function PublishedBookThumbnail({ book, supabaseClient }) {
+  const [publication, setPublication] = useState(null);
+  const [coverUrl, setCoverUrl] = useState('');
+  useEffect(() => {
+    let live = true;
+    setPublication(null);
+    setCoverUrl('');
+    (async () => {
+      let accessToken = '';
+      try { accessToken = JSON.parse(localStorage.getItem(`tateyoko.voice.${book.public_id}.access.v1`) || '{}').token || ''; }
+      catch { /* The reader also treats an unreadable cached token as absent. */ }
+      const { data, error } = await supabaseClient.functions.invoke('public-voice', {
+        body: { publicId: book.public_id, accessToken },
+      });
+      if (!live || error || !data?.success || !data.publication) return;
+      setPublication(data.publication);
+      if (!data.publication.hasCover) return;
+      const asset = await supabaseClient.functions.invoke('public-voice', {
+        body: { action: 'asset', publicId: book.public_id, kind: 'cover', accessToken },
+      });
+      if (live && !asset.error && asset.data?.success) setCoverUrl(asset.data.asset?.url || '');
+    })().catch(() => {});
+    return () => { live = false; };
+  }, [book.public_id, supabaseClient]);
+  const cover = { title: book.title || '人生の物語', subtitle: book.subtitle || '',
+    subjectName: book.subject_name || '', ...publication,
+    coverImageUrl: publicationCoverImageUrl(book.public_id) };
+  return <div className="fp-person-book-cover-art wb" role="img" aria-label={`${cover.title}の表紙`}>
+    <div aria-hidden="true"><WebBookCover publication={cover} coverUrl={coverUrl}/></div>
+  </div>;
+}
+
 export default function FamilyPersonPage({ person, stories = [], books = [], booksStatus = 'ready',
   facts = [], questions = [], activeTab = 'ring', onTabChange, onBack, onProfile,
-  onOpenStory, onAddFact, onRetryBooks, busy = false }) {
+  onOpenStory, onAddFact, onRetryBooks, supabaseClient, busy = false }) {
   const [showQuestions, setShowQuestions] = useState(false);
   const saved = stories.filter(hasAnswer);
   const timeline = [...facts];
@@ -58,7 +91,7 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
         : booksStatus === 'error' ? <div className="fp-person-story-empty" role="alert">本棚を読み込めませんでした。<button type="button" onClick={onRetryBooks}>もう一度試す</button></div>
         : books.length ? <div className="fp-person-books">{books.map(book =>
           <article className="fp-person-book" key={book.publication_id}>
-            <span className="fp-person-book-icon" aria-hidden="true"><BookOpen/></span>
+            <PublishedBookThumbnail book={book} supabaseClient={supabaseClient}/>
             <div className="fp-person-book-copy"><strong>{book.title || '人生の物語'}</strong>
               {book.subtitle && <small>{book.subtitle}</small>}
               {book.published_at && <time>{bookDate(book.published_at)} 公開</time>}

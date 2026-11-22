@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import WebBook from './WebBook.jsx';
+import { publicationCoverImageUrl } from './WebBookCover.jsx';
 
 const accessKey = publicId => `tateyoko.voice.${publicId}.access.v1`;
 
@@ -61,8 +62,7 @@ export default function PublishedWebBook({ supabaseClient, publicId, returnHref 
   if (state.status === 'ready') {
     // This early sample predates the published cover snapshot. Use its approved
     // printed cover until the sample is republished with a cover asset.
-    const sampleCover = publicId === '0ae7500b3ee6507721663b40c02ea7dc3c5de4f7be949288'
-      ? '/site/webbook-sample-cover-sage.jpg' : '';
+    const sampleCover = publicationCoverImageUrl(publicId);
     return <WebBook publication={{ ...state.publication, coverImageUrl: sampleCover }}
       resolveAsset={resolveAsset} returnHref={returnHref} />;
   }

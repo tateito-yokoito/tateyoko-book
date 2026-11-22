@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Play, Pause, Volume2, ChevronDown, ArrowLeft, LibraryBig } from 'lucide-react';
 import { webBookSections, webBookStorySequence, webBookAudioSequence } from './lib/webBook.js';
 import './web-book.css';
-import CoverPhotoFrame from './CoverPhotoFrame.jsx';
+import WebBookCover from './WebBookCover.jsx';
 import WebBookAudioPlayer,{audioTotal} from './WebBookAudioPlayer.jsx';
 import WebBookMediaControls from './WebBookMediaControls.jsx';
 import WebBookVideoPlayer from './WebBookVideoPlayer.jsx';
@@ -114,8 +114,8 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
         {nextEntry&&<section className="wb-next-story" aria-label="次の語りへの案内"><p className="wb-eyebrow">{nextEntry.chapterKey===storyEntry?.chapterKey?'次の語り':<>次の章　<span>{nextEntry.chapterLabel}</span></>}</p><button onClick={()=>openStory(nextEntry.item)}><span>{nextEntry.title}</span><span aria-hidden="true">→</span></button></section>}
         {previousEntry&&<button className="wb-back wb-previous-story" onClick={()=>openStory(previousEntry.item)}>← 前の語り</button>}
       </article> : <>
-        {publication.coverImageUrl ? <section className="wb-cover wb-cover-reference" aria-label="ブックの表紙"><img src={publication.coverImageUrl} alt={`${publication.subjectName || publication.title}のブック表紙`}/></section>
-          : <section className="wb-cover wb-cover-print" style={{'--wb-cover-color':publication.coverColor || '#a9bcb6'}}><div className="wb-name"><h1>{publication.subjectName || publication.title}</h1>{sections.name?.audio?.length ? button(sections.name,0,null,'名前の声を聴く',true):null}</div>{publication.title && publication.title !== publication.subjectName && <p className="wb-book-title">{publication.title}</p>}{publication.subtitle&&<p className="wb-subtitle">{publication.subtitle}</p>}{cover&&<div className="wb-cover-photo" role="img" aria-label="BOOKの表紙写真"><CoverPhotoFrame photo={{url:cover,transform:publication.coverTransform}} backgroundColor="transparent" className="wb-cover-photo-frame"/></div>}{publication.footerText&&<p className="wb-date">{publication.footerText}</p>}<p className="wb-cover-brand">縦糸横糸</p></section>}
+        <WebBookCover publication={publication} coverUrl={cover}
+          nameAudioButton={sections.name?.audio?.length ? button(sections.name,0,null,'名前の声を聴く',true):null}/>
         {(publication.subjectName || createdOn) && <div className="wb-cover-meta">
           {publication.subjectName}{publication.subjectName && createdOn && '｜'}{createdOn && `${createdOn} 作成`}
         </div>}
