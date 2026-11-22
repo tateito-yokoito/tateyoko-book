@@ -1,1 +1,1 @@
-.family-avatar{display:block;width:100%;height:100%;border-radius:50%;object-fit:cover;flex:none;background:#e8ebdc}
+.family-avatar{display:block;width:100%;height:100%;min-width:0;min-height:0;aspect-ratio:1;border-radius:50%;object-fit:cover;object-position:center;flex:none;background:#e8ebdc}

@@ -12,7 +12,7 @@ export function avatarStage(person, now = new Date()) {
 
 export default function FamilyAvatar({ person, className = '' }) {
   if (person?.portrait_url) return <img className={`family-avatar ${className}`.trim()}
-    src={person.portrait_url} alt=""/>;
+    src={person.portrait_url} width="512" height="512" alt=""/>;
   const stage = avatarStage(person);
   const style = person?.gender === 'female' ? 'female' : person?.gender === 'male' ? 'male' : 'neutral';
   return <svg className={`family-avatar ${className}`.trim()} viewBox="0 0 96 96"
