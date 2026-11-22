@@ -22,10 +22,10 @@ export default function FamilyHome({ people = [], storyCounts = {}, onAddPerson,
             <p>{hasStories ? '人物ページから、残した語りを読み返せます。' : '大切な人を登録すると、ここから物語が始まります。'}</p></div>
         </div>
         <button type="button" className="fp-home-primary" onClick={onAddPerson}><Plus aria-hidden="true"/>自分・家族を登録する</button>
-        <div className="fp-home-shortcuts" aria-label="これから使える家族の機能">
-          <div><Network aria-hidden="true"/><strong>家系図</strong><small>準備中</small></div>
-          <div><BookOpen aria-hidden="true"/><strong>家族年表</strong><small>準備中</small></div>
-          <div><Image aria-hidden="true"/><strong>家族の思い出</strong><small>準備中</small></div>
+        <div className="fp-home-shortcuts" aria-label="家族の機能">
+          <div><Network aria-hidden="true"/><strong>家系図</strong></div>
+          <div><BookOpen aria-hidden="true"/><strong>家族年表</strong></div>
+          <div><Image aria-hidden="true"/><strong>家族の思い出</strong></div>
         </div>
         <h2 className="fp-home-people-title">家族の人たち</h2>
         {people.length ? <div className="fp-home-people-list">{people.map(person =>

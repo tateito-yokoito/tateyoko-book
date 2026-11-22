@@ -8,7 +8,7 @@
 - 実アプリの家族ホームだけを `FamilyHome` に切り出し、生成り、深緑、写真ヒーロー、書籍型カード、カードの余白・影、アイコン付き下部ナビを正本に合わせた。
 - 初回は人物・BOOK・思い出の架空データを表示しない。人物と無料の語りが増えると、同じホームの人物カードと記録件数に反映する。
 - 既存の人物登録、人物ページへの遷移、保存処理は変更していない。家族ホーム以外の画面スタイルは変更していない。
-- 家系図・年表・思い出の入口は視覚的に示し、未実装なので「準備中」と表示する。押せるようにはしていない。
+- 家系図・年表・思い出の入口は正本に合わせたアイコンと名称だけを表示する。現段階では押せるようにはしていない。
 
 ## 正本と異なる点
 
@@ -18,11 +18,11 @@
 
 ## 確認入口
 
-- [TEST HTTPS・家族ホーム実部品レビュー](https://tateyoko-book-test-9z5crht7v-tateito-yokoito.vercel.app/family-home-review.html) — 右上で初回・人物登録済み・記録ありを切り替えられる。架空の人物はブラウザ内の表示用のみでDBに保存しない。
-- [TEST HTTPS・承認済みとの並列比較](https://tateyoko-book-test-9z5crht7v-tateito-yokoito.vercel.app/family-home-comparison.html)。
-- [TEST HTTPS・認証付き実アプリ](https://tateyoko-book-test-9z5crht7v-tateito-yokoito.vercel.app/?app=family_place) — 同じ `FamilyHome` を実データで表示する。今回、認証付きの登録・保存E2Eは再実施していない。
+- [TEST HTTPS・家族ホーム実部品レビュー](https://tateyoko-book-test-e184qhrod-tateito-yokoito.vercel.app/family-home-review.html) — 右上で初回・人物登録済み・記録ありを切り替えられる。架空の人物はブラウザ内の表示用のみでDBに保存しない。
+- [TEST HTTPS・承認済みとの並列比較](https://tateyoko-book-test-e184qhrod-tateito-yokoito.vercel.app/family-home-comparison.html)。
+- [TEST HTTPS・認証付き実アプリ](https://tateyoko-book-test-e184qhrod-tateito-yokoito.vercel.app/?app=family_place) — 同じ `FamilyHome` を実データで表示する。今回、認証付きの登録・保存E2Eは再実施していない。
 
-TESTプレビュー配備ID: `dpl_A4ridSkY1jnmj8MaBFfbz3DCiyhn`。`x-tateyoko-environment: test`、noindex、TEST Supabase参照を確認した。本番環境は変更していない。
+TESTプレビュー配備ID: `dpl_5Bh9jE4GWNmcZQs7aknxSAg2FwDB`。`x-tateyoko-environment: test`、noindex、TEST Supabase参照を確認した。本番環境は変更していない。
 
 ## 確認結果
 
