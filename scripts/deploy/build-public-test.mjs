@@ -25,7 +25,8 @@ assertPublicTestEnvironment(settings);
 // Do not import a developer's .env.local or leak ambient VITE values.
 for(const key of Object.keys(process.env))if(key.startsWith('VITE_'))delete process.env[key];
 Object.assign(process.env,settings);
-const root=process.cwd(),outDir=path.join(root,'output/family-test-stage');
+if(process.env.QA_FAMILY_HOME_REVIEW==='true')process.env.RELEASE_FAMILY_HOME_REVIEW='true';
+const root=process.cwd(),outDir=process.env.QA_PUBLIC_TEST_OUTDIR||path.join(root,'output/family-test-stage');
 const filesUnder=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?filesUnder(path.join(dir,e.name)):[path.join(dir,e.name)]);
 const sourceText=filesUnder(path.join(root,'src')).filter(p=>/\.(jsx?|css)$/.test(p)).map(p=>fs.readFileSync(p,'utf8')).join('\n')+fs.readFileSync('index.html','utf8');
 await build({envDir:false,build:{outDir,emptyOutDir:true,sourcemap:false},publicDir:false,plugins:[{
@@ -42,6 +43,10 @@ const assets=new Set([...sourceText.matchAll(/["'`]\/(?:site\/)?[A-Za-z0-9_.\/-]
 for(const relative of assets){
  const source=path.join(root,'public',relative);assert.ok(fs.existsSync(source),`Missing public asset: ${relative}`);
  const dest=path.join(outDir,relative);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(source,dest);
+}
+if(process.env.QA_FAMILY_HOME_REVIEW==='true'){
+ const relative='docs/product/design-references/family-power-v1.0-approved-10-screens.png';
+ const dest=path.join(outDir,relative);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(path.join(root,relative),dest);
 }
 // The test build disables Vite's full publicDir copy. Keep only scripts and
 // styles explicitly used by index.html so the app and landing page still work.

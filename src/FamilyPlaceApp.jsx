@@ -3,6 +3,7 @@ import { BookOpen, ChevronLeft, Home, Image, LockKeyhole, Mic, Pencil, Plus, Use
 import { Scene_Login, Scene_Recording, PhotoCorrectionFlow, ensureProfileExists, supabaseClient } from './App.jsx';
 import { AnswerBodyEditor, AnswerEntryChoices, AnswerReview, AnswerSaveStatus } from './AnswerInputUI.jsx';
 import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
+import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
 import {
   ensureFamilyPlace, familyPlacePeople, addFamilyPlacePerson, updateFamilyPlacePerson,
   familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories,
@@ -295,34 +296,15 @@ export default function FamilyPlaceApp() {
       }}>音声保存を再試行する</button>}</div>}
   </div>;
   return <div className="fp-app">
-    <header className="fp-header">
-      {screen === 'home' ? <span className="fp-brand"><Home size={22}/> 縦糸∞横糸</span>
-        : <button onClick={() => screen === 'story' ? leaveStory()
+    {screen !== 'home' && <header className="fp-header">
+      <button onClick={() => screen === 'story' ? leaveStory()
           : screen === 'profile' ? setScreen('person')
-          : screen === 'person' ? goHome() : setScreen('home')}><ChevronLeft/>戻る</button>}
-      <span>{screen === 'home' ? '家族の場所' : person?.display_name || '家族の場所'}</span>
-    </header>
+          : screen === 'person' ? goHome() : setScreen('home')}><ChevronLeft/>戻る</button>
+      <span>{person?.display_name || '家族の場所'}</span>
+    </header>}
     {error && <p className="fp-error" role="alert">{error}</p>}
-    {screen === 'home' && <main>
-      <section className="fp-hero"><h1>家族のチカラは、<br/>人生を照らす。</h1><small>背景はレビュー用の仮素材です</small></section>
-      <section className="fp-section"><h2>家族の人生の物語</h2>
-        <div className="fp-card fp-empty-book"><BookOpen/><div><strong>{Object.values(homeStoryCounts).some(Boolean)
-          ? '家族の語りが少しずつ残っています' : '家族の物語は、ここから'}</strong>
-          <p>{Object.values(homeStoryCounts).some(Boolean)
-            ? '人物ページから保存した語りを読み返せます。'
-            : '人物を登録すると、その人の記録がここに並びます。'}</p></div></div>
-        <p className="fp-note">BOOK作品は、購入・制作を始めるまで作成されません。</p>
-      </section>
-      <section className="fp-section"><h2>家族の人たち</h2>
-        {people.map(item => <button className="fp-card fp-person-row" key={item.id}
-          onClick={() => openPerson(item.id)}><span className="fp-avatar">{item.display_name.slice(0,1)}</span>
-          <span><strong>{item.display_name}</strong><small>{homeStoryCounts[item.id]
-            ? `人生の語り ${homeStoryCounts[item.id]}件` : '人物ページを見る'}</small></span><span>›</span></button>)}
-        {!people.length && <p className="fp-note">まずは自分か家族を一人登録しましょう。</p>}
-        <button className="fp-primary" onClick={() => setScreen('add-person')}><Plus/>自分・家族を登録する</button>
-      </section>
-      <nav className="fp-quick"><a href="/?app=1">BOOK制作へ</a><span>家系図・思い出は次の段階で追加します</span></nav>
-    </main>}
+    {screen === 'home' && <FamilyHome people={people} storyCounts={homeStoryCounts}
+      onAddPerson={() => setScreen('add-person')} onOpenPerson={openPerson}/>}
     {screen === 'add-person' && <main className="fp-section"><h1>家族を登録する</h1>
       <form onSubmit={createPerson} className="fp-form">
         <label>どなたを登録しますか？<select value={newIsSelf ? 'self' : 'family'}
@@ -444,7 +426,7 @@ export default function FamilyPlaceApp() {
       <PhotoCorrectionFlow open={photoOpen} awaitCompletion title="写真を添える"
         onClose={() => setPhotoOpen(false)} onComplete={addPhoto}/>
     </main>}
-    {screen !== 'recording' && <nav className="fp-bottom">
+    {screen === 'home' ? <FamilyHomeNav onHome={goHome} onStories={goHome} onFamily={goHome}/> : <nav className="fp-bottom">
       <button onClick={goHome}><Home/>ホーム</button>
       <button onClick={() => {setScreen('home');setSelectedId(null);}}><BookOpen/>人生の物語</button>
       <button onClick={() => {setScreen('home');setSelectedId(null);}}><Users/>家族</button>

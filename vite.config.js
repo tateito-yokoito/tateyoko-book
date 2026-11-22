@@ -13,6 +13,10 @@ export default defineConfig({
         generalInquiry: 'contact/index.html',
         earlyAccess: 'early-access/index.html',
         ...(process.env.RELEASE_EXCLUDE_REVIEW_ENTRY === 'true' ? {} : { answerUiReview: 'answer-ui-review.html' }),
+        ...(process.env.RELEASE_FAMILY_HOME_REVIEW === 'true' ? {
+          familyHomeReview: 'family-home-review.html',
+          familyHomeComparison: 'family-home-comparison.html',
+        } : {}),
       },
     },
   },
