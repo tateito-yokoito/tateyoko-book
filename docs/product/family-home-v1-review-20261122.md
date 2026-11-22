@@ -2,6 +2,7 @@
 
 正本: [承認済み10画面](design-references/family-power-v1.0-approved-10-screens.png) の左上1画面。
 比較画像: [承認済みと実部品の並列表示](design-references/family-home-approved-vs-actual-20261122.png)。
+スマホ基準プレビュー: [PC上でも390×844pxのスマホ枠で表示](design-references/family-home-mobile-preview-20261122.png)。今後のレビューはスマホ表示を先に確認し、PC専用レイアウトは実装段階で整える。
 
 ## 今回反映した範囲
 
@@ -18,11 +19,11 @@
 
 ## 確認入口
 
-- [TEST HTTPS・家族ホーム実部品レビュー](https://tateyoko-book-test-e184qhrod-tateito-yokoito.vercel.app/family-home-review.html) — 右上で初回・人物登録済み・記録ありを切り替えられる。架空の人物はブラウザ内の表示用のみでDBに保存しない。
-- [TEST HTTPS・承認済みとの並列比較](https://tateyoko-book-test-e184qhrod-tateito-yokoito.vercel.app/family-home-comparison.html)。
-- [TEST HTTPS・認証付き実アプリ](https://tateyoko-book-test-e184qhrod-tateito-yokoito.vercel.app/?app=family_place) — 同じ `FamilyHome` を実データで表示する。今回、認証付きの登録・保存E2Eは再実施していない。
+- [TEST HTTPS・家族ホーム実部品レビュー](https://tateyoko-book-test-efs78g2wa-tateito-yokoito.vercel.app/family-home-review.html) — PCでも390×844pxのスマホ枠。スマホでは画面幅に合わせる。初回・人物登録済み・記録ありを切り替えられる。架空の人物はブラウザ内の表示用のみでDBに保存しない。
+- [TEST HTTPS・承認済みとの並列比較](https://tateyoko-book-test-efs78g2wa-tateito-yokoito.vercel.app/family-home-comparison.html)。
+- [TEST HTTPS・認証付き実アプリ](https://tateyoko-book-test-efs78g2wa-tateito-yokoito.vercel.app/?app=family_place) — 同じ `FamilyHome` を実データで表示する。今回、認証付きの登録・保存E2Eは再実施していない。
 
-TESTプレビュー配備ID: `dpl_5Bh9jE4GWNmcZQs7aknxSAg2FwDB`。`x-tateyoko-environment: test`、noindex、TEST Supabase参照を確認した。本番環境は変更していない。
+TESTプレビュー配備ID: `dpl_AGHV8PgTC2qVqTUPv8VCN4do47dh`。`x-tateyoko-environment: test`、noindex、TEST Supabase参照を確認した。本番環境は変更していない。
 
 ## 確認結果
 
