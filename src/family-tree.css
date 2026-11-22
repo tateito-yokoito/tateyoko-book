@@ -41,3 +41,8 @@
 .ft-page-open{bottom:70px}
 .ft-profile-edit svg,.ft-page-open svg{width:19px;height:19px}
 .ft-profile-edit:focus-visible,.ft-page-open:focus-visible{outline:3px solid #274927;outline-offset:2px}
+.ft-edit-choice{width:min(100%,580px);padding:22px 18px 28px;border-radius:24px 24px 0 0;background:#fffdf8;box-shadow:0 -8px 35px #0003}
+.ft-edit-choice h2{margin:0 0 15px;font:700 21px/1.4 'Yu Mincho',serif;text-align:center}
+.ft-edit-choice>button{width:100%;min-height:56px;display:flex;align-items:center;justify-content:space-between;margin-top:9px;padding:0 18px;border:1px solid #d9dfca;border-radius:14px;background:#fff;color:#365d20;font-size:17px;font-weight:700;text-align:left}
+.ft-edit-choice>button svg{width:19px;height:19px}
+.ft-edit-choice>button.ft-edit-choice-close{justify-content:center;min-height:44px;border:0;background:transparent;color:#6e7665;font-size:14px}

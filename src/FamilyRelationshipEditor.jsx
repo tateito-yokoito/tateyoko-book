@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import FamilyAvatar from './FamilyAvatar.jsx';
+import { relationCandidates } from './lib/familyTreeModel.js';
 import './family-relationship-editor.css';
 
 const relationRole = (relation,personId) => relation.relation_type === 'spouse' ? 'spouse'
@@ -31,40 +32,48 @@ export function FamilyRelationQuestion({ item, busy, onAnswer }) {
 }
 
 export default function FamilyRelationshipEditor({ person, people, relations, suggestions,
-  busy, onSave, onRemove, onAnswer }) {
+  busy, onSave, onRemove, onAnswer, sectionRef, primaryHeading = false }) {
   const [editing, setEditing] = useState(null);
   const [otherId, setOtherId] = useState('');
-  const [role, setRole] = useState('parent');
+  const [role, setRole] = useState('');
   const byId = new Map(people.map(item => [item.id,item]));
   const current = relations.filter(row => row.person_a_id === person.id || row.person_b_id === person.id)
     .map(row => ({ relation:row, other:byId.get(row.person_a_id === person.id ? row.person_b_id : row.person_a_id),
       role:relationRole(row,person.id) })).filter(item => item.other);
-  const relatedIds = new Set(current.map(item => item.other.id));
-  const available = people.filter(item => item.id !== person.id && !relatedIds.has(item.id));
+  const available = relationCandidates(person,people,relations,role);
+  const hasUnlinkedPerson = Boolean(relationCandidates(person,people,relations,'parent').length
+    || relationCandidates(person,people,relations,'child').length
+    || relationCandidates(person,people,relations,'spouse').length);
   const deferred = suggestions.filter(item => item.status === 'later'
     && (item.person_a_id === person.id || item.person_b_id === person.id));
-  const close = () => { setEditing(null); setOtherId(''); setRole('parent'); };
-  return <section className="fr-section" aria-label="家族との関係">
-    <h2>家族との関係</h2>
+  const close = () => { setEditing(null); setOtherId(''); setRole(''); };
+  return <section ref={sectionRef} className="fr-section" aria-label="家族関係">
+    {primaryHeading ? <h1>家族関係</h1> : <h2>家族関係</h2>}
     {current.length ? <div className="fr-list">{current.map(item => <div className="fr-row" key={item.relation.id}>
       <FamilyAvatar person={item.other}/><span><small>{relationLabel(item.role,item.other)}</small>
         <strong>{item.other.display_name}</strong></span>
       <button type="button" onClick={() => { setEditing(item.relation); setOtherId(item.other.id); setRole(item.role); }}>
         関係を編集</button>
     </div>)}</div> : <p className="fr-empty">家族との関係は、まだ登録されていません。</p>}
-    {available.length > 0 && !editing && <button type="button" className="fr-add" onClick={() => setEditing('new')}>
+    {hasUnlinkedPerson && !editing && <button type="button" className="fr-add" onClick={() => setEditing('new')}>
       ＋ 家族との関係を追加</button>}
     {editing && <form className="fr-form" onSubmit={async event => {
       event.preventDefault();
       if (await onSave(otherId,role,editing === 'new' ? null : editing.id)) close();
     }}>
-      <label>登録済みの人物<select required value={otherId} disabled={editing !== 'new'}
+      <label>この人から見た関係性<select required value={role} onChange={event => {
+        setRole(event.target.value);
+        if (editing === 'new') setOtherId('');
+      }}>
+        <option value="">選んでください</option><option value="father">父</option>
+        <option value="mother">母</option><option value="parent">親（父・母を指定しない）</option>
+        <option value="spouse">配偶者</option><option value="child">子ども</option></select></label>
+      <label>登録済みの人物<select required value={otherId} disabled={editing !== 'new' || !role}
         onChange={event => setOtherId(event.target.value)}><option value="">選んでください</option>
         {(editing === 'new' ? available : [byId.get(otherId)]).filter(Boolean).map(item =>
           <option value={item.id} key={item.id}>{item.display_name}</option>)}</select></label>
-      <label>この人から見た関係<select value={role} onChange={event => setRole(event.target.value)}>
-        <option value="parent">親（父・母）</option><option value="spouse">配偶者</option>
-        <option value="child">子ども</option></select></label>
+      {editing === 'new' && role && !available.length &&
+        <p className="fr-empty">この関係で追加できる登録済みの人物はいません。</p>}
       <button className="fr-save" disabled={busy || !otherId}>関係を保存する</button>
       {editing !== 'new' && <button type="button" className="fr-remove" disabled={busy}
         onClick={async () => {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { treeNeighbors, familyRelationSuggestions } from '../../src/lib/familyTreeModel.js';
+import { treeNeighbors, familyRelationSuggestions, relationCandidates } from '../../src/lib/familyTreeModel.js';
 
 const people = ['self', 'father', 'mother', 'spouse', 'child', 'sibling', 'grandparent', 'aunt']
   .map(id => ({ id, display_name: id }));
@@ -51,4 +51,24 @@ test('a spouse with an unlinked child is proposed once and decisions persist', (
   assert.equal(familyRelationSuggestions(people,base,[decision]).some(item => item.key === proposal.key),false);
   assert.equal(familyRelationSuggestions(people,base,[{...decision,status:'later'}])
     .find(item => item.key === proposal.key)?.status,'later');
+});
+
+test('relationship picker narrows people after choosing a role without guessing unknown gender', () => {
+  const profiles = [...people.map(item => ({ ...item, gender:item.id === 'mother' ? 'female'
+    : item.id === 'aunt' ? 'female' : item.id === 'grandparent' ? 'male' : null })),
+  {id:'unlinked-man',display_name:'unlinked man',gender:'male'},
+  {id:'unlinked-unknown',display_name:'unlinked unknown',gender:null}];
+  const self = profiles.find(item => item.id === 'self');
+  assert.deepEqual(relationCandidates(self,profiles,relations,'').map(item => item.id),[]);
+  const fathers = relationCandidates(self,profiles,relations,'father').map(item => item.id);
+  assert.ok(fathers.includes('unlinked-man'));
+  assert.ok(fathers.includes('unlinked-unknown'));
+  assert.ok(!fathers.includes('aunt'));
+  assert.ok(!fathers.includes('grandparent'));
+  assert.ok(!fathers.includes('sibling'));
+  assert.ok(!fathers.includes('child'));
+  const spouses = relationCandidates(self,profiles,relations,'spouse').map(item => item.id);
+  assert.ok(!spouses.includes('sibling'));
+  assert.ok(!spouses.includes('father'));
+  assert.ok(!spouses.includes('spouse'));
 });

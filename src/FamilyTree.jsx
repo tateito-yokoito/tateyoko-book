@@ -39,7 +39,7 @@ function PersonNode({ item, label, onCenter, onEditProfile, onOpenPage, center =
       <span className="ft-avatar-ring"><FamilyAvatar person={person}/></span>
     </button>
     {center && <button type="button" className="ft-profile-edit" onClick={() => onEditProfile(person.id)}
-      aria-label={`${person.display_name}さんのプロフィールを編集する`} title="プロフィールを編集する"><Pencil/></button>}
+      aria-label={`${person.display_name}さんの編集先を選ぶ`} title="編集先を選ぶ"><Pencil/></button>}
     {center && <button type="button" className="ft-page-open" onClick={() => onOpenPage(person.id)}
       aria-label={`${person.display_name}さんの個人ページを開く`} title="個人ページを開く"><BookOpen/></button>}
   </div>;
@@ -48,6 +48,7 @@ function PersonNode({ item, label, onCenter, onEditProfile, onOpenPage, center =
 export default function FamilyTree({ people, relations, selfId, centerId, onCenter, onAdd,
   onOpenPerson, onEditProfile, onHome, onScrollLeft, restoreScrollLeft,
   suggestions = [], promptPersonId = null, onAnswerSuggestion, busy = false }) {
+  const [editTargetId, setEditTargetId] = useState(null);
   const [suggestionToConfirm, setSuggestionToConfirm] = useState(null);
   const suggestionShown = useRef(false);
   const [paths, setPaths] = useState([]);
@@ -187,7 +188,7 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
           </div>}
           <div className="ft-generation ft-middle">
             <PersonNode item={center} label={centerId === selfId ? '自分' : '中心の人物'} center
-              onCenter={onCenter} onEditProfile={onEditProfile}
+              onCenter={onCenter} onEditProfile={setEditTargetId}
               onOpenPage={onOpenPerson}/>
             {spouses.map(item => <PersonNode key={item.relation.id} item={item} label="配偶者" onCenter={onCenter}/>)}
             {siblings.map(item => <PersonNode key={item.person.id} item={item} label="兄弟姉妹" onCenter={onCenter}/>)}
@@ -209,6 +210,16 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
       </button>
       {!selfId && <p className="ft-hint">自分が未登録です。通常の人物登録から「自分」を登録できます。</p>}
     </>}
+    {editTargetId && <div className="ft-suggestion-backdrop" role="presentation">
+      <div className="ft-edit-choice" role="dialog" aria-modal="true" aria-label="編集する内容を選ぶ">
+        <h2>編集する内容を選ぶ</h2>
+        <button type="button" onClick={() => { const id=editTargetId; setEditTargetId(null); onEditProfile(id,'profile'); }}>
+          プロフィール<ChevronRight/></button>
+        <button type="button" onClick={() => { const id=editTargetId; setEditTargetId(null); onEditProfile(id,'relations'); }}>
+          家族関係<ChevronRight/></button>
+        <button type="button" className="ft-edit-choice-close" onClick={() => setEditTargetId(null)}>閉じる</button>
+      </div>
+    </div>}
     {suggestionToConfirm && <div className="ft-suggestion-backdrop" role="presentation">
       <div className="ft-suggestion-sheet" role="dialog" aria-modal="true" aria-label="家族関係の確認">
         <FamilyRelationQuestion item={suggestionToConfirm} busy={busy} onAnswer={async (item,answer) => {

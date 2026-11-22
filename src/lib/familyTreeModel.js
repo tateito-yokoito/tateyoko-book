@@ -21,6 +21,36 @@ export function treeNeighbors(centerId, people, relations) {
   return { parents, spouses, siblings, children };
 }
 
+// Keep the picker conservative: never propose an existing direct link, a
+// parent-child cycle, or a spouse link between known close relatives. Unknown
+// gender stays selectable; the UI must not guess missing profile details.
+export function relationCandidates(person, people, relations, role) {
+  if (!person || !role) return [];
+  const parentLinks = relations.filter(row => row.relation_type === 'parent_child');
+  const linked = new Set(relations.filter(row => row.person_a_id === person.id || row.person_b_id === person.id)
+    .map(row => row.person_a_id === person.id ? row.person_b_id : row.person_a_id));
+  const reach = (start, direction) => {
+    const seen = new Set(); const queue = [start];
+    for (const id of queue) for (const row of parentLinks) {
+      const next = direction === 'down' && row.person_a_id === id ? row.person_b_id
+        : direction === 'up' && row.person_b_id === id ? row.person_a_id : null;
+      if (next && !seen.has(next)) { seen.add(next); queue.push(next); }
+    }
+    return seen;
+  };
+  const ancestors = reach(person.id,'up');
+  const descendants = reach(person.id,'down');
+  const directParents = new Set(parentLinks.filter(row => row.person_b_id === person.id)
+    .map(row => row.person_a_id));
+  const siblings = new Set(parentLinks.filter(row => directParents.has(row.person_a_id))
+    .map(row => row.person_b_id));
+  return people.filter(candidate => candidate.id !== person.id && !linked.has(candidate.id)
+    && !siblings.has(candidate.id) && !ancestors.has(candidate.id)
+    && !descendants.has(candidate.id)
+    && (role !== 'father' || !candidate.gender || candidate.gender === 'male')
+    && (role !== 'mother' || !candidate.gender || candidate.gender === 'female'));
+}
+
 // Suggestions are derived from saved links. A suggestion is never a relation
 // until the person explicitly answers yes and the relation insert succeeds.
 export function familyRelationSuggestions(people, relations, decisions = []) {

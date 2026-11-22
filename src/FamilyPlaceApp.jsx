@@ -128,6 +128,8 @@ export default function FamilyPlaceApp() {
   const [screen, setScreen] = useState('home');
   const [profile, setProfile] = useState(null);
   const [profileReturnToTree, setProfileReturnToTree] = useState(false);
+  const [profileSection, setProfileSection] = useState('profile');
+  const relationSectionRef = useRef(null);
   const [profilePhotoFile, setProfilePhotoFile] = useState(null);
   const [profilePhotoPreview, setProfilePhotoPreview] = useState(null);
   const [portraitCandidate, setPortraitCandidate] = useState(null);
@@ -177,7 +179,9 @@ export default function FamilyPlaceApp() {
       window.scrollTo(0, Number(treeViewRef.current.scrollY) || 0);
       restoreTreeScrollRef.current = false;
     } else if (screen === 'profile' || screen === 'person' || screen === 'tree') window.scrollTo(0, 0);
-  }, [screen]);
+    if (screen === 'profile' && profileSection === 'relations')
+      relationSectionRef.current?.scrollIntoView({ block:'start' });
+  }, [screen,profileSection]);
 
   useEffect(() => () => { if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview); }, [profilePhotoPreview]);
   useEffect(() => () => { portraitUrlsRef.current.forEach(url => URL.revokeObjectURL(url)); }, []);
@@ -428,7 +432,7 @@ export default function FamilyPlaceApp() {
     } catch (cause) { setError(cause.message || '登録できませんでした'); }
     finally { setBusy(false); }
   };
-  const startProfile = (target = person, fromTree = false) => {
+  const startProfile = (target = person, fromTree = false, section = 'profile') => {
     if (!target) return;
     if (fromTree && screen === 'tree') rememberTreeView();
     if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
@@ -436,6 +440,7 @@ export default function FamilyPlaceApp() {
     setPortraitCandidateIsNew(false); setPortraitSourceFile(null); setPortraitSourceIsNew(false);
     setSelectedId(target.id);
     setProfileReturnToTree(fromTree);
+    setProfileSection(section);
     setProfile({ ...personNameParts(target), family_name_kana: target.family_name_kana || '',
       given_name_kana: target.given_name_kana || '', birth_year: target.birth_year || '',
       birth_month: target.birth_month || '', birth_day: target.birth_day || '',
@@ -652,8 +657,8 @@ export default function FamilyPlaceApp() {
       onAddPerson={() => startAddPerson()} onOpenPerson={openPerson} onTree={openTree}/>}
     {screen === 'tree' && <FamilyTree people={people} relations={relations} selfId={selfId}
       centerId={treeCenterId || selfId || people[0]?.id} onCenter={setTreeCenterId}
-      onAdd={startAddPerson} onOpenPerson={id => openPerson(id, 'tree')} onEditProfile={id => {
-        startProfile(people.find(item => item.id === id), true);
+      onAdd={startAddPerson} onOpenPerson={id => openPerson(id, 'tree')} onEditProfile={(id,section) => {
+        startProfile(people.find(item => item.id === id), true, section);
       }} onHome={goHome} restoreScrollLeft={treeViewRef.current.centerId === treeCenterId
         ? treeViewRef.current.scrollLeft : null}
       onScrollLeft={scrollLeft => { treeViewRef.current.scrollLeft = scrollLeft;
@@ -757,6 +762,7 @@ export default function FamilyPlaceApp() {
         <button className="fp-primary" disabled={busy}>プロフィールを保存する</button>
       </form>
       <FamilyRelationshipEditor person={person} people={people} relations={relations}
+        sectionRef={relationSectionRef} primaryHeading={profileSection === 'relations'}
         suggestions={relationshipSuggestions} busy={busy}
         onSave={(otherId,role,relationId) => saveRelationship(person.id,otherId,role,relationId)}
         onRemove={unlinkRelation} onAnswer={answerRelationshipSuggestion}/>

@@ -1,5 +1,5 @@
-.fr-section{margin:28px 0;padding:18px 16px;border:1px solid #e6e1d3;border-radius:18px;background:#fffdf8;box-shadow:0 4px 14px #60482713}
-.fr-section h2{margin:0 0 14px;font-size:20px}
+.fr-section{margin:28px 0;padding:18px 16px;border:1px solid #e6e1d3;border-radius:18px;background:#fffdf8;box-shadow:0 4px 14px #60482713;scroll-margin-top:76px}
+.fr-section h1,.fr-section h2{margin:0 0 14px;font-size:20px}
 .fr-list{display:grid;gap:8px}.fr-row{display:flex;align-items:center;gap:10px;min-height:60px;border-bottom:1px solid #eee9df;padding:5px 0}
 .fr-row .family-avatar,.fr-question-people .family-avatar{width:44px;height:44px;flex:none}
 .fr-row span{min-width:0;flex:1}.fr-row small,.fr-row strong{display:block}.fr-row small{color:#7c7a65;font-size:13px}.fr-row strong{font-size:16px}
