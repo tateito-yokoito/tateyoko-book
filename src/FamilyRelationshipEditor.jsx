@@ -41,21 +41,19 @@ export default function FamilyRelationshipEditor({ person, people, relations, su
     .map(row => ({ relation:row, other:byId.get(row.person_a_id === person.id ? row.person_b_id : row.person_a_id),
       role:relationRole(row,person.id) })).filter(item => item.other);
   const available = relationCandidates(person,people,relations,role);
-  const hasUnlinkedPerson = Boolean(relationCandidates(person,people,relations,'parent').length
-    || relationCandidates(person,people,relations,'child').length
-    || relationCandidates(person,people,relations,'spouse').length);
   const deferred = suggestions.filter(item => item.status === 'later'
     && (item.person_a_id === person.id || item.person_b_id === person.id));
   const close = () => { setEditing(null); setOtherId(''); setRole(''); };
-  return <section ref={sectionRef} className="fr-section" aria-label="家族関係">
-    {primaryHeading ? <h1>家族関係</h1> : <h2>家族関係</h2>}
+  const heading = `${person.display_name}さんの家族関係`;
+  return <section ref={sectionRef} className="fr-section" aria-label={heading}>
+    {primaryHeading ? <h1>{heading}</h1> : <h2>{heading}</h2>}
     {current.length ? <div className="fr-list">{current.map(item => <div className="fr-row" key={item.relation.id}>
       <FamilyAvatar person={item.other}/><span><small>{relationLabel(item.role,item.other)}</small>
         <strong>{item.other.display_name}</strong></span>
       <button type="button" onClick={() => { setEditing(item.relation); setOtherId(item.other.id); setRole(item.role); }}>
         関係を編集</button>
     </div>)}</div> : <p className="fr-empty">家族との関係は、まだ登録されていません。</p>}
-    {hasUnlinkedPerson && !editing && <button type="button" className="fr-add" onClick={() => setEditing('new')}>
+    {!editing && <button type="button" className="fr-add" onClick={() => setEditing('new')}>
       ＋ 家族との関係を追加</button>}
     {editing && <form className="fr-form" onSubmit={async event => {
       event.preventDefault();
