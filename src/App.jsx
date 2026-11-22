@@ -4849,7 +4849,7 @@ const getAnswerTextForEditRecording = (answer) => (
   ""
 );
 
-const startEditRecording = (
+const startEditRecording = async (
   answer,
   mode,
   existingAudioPaths = [],
@@ -4858,6 +4858,13 @@ const startEditRecording = (
   if (!answer?.id) return false;
 
   if (mode === "replace") {
+    const { data: linked, error: linkedError } = await supabaseClient.rpc(
+      'is_person_story_linked_answer', { input_answer_id: answer.id });
+    if (linkedError) { alert('語りの状態を確認できませんでした。'); return false; }
+    if (linked) {
+      alert('年輪と共有中の音声は、現在差し替えできません。語り足すことはできます。');
+      return false;
+    }
     const ok = window.confirm(
       "語り直すと、今保存されている音声と文章は新しい内容に置き換わります。写真は残ります。よろしいですか？"
     );
@@ -6014,7 +6021,7 @@ const startLifeOutlineAnswerRetake = async (answer) => {
 
     if (error) throw error;
 
-    startEditRecording(
+    await startEditRecording(
       answer,
       "replace",
       (data || []).map(item => item.storage_path).filter(Boolean),
@@ -6991,6 +6998,12 @@ const handleSaveAnswer = async (tag = null) => {
       const isEditRecording = editMode === "replace" || editMode === "append" || editMode === "voice_only";
       const answerProjectId = foundation?.project?.id || currentQ?.book_project_id || null;
       let ansId = voiceData.targetAnswerId || voiceData.answerId || crypto.randomUUID();
+      if (editMode === 'replace' && voiceData.targetAnswerId) {
+        const { data: linked, error: linkedError } = await supabaseClient.rpc(
+          'is_person_story_linked_answer', { input_answer_id: voiceData.targetAnswerId });
+        if (linkedError) throw linkedError;
+        if (linked) throw new Error('年輪と共有中の音声は差し替えできません。');
+      }
       if (!voiceData.targetAnswerId && !voiceData.answerId) {
         let existingAnswerQuery = supabaseClient.from("answers").select("id")
           .eq("user_id", user.id).eq("sequence_order", currentSeq);
@@ -22104,6 +22117,13 @@ const startEditRecordFromModal = async (mode) => {
   const deletePhoto = async (photo) => {
     if (!photo?.storage_path) return;
 
+    if (!storyAccess && photo.answer_id) {
+      const { data: linked, error: linkedError } = await supabaseClient.rpc(
+        'is_person_story_linked_answer', { input_answer_id: photo.answer_id });
+      if (linkedError) { alert('語りの状態を確認できませんでした。'); return; }
+      if (linked) { alert('年輪と共有中の写真は、現在削除できません。'); return; }
+    }
+
     const ok = window.confirm("この写真を語りから削除しますか？ 本の紙面からも削除されます。");
     if (!ok) return;
 
@@ -22182,6 +22202,12 @@ const replaceStoryPhoto = async (file, target) => {
   const photo = target?.photo;
 
   if (!file?.type?.startsWith("image/") || !photo?.id || !user?.id) return;
+  if (!storyAccess && target?.answerId) {
+    const { data: linked, error: linkedError } = await supabaseClient.rpc(
+      'is_person_story_linked_answer', { input_answer_id: target.answerId });
+    if (linkedError) { alert('語りの状態を確認できませんでした。'); return; }
+    if (linked) { alert('年輪と共有中の写真は、現在差し替えできません。'); return; }
+  }
 
   const contentType = file.type || "image/jpeg";
   const ext = contentType.includes("png")

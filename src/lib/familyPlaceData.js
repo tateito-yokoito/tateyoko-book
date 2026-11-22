@@ -180,7 +180,7 @@ export async function setFamilyPlaceStoryVisibility(client, story, visibility) {
 
 export async function familyPlaceMedia(client, storyId) {
   const { data, error } = await client.from('family_free_story_media')
-    .select('id,story_id,asset_type,storage_path,duration_seconds,created_at')
+    .select('id,story_id,asset_type,storage_bucket,storage_path,duration_seconds,created_at')
     .eq('story_id', storyId).order('created_at');
   if (error) throw error;
   const opened = [];
@@ -188,7 +188,7 @@ export async function familyPlaceMedia(client, storyId) {
     for (const item of data || []) {
       // Download through the caller's JWT each time. A signed URL would remain
       // usable after a key or collaborator permission changes.
-      const downloaded = await client.storage.from('family-free-media')
+      const downloaded = await client.storage.from(item.storage_bucket || 'family-free-media')
         .download(item.storage_path);
       if (downloaded.error || !downloaded.data) throw downloaded.error || new Error('メディアを開けません');
       opened.push({ ...item, url: URL.createObjectURL(downloaded.data) });
@@ -212,16 +212,17 @@ export async function addFamilyPlaceMedia(client, userId, storyId, file, kind, d
     ? (file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg')
     : (file.type.includes('webm') ? 'webm' : 'mp4');
   const path = `${userId}/${storyId}/${crypto.randomUUID()}.${ext}`;
-  const uploaded = await client.storage.from('family-free-media').upload(path, file, {
+  const bucket = kind === 'photo' ? 'photos' : 'audio';
+  const uploaded = await client.storage.from(bucket).upload(path, file, {
     contentType: file.type, upsert: false,
   });
   if (uploaded.error) throw uploaded.error;
   const { data, error } = await client.from('family_free_story_media').insert({
-    story_id: storyId, asset_type: kind, storage_path: path,
+    story_id: storyId, asset_type: kind, storage_bucket: bucket, storage_path: path,
     uploaded_by: userId, duration_seconds: durationSeconds,
   }).select('id').single();
   if (error || !data) {
-    await client.storage.from('family-free-media').remove([path]).catch(() => {});
+    await client.storage.from(bucket).remove([path]).catch(() => {});
     throw error || new Error('ファイルの登録に失敗しました');
   }
   return { id: data.id, path };

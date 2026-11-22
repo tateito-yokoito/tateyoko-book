@@ -75,9 +75,10 @@ serve(async (req) => {
       throw new Error(`audioPaths must contain at most ${MAX_AUDIO_PARTS} items`);
     }
 
+    let freeStoryAudioBuckets: string[] = [];
     if (freeStoryId) {
-      await editableFreeStory(serviceClient, freeStoryId, user.id);
-      await assertFreeStoryAudioPaths(serviceClient, freeStoryId, audioPaths);
+      await editableFreeStory(serviceClient, authClient, freeStoryId);
+      freeStoryAudioBuckets = await assertFreeStoryAudioPaths(serviceClient, freeStoryId, audioPaths);
     }
     if (!bookProjectId && !seasonalRecordId && !freeStoryId) {
       const { data: answer } = await serviceClient
@@ -138,7 +139,7 @@ serve(async (req) => {
     for (let index = 0; index < audioPaths.length; index++) {
       const path = audioPaths[index];
       const { data: audioBlob, error: downloadError } =
-        await serviceClient.storage.from(freeStoryId ? "family-free-media" : seasonalRecordId ? "seasonal-memory" : "audio").download(path);
+        await serviceClient.storage.from(freeStoryId ? freeStoryAudioBuckets[index] : seasonalRecordId ? "seasonal-memory" : "audio").download(path);
 
       if (downloadError || !audioBlob) {
         console.error("audio download error", {

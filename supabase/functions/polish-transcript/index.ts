@@ -60,7 +60,7 @@ serve(async (req) => {
     if (!answerId) throw new Error("answerId is required");
     const pendingVoice = seasonalRecordId || freeStoryId ? null : await familyPendingVoiceScope(serviceClient, body, user.id);
     if (freeStoryId) {
-      await editableFreeStory(serviceClient, freeStoryId, user.id);
+      await editableFreeStory(serviceClient, authClient, freeStoryId);
     } else if (seasonalRecordId) {
       await editableSeasonalMemory(authClient, serviceClient, seasonalRecordId, bookProjectId);
     } else if (bookProjectId && !pendingVoice) {
