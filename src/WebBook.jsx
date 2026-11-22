@@ -97,9 +97,10 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
   };
   const row = item => <div className="wb-question" key={item.order}>{item.audio?.length ? button(item,0,null,`${item.question}を聴く`):null}<button className="wb-title-button" onClick={() => openStory(item)}>{item.question || item.chapterTitle}</button><small>{time(audioTotal(item.audio))}</small></div>;
   return <div className={`wb ${showFixed?'wb-has-player':''}`}>
-    {returnHref && <div className="wb-return-bar"><a href={returnHref}><LibraryBig size={18} aria-hidden="true"/>本棚へ</a></div>}
     {previewLabel&&<aside className="wb-preview">{previewLabel}{onClose&&<button onClick={onClose}>確認を終える</button>}</aside>}
-    <header className="wb-header"><img src="/brand-logo-official.svg" alt="縦糸横糸"/><span>Webブック</span></header>
+    <header className="wb-header"><img src="/brand-logo-official.svg" alt="縦糸横糸"/><span>Webブック</span>
+      {returnHref && <a className="wb-shelf-link" href={returnHref}><LibraryBig size={18} aria-hidden="true"/>本棚へ</a>}
+    </header>
     <main>
       {story ? <article className="wb-story"><button className="wb-back" onClick={() => {setStory(null);window.scrollTo?.({top:0});}}><ArrowLeft size={17}/>目次へ戻る</button>
         <p className="wb-eyebrow">{story.contributionId ? `${story.contributorName || '大切な人'}の語り` : story.chapterTitle}</p><h1>{story.question}</h1>
