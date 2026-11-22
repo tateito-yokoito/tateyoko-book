@@ -11,7 +11,7 @@ export async function ensureFamilyPlace(client, user, label) {
 
 export async function familyPlacePeople(client, familyId) {
   const { data, error } = await client.from('persons')
-    .select('id,family_id,display_name,birth_year,death_year,notes,maiden_name,created_at')
+    .select('id,family_id,display_name,family_name,given_name,birth_year,birth_month,birth_day,death_year,notes,maiden_name,created_at')
     .eq('family_id', familyId).order('created_at');
   if (error) throw error;
   return data || [];
@@ -26,20 +26,42 @@ export async function familyPlacePublishedBooks(client, personId) {
     .sort((a, b) => (Date.parse(b.published_at) || 0) - (Date.parse(a.published_at) || 0));
 }
 
-export async function addFamilyPlacePerson(client, familyId, name, isSelf) {
-  const { data, error } = await client.rpc('create_family_place_person', {
+export function personNameParts(person) {
+  if (person?.family_name || person?.given_name) return {
+    family_name: person.family_name || '', given_name: person.given_name || '',
+  };
+  // Legacy records have only display_name. Preserve the complete name even
+  // when it has no separator; never guess a split within Japanese text.
+  const parts = String(person?.display_name || '').trim().split(/[\s\u3000]+/);
+  return parts.length > 1
+    ? { family_name: parts.shift(), given_name: parts.join(' ') }
+    : { family_name: parts[0] || '', given_name: '' };
+}
+
+export async function addFamilyPlacePerson(client, familyId, fields, isSelf) {
+  const { data, error } = await client.rpc('create_family_place_person_profile', {
     input_family_id: familyId,
-    input_display_name: name.trim(),
+    input_family_name: fields.family_name.trim(),
+    input_given_name: fields.given_name.trim(),
     input_is_self: Boolean(isSelf),
+    input_birth_year: fields.birth_year ? Number(fields.birth_year) : null,
+    input_birth_month: fields.birth_month ? Number(fields.birth_month) : null,
+    input_birth_day: fields.birth_day ? Number(fields.birth_day) : null,
   });
   if (error || !data) throw error || new Error('人物を登録できませんでした');
   return data;
 }
 
 export async function updateFamilyPlacePerson(client, personId, fields) {
+  const familyName = fields.family_name.trim();
+  const givenName = fields.given_name.trim();
   const payload = {
-    display_name: fields.display_name.trim(),
+    family_name: familyName || null,
+    given_name: givenName || null,
+    display_name: [familyName,givenName].filter(Boolean).join(' '),
     birth_year: fields.birth_year ? Number(fields.birth_year) : null,
+    birth_month: fields.birth_month ? Number(fields.birth_month) : null,
+    birth_day: fields.birth_day ? Number(fields.birth_day) : null,
     death_year: fields.death_year ? Number(fields.death_year) : null,
     maiden_name: fields.maiden_name?.trim() || null,
     notes: fields.notes?.trim() || null,
@@ -79,7 +101,8 @@ export async function saveFamilyPlaceFact(client, userId, person, fact) {
 export function familyPlaceTimeline(person, facts) {
   const events = [];
   if (person?.birth_year) events.push({
-    id: 'birth-year', year: person.birth_year, label: '誕生', detail: '',
+    id: 'birth-year', year: person.birth_year,
+    month: person.birth_month, day: person.birth_day, label: '誕生', detail: '',
   });
   if (person?.death_year) events.push({
     id: 'death-year', year: person.death_year, label: '逝去', detail: '',

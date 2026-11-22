@@ -7,6 +7,7 @@ import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
 import {
   ensureFamilyPlace, familyPlacePeople, familyPlacePublishedBooks, addFamilyPlacePerson, updateFamilyPlacePerson,
+  personNameParts,
   familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories,
   getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, addFamilyPlaceMedia,
   setFamilyPlaceStoryVisibility,
@@ -17,6 +18,34 @@ import './family-place.css';
 // questions; this route remains disabled in production builds until then.
 const testQuestions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) =>
   ({ id: question.id, slot: index + 1, text: question.content }));
+
+const emptyPersonDraft = () => ({ family_name: '', given_name: '',
+  birth_year: '', birth_month: '', birth_day: '' });
+
+function BirthDateFields({ value, onChange }) {
+  const year = Number(value.birth_year) || 0;
+  const month = Number(value.birth_month) || 0;
+  const days = year && month ? new Date(year, month, 0).getDate() : 0;
+  const lastYear = Math.max(new Date().getFullYear(), year);
+  return <fieldset className="fp-birth-date">
+    <legend>生年月日（分かる範囲で）</legend>
+    <div className="fp-date">
+      <label>年<select value={value.birth_year || ''} onChange={event => onChange({
+        ...value, birth_year: event.target.value, birth_month: '', birth_day: '',
+      })}><option value="">未登録</option>{Array.from({length:lastYear-1799},(_,index) =>
+        <option value={lastYear-index} key={lastYear-index}>{lastYear-index}年</option>)}</select></label>
+      <label>月<select value={value.birth_month || ''} disabled={!year} onChange={event => onChange({
+        ...value, birth_month: event.target.value, birth_day: '',
+      })}><option value="">未登録</option>{Array.from({length:12},(_,index) =>
+        <option value={index+1} key={index+1}>{index+1}月</option>)}</select></label>
+      <label>日<select value={value.birth_day || ''} disabled={!month} onChange={event => onChange({
+        ...value, birth_day: event.target.value,
+      })}><option value="">未登録</option>{Array.from({length:days},(_,index) =>
+        <option value={index+1} key={index+1}>{index+1}日</option>)}</select></label>
+    </div>
+    <p className="fp-note">年だけ、または年月だけでも登録できます。</p>
+  </fieldset>;
+}
 
 export default function FamilyPlaceApp() {
   const [user, setUser] = useState(null);
@@ -32,7 +61,7 @@ export default function FamilyPlaceApp() {
   const [stories, setStories] = useState([]);
   const [publishedBooks, setPublishedBooks] = useState([]);
   const [booksStatus, setBooksStatus] = useState('loading');
-  const [newName, setNewName] = useState('');
+  const [newPerson, setNewPerson] = useState(emptyPersonDraft);
   const [newIsSelf, setNewIsSelf] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -147,18 +176,19 @@ export default function FamilyPlaceApp() {
   };
   const createPerson = async event => {
     event.preventDefault();
-    if (!familyId || !newName.trim()) return;
+    if (!familyId || !(newPerson.family_name.trim() || newPerson.given_name.trim())) return;
     setBusy(true); setError('');
     try {
-      const id = await addFamilyPlacePerson(supabaseClient, familyId, newName, newIsSelf);
+      const id = await addFamilyPlacePerson(supabaseClient, familyId, newPerson, newIsSelf);
       await loadHome(user);
-      setNewName(''); setNewIsSelf(false);
+      setNewPerson(emptyPersonDraft()); setNewIsSelf(false);
       openPerson(id);
     } catch (cause) { setError(cause.message || '登録できませんでした'); }
     finally { setBusy(false); }
   };
   const startProfile = () => {
-    setProfile({ display_name: person.display_name, birth_year: person.birth_year || '',
+    setProfile({ ...personNameParts(person), birth_year: person.birth_year || '',
+      birth_month: person.birth_month || '', birth_day: person.birth_day || '',
       death_year: person.death_year || '', maiden_name: person.maiden_name || '',
       notes: person.notes || '' });
     setScreen('profile');
@@ -324,7 +354,13 @@ export default function FamilyPlaceApp() {
           onChange={event => setNewIsSelf(event.target.value === 'self')}>
           <option value="family">家族</option><option value="self" disabled={Boolean(selfId)}>自分</option>
         </select></label>
-        <label>お名前<input required maxLength={100} value={newName} onChange={event => setNewName(event.target.value)}/></label>
+        <div className="fp-name-fields">
+          <label>姓<input maxLength={100} required={!newPerson.given_name.trim()} autoComplete="family-name" value={newPerson.family_name}
+            onChange={event => setNewPerson({...newPerson,family_name:event.target.value})}/></label>
+          <label>名<input maxLength={100} required={!newPerson.family_name.trim()} autoComplete="given-name" value={newPerson.given_name}
+            onChange={event => setNewPerson({...newPerson,given_name:event.target.value})}/></label>
+        </div>
+        <BirthDateFields value={newPerson} onChange={setNewPerson}/>
         <p className="fp-note">詳しいプロフィールは後から追加できます。</p>
         <button className="fp-primary" disabled={busy}>登録して人物ページを見る</button>
       </form></main>}
@@ -336,12 +372,15 @@ export default function FamilyPlaceApp() {
       onAddFact={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}/>}
     {screen === 'profile' && person && <main className="fp-section"><h1>プロフィール</h1>
       <form className="fp-form" onSubmit={saveProfile}>
-        <label>氏名<input required maxLength={100} value={profile?.display_name || ''}
-          onChange={event => setProfile({...profile,display_name:event.target.value})}/></label>
+        <div className="fp-name-fields">
+          <label>姓<input maxLength={100} required={!profile?.given_name?.trim()} autoComplete="family-name" value={profile?.family_name || ''}
+            onChange={event => setProfile({...profile,family_name:event.target.value})}/></label>
+          <label>名<input maxLength={100} required={!profile?.family_name?.trim()} autoComplete="given-name" value={profile?.given_name || ''}
+            onChange={event => setProfile({...profile,given_name:event.target.value})}/></label>
+        </div>
         <label>旧姓（任意）<input value={profile?.maiden_name || ''}
           onChange={event => setProfile({...profile,maiden_name:event.target.value})}/></label>
-        <label>生年（分かる場合）<input type="number" min="1800" max="2200" value={profile?.birth_year || ''}
-          onChange={event => setProfile({...profile,birth_year:event.target.value})}/></label>
+        <BirthDateFields value={profile || emptyPersonDraft()} onChange={setProfile}/>
         <label>没年（分かる場合）<input type="number" min="1800" max="2200" value={profile?.death_year || ''}
           onChange={event => setProfile({...profile,death_year:event.target.value})}/></label>
         <label>紹介（任意）<textarea value={profile?.notes || ''}

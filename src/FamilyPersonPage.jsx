@@ -26,7 +26,7 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
       <div className="fp-person-intro-copy">
         <h1>{person.display_name}</h1>
         {(person.birth_year || person.death_year) && <p className="fp-person-dates">
-          {person.birth_year ? `${person.birth_year}年生まれ` : '生年未登録'}
+          {person.birth_year ? `${person.birth_year}年${person.birth_month ? `${person.birth_month}月${person.birth_day ? `${person.birth_day}日` : ''}` : ''}生まれ` : '生年未登録'}
           {person.death_year ? `・${person.death_year}年逝去` : ''}</p>}
         {person.notes && <p className="fp-person-bio">{person.notes}</p>}
       </div>
