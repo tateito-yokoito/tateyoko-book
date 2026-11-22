@@ -34,6 +34,7 @@ export function FamilyRelationQuestion({ item, busy, onAnswer }) {
 export default function FamilyRelationshipEditor({ person, people, relations, suggestions,
   busy, onSave, onRemove, onAnswer, sectionRef, primaryHeading = false }) {
   const [editing, setEditing] = useState(null);
+  const [openSuggestionKey, setOpenSuggestionKey] = useState(null);
   const [otherId, setOtherId] = useState('');
   const [role, setRole] = useState('');
   const byId = new Map(people.map(item => [item.id,item]));
@@ -41,8 +42,8 @@ export default function FamilyRelationshipEditor({ person, people, relations, su
     .map(row => ({ relation:row, other:byId.get(row.person_a_id === person.id ? row.person_b_id : row.person_a_id),
       role:relationRole(row,person.id) })).filter(item => item.other);
   const available = relationCandidates(person,people,relations,role);
-  const deferred = suggestions.filter(item => item.status === 'later'
-    && (item.person_a_id === person.id || item.person_b_id === person.id));
+  const review = suggestions.filter(item => (item.status === null || item.status === 'later')
+    && [item.person_a_id,item.person_b_id,item.child_id,item.anchor_parent_id].includes(person.id));
   const close = () => { setEditing(null); setOtherId(''); setRole(''); };
   const heading = `${person.display_name}さんの家族関係`;
   return <section ref={sectionRef} className="fr-section" aria-label={heading}>
@@ -55,6 +56,17 @@ export default function FamilyRelationshipEditor({ person, people, relations, su
     </div>)}</div> : <p className="fr-empty">家族との関係は、まだ登録されていません。</p>}
     {!editing && <button type="button" className="fr-add" onClick={() => setEditing('new')}>
       ＋ 家族との関係を追加</button>}
+    {review.length > 0 && <div className="fr-review"><h3>確認したい家族関係</h3>
+      {review.map(item => <div className="fr-review-row" key={item.key}>
+        <p>{suggestionQuestion(item)}</p>
+        <button type="button" aria-expanded={openSuggestionKey === item.key}
+          onClick={() => setOpenSuggestionKey(openSuggestionKey === item.key ? null : item.key)}>
+          {item.status === 'later' ? 'あとで確認' : '確認する'}</button>
+        {openSuggestionKey === item.key && <FamilyRelationQuestion item={item} busy={busy}
+          onAnswer={async (question,answer) => {
+            if (await onAnswer(question,answer)) setOpenSuggestionKey(null);
+          }}/>}</div>)}
+    </div>}
     {editing && <form className="fr-form" onSubmit={async event => {
       event.preventDefault();
       if (await onSave(otherId,role,editing === 'new' ? null : editing.id)) close();
@@ -80,7 +92,5 @@ export default function FamilyRelationshipEditor({ person, people, relations, su
         }}>この関係を解除する（人物は残す）</button>}
       <button type="button" className="fr-cancel" onClick={close}>閉じる</button>
     </form>}
-    {deferred.length > 0 && <div className="fr-deferred"><h3>あとで確認する関係</h3>
-      <FamilyRelationQuestion item={deferred[0]} busy={busy} onAnswer={onAnswer}/></div>}
   </section>;
 }

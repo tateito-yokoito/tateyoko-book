@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { treeNeighbors, familyRelationSuggestions, relationCandidates } from '../../src/lib/familyTreeModel.js';
+import { treeNeighbors, familyRelationSuggestions, relationCandidates,
+  spouseParentsOfChild } from '../../src/lib/familyTreeModel.js';
 
 const people = ['self', 'father', 'mother', 'spouse', 'child', 'sibling', 'grandparent', 'aunt']
   .map(id => ({ id, display_name: id }));
@@ -33,6 +34,13 @@ test('sharing a child does not invent a spouse relationship', () => {
   assert.deepEqual(ids(treeNeighbors('mother', people, relations).spouses), []);
 });
 
+test('a child joins a couple line only when both parents and their marriage are saved', () => {
+  assert.deepEqual(spouseParentsOfChild(relations,'child'),['self','spouse']);
+  assert.equal(spouseParentsOfChild(relations,'self'),null);
+  assert.equal(spouseParentsOfChild(relations.filter(row => row.relation_type !== 'spouse'),'child'),null);
+  assert.equal(spouseParentsOfChild(relations.filter(row => row.person_a_id !== 'spouse'),'child'),null);
+});
+
 test('shared parents are proposed, never added as spouses', () => {
   const suggestions = familyRelationSuggestions(people,relations);
   assert.equal(suggestions.some(item => item.kind === 'shared_child_spouse'
@@ -46,6 +54,7 @@ test('a spouse with an unlinked child is proposed once and decisions persist', (
   const proposal = familyRelationSuggestions(people,base).find(item =>
     item.kind === 'spouse_child_parent' && item.person_a_id === 'spouse' && item.person_b_id === 'child');
   assert.ok(proposal);
+  assert.equal(proposal.anchor_parent_id,'self');
   const decision = { kind:proposal.kind,person_a_id:proposal.person_a_id,
     person_b_id:proposal.person_b_id,status:'declined' };
   assert.equal(familyRelationSuggestions(people,base,[decision]).some(item => item.key === proposal.key),false);

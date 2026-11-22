@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, ChevronRight, Pencil, Plus, RotateCcw, Users } from 'lucide-react';
 import FamilyAvatar from './FamilyAvatar.jsx';
 import { FamilyRelationQuestion } from './FamilyRelationshipEditor.jsx';
-import { treeNeighbors } from './lib/familyTreeModel.js';
+import { spouseParentsOfChild, treeNeighbors } from './lib/familyTreeModel.js';
 import './family-tree.css';
 
 export { treeNeighbors };
@@ -64,7 +64,8 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
     if (suggestionShown.current) return;
     const pending = suggestions.filter(item => !item.status);
     const next = pending.find(item => promptPersonId
-      && [item.person_a_id,item.person_b_id,item.child_id].includes(promptPersonId)) || pending[0];
+      && [item.person_a_id,item.person_b_id,item.child_id,item.anchor_parent_id]
+        .includes(promptPersonId)) || pending[0];
     if (next) { suggestionShown.current = true; setSuggestionToConfirm(next); }
   }, [promptPersonId,suggestions]);
   useLayoutEffect(() => {
@@ -93,9 +94,22 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
       const parentEdges = relations.filter(row => row.relation_type === 'parent_child')
         .map(row => ({ row, start: nodes.get(row.person_a_id), end: nodes.get(row.person_b_id) }))
         .filter(edge => edge.start && edge.end && edge.start.bottom < edge.end.top);
+      const coupleChildren = new Map();
+      for (const edge of parentEdges) {
+        const childId = edge.row.person_b_id;
+        if (coupleChildren.has(childId)) continue;
+        const parentIds = spouseParentsOfChild(relations, childId);
+        if (!parentIds) continue;
+        const pair = parentIds.map(id => nodes.get(id));
+        if (pair.some(node => !node) || pair[0].row !== pair[1].row
+          || pair.some(node => node.bottom >= edge.end.top)
+          || Math.abs(pair[0].x-pair[1].x) <= pair[0].radius+pair[1].radius) continue;
+        coupleChildren.set(childId, { parents:pair, child:edge.end });
+      }
+      const separateEdges = parentEdges.filter(edge => !coupleChildren.has(edge.row.person_b_id));
       const lanes = new Map();
       const byRows = new Map();
-      parentEdges.forEach(edge => {
+      separateEdges.forEach(edge => {
         const key = `${edge.start.row}|${edge.end.row}`;
         if (!byRows.has(key)) byRows.set(key, []);
         byRows.get(key).push(edge);
@@ -108,9 +122,9 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
         sources.forEach((id,index) => lanes.set(`${edges[0].start.row}|${edges[0].end.row}|${id}`,
           upperBottom+(lowerTop-upperBottom)*(index+1)/(sources.length+1)));
       });
-      const next = parentEdges.map(edge => {
+      const next = separateEdges.map(edge => {
         const key = `${edge.start.row}|${edge.end.row}|${edge.row.person_a_id}`;
-        const sameTarget = parentEdges.filter(other => other.row.person_b_id === edge.row.person_b_id
+        const sameTarget = separateEdges.filter(other => other.row.person_b_id === edge.row.person_b_id
           && other.start.row === edge.start.row);
         const targetIndex = sameTarget.findIndex(other => other.row.id === edge.row.id);
         const sourceX = edge.start.x;
@@ -120,6 +134,18 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
           { x:sourceX,y:edge.start.bottom }, { x:sourceX,y:lanes.get(key) },
           { x:targetX,y:lanes.get(key) }, { x:targetX,y:targetY },
         ]) };
+      });
+      coupleChildren.forEach(({ parents, child }, childId) => {
+        const [left,right] = parents[0].x < parents[1].x ? parents : [...parents].reverse();
+        const gapStart = left.x+left.radius;
+        const gapEnd = right.x-right.radius;
+        const jointX = (gapStart+gapEnd)/2;
+        const laneY = (Math.max(left.rowBottom,right.rowBottom)+child.rowTop)/2;
+        const targetY = child.nameTop-7;
+        next.push({ id:`couple-child-${childId}`, kind:'parent_child', d:roundedRelationPath([
+          { x:jointX,y:left.middle }, { x:jointX,y:laneY },
+          { x:child.x,y:laneY }, { x:child.x,y:targetY },
+        ]) });
       });
       relations.filter(row => row.relation_type === 'spouse').forEach(row => {
         const a = nodes.get(row.person_a_id); const b = nodes.get(row.person_b_id);

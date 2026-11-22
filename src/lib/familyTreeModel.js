@@ -51,6 +51,17 @@ export function relationCandidates(person, people, relations, role) {
     && (role !== 'mother' || !candidate.gender || candidate.gender === 'female'));
 }
 
+// A shared child may branch from the couple line only when both parent links
+// and the spouse link are explicitly saved. More complex parent sets keep
+// their individual lines rather than suggesting a relationship visually.
+export function spouseParentsOfChild(relations, childId) {
+  const parents = [...new Set(relations.filter(row => row.relation_type === 'parent_child'
+    && row.person_b_id === childId).map(row => row.person_a_id))];
+  if (parents.length !== 2) return null;
+  return relations.some(row => row.relation_type === 'spouse'
+    && parents.includes(row.person_a_id) && parents.includes(row.person_b_id)) ? parents : null;
+}
+
 // Suggestions are derived from saved links. A suggestion is never a relation
 // until the person explicitly answers yes and the relation insert succeeds.
 export function familyRelationSuggestions(people, relations, decisions = []) {
@@ -68,11 +79,12 @@ export function familyRelationSuggestions(people, relations, decisions = []) {
   const decisionByKey = new Map(decisions.map(row =>
     [`${row.kind}:${row.person_a_id}:${row.person_b_id}`,row.status]));
   const suggestions = new Map();
-  const add = (kind,a,b,childId) => {
+  const add = (kind,a,b,childId,anchorParentId = null) => {
     if (!byId.has(a) || !byId.has(b) || a === b) return;
     const key = `${kind}:${a}:${b}`;
     if (suggestions.has(key)) return;
     suggestions.set(key, { key,kind,person_a_id:a,person_b_id:b,child_id:childId,
+      anchor_parent_id:anchorParentId,
       status:decisionByKey.get(key) || null,personA:byId.get(a),personB:byId.get(b) });
   };
   parentsByChild.forEach((parents,childId) => {
@@ -85,7 +97,7 @@ export function familyRelationSuggestions(people, relations, decisions = []) {
     for (const [parent,other] of [[row.person_a_id,row.person_b_id],[row.person_b_id,row.person_a_id]]) {
       parentsByChild.forEach((parents,childId) => {
         if (parents.size >= 2 || !parents.has(parent) || parents.has(other) || childId === other) return;
-        add('spouse_child_parent',other,childId,childId);
+        add('spouse_child_parent',other,childId,childId,parent);
       });
     }
   });
