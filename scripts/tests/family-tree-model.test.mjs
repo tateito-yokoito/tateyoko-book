@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { treeNeighbors, familyRelationSuggestions, relationCandidates,
-  spouseParentsOfChild } from '../../src/lib/familyTreeModel.js';
+  spouseParentsOfChild, nextMatchingRelationSuggestion } from '../../src/lib/familyTreeModel.js';
 
 const people = ['self', 'father', 'mother', 'spouse', 'child', 'sibling', 'grandparent', 'aunt']
   .map(id => ({ id, display_name: id }));
@@ -60,6 +60,18 @@ test('a spouse with an unlinked child is proposed once and decisions persist', (
   assert.equal(familyRelationSuggestions(people,base,[decision]).some(item => item.key === proposal.key),false);
   assert.equal(familyRelationSuggestions(people,base,[{...decision,status:'later'}])
     .find(item => item.key === proposal.key)?.status,'later');
+});
+
+test('confirming one child continues with the same proposed parent only', () => {
+  const first = {key:'first',kind:'spouse_child_parent',person_a_id:'mother',status:null};
+  const unrelated = {key:'other',kind:'spouse_child_parent',person_a_id:'father',status:null};
+  const later = {key:'later',kind:'spouse_child_parent',person_a_id:'mother',status:'later'};
+  const second = {key:'second',kind:'spouse_child_parent',person_a_id:'mother',status:null};
+  assert.equal(nextMatchingRelationSuggestion([first,unrelated,later,second],first),second);
+  assert.equal(nextMatchingRelationSuggestion([first,later],first),null);
+  assert.equal(nextMatchingRelationSuggestion([first,second],{
+    ...first,kind:'shared_child_spouse',key:'couple',
+  }),null);
 });
 
 test('relationship picker narrows people after choosing a role without guessing unknown gender', () => {

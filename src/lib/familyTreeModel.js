@@ -103,3 +103,9 @@ export function familyRelationSuggestions(people, relations, decisions = []) {
   });
   return [...suggestions.values()].filter(item => item.status !== 'declined' && item.status !== 'accepted');
 }
+
+export function nextMatchingRelationSuggestion(suggestions, answered) {
+  if (answered.kind !== 'spouse_child_parent') return null;
+  return suggestions.find(item => !item.status && item.key !== answered.key
+    && item.kind === answered.kind && item.person_a_id === answered.person_a_id) || null;
+}

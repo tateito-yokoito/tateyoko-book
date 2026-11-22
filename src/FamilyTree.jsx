@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, ChevronRight, Pencil, Plus, RotateCcw, Users } from 'lucide-react';
 import FamilyAvatar from './FamilyAvatar.jsx';
 import { FamilyRelationQuestion } from './FamilyRelationshipEditor.jsx';
-import { spouseParentsOfChild, treeNeighbors } from './lib/familyTreeModel.js';
+import { nextMatchingRelationSuggestion, spouseParentsOfChild, treeNeighbors } from './lib/familyTreeModel.js';
 import './family-tree.css';
 
 export { treeNeighbors };
@@ -250,7 +250,8 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
     {suggestionToConfirm && <div className="ft-suggestion-backdrop" role="presentation">
       <div className="ft-suggestion-sheet" role="dialog" aria-modal="true" aria-label="家族関係の確認">
         <FamilyRelationQuestion item={suggestionToConfirm} busy={busy} onAnswer={async (item,answer) => {
-          if (await onAnswerSuggestion(item,answer)) setSuggestionToConfirm(null);
+          if (await onAnswerSuggestion(item,answer))
+            setSuggestionToConfirm(nextMatchingRelationSuggestion(suggestions,item));
         }}/>
       </div>
     </div>}
