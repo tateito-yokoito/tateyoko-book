@@ -10,12 +10,13 @@ import PortraitCropEditor from './PortraitCropEditor.jsx';
 import {
   ensureFamilyPlace, familyPlacePeople, familyPlacePublishedBooks, addFamilyPlacePerson, updateFamilyPlacePerson,
   familyPlaceRelations, saveFamilyPlaceRelation, removeFamilyPlaceRelation,
-  personNameParts, uploadFamilyPlacePortrait, familyPlacePortraitUrl,
+  personNameParts, uploadFamilyPlacePortrait, downloadFamilyPlacePortrait, familyPlacePortraitUrl,
   familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories,
   getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, addFamilyPlaceMedia,
   setFamilyPlaceStoryVisibility, revokeFamilyPlaceMediaUrls,
 } from './lib/familyPlaceData.js';
 import './family-place.css';
+import { preparePortraitSource } from './lib/portraitSource.js';
 
 // TEST-only provisional prompts. The owner will select the final person-based
 // questions; this route remains disabled in production builds until then.
@@ -98,6 +99,9 @@ export default function FamilyPlaceApp() {
   const [profilePhotoFile, setProfilePhotoFile] = useState(null);
   const [profilePhotoPreview, setProfilePhotoPreview] = useState(null);
   const [portraitCandidate, setPortraitCandidate] = useState(null);
+  const [portraitCandidateIsNew, setPortraitCandidateIsNew] = useState(false);
+  const [portraitSourceFile, setPortraitSourceFile] = useState(null);
+  const [portraitSourceIsNew, setPortraitSourceIsNew] = useState(false);
   const portraitUrlsRef = useRef(new Map());
   const [factDraft, setFactDraft] = useState(null);
   const [facts, setFacts] = useState([]);
@@ -347,6 +351,7 @@ export default function FamilyPlaceApp() {
   const startProfile = () => {
     if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
     setProfilePhotoFile(null); setProfilePhotoPreview(null); setPortraitCandidate(null);
+    setPortraitCandidateIsNew(false); setPortraitSourceFile(null); setPortraitSourceIsNew(false);
     setProfile({ ...personNameParts(person), family_name_kana: person.family_name_kana || '',
       given_name_kana: person.given_name_kana || '', birth_year: person.birth_year || '',
       birth_month: person.birth_month || '', birth_day: person.birth_day || '',
@@ -354,21 +359,51 @@ export default function FamilyPlaceApp() {
       notes: person.notes || '', gender: person.gender || '' });
     setScreen('profile');
   };
+  const adjustPortrait = async () => {
+    if (portraitSourceFile) {
+      setPortraitCandidate(portraitSourceFile);
+      setPortraitCandidateIsNew(portraitSourceIsNew);
+      return;
+    }
+    const path = person.portrait_source_storage_path || person.portrait_storage_path;
+    if (!path) return;
+    setBusy(true); setError('');
+    try {
+      const source = await downloadFamilyPlacePortrait(supabaseClient, path);
+      setPortraitSourceFile(source);
+      setPortraitSourceIsNew(false);
+      setPortraitCandidateIsNew(false);
+      setPortraitCandidate(source);
+    } catch (cause) { setError(cause.message || '写真を読み込めませんでした'); }
+    finally { setBusy(false); }
+  };
   const saveProfile = async event => {
     event.preventDefault(); setBusy(true); setError('');
-    let newPortraitPath = null;
+    const uploadedPaths = [];
+    let committed = false;
     try {
-      if (profilePhotoFile) newPortraitPath = await uploadFamilyPlacePortrait(
-        supabaseClient, user.id, person.id, profilePhotoFile);
+      let sourcePath;
+      let newPortraitPath;
+      if (profilePhotoFile) {
+        sourcePath = person.portrait_source_storage_path || person.portrait_storage_path || null;
+        if (portraitSourceIsNew) {
+          const preparedSource = await preparePortraitSource(portraitSourceFile);
+          sourcePath = await uploadFamilyPlacePortrait(supabaseClient, user.id, person.id, preparedSource);
+          uploadedPaths.push(sourcePath);
+        }
+        newPortraitPath = await uploadFamilyPlacePortrait(supabaseClient, user.id, person.id, profilePhotoFile);
+        uploadedPaths.push(newPortraitPath);
+      }
       await updateFamilyPlacePerson(supabaseClient, person.id, profile,
-        newPortraitPath || undefined);
+        newPortraitPath || undefined, profilePhotoFile ? sourcePath : undefined);
+      committed = true;
       await loadHome(user);
       if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
-      setProfilePhotoFile(null); setProfilePhotoPreview(null);
+      setProfilePhotoFile(null); setProfilePhotoPreview(null); setPortraitSourceFile(null);
       setScreen('person');
     } catch (cause) {
-      if (newPortraitPath) await supabaseClient.storage.from('family-person-portraits')
-        .remove([newPortraitPath]).catch(() => {});
+      if (!committed && uploadedPaths.length) await supabaseClient.storage.from('family-person-portraits')
+        .remove(uploadedPaths).catch(() => {});
       setError(cause.message || '保存できませんでした');
     }
     finally { setBusy(false); }
@@ -602,15 +637,21 @@ export default function FamilyPlaceApp() {
                 setError('JPEG・PNG・WebPの画像（20MB以下）を選んでください');
                 return;
               }
-              setError(''); setPortraitCandidate(file);
+              setError(''); setPortraitCandidateIsNew(true); setPortraitCandidate(file);
             }}/>
           <small>JPEG・PNG・WebP（20MB以下）。丸のガイドで位置と大きさを調整できます。</small>
         </label>
+        {(profilePhotoFile || person.portrait_storage_path) && !portraitCandidate &&
+          <button type="button" className="fp-portrait-adjust" disabled={busy} onClick={adjustPortrait}>
+            位置・大きさを調整
+          </button>}
         {portraitCandidate && <PortraitCropEditor file={portraitCandidate}
           onCancel={() => setPortraitCandidate(null)} onConfirm={file => {
             if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
             setProfilePhotoFile(file);
             setProfilePhotoPreview(URL.createObjectURL(file));
+            setPortraitSourceFile(portraitCandidate);
+            setPortraitSourceIsNew(portraitCandidateIsNew);
             setPortraitCandidate(null);
           }}/>}
         <div className="fp-name-fields">

@@ -11,7 +11,7 @@ export async function ensureFamilyPlace(client, user, label) {
 
 export async function familyPlacePeople(client, familyId) {
   const { data, error } = await client.from('persons')
-    .select('id,family_id,display_name,family_name,given_name,family_name_kana,given_name_kana,birth_year,birth_month,birth_day,death_year,gender,notes,maiden_name,portrait_storage_path,created_at')
+    .select('id,family_id,display_name,family_name,given_name,family_name_kana,given_name_kana,birth_year,birth_month,birth_day,death_year,gender,notes,maiden_name,portrait_storage_path,portrait_source_storage_path,created_at')
     .eq('family_id', familyId).order('created_at');
   if (error) throw error;
   return data || [];
@@ -57,7 +57,8 @@ export async function addFamilyPlacePerson(client, familyId, fields, isSelf, anc
   return data;
 }
 
-export async function updateFamilyPlacePerson(client, personId, fields, portraitStoragePath = undefined) {
+export async function updateFamilyPlacePerson(client, personId, fields,
+  portraitStoragePath = undefined, portraitSourceStoragePath = undefined) {
   const familyName = fields.family_name.trim();
   const givenName = fields.given_name.trim();
   const payload = {
@@ -75,6 +76,7 @@ export async function updateFamilyPlacePerson(client, personId, fields, portrait
     gender: fields.gender || null,
   };
   if (portraitStoragePath !== undefined) payload.portrait_storage_path = portraitStoragePath;
+  if (portraitSourceStoragePath !== undefined) payload.portrait_source_storage_path = portraitSourceStoragePath;
   const { data, error } = await client.from('persons').update(payload)
     .eq('id', personId).select('id').single();
   if (error || !data) throw error || new Error('プロフィールを保存できませんでした');
@@ -131,6 +133,12 @@ export async function familyPlacePortraitUrl(client, path) {
   const { data, error } = await client.storage.from('family-person-portraits').download(path);
   if (error || !data) return null;
   return URL.createObjectURL(data);
+}
+
+export async function downloadFamilyPlacePortrait(client, path) {
+  const { data, error } = await client.storage.from('family-person-portraits').download(path);
+  if (error || !data) throw error || new Error('写真を読み込めませんでした');
+  return new File([data], 'profile-portrait-source.jpg', { type: data.type || 'image/jpeg' });
 }
 
 export async function familyPlaceFacts(client, personId) {
