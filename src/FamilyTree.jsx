@@ -1,19 +1,10 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft, ChevronRight, Plus, RotateCcw, Users } from 'lucide-react';
 import FamilyAvatar from './FamilyAvatar.jsx';
+import { treeNeighbors } from './lib/familyTreeModel.js';
 import './family-tree.css';
 
-export function treeNeighbors(centerId, people, relations) {
-  const byId = new Map(people.map(person => [person.id, person]));
-  const related = (type, test, pick) => relations.filter(row => row.relation_type === type && test(row))
-    .map(row => ({ relation: row, person: byId.get(pick(row)) })).filter(item => item.person);
-  return {
-    parents: related('parent_child', row => row.person_b_id === centerId, row => row.person_a_id),
-    spouses: related('spouse', row => row.person_a_id === centerId || row.person_b_id === centerId,
-      row => row.person_a_id === centerId ? row.person_b_id : row.person_a_id),
-    children: related('parent_child', row => row.person_a_id === centerId, row => row.person_b_id),
-  };
-}
+export { treeNeighbors };
 
 function roleName(item) {
   if (item.relation.relation_type === 'spouse') return '配偶者';
@@ -22,7 +13,7 @@ function roleName(item) {
 
 function PersonNode({ item, label, onCenter, onEdit, center = false }) {
   const person = item.person || item;
-  return <div className={`ft-node ${center ? 'is-center' : ''}`}>
+  return <div className={`ft-node ${center ? 'is-center' : ''}`} data-person-id={person.id}>
     <button type="button" className="ft-node-main" onClick={() => onCenter(person.id)}
       aria-label={`${person.display_name}さんを中心にする`}>
       <strong className="ft-person-name">{person.display_name}</strong>
@@ -37,8 +28,64 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
   onOpenPerson, onHome, onEditRelation, onRemoveRelation }) {
   const [editing, setEditing] = useState(null);
   const [role, setRole] = useState('parent');
+  const [paths, setPaths] = useState([]);
+  const graphRef = useRef(null);
+  const boardRef = useRef(null);
   const center = people.find(item => item.id === centerId) || null;
-  const { parents, spouses, children } = treeNeighbors(centerId, people, relations);
+  const { parents, spouses, siblings, children } = treeNeighbors(centerId, people, relations);
+  useLayoutEffect(() => {
+    const board = boardRef.current;
+    const graph = graphRef.current;
+    if (!board || !graph) return undefined;
+    let frame;
+    const draw = () => {
+      const origin = board.getBoundingClientRect();
+      const nodes = new Map([...board.querySelectorAll('[data-person-id]')]
+        .map(node => [node.dataset.personId, node.querySelector('.ft-avatar-ring')]));
+      const point = (id, edge) => {
+        const node = nodes.get(id);
+        if (!node) return null;
+        const rect = node.getBoundingClientRect();
+        return { x: rect.left - origin.left + rect.width / 2,
+          y: rect.top - origin.top + (edge === 'top' ? 0 : edge === 'bottom' ? rect.height : rect.height / 2),
+          radius: rect.width / 2 };
+      };
+      const next = relations.flatMap(row => {
+        if (row.relation_type === 'parent_child') {
+          const start = point(row.person_a_id, 'bottom');
+          const end = point(row.person_b_id, 'top');
+          if (!start || !end || end.y <= start.y) return [];
+          const bend = (start.y + end.y) / 2;
+          return [{ id: row.id, kind: 'parent_child',
+            d: `M ${start.x} ${start.y} C ${start.x} ${bend}, ${end.x} ${bend}, ${end.x} ${end.y}` }];
+        }
+        if (row.relation_type === 'spouse') {
+          const a = point(row.person_a_id, 'middle');
+          const b = point(row.person_b_id, 'middle');
+          if (!a || !b) return [];
+          const [left, right] = a.x < b.x ? [a,b] : [b,a];
+          return [{ id: row.id, kind: 'spouse',
+            d: `M ${left.x + left.radius} ${left.y} L ${right.x - right.radius} ${right.y}` }];
+        }
+        return [];
+      });
+      setPaths(next);
+    };
+    const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(draw); };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(board);
+    board.querySelectorAll('.ft-avatar-ring').forEach(node => observer.observe(node));
+    window.addEventListener('resize', schedule);
+    draw();
+    const selected = [...board.querySelectorAll('[data-person-id]')]
+      .find(node => node.dataset.personId === centerId);
+    if (selected) {
+      const boardRect = board.getBoundingClientRect();
+      const selectedRect = selected.getBoundingClientRect();
+      graph.scrollLeft = selectedRect.left - boardRect.left + selectedRect.width / 2 - graph.clientWidth / 2;
+    }
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener('resize', schedule); };
+  }, [centerId, people, relations]);
   const chooseEdit = item => {
     setEditing(item);
     setRole(item.relation.relation_type === 'spouse' ? 'spouse'
@@ -53,19 +100,23 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
     </section> : <>
       <div className="ft-context"><span>{center.display_name}さんを中心に表示</span>
         {selfId && centerId !== selfId && <button type="button" onClick={() => onCenter(selfId)}><RotateCcw/>自分を中心に戻る</button>}</div>
-      <section className="ft-graph" aria-label={`${center.display_name}さんの家系図`}>
-        {parents.length > 0 && <div className="ft-generation ft-parents">
-          {parents.map(item => <PersonNode key={item.relation.id} item={item} label={roleName(item)} onCenter={onCenter} onEdit={chooseEdit}/>)}
-        </div>}
-        {parents.length > 0 && <div className="ft-line" aria-hidden="true"/>}
-        <div className={`ft-generation ft-middle ${spouses.length ? 'has-spouse' : ''}`}>
-          <PersonNode item={center} label={centerId === selfId ? '自分' : '中心の人物'} center onCenter={onCenter} onEdit={chooseEdit}/>
-          {spouses.map(item => <PersonNode key={item.relation.id} item={item} label="配偶者" onCenter={onCenter} onEdit={chooseEdit}/>)}
+      <section ref={graphRef} className="ft-graph" aria-label={`${center.display_name}さんの家系図`}>
+        <div ref={boardRef} className="ft-board">
+          <svg className="ft-connections" aria-hidden="true">
+            {paths.map(path => <path key={path.id} className={`ft-connection ft-connection-${path.kind}`} d={path.d}/>)}
+          </svg>
+          {parents.length > 0 && <div className="ft-generation ft-parents">
+            {parents.map(item => <PersonNode key={item.relation.id} item={item} label={roleName(item)} onCenter={onCenter} onEdit={chooseEdit}/>)}
+          </div>}
+          <div className="ft-generation ft-middle">
+            <PersonNode item={center} label={centerId === selfId ? '自分' : '中心の人物'} center onCenter={onCenter} onEdit={chooseEdit}/>
+            {spouses.map(item => <PersonNode key={item.relation.id} item={item} label="配偶者" onCenter={onCenter} onEdit={chooseEdit}/>)}
+            {siblings.map(item => <PersonNode key={item.person.id} item={item} label="兄弟姉妹" onCenter={onCenter} onEdit={chooseEdit}/>)}
+          </div>
+          {children.length > 0 && <div className="ft-generation ft-children">
+            {children.map(item => <PersonNode key={item.relation.id} item={item} label="子ども" onCenter={onCenter} onEdit={chooseEdit}/>)}
+          </div>}
         </div>
-        {children.length > 0 && <div className="ft-line" aria-hidden="true"/>}
-        {children.length > 0 && <div className="ft-generation ft-children">
-          {children.map(item => <PersonNode key={item.relation.id} item={item} label="子ども" onCenter={onCenter} onEdit={chooseEdit}/>)}
-        </div>}
       </section>
       <div className="ft-add-actions" aria-label="家族を追加する">
         <button type="button" onClick={() => onAdd(centerId,'father')}><Plus/>父を追加</button>
