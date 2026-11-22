@@ -621,30 +621,33 @@ export default function FamilyPlaceApp() {
       onAddFact={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}/>}
     {screen === 'profile' && person && <main className="fp-section"><h1>プロフィール</h1>
       <form className="fp-form" onSubmit={saveProfile}>
-        <label className="fp-profile-photo">プロフィール画像（任意）
-          <span className="fp-profile-photo-picker">
+        <div className="fp-profile-photo"><span>プロフィール画像（任意）</span>
+          <div className="fp-profile-photo-controls">
+            <span className="fp-profile-photo-picker">
             {(profilePhotoPreview || person.portrait_url) ? <img
               src={profilePhotoPreview || person.portrait_url} alt="選択中のプロフィール画像"/>
               : <span className="fp-profile-photo-empty" aria-hidden="true">写真</span>}
-            <span>写真を選ぶ</span>
-          </span>
-          <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy}
-            onChange={event => {
-              const file = event.target.files?.[0] || null;
-              event.target.value = '';
-              if (!file) return;
-              if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 20 * 1024 * 1024) {
-                setError('JPEG・PNG・WebPの画像（20MB以下）を選んでください');
-                return;
-              }
-              setError(''); setPortraitCandidateIsNew(true); setPortraitCandidate(file);
-            }}/>
+            </span>
+            <div className="fp-profile-photo-actions">
+              <button type="button" className="fp-portrait-action" disabled={busy || !(profilePhotoFile || person.portrait_storage_path)}
+                onClick={adjustPortrait}>位置などを調整</button>
+              <label className="fp-portrait-action fp-portrait-choose">写真を選ぶ
+                <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy}
+                  onChange={event => {
+                    const file = event.target.files?.[0] || null;
+                    event.target.value = '';
+                    if (!file) return;
+                    if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 20 * 1024 * 1024) {
+                      setError('JPEG・PNG・WebPの画像（20MB以下）を選んでください');
+                      return;
+                    }
+                    setError(''); setPortraitCandidateIsNew(true); setPortraitCandidate(file);
+                  }}/>
+              </label>
+            </div>
+          </div>
           <small>JPEG・PNG・WebP（20MB以下）。丸のガイドで位置と大きさを調整できます。</small>
-        </label>
-        {(profilePhotoFile || person.portrait_storage_path) && !portraitCandidate &&
-          <button type="button" className="fp-portrait-adjust" disabled={busy} onClick={adjustPortrait}>
-            位置・大きさを調整
-          </button>}
+        </div>
         {portraitCandidate && <PortraitCropEditor file={portraitCandidate}
           onCancel={() => setPortraitCandidate(null)} onConfirm={file => {
             if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
