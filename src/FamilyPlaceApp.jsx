@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { BookOpen, ChevronLeft, Home, Image, LockKeyhole, Mic, Pencil, Plus, Users } from 'lucide-react';
+import { BookOpen, ChevronLeft, Home, Image, Users } from 'lucide-react';
 import { Scene_Login, Scene_Recording, PhotoCorrectionFlow, ensureProfileExists, supabaseClient } from './App.jsx';
 import { AnswerBodyEditor, AnswerEntryChoices, AnswerReview, AnswerSaveStatus } from './AnswerInputUI.jsx';
 import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
 import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
+import FamilyPersonPage from './FamilyPersonPage.jsx';
 import {
   ensureFamilyPlace, familyPlacePeople, addFamilyPlacePerson, updateFamilyPlacePerson,
   familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories,
@@ -296,7 +297,7 @@ export default function FamilyPlaceApp() {
       }}>音声保存を再試行する</button>}</div>}
   </div>;
   return <div className="fp-app">
-    {screen !== 'home' && <header className="fp-header">
+    {screen !== 'home' && screen !== 'person' && <header className="fp-header">
       <button onClick={() => screen === 'story' ? leaveStory()
           : screen === 'profile' ? setScreen('person')
           : screen === 'person' ? goHome() : setScreen('home')}><ChevronLeft/>戻る</button>
@@ -315,42 +316,11 @@ export default function FamilyPlaceApp() {
         <p className="fp-note">詳しいプロフィールは後から追加できます。</p>
         <button className="fp-primary" disabled={busy}>登録して人物ページを見る</button>
       </form></main>}
-    {screen === 'person' && person && <main>
-      <section className="fp-person-head"><span className="fp-avatar fp-avatar-large">{person.display_name.slice(0,1)}</span>
-        <div><h1>{person.display_name}</h1>{person.birth_year && <p>{person.birth_year}年生まれ</p>}
-        {person.notes && <p>{person.notes}</p>}</div></section>
-      <button className="fp-profile-link" onClick={startProfile}>プロフィールを見る・編集する ›</button>
-      <div className="fp-tabs" role="tablist">
-        {[['life','人生'],['memories','思い出'],['timeline','年表']].map(([key,label]) =>
-          <button key={key} role="tab" aria-selected={activeTab===key}
-            onClick={() => setActiveTab(key)}>{label}</button>)}
-      </div>
-      {activeTab === 'life' && <section className="fp-section">
-        <h2>人生の語り</h2>
-        {!stories.some(row => row.body || row.transcript_raw || row.media_count) && <div className="fp-card fp-empty-story">
-          <BookOpen/><strong>人生の語りは、これから</strong>
-          <p>思い出したことから、声・文章・写真で残せます。</p></div>}
-        {stories.filter(row => row.body || row.transcript_raw || row.media_count).map(row =>
-          <button className="fp-card fp-story-row" key={row.id}
-            onClick={() => openStory(testQuestions[row.question_slot-1])}>
-            <span>{row.visibility === 'private' && <LockKeyhole size={15}/>}
-              {row.question_text}</span><small>保存した語りを見る ›</small></button>)}
-        <p className="fp-note">質問文は技術検証用です。正式な無料3問は選定後に反映します。</p>
-        {testQuestions.map(question => <button key={question.id} className="fp-outline"
-          disabled={busy} onClick={() => openStory(question)}>
-          {question.slot}問目：{question.text}</button>)}
-      </section>}
-      {activeTab === 'memories' && <section className="fp-section"><h2>思い出</h2>
-        <p className="fp-note">家族の思い出カードは次の実装段階です。</p></section>}
-      {activeTab === 'timeline' && <section className="fp-section"><h2>年表</h2>
-        {familyPlaceTimeline(person,facts).length
-          ? familyPlaceTimeline(person,facts).map(item => <div className="fp-card fp-timeline" key={item.id}>
-            <time>{item.year ? `${item.year}年${item.month ? item.month+'月' : ''}${item.day ? item.day+'日' : ''}` : '時期未登録'}</time>
-            <strong>{item.label}</strong>{item.detail && <p>{item.detail}</p>}</div>)
-          : <p className="fp-note">登録した事実だけを年表に表示します。</p>}
-        <button className="fp-outline" onClick={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}>出来事を登録する</button>
-      </section>}
-    </main>}
+    {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories}
+      facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
+      onTabChange={setActiveTab} onBack={goHome} onProfile={startProfile}
+      onOpenStory={openStory} busy={busy}
+      onAddFact={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}/>}
     {screen === 'profile' && person && <main className="fp-section"><h1>プロフィール</h1>
       <form className="fp-form" onSubmit={saveProfile}>
         <label>氏名<input required maxLength={100} value={profile?.display_name || ''}
@@ -426,7 +396,7 @@ export default function FamilyPlaceApp() {
       <PhotoCorrectionFlow open={photoOpen} awaitCompletion title="写真を添える"
         onClose={() => setPhotoOpen(false)} onComplete={addPhoto}/>
     </main>}
-    {screen === 'home' ? <FamilyHomeNav onHome={goHome} onStories={goHome} onFamily={goHome}/> : <nav className="fp-bottom">
+    {screen === 'home' ? <FamilyHomeNav onHome={goHome} onStories={goHome} onFamily={goHome}/> : screen === 'person' ? null : <nav className="fp-bottom">
       <button onClick={goHome}><Home/>ホーム</button>
       <button onClick={() => {setScreen('home');setSelectedId(null);}}><BookOpen/>人生の物語</button>
       <button onClick={() => {setScreen('home');setSelectedId(null);}}><Users/>家族</button>

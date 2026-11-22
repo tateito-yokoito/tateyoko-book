@@ -16,6 +16,8 @@ export default defineConfig({
         ...(process.env.RELEASE_FAMILY_HOME_REVIEW === 'true' ? {
           familyHomeReview: 'family-home-review.html',
           familyHomeComparison: 'family-home-comparison.html',
+          familyPersonReview: 'family-person-review.html',
+          familyPersonComparison: 'family-person-comparison.html',
         } : {}),
       },
     },
