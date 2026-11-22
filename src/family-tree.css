@@ -34,6 +34,8 @@
 .ft-connection-spouse{stroke:#a48724;stroke-width:2.5}
 .ft-middle.has-spouse::before{content:none}
 .ft-node.is-center{position:relative}
-.ft-profile-edit{position:absolute;right:-9px;bottom:-9px;z-index:2;display:grid;place-items:center;width:44px;height:44px;border:2px solid #fffdf7;border-radius:50%;background:#507a2b;color:#fff;box-shadow:0 3px 10px #26301f40;cursor:pointer}
-.ft-profile-edit svg{width:19px;height:19px}
-.ft-profile-edit:focus-visible{outline:3px solid #274927;outline-offset:2px}
+.ft-profile-edit,.ft-page-open{position:absolute;right:-9px;z-index:2;display:grid;place-items:center;width:44px;height:44px;border:2px solid #fffdf7;border-radius:50%;background:#507a2b;color:#fff;box-shadow:0 3px 10px #26301f40;cursor:pointer}
+.ft-profile-edit{bottom:-9px}
+.ft-page-open{bottom:70px}
+.ft-profile-edit svg,.ft-page-open svg{width:19px;height:19px}
+.ft-profile-edit:focus-visible,.ft-page-open:focus-visible{outline:3px solid #274927;outline-offset:2px}
