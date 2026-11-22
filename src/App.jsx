@@ -2124,6 +2124,29 @@ async function loadUserQuestionSet(userId, foundationData = null) {
 
   if (uqError) throw uqError;
 
+  // A paid BOOK can adopt a matching Person story without copying it into an
+  // independently editable answer. The server links only an empty question and
+  // maintains its BOOK projection in the same transaction as future edits.
+  if (projectId && hasFullProjectAccess(foundationData?.project)) {
+    const { data: mappings, error: mappingError } = await supabaseClient
+      .from('person_story_question_map').select('book_question_id').eq('enabled', true);
+    if (mappingError) throw mappingError;
+    const mappedIds = new Set((mappings || []).map(item => item.book_question_id));
+    for (const row of userQuestions || []) {
+      if (!mappedIds.has(row.question_id)) continue;
+      const { data: link, error: linkError } = await supabaseClient.rpc('attach_person_story_to_book', {
+        input_project_id: projectId, input_user_question_id: row.id,
+      });
+      if (linkError) throw linkError;
+      if (link?.status === 'linked') {
+        row.status = 'answered';
+        row.answered_at ||= new Date().toISOString();
+      } else if (link?.status === 'conflict') {
+        console.warn('Person story and BOOK answer need individual conflict review', row.id);
+      }
+    }
+  }
+
   await loadPublishedQuestionCopy(supabaseClient).catch(error=>console.warn('question copy unavailable',error));
   return normalizeUserQuestions(userQuestions || []).map(withPublishedQuestionCopy);
 }

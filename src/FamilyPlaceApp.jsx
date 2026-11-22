@@ -10,7 +10,7 @@ import {
   personNameParts,
   familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories,
   getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, addFamilyPlaceMedia,
-  setFamilyPlaceStoryVisibility,
+  setFamilyPlaceStoryVisibility, revokeFamilyPlaceMediaUrls,
 } from './lib/familyPlaceData.js';
 import './family-place.css';
 
@@ -67,6 +67,7 @@ export default function FamilyPlaceApp() {
   const [error, setError] = useState('');
   const [activeStory, setActiveStory] = useState(null);
   const [media, setMedia] = useState([]);
+  const mediaRef = useRef([]);
   const [body, setBody] = useState('');
   const [saveState, setSaveState] = useState('idle');
   const [recordingError, setRecordingError] = useState('');
@@ -147,7 +148,16 @@ export default function FamilyPlaceApp() {
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, []);
-  useEffect(() => () => clearTimeout(saveTimer.current), []);
+  useEffect(() => () => {
+    clearTimeout(saveTimer.current);
+    revokeFamilyPlaceMediaUrls(mediaRef.current);
+  }, []);
+
+  const replaceMedia = items => {
+    revokeFamilyPlaceMediaUrls(mediaRef.current);
+    mediaRef.current = items;
+    setMedia(items);
+  };
 
   const openPerson = id => {
     personLoadEpoch.current++;
@@ -162,6 +172,7 @@ export default function FamilyPlaceApp() {
     if (activeStory && (textRef.current !== savedTextRef.current || savePromiseRef.current)) {
       try { await flushText(); } catch { setError('保存できていません。再試行してください'); return; }
     }
+    replaceMedia([]);
     setActiveStory(null); setSelectedId(null); setScreen('home');
     if (user) await loadHome(user);
   };
@@ -171,6 +182,7 @@ export default function FamilyPlaceApp() {
       try { await flushText(); }
       catch { setError('保存できていません。再試行してください'); return; }
     }
+    replaceMedia([]);
     setScreen('person');
     if (person) await loadPerson(person.id);
   };
@@ -222,7 +234,7 @@ export default function FamilyPlaceApp() {
       const items = await familyPlaceMedia(supabaseClient, row.id);
       storyRef.current = row; setActiveStory(row); setStoryQuestion(question);
       textRef.current = row.body || ''; savedTextRef.current = row.body || '';
-      setBody(row.body || ''); setMedia(items); setSaveState('saved');
+      setBody(row.body || ''); replaceMedia(items); setSaveState('saved');
       setScreen('story');
       await loadPerson(person.id);
     } catch (cause) { setError(cause.message || '記録を開けませんでした'); }
@@ -279,7 +291,7 @@ export default function FamilyPlaceApp() {
     setSaveState('saving');
     const item = await addFamilyPlaceMedia(supabaseClient, user.id, storyRef.current.id, file, kind, seconds);
     const refreshed = await familyPlaceMedia(supabaseClient, storyRef.current.id);
-    setMedia(refreshed); setSaveState('saved');
+    replaceMedia(refreshed); setSaveState('saved');
     await loadPerson(person.id);
     return item;
   };

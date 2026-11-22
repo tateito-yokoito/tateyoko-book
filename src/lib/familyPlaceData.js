@@ -183,12 +183,27 @@ export async function familyPlaceMedia(client, storyId) {
     .select('id,story_id,asset_type,storage_path,duration_seconds,created_at')
     .eq('story_id', storyId).order('created_at');
   if (error) throw error;
-  return Promise.all((data || []).map(async item => {
-    const signed = await client.storage.from('family-free-media')
-      .createSignedUrl(item.storage_path, 3600);
-    if (signed.error || !signed.data?.signedUrl) throw signed.error || new Error('メディアを開けません');
-    return { ...item, url: signed.data.signedUrl };
-  }));
+  const opened = [];
+  try {
+    for (const item of data || []) {
+      // Download through the caller's JWT each time. A signed URL would remain
+      // usable after a key or collaborator permission changes.
+      const downloaded = await client.storage.from('family-free-media')
+        .download(item.storage_path);
+      if (downloaded.error || !downloaded.data) throw downloaded.error || new Error('メディアを開けません');
+      opened.push({ ...item, url: URL.createObjectURL(downloaded.data) });
+    }
+    return opened;
+  } catch (cause) {
+    revokeFamilyPlaceMediaUrls(opened);
+    throw cause;
+  }
+}
+
+export function revokeFamilyPlaceMediaUrls(items) {
+  for (const item of items || []) {
+    if (item.url?.startsWith('blob:')) URL.revokeObjectURL(item.url);
+  }
 }
 
 export async function addFamilyPlaceMedia(client, userId, storyId, file, kind, durationSeconds = null) {
