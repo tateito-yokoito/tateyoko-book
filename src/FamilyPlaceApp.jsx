@@ -20,6 +20,8 @@ import {
 } from './lib/familyPlaceData.js';
 import './family-place.css';
 import { preparePortraitSource } from './lib/portraitSource.js';
+import { hasKanji, kanaFieldForName, normalizeKanaReading,
+  suggestNameReading } from './lib/nameReading.js';
 
 // TEST-only provisional prompts. The owner will select the final person-based
 // questions; this route remains disabled in production builds until then.
@@ -29,10 +31,53 @@ const testQuestions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) =>
 const emptyPersonDraft = () => ({ family_name: '', given_name: '', family_name_kana: '', given_name_kana: '',
   maiden_name: '', maiden_name_kana: '', birth_year: '', birth_month: '', birth_day: '', gender: '' });
 
-function PersonNameFields({ value, onChange }) {
-  const field = (label, key, autoComplete, required = false) => <label>{label}<input
-    maxLength={100} required={required} autoComplete={autoComplete} value={value?.[key] || ''}
-    onChange={event => onChange({ ...value, [key]: event.target.value })}/></label>;
+function PersonNameFields({ value, onChange, people = [] }) {
+  const readingRef = useRef({});
+  const imeEligibleRef = useRef({});
+  const [autoFields, setAutoFields] = useState(() => new Set());
+  const markAuto = (key, enabled) => setAutoFields(previous => {
+    const next = new Set(previous);
+    if (enabled) next.add(key); else next.delete(key);
+    return next;
+  });
+  const changeName = (key, name) => {
+    const kanaKey = kanaFieldForName(key);
+    if (hasKanji(value?.[key]) && value[key] !== name) readingRef.current[key] = '';
+    const reading = normalizeKanaReading(name);
+    if (reading) readingRef.current[key] = reading;
+    const candidate = suggestNameReading(people,key,name,readingRef.current[key]);
+    const next = { ...value, [key]:name };
+    if (candidate && (!value?.[kanaKey]?.trim() || autoFields.has(kanaKey))) {
+      next[kanaKey] = candidate;
+      markAuto(kanaKey,true);
+    } else if (hasKanji(name) && autoFields.has(kanaKey) && !candidate) {
+      next[kanaKey] = '';
+      markAuto(kanaKey,false);
+    }
+    onChange(next);
+  };
+  const field = (label, key, autoComplete, required = false) => {
+    const nameField = Boolean(kanaFieldForName(key));
+    return <label>{label}<input maxLength={100} required={required} autoComplete={autoComplete}
+      value={value?.[key] || ''} onChange={event => {
+        if (nameField) changeName(key,event.target.value);
+        else { markAuto(key,false); onChange({ ...value, [key]:event.target.value }); }
+      }} onCompositionStart={nameField ? () => {
+        imeEligibleRef.current[key] = !hasKanji(value?.[key]);
+        readingRef.current[key] = '';
+      } : undefined}
+      onCompositionUpdate={nameField ? event => {
+        const reading = normalizeKanaReading(event.data);
+        if (imeEligibleRef.current[key] && reading) readingRef.current[key] = reading;
+      } : undefined}
+      onCompositionEnd={nameField ? event => {
+        if (imeEligibleRef.current[key]) changeName(key,event.currentTarget.value);
+        imeEligibleRef.current[key] = false;
+      } : undefined}
+      onBlur={nameField ? () => { readingRef.current[key] = ''; } : undefined}/>
+      {autoFields.has(key) && <small className="fp-reading-note">ふりがな候補です。必要なら修正してください。</small>}
+    </label>;
+  };
   return <>
     <div className="fp-name-fields">
       {field('姓', 'family_name', 'family-name', !value?.given_name?.trim())}
@@ -691,7 +736,7 @@ export default function FamilyPlaceApp() {
             onClick={() => linkExisting(existingPersonId)}>選んだ家族を家系図に結ぶ</button>
         </div>}
         {unlinkedPeople.length > 0 && <p className="fp-note">新しく登録する場合は、下に入力してください。</p>}
-        <PersonNameFields value={newPerson} onChange={setNewPerson}/>
+        <PersonNameFields value={newPerson} onChange={setNewPerson} people={people}/>
         <BirthDateFields value={newPerson} onChange={setNewPerson}/>
         <label>性別<select value={newPerson.gender || ''}
           disabled={newPersonRelation === 'father' || newPersonRelation === 'mother'}
@@ -749,7 +794,7 @@ export default function FamilyPlaceApp() {
             setPortraitSourceIsNew(portraitCandidateIsNew);
             setPortraitCandidate(null);
           }}/>}
-        <PersonNameFields value={profile} onChange={setProfile}/>
+        <PersonNameFields value={profile} onChange={setProfile} people={people}/>
         <BirthDateFields value={profile || emptyPersonDraft()} onChange={setProfile}/>
         <label>没年（分かる場合）<YearSelect value={profile?.death_year} onChange={next =>
           setProfile({...profile,death_year:next})}/></label>
