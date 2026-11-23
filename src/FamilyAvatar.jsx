@@ -11,8 +11,11 @@ export function FamilyAvatarProvider({ people, relations, children }) {
 }
 
 const spriteColumns = { male: 441, female: 735, neutral: 1035 };
-const spriteRows = { child: 255, young: 453, adult: 622, mature: 779, senior: 925,
-  unknown: 1090 };
+const spriteRows = { child: 255, young: 453, adult: 622, mature: 779, senior: 925 };
+// The silhouettes are offset inside the source image's dotted guide circles.
+// Center the visible figures, not those guides.
+const unknownCenters = { male: { x: 441, y: 1090 }, female: { x: 732, y: 1090 },
+  neutral: { x: 1030, y: 1092 } };
 // Crop inside each illustration circle so artwork from neighboring rows stays
 // hidden. The senior illustration is centered at 925, above the dotted guide.
 const illustrationCropSize = 144;
@@ -24,8 +27,8 @@ export default function FamilyAvatar({ person, className = '' }) {
     src={person.portrait_url} width="512" height="512" alt=""/>;
   const stage = avatarStage(person, new Date(), relations, people);
   const style = person?.gender === 'female' ? 'female' : person?.gender === 'male' ? 'male' : 'neutral';
-  const x = spriteColumns[style];
-  const y = spriteRows[stage];
+  const { x, y } = stage === 'unknown' ? unknownCenters[style]
+    : { x: spriteColumns[style], y: spriteRows[stage] };
   const cropSize = stage === 'unknown' ? unknownCropSize : illustrationCropSize;
   return <span className={`family-avatar family-avatar-illustration ${className}`.trim()}
     role="img" aria-label={stage === 'unknown' ? '年齢未登録の人物のイラスト' : '人物のイラスト'}>
