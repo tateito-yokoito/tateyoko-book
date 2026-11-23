@@ -1,11 +1,11 @@
 {
   "site": "https://www.tateito-yokoito.jp/",
   "deployedAt": "2026-11-23",
-  "vercelDeploymentId": "dpl_5QituFrgoyTGYFn6g9q75jfwdEmK",
+  "vercelDeploymentId": "dpl_3hUftfsX8uqyQvfkZeLWAmxeYDVA",
   "sourceBranch": "codex/family-production-integration",
-  "sourceCommit": "64c2da3aea464ac5a99cfb0086cc0631fc20ea4e",
-  "mainJsAsset": "assets/app-IceoIh_f.js",
-  "mainJsSha256": "3577b931a377393749e531950ec49702b21520a07bc01d494d2036075d0849be",
+  "sourceCommit": "bbfb3253ed7c4f17de9c6982d40d8fd4a704d8cf",
+  "mainJsAsset": "assets/app-DG0ufWGe.js",
+  "mainJsSha256": "9cdc8c3dc5f31820278f84ed0aef86f96bedc3fc5152a87aa213139e2838ba10",
   "entryJsAsset": "assets/index-Be25SE7n.js",
   "entryJsSha256": "4a804a488f7cc98fc1a520ec435a0f6149e3a97746475dca01015d1634a03f06"
 }
