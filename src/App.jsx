@@ -10906,7 +10906,9 @@ if (isNewMode) {
                 ? "お手伝いの依頼メールに記載された認証コードを入力してください"
                 : commercePurchaseReviewRequested() && getEntryModeFromUrl() === 'purchase'
                   ? "購入内容と無料3問の語りを引き継ぐため、メールに記載された数字をこの画面に入力してください。メールのURLは開かないでください。"
-                  : "メールのボタンを押すか、記載された数字を6〜8桁すべて入力してください"}
+                  : familyPlaceLogin
+                    ? "メールのログイン用URLを開くか、記載された6桁のコードを入力してください"
+                    : "メールのボタンを押すか、記載された数字を6〜8桁すべて入力してください"}
             </p>
           </div>
 
@@ -10914,19 +10916,19 @@ if (isNewMode) {
             type="text"
             className="quiet-input tracking-widest text-xl"
             value={pin}
-            onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, familyPlaceLogin ? 6 : 8))}
             inputMode="numeric"
             autoComplete="one-time-code"
-            placeholder="メール記載の数字（6〜8桁）"
-            maxLength="8"
+            placeholder={familyPlaceLogin ? "メール記載の6桁コード" : "メール記載の数字（6〜8桁）"}
+            maxLength={familyPlaceLogin ? 6 : 8}
           />
 
           <button
             type="button"
             onClick={handleVerifyPin}
-            disabled={!/^\d{6,8}$/.test(pin) || loading}
+            disabled={!(familyPlaceLogin ? /^\d{6}$/ : /^\d{6,8}$/).test(pin) || loading}
             className={`btn-quiet w-full py-4 rounded-full text-sm ${
-              !/^\d{6,8}$/.test(pin) || loading ? "opacity-40" : ""
+              !(familyPlaceLogin ? /^\d{6}$/ : /^\d{6,8}$/).test(pin) || loading ? "opacity-40" : ""
             }`}
           >
             {loading
