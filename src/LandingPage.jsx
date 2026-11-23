@@ -9,7 +9,9 @@ import SupportConsultationInline from './SupportConsultationInline.jsx';
 import { startHpAnalytics } from './lib/hpAnalytics.js';
 import { publicPurchaseHref, publicPurchaseLabel, publicPurchaseNote } from './lib/publicPurchaseCta.js';
 
-const LOGIN = "/?app=1&entry=login";
+// Both HP entrances share the family app's existing Supabase/BOOK identity.
+// The family-app allowlist continues to decide who can open the app.
+const LOGIN = "/login";
 const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true'
   ? '/?guest_trial=1' : '/?app=1&entry=trial';
 const PURCHASE = publicPurchaseHref;
@@ -179,7 +181,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
     </div>}
     <header className="hp-header">
       <a href="#top" aria-label="縦糸横糸 トップへ"><img src="/brand-logo-official.svg" alt="縦糸横糸" width="200" height="48" /></a>
-      <div className="hp-header-actions"><a href={reviewOnly ? "#hp-review-notice" : LOGIN}>ログイン</a><button id="hp-menu-toggle" aria-label={menu ? "メニューを閉じる" : "メニューを開く"} aria-expanded={menu} aria-controls="hp-nav" onClick={() => setMenu(!menu)}>{menu ? "閉じる ×" : "メニュー ☰"}</button></div>
+      <div className="hp-header-actions"><a href={reviewOnly ? "#hp-review-notice" : LOGIN}>無料で始める</a><a href={reviewOnly ? "#hp-review-notice" : LOGIN}>ログイン</a><button id="hp-menu-toggle" aria-label={menu ? "メニューを閉じる" : "メニューを開く"} aria-expanded={menu} aria-controls="hp-nav" onClick={() => setMenu(!menu)}>{menu ? "閉じる ×" : "メニュー ☰"}</button></div>
       {menu && <nav id="hp-nav" aria-label="メインメニュー">{[["#experience", "縦糸横糸とは"], ["#works", "二つの作品"], ["#price", "料金"], ["#support", "制作のお手伝い"], ["#faq", "よくある質問"]].map(([href,label]) => <a key={href} href={href} onClick={() => setMenu(false)}>{label}<span aria-hidden="true">↗</span></a>)}<a className="hp-company-link" href={COMPANY_SITE}>運営会社<span aria-hidden="true">↗</span></a></nav>}
     </header>
 

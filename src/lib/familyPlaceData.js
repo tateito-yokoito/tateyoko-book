@@ -199,9 +199,12 @@ export async function saveFamilyPlaceFact(client, userId, person, fact) {
 
 export function familyPlaceTimeline(person, facts) {
   const events = [];
+  const birthPlace = (facts || []).find(fact =>
+    fact.fact_type === 'birth' && fact.label === '生まれた場所')?.detail || '';
   if (person?.birth_year) events.push({
     id: 'birth-year', year: person.birth_year,
-    month: person.birth_month, day: person.birth_day, label: '誕生', detail: '',
+    month: person.birth_month, day: person.birth_day,
+    label: birthPlace ? `${birthPlace}で生まれる` : '誕生', detail: '',
   });
   if (person?.death_year) events.push({
     id: 'death-year', year: person.death_year, label: '逝去', detail: '',

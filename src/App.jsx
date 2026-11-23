@@ -10259,7 +10259,8 @@ function Scene_TokenInvalid({ onBack, issue = "invalid", onRetry }) {
 }
 
 
-export function Scene_Login({ onLogin, giftPreview, familyInvitePreview, existingAccountOnly = false }) {
+export function Scene_Login({ onLogin, giftPreview, familyInvitePreview,
+  existingAccountOnly = false, familyPlaceLogin = false }) {
   const supporterInvitationUrl = getSupporterInvitationUrlFromCurrentLocation();
   const authReturnUrl = getAuthReturnUrlFromCurrentLocation();
   const isSupporterInviteLogin = Boolean(supporterInvitationUrl);
@@ -10838,12 +10839,13 @@ if (isNewMode) {
         <div className="w-full max-w-[320px] space-y-8 py-10 fade-enter">
           <div className="space-y-4 text-narrative">
             <p className="text-[1.1rem] text-white/90">
-              {isGiftEntry ? "贈りものを開く" : isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
+              {familyPlaceLogin ? '家族のチカラを開く'
+                : isGiftEntry ? "贈りものを開く" : isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
             </p>
 
             <p className="ui-small">
               {lineAuthEnabled
-                ? "前回と同じログイン方法を選んでください。"
+                ? (familyPlaceLogin ? 'LINEまたはメールアドレスで続けてください。' : "前回と同じログイン方法を選んでください。")
                 : <>登録したメールアドレスを入力してください。<br />同じメールアドレスで、前回の続きが開きます。</>}
             </p>
           </div>
@@ -10854,7 +10856,9 @@ if (isNewMode) {
                 className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${loading ? "opacity-40" : ""}`}>
                 {loading ? "LINEを開いています..." : "LINEで続ける"}
               </button>
-              <p className="ui-small">LINEで登録・連携した方はこちら。メールで登録した方は、下からお進みください。</p>
+              <p className="ui-small">{familyPlaceLogin
+                ? 'LINEをご利用の方はこちら。PCでもLINEの認証画面から進めます。'
+                : 'LINEで登録・連携した方はこちら。メールで登録した方は、下からお進みください。'}</p>
             </div>
           )}
 

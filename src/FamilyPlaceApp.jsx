@@ -35,7 +35,7 @@ const FamilyProductionEntry = React.lazy(() => import('./FamilyProductionEntry.j
 const emptyPersonDraft = () => ({ family_name: '', given_name: '', family_name_kana: '', given_name_kana: '',
   maiden_name: '', maiden_name_kana: '', birth_year: '', birth_month: '', birth_day: '', gender: '' });
 
-function PersonNameFields({ value, onChange, people = [] }) {
+function PersonNameFields({ value, onChange, people = [], firstRegistration = false }) {
   const readingRef = useRef({});
   const imeEligibleRef = useRef({});
   const [autoFields, setAutoFields] = useState(() => new Set());
@@ -84,9 +84,12 @@ function PersonNameFields({ value, onChange, people = [] }) {
   const readingNote = <small className="fp-reading-note">※ふりがな候補は修正可能。</small>;
   return <>
     <div className="fp-name-fields">
-      {field('姓', 'family_name', 'family-name', !value?.given_name?.trim())}
-      {field('名', 'given_name', 'given-name', !value?.family_name?.trim())}
+      {field(firstRegistration ? '姓（任意）' : '姓', 'family_name', 'family-name',
+        !firstRegistration && !value?.given_name?.trim())}
+      {field(firstRegistration ? '名' : '名', 'given_name', 'given-name',
+        firstRegistration || !value?.family_name?.trim())}
     </div>
+    {firstRegistration && <p className="fp-note fp-onboarding-name-note">名はニックネームでも大丈夫です。</p>}
     <div className="fp-name-group">
       <div className="fp-name-fields">
         {field('姓のふりがな', 'family_name_kana')}
@@ -94,13 +97,13 @@ function PersonNameFields({ value, onChange, people = [] }) {
       </div>
       {(autoFields.has('family_name_kana') || autoFields.has('given_name_kana')) && readingNote}
     </div>
-    <div className="fp-name-group">
+    {!firstRegistration && <div className="fp-name-group">
       <div className="fp-name-fields">
         {field('旧姓', 'maiden_name')}
         {field('旧姓のふりがな', 'maiden_name_kana')}
       </div>
       {autoFields.has('maiden_name_kana') && readingNote}
-    </div>
+    </div>}
   </>;
 }
 
@@ -166,6 +169,8 @@ export default function FamilyPlaceApp() {
   const [accessState, setAccessState] = useState('checking');
   const [verifiedUserId, setVerifiedUserId] = useState(null);
   const [familyId, setFamilyId] = useState(null);
+  const [onboarding, setOnboarding] = useState(emptyPersonDraft);
+  const [birthPlace, setBirthPlace] = useState('');
   const [people, setPeople] = useState([]);
   const [relations, setRelations] = useState([]);
   const [relationDecisions, setRelationDecisions] = useState([]);
@@ -283,6 +288,10 @@ export default function FamilyPlaceApp() {
     setRelationDecisions(nextDecisions);
     setHomeStoryCounts(counts);
     setSelfId(links.data?.find(link => persons.some(item => item.id === link.person_id))?.person_id || null);
+    if (window.location.pathname === '/login') {
+      window.history.replaceState(window.history.state, '',
+        `/app${window.location.search}${window.location.hash}`);
+    }
   }, []);
   const loadPerson = useCallback(async personId => {
     const epoch = ++personLoadEpoch.current;
@@ -606,6 +615,49 @@ export default function FamilyPlaceApp() {
     } catch (cause) { setError(cause.message || '登録できませんでした'); }
     finally { setBusy(false); }
   };
+  const finishOnboarding = async event => {
+    event.preventDefault();
+    if (!familyId || !onboarding.given_name.trim() || busy) return;
+    setBusy(true); setError('');
+    try {
+      // The existing self-person RPC locks by account and returns the existing
+      // linked person on retries. Never infer identity from a matching name.
+      const id = await addFamilyPlacePerson(supabaseClient, familyId, onboarding, true);
+      if (birthPlace.trim()) {
+        const { data: existing, error: lookupError } = await supabaseClient
+          .from('family_person_profile_facts').select('id')
+          .eq('person_id', id).eq('fact_type', 'birth').limit(1);
+        if (lookupError) throw lookupError;
+        if (!existing?.length) await saveFamilyPlaceFact(supabaseClient, user.id,
+          { id, family_id:familyId }, { fact_type:'birth', label:'生まれた場所',
+            event_year:onboarding.birth_year, event_month:onboarding.birth_month,
+            event_day:onboarding.birth_day, detail:birthPlace });
+      }
+      // BOOK and family app share this Auth user and profile. Fill only an
+      // untouched placeholder so an existing purchaser's name is preserved.
+      const { data: accountProfile, error: profileError } = await supabaseClient
+        .from('profiles').select('display_name,name,family_name,given_name')
+        .eq('id', user.id).maybeSingle();
+      if (profileError) throw profileError;
+      if (accountProfile && !accountProfile.family_name && !accountProfile.given_name
+        && ['','あなた'].includes(accountProfile.display_name || '')
+        && ['','あなた'].includes(accountProfile.name || '')) {
+        const fullName = [onboarding.family_name.trim(),onboarding.given_name.trim()]
+          .filter(Boolean).join(' ');
+        const { error: updateError } = await supabaseClient.from('profiles').update({
+          family_name:onboarding.family_name.trim() || null,
+          given_name:onboarding.given_name.trim(),
+          name:fullName,display_name:fullName,
+          preferred_name:`${onboarding.given_name.trim()}さん`,
+        }).eq('id',user.id);
+        if (updateError) throw updateError;
+      }
+      await loadHome(user);
+      setTreeCenterId(id);
+      setScreen('home');
+    } catch (cause) { setError(cause.message || '登録できませんでした'); }
+    finally { setBusy(false); }
+  };
   const startProfile = (target = person, fromTree = false, section = 'profile') => {
     if (!target) return;
     if (fromTree && screen === 'tree') rememberTreeView();
@@ -798,7 +850,7 @@ export default function FamilyPlaceApp() {
   if (!user) return <div className="fp-auth">{demoLoginOpen
     ? <FamilyPlaceDemoLogin client={supabaseClient} onBack={() => setDemoLoginOpen(false)}
         onAuthenticated={setUser}/>
-    : <><Scene_Login existingAccountOnly onLogin={() =>
+    : <><Scene_Login existingAccountOnly familyPlaceLogin onLogin={() =>
       supabaseClient.auth.getUser().then(({ data }) => setUser(data.user))} />
       <button type="button" className="fp-demo-login-entry" onClick={() => setDemoLoginOpen(true)}>
         デモアカウントで開く
@@ -810,6 +862,25 @@ export default function FamilyPlaceApp() {
     <p>{accessState === 'error' ? '家族の場所を開けませんでした。' : '利用権限を確認しています…'}</p>
     {error && <p role="alert">{error}</p>}</main>;
   if (!familyId) return <main className="fp-app"><p>家族の場所を準備しています…</p>{error && <p role="alert">{error}</p>}</main>;
+  if (!selfId) return <main className="fp-app fp-onboarding"><section className="fp-section">
+    <h1>あなたのことを教えてください</h1>
+    <p>家系図の最初の一人は、あなたです。</p>
+    {error && <p className="fp-error" role="alert">{error}</p>}
+    <form className="fp-form" onSubmit={finishOnboarding}>
+      <PersonNameFields value={onboarding} onChange={setOnboarding} people={people} firstRegistration/>
+      <BirthDateFields value={onboarding} onChange={setOnboarding}/>
+      <p className="fp-note">生まれた年を入力すると、あなたの年表が始まります。</p>
+      <label>生まれた場所（任意）<input maxLength={120} value={birthPlace}
+        placeholder="例：岩手県奥州市" onChange={event => setBirthPlace(event.target.value)}/></label>
+      <label>性別（任意）<select value={onboarding.gender || ''}
+        onChange={event => setOnboarding({...onboarding,gender:event.target.value})}>
+        <option value="">未登録</option><option value="female">女性</option><option value="male">男性</option>
+      </select></label>
+      <p className="fp-note">あとからいつでも追加・変更できます。</p>
+      <button className="fp-primary" disabled={busy || !onboarding.given_name.trim()}>
+        {busy ? '登録しています…' : '家族の物語をはじめる →'}</button>
+    </form>
+  </section></main>;
   if (screen === 'recording' && activeStory) return <div className="fp-recorder">
     <Scene_Recording question={{ content: activeStory.question_text, question_role: 'story_question' }}
       lightMode autoStart progress={{ currentIndex: 0, total: 1 }}

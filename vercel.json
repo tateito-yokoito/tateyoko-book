@@ -21,6 +21,14 @@
   ],
   "rewrites": [
     {
+      "source": "/app",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/login",
+      "destination": "/index.html"
+    },
+    {
       "source": "/g/:compactToken",
       "destination": "/gift-three-questions.html"
     }
