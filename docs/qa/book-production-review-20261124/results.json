@@ -1,0 +1,98 @@
+{
+  "sourceSha": "10741ab8ac05edffa4cf63268e18078f2375fff1",
+  "viewport": "390x844 @2x",
+  "method": "本番Reactコンポーネント＋架空のメモリ内データ。認証・DB・決済への接続なし。",
+  "results": [
+    {
+      "scene": "home",
+      "image": "01-book-home.png",
+      "rendered": true,
+      "errors": [],
+      "text": "はじめに\nはじめの会話\n次の問いに語る\n写真から語る\n問いの一覧\nこれまでの語り\n語りを見る\n1件／1テーマ\n本に仕上げる\n本棚\n私の本棚・家族の本棚\n物語を追加する\n自分の物語を追加する\n友人に紹介する"
+    },
+    {
+      "scene": "opening",
+      "image": "02-paid-opening.png",
+      "rendered": true,
+      "errors": [],
+      "text": "はじまりの章\n\n物語の扉を、\nひらくところから\n\n聞いておきたかったこと。\nいつか話そうと思っていたこと。\n\n大切な記憶ほど、日々の会話だけでは残しきれません。縦糸横糸は、スマートフォンに届く問いに声で語りながら、思い出や考えを言葉にし、Webと一冊の本へまとめていくために生まれました。\n\n01\n\n"
+    },
+    {
+      "scene": "pace",
+      "image": "03-pace.png",
+      "rendered": true,
+      "errors": [],
+      "text": "一つのテーマを、数回に分けて\n\n✓\n\n答えやすい問いから、少しずつ深めます\n\n✓\n\n話し足りないときは、そのまま続けられます\n\n✓\n\n答えにくい問いは飛ばせて、いつでも休めます\n\n昔の写真や卒業アルバムなどがあれば、あとで見返しながらお話しいただくのもおすすめです。なくても、そのまま進められます。\n"
+    },
+    {
+      "scene": "question",
+      "image": "04-first-question.png",
+      "rendered": true,
+      "errors": [],
+      "text": "架空 あおいさんの物語\n\nはじめの会話\n\n1 / 3\n\n子どものころ、\n夢中になった遊びは何ですか？\n\n声で語る\n書き込む\n写真を添える\n今日はここまで"
+    },
+    {
+      "scene": "review",
+      "image": "05-answer-review.png",
+      "rendered": true,
+      "errors": [],
+      "text": "語りを確認します\n\nそのまま\n語り調\n作品調\n\n架空のデモ用の語りです。\n\n少し話し足すこの内容で進むもう一度話す"
+    },
+    {
+      "scene": "saved",
+      "image": "06-answer-saved.png",
+      "rendered": true,
+      "errors": [],
+      "text": "あなたの物語に、\nひとつのページが加わりました\n\n→\n次の問いに進む\nホームへ\n今日はここまで"
+    },
+    {
+      "scene": "book-0",
+      "image": "07-book-cover.png",
+      "rendered": true,
+      "errors": [],
+      "text": "本に仕上げる\n\n1\n\n表紙\n\n2\n\n収録内容\n\n3\n\n紙面確認\n\n4\n\nオプション\n\n5\n\n注文\n\n紙面プレビュー　B5・8ページ\n開く ›\n\nわたしの物語\n\n基本パッケージ「スタンダード冊子」の表紙仕様\n\n表紙写真（任意）\n\n写真を添える\n\n表紙の色\n\nセージグリーン\nダスティローズ\nアイボリー\n"
+    },
+    {
+      "scene": "book-1",
+      "image": "08-book-stories.png",
+      "rendered": true,
+      "errors": [],
+      "text": "本に仕上げる\n\n1\n\n表紙\n\n2\n\n収録内容\n\n3\n\n紙面確認\n\n4\n\nオプション\n\n5\n\n注文\n\n紙面プレビュー　B5・8ページ\n開く ›\n\n語りの確認\n\n1 / 1 件の語りを収録\n\n子どものころ、夢中になった遊びは何ですか？\n\n写真：質問の下 0枚／本文のあと 0枚\n\n本文が短い可能性がありま"
+    },
+    {
+      "scene": "book-2",
+      "image": "09-book-pages.png",
+      "rendered": true,
+      "errors": [],
+      "text": "本に仕上げる\n\n1\n\n表紙\n\n2\n\n収録内容\n\n3\n\n紙面確認\n\n4\n\nオプション\n\n5\n\n注文\n\n紙面プレビュー　B5・8ページ\n開く ›\n紙の本にWebブックのQRを載せる\nQRを載せると、リンクを知っている人がWebブックを開けます。載せない場合もWebブックは制作します。\n\n紙面プレビュー\n"
+    },
+    {
+      "scene": "book-3",
+      "image": "10-book-options.png",
+      "rendered": true,
+      "errors": [],
+      "text": "本に仕上げる\n\n1\n\n表紙\n\n2\n\n収録内容\n\n3\n\n紙面確認\n\n4\n\nオプション\n\n5\n\n注文\n\n紙面プレビュー　B5・8ページ\n開く ›\n\n基本パッケージ\n\n縦糸横糸ブック 基本パッケージ\n\n語り体験・スタンダード冊子1冊・Webブック・QR音声再生\n\n49,800円\n\nお支払い済み\n\nオプショ"
+    },
+    {
+      "scene": "book-4",
+      "image": "11-book-order.png",
+      "rendered": true,
+      "errors": [],
+      "text": "本に仕上げる\n\n1\n\n表紙\n\n2\n\n収録内容\n\n3\n\n紙面確認\n\n4\n\nオプション\n\n5\n\n注文\n\n紙面プレビュー　B5・8ページ\n開く ›\n\nお届け先\n\n選択した冊子を、このお届け先へ発送します。\n\n基本パッケージ\n\nスタンダード冊子1冊を含む\n\nお支払い済み\n\n戻る\n次へ"
+    },
+    {
+      "scene": "proxy-home",
+      "image": "12-proxy-home.png",
+      "rendered": true,
+      "errors": [],
+      "text": "自分のホームへ\n架空 あおいの物語\nお手伝い中\nはじめに\nはじめの会話\n次の問いに語る\n写真から語る\n問いの一覧\nこれまでの語り\n語りを見る\n1件／1テーマ\n本に仕上げる"
+    },
+    {
+      "scene": "published-fictional-demo",
+      "image": "13-fictional-published-webbook.png",
+      "rendered": true,
+      "errors": [],
+      "text": "公開済みの架空デモ④・本番Webブック"
+    }
+  ]
+}
