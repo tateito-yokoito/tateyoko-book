@@ -1,0 +1,121 @@
+{
+  "sourceSha": "028e4d66ae94da920cc9a3e9aaf10454bf0d5cab",
+  "data": "架空のローカル fixture のみ。実顧客データ・認証情報なし。",
+  "viewport": {
+    "width": 390,
+    "height": 844,
+    "deviceScaleFactor": 2
+  },
+  "checks": [
+    {
+      "name": "家族ホームを表示",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "家族ホーム→家系図",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "家系図→父の人物ページ",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "年輪→無料質問",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "無料質問→年輪の保存済み語り",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "年輪→本棚",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "人物ページ→元の家系図",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "ブラウザ例外なし・空状態",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "完成BOOKの本棚→Webブック導線",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Webブック→本棚への戻り先",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Webブック→父の本棚",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "ブラウザ例外なし・完成状態",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "BOOK制作ホームの主要メニュー",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "BOOK制作ホームの次の問い操作",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "家族ホーム→共通BOOK紹介",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "ホーム入口では購入前に主人公を選ぶ",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "商品選択で主人公名を維持",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "BOOK紹介からホームへ戻る",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "人物ページ上部→共通BOOK紹介",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "人物上部の戻り先",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "本棚入口の戻り先",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "BOOK紹介のブラウザ例外なし",
+      "passed": true,
+      "detail": ""
+    }
+  ]
+}
