@@ -43,8 +43,12 @@ begin
     end if;
     -- Dashboard-created Auth users have no profiles until their first app login.
     -- BOOK answer rows require profiles(id), so create only the missing demo row.
-    insert into public.profiles(id,email,name)
-      select actor,format('family-demo-0%s@tateito-yokoito.jp',slot),format('架空デモ%s',slot)
+    insert into public.profiles(id,email,name,family_name,given_name,display_name,preferred_name)
+      select actor,format('family-demo-0%s@tateito-yokoito.jp',slot),
+        case when slot=1 then '架空 デモ1' else '架空 あおい' end,
+        '架空',case when slot=1 then 'デモ1' else 'あおい' end,
+        case when slot=1 then '架空 デモ1' else '架空 あおい' end,
+        case when slot=1 then 'デモ1さん' else 'あおいさん' end
       where not exists(select 1 from public.profiles where id=actor);
     insert into public.family_place_early_access(user_id) values(actor);
     insert into public.families(owner_user_id,name)
