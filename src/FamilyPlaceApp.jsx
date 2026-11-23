@@ -6,6 +6,7 @@ import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
 import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
 import { FamilyAvatarProvider } from './FamilyAvatar.jsx';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
+import FamilyPlaceDemoLogin from './FamilyPlaceDemoLogin.jsx';
 import FamilyTree from './FamilyTree.jsx';
 import FamilyRelationshipEditor from './FamilyRelationshipEditor.jsx';
 import { familyRelationSuggestions } from './lib/familyTreeModel.js';
@@ -159,6 +160,7 @@ function EventDateFields({ value, onChange }) {
 
 export default function FamilyPlaceApp() {
   const [user, setUser] = useState(null);
+  const [demoLoginOpen, setDemoLoginOpen] = useState(false);
   const [accessState, setAccessState] = useState('checking');
   const [verifiedUserId, setVerifiedUserId] = useState(null);
   const [familyId, setFamilyId] = useState(null);
@@ -697,8 +699,14 @@ export default function FamilyPlaceApp() {
     }
   };
 
-  if (!user) return <div className="fp-auth"><Scene_Login existingAccountOnly onLogin={() =>
-    supabaseClient.auth.getUser().then(({ data }) => setUser(data.user))} /></div>;
+  if (!user) return <div className="fp-auth">{demoLoginOpen
+    ? <FamilyPlaceDemoLogin client={supabaseClient} onBack={() => setDemoLoginOpen(false)}
+        onAuthenticated={setUser}/>
+    : <><Scene_Login existingAccountOnly onLogin={() =>
+      supabaseClient.auth.getUser().then(({ data }) => setUser(data.user))} />
+      <button type="button" className="fp-demo-login-entry" onClick={() => setDemoLoginOpen(true)}>
+        デモアカウントで開く
+      </button></>}</div>;
   if (accessState === 'denied') return <main className="fp-app fp-access-message"><h1>家族の場所</h1>
     <p>このアカウントは先行利用の対象ではありません。</p>
     <button type="button" onClick={() => supabaseClient.auth.signOut()}>別のアカウントで開く</button></main>;

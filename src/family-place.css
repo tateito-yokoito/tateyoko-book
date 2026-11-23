@@ -18,3 +18,13 @@
 
 .fp-app.is-tree{padding-bottom:0}
 .fp-section h1,.fp-section h2,.fp-person-head h1{font-family:inherit}
+.fp-demo-login{box-sizing:border-box;max-width:430px;min-height:100vh;margin:0 auto;padding:clamp(40px,12vh,100px) 24px 40px;background:#faf7ef;color:#282b1d;font-family:system-ui,sans-serif}
+.fp-demo-login h1{margin:0 0 14px;font-size:24px;line-height:1.4}
+.fp-demo-login p{margin:0 0 26px;color:#626b54;line-height:1.7}
+.fp-demo-login form{display:grid;gap:18px}
+.fp-demo-login label{display:grid;gap:8px;font-size:16px;font-weight:700}
+.fp-demo-login input{box-sizing:border-box;width:100%;min-height:50px;padding:12px 14px;border:1px solid #cfd6c0;border-radius:12px;background:#fff;color:#282b1d;font:inherit}
+.fp-demo-login form button{min-height:52px;margin-top:8px;border:0;border-radius:999px;background:#4e7925;color:#fff;font:inherit;font-weight:700}
+.fp-demo-login form button:disabled{opacity:.55}
+.fp-demo-login [role=alert]{margin:0;color:#8a2e22}
+.fp-demo-login-back,.fp-demo-login-entry{display:block;margin:24px auto;padding:10px 16px;border:1px solid #96ab6b;border-radius:999px;background:#fffdf2;color:#385d23;font:inherit}
