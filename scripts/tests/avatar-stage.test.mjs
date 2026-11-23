@@ -11,7 +11,13 @@ test('saved birth year chooses the avatar stage before any relation estimate', (
   assert.equal(avatarStage({ ...parent, birth_year:2016 },now,[parentLink],[child(1950)]),'child');
   assert.equal(avatarStage({ ...parent, birth_year:2007 },now),'young');
   assert.equal(avatarStage({ ...parent, birth_year:1980 },now),'adult');
+  assert.equal(avatarStage({ ...parent, birth_year:1971 },now),'adult');
+  assert.equal(avatarStage({ ...parent, birth_year:1970 },now),'mature');
   assert.equal(avatarStage({ ...parent, birth_year:1960 },now),'mature');
+  assert.equal(avatarStage({ ...parent, birth_year:1957 },now),'mature');
+  assert.equal(avatarStage({ ...parent, birth_year:1956 },now),'senior');
+  assert.equal(avatarStage({ ...parent, birth_year:1970, birth_month:12, birth_day:1 },now),'adult');
+  assert.equal(avatarStage({ ...parent, birth_year:1970, birth_month:11, birth_day:23 },now),'mature');
   assert.equal(avatarStage({ ...parent, birth_year:1940 },now),'senior');
 });
 

@@ -1,10 +1,15 @@
+import { currentPersonAge } from './personAge.js';
+
 const stageForAge = age => age < 13 ? 'child' : age < 25 ? 'young'
-  : age < 55 ? 'adult' : age < 75 ? 'mature' : 'senior';
+  : age < 56 ? 'adult' : age < 70 ? 'mature' : 'senior';
 
 // The inferred stage is only a visual fallback. It never changes a person's
 // profile, and a saved birth year always takes precedence over relationships.
 export function avatarStage(person, now = new Date(), relations = [], people = []) {
-  if (person?.birth_year) return stageForAge(now.getFullYear() - Number(person.birth_year));
+  if (person?.birth_year) {
+    const age = currentPersonAge(person, now);
+    return stageForAge(age ?? (Number(person.death_year) || now.getFullYear()) - Number(person.birth_year));
+  }
   if (!person?.id) return 'unknown';
   const personById = new Map(people.map(item => [item.id, item]));
   const referenceYear = Number(person.death_year) || now.getFullYear();

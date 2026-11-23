@@ -25,7 +25,7 @@ export default function FamilyAvatar({ person, className = '' }) {
   const y = spriteRows[stage];
   return <span className={`family-avatar family-avatar-illustration ${className}`.trim()}
     role="img" aria-label={stage === 'unknown' ? '年齢未登録の人物のイラスト' : '人物のイラスト'}>
-    <img src="/assets/family-avatar-brushup-20261123.png" alt="" aria-hidden="true"
+    <img src="/assets/family-avatar-final-20261123.png" alt="" aria-hidden="true"
       style={{ width: `${1306 / cropSize * 100}%`,
         left: `${(0.5 - x / cropSize) * 100}%`, top: `${(0.5 - y / cropSize) * 100}%` }}/>
   </span>;
