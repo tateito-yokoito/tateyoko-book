@@ -302,7 +302,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         </div>
 
         {orderType === 'gift' && <label className="mt-8 block text-sm font-semibold">贈る相手のお名前<input className="mt-2 w-full rounded-lg border border-[#bfc9bd] bg-white p-3 text-base" value={gift.recipient_name} disabled={Boolean(familyInvitation)} onChange={event => setGift(current => ({ ...current, recipient_name: event.target.value }))} /></label>}
-        {!isPreview && <label className="mt-8 block text-sm font-semibold">割引コード（お持ちの方）<input className="mt-2 w-full rounded-lg border border-[#bfc9bd] bg-white p-3 text-base" value={discountCode} onChange={event => { setDiscountCode(event.target.value); requestKey.current = newRequestKey(); }} /></label>}
+        <label className="mt-8 block text-sm font-semibold">割引コード（お持ちの方）<input className="mt-2 w-full rounded-lg border border-[#bfc9bd] bg-white p-3 text-base" value={discountCode} onChange={event => { setDiscountCode(event.target.value); requestKey.current = newRequestKey(); }} /></label>
         <div className="mt-7 rounded-xl bg-[#eaf0e8] p-5" aria-live="polite">
           <p className="flex justify-between gap-3 py-2 text-sm"><span>商品・オプション</span><span>{quote ? yen(quote.amount_subtotal) : '確認中'}</span></p>
           <p className="flex justify-between gap-3 py-2 text-sm"><span>割引</span><span>{quote ? `−${Number(quote.discount_amount || 0).toLocaleString('ja-JP')}円` : '—'}</span></p>
