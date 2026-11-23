@@ -2,6 +2,8 @@
 
 対象ソース: `10741ab8ac05edffa4cf63268e18078f2375fff1`（本番デプロイ元の現行React）。画像01〜12は**実コンポーネントを390×844pxで描画**し、架空のメモリ内データだけで撮影した。仕上げ画面は「次へ」で実際にステップを進めた。実アカウントの操作結果やDB保存の証拠ではない。画像13は公開済みの**架空デモ④**の本番Webブックを同じ幅で撮影した。注文・決済・DB変更はしていない。再撮影は `QA_CAPTURE_PUBLIC_DEMO=1 node scripts/qa/capture-book-production-review.mjs`。機械的な描画結果は [results.json](results.json)。
 
+画像14〜19はオーナーがログインした**架空デモ③の本番Safari実画面**。デスクトップ幅で撮影し、ブラウザのタブ領域を除いた。回答保存、同意確認、購入、完成確定は行っていない。
+
 ## 操作順と画面
 
 | 順 | 画面・画像 | 実際の入口／操作 |
@@ -20,7 +22,18 @@
 | 分岐 | [家族による代理制作ホーム](12-proxy-home.png) | 代理制作者が支援対象を開くと「お手伝い中」枠。録音時に本人同意確認がある |
 | 完成 | [架空デモ④の公開Webブック](13-fictional-published-webbook.png) | `https://www.tateito-yokoito.jp/?voice=40b0af31bf063bfd0815fc68a9b67eaaa1274ee536f25c85`（固定内容、ログイン不要） |
 
-スマートフォンで実際に操作する場合は、専用の架空アカウント③で [制作中BOOKの入口](https://www.tateito-yokoito.jp/?app=family_place) にログインし、架空 あおいの本棚から「BOOK制作を再開する」を選ぶ。作業中の直接URLは [架空BOOK③の制作ホーム](https://www.tateito-yokoito.jp/?app=1&family=1&family_project=5166497a-b559-456d-9461-65d89d352bdf)。制作ホームとその後の問い・語り・仕上げ画面は主に同じURL内のReact状態で切り替わるため、個々の問いなどに安定した直接URLはない。完成状態は専用の架空アカウント④の本棚から開ける。
+### 本番ログイン後の実画面
+
+| 画像 | 実操作と結果 |
+| --- | --- |
+| [制作セットアップ](19-live-demo03-setup.png) | 家族アプリから架空デモ③を開くと表示。本人／家族のスマホ選択と本人同意確認が必要。今回は押さず停止 |
+| [制作ホーム](14-live-demo03-home.png) | BOOK直接URLから開き、テーマ案内の「ホームへ」を押した状態 |
+| [問いの一覧](15-live-demo03-questions.png) | 制作ホーム「問いの一覧」。回答済みと未回答、追加欄を確認 |
+| [語りを見る](16-live-demo03-stories.png) | 制作ホーム「語りを見る」。架空回答1件と編集入口を確認。編集・保存はしない |
+| [本に仕上げる・表紙](17-live-demo03-cover.png) | 制作ホーム「本に仕上げる」。既存表紙設定を表示。設定変更・注文はしない |
+| [再読み込み後のテーマ案内](18-live-demo03-reload-theme.png) | 同じBOOK URLを再読み込みすると制作ホームではなく「幼い頃のこと／2問目から再開する」へ。URLは同じ |
+
+スマートフォンで実際に操作する場合は、専用の架空アカウント③で [制作中BOOKの入口](https://www.tateito-yokoito.jp/?app=family_place) にログインし、架空 あおいの本棚から「BOOK制作を再開する」を選ぶ。作業中の直接URLは [架空BOOK③の制作入口](https://www.tateito-yokoito.jp/?app=1&family=1&family_project=5166497a-b559-456d-9461-65d89d352bdf)。このURLは再読み込み時にテーマ案内が先に表示される。制作ホームとその後の問い・語り・仕上げ画面は主に同じURL内のReact状態で切り替わるため、個々の問いなどに安定した直接URLはない。完成状態は専用の架空アカウント④の本棚から開ける。
 
 ## 目視・コード上の確認事項
 
@@ -29,5 +42,7 @@
 3. **戻り先は状態で変わる。** 制作ホーム内の問い／語り／仕上げは同一URLの `scene` 切替。BOOK仕上げの「戻る」はステップ0だけ制作ホームへ、それ以外は前ステップへ。ブラウザ再読み込みは `family_scene=book` 以外をホームから開き直す。
 4. **完成の実行は未検証。** `confirm_book_work` と `publish-voice-edition` を呼ぶコードはあるが、今回の非破壊レビューでは押していない。架空デモ④の固定Webブックが公開URLで読めることだけ確認した。
 5. **共同管理分岐は実操作未確認。** 既存コードに共同管理者用 `get_co_manager_stories` / `get_co_manager_media` と招待・受諾画面はある。架空デモ③④には共同管理者アカウントを設定していないため、本人・代理・共同管理の権限別E2Eや戻り先はこの撮影から結論できない。
+
+6. **架空デモ③で「購入完了」と表示された。** この作品は注文・決済なしで用意した旧 `legacy` 権利。家族アプリの「制作セットアップ」は実購入完了の証拠ではなく、デモ体験時に誤解を招く。本人同意チェックは押していない。
 
 コードの主な対応先: `src/FamilyConnectionTest.jsx`（画面状態）、`src/FamilyProductionEntry.jsx`（各制作フローへの接続）、`src/FamilyStartingFlow.jsx`、`src/FamilyRecordingFlow.jsx`、`src/FamilyBookFlow.jsx`、`src/App.jsx`（BOOK仕上げ・共同管理）。
