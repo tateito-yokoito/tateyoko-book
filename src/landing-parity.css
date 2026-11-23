@@ -2,3 +2,8 @@ body.landing-page-active{margin:0;background:#f5f3ed;color:#182a35}.landing-site
 /* Quiet route from the product site to its operating company. */
 .landing-site .hp-header nav .hp-company-link{margin-top:6px;border-bottom:0;color:var(--muted);font:15px/1.7 "Noto Sans JP",sans-serif}
 .landing-site .hp-footer .hp-company-footer-link{display:inline-flex;min-height:44px;align-items:center;color:var(--muted);font:15px/1.7 "Noto Sans JP",sans-serif}
+@media (max-width: 620px) {
+  .hp-header > a img { width: 125px; height: auto; }
+  .hp-header-actions { gap: 8px; font-size: 14px; }
+  .hp-header-actions > a, .hp-header-actions > button { white-space: nowrap; }
+}
