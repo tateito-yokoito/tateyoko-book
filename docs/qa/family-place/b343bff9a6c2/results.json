@@ -1,0 +1,81 @@
+{
+  "sourceSha": "b343bff9a6c2eb19f5e58c9ad02a527e62fc6ffe",
+  "data": "架空のローカル fixture のみ。実顧客データ・認証情報なし。",
+  "viewport": {
+    "width": 390,
+    "height": 844,
+    "deviceScaleFactor": 2
+  },
+  "checks": [
+    {
+      "name": "家族ホームを表示",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "家族ホーム→家系図",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "家系図→父の人物ページ",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "年輪→無料質問",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "無料質問→年輪の保存済み語り",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "年輪→本棚",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "人物ページ→元の家系図",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "ブラウザ例外なし・空状態",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "完成BOOKの本棚→Webブック導線",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Webブック→本棚への戻り先",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Webブック→父の本棚",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "ブラウザ例外なし・完成状態",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "BOOK制作ホームの主要メニュー",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "BOOK制作ホームの次の問い操作",
+      "passed": true,
+      "detail": ""
+    }
+  ]
+}
