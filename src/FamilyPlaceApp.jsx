@@ -4,6 +4,7 @@ import { Scene_Login, Scene_Recording, PhotoCorrectionFlow, ensureProfileExists,
 import { AnswerBodyEditor, AnswerEntryChoices, AnswerReview, AnswerSaveStatus } from './AnswerInputUI.jsx';
 import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
 import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
+import { FamilyAvatarProvider } from './FamilyAvatar.jsx';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
 import FamilyTree from './FamilyTree.jsx';
 import FamilyRelationshipEditor from './FamilyRelationshipEditor.jsx';
@@ -685,7 +686,7 @@ export default function FamilyPlaceApp() {
   const relationAnchorId = newPersonAnchorId || selfId;
   const unlinkedPeople = relationAnchorId ? people.filter(item => item.id !== relationAnchorId
     && !relations.some(relation => relation.person_a_id === item.id || relation.person_b_id === item.id)) : [];
-  return <div className="fp-app">
+  return <FamilyAvatarProvider people={people} relations={relations}><div className="fp-app">
     {screen !== 'home' && screen !== 'person' && screen !== 'tree' &&
       <header className={`fp-header ${screen === 'profile' && profileReturnToTree ? 'fp-header-from-tree' : ''}`}>
       <button onClick={() => screen === 'story' ? leaveStory()
@@ -873,5 +874,5 @@ export default function FamilyPlaceApp() {
       <button onClick={openTree}><Users/>家族</button>
       <button disabled><Image/>思い出</button>
     </nav>}
-  </div>;
+  </div></FamilyAvatarProvider>;
 }
