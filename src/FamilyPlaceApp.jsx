@@ -76,21 +76,27 @@ function PersonNameFields({ value, onChange, people = [] }) {
         imeEligibleRef.current[key] = false;
       } : undefined}
       onBlur={nameField ? () => { readingRef.current[key] = ''; } : undefined}/>
-      {autoFields.has(key) && <small className="fp-reading-note">ふりがな候補です。必要なら修正してください。</small>}
     </label>;
   };
+  const readingNote = <small className="fp-reading-note">※ふりがな候補は修正可能。</small>;
   return <>
     <div className="fp-name-fields">
       {field('姓', 'family_name', 'family-name', !value?.given_name?.trim())}
-      {field('姓のふりがな', 'family_name_kana')}
-    </div>
-    <div className="fp-name-fields">
       {field('名', 'given_name', 'given-name', !value?.family_name?.trim())}
-      {field('名のふりがな', 'given_name_kana')}
     </div>
-    <div className="fp-name-fields">
-      {field('旧姓', 'maiden_name')}
-      {field('旧姓のふりがな', 'maiden_name_kana')}
+    <div className="fp-name-group">
+      <div className="fp-name-fields">
+        {field('姓のふりがな', 'family_name_kana')}
+        {field('名のふりがな', 'given_name_kana')}
+      </div>
+      {(autoFields.has('family_name_kana') || autoFields.has('given_name_kana')) && readingNote}
+    </div>
+    <div className="fp-name-group">
+      <div className="fp-name-fields">
+        {field('旧姓', 'maiden_name')}
+        {field('旧姓のふりがな', 'maiden_name_kana')}
+      </div>
+      {autoFields.has('maiden_name_kana') && readingNote}
     </div>
   </>;
 }
