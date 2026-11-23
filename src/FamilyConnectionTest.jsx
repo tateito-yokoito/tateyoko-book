@@ -12,8 +12,8 @@ import {firstStoryGuideState, finishFirstStoryGuide, firstStoryDestination} from
 import VideoStoryFlow from './VideoStoryFlow.jsx';
 
 // TEST-only adapter. Do not mount App's legacy Person/Project bootstrap here.
-export default function FamilyConnectionTest({client, onOwnStory, renderBook, renderRecording, renderSharedStories, renderSubjectStories, renderSupporterPhoto, renderPrivacy, renderStarting, renderSubjectPhoto, renderTheme, renderDelivery, fixtureUpload = false}) {
-  const api = useMemo(() => createFamilyApi(client), [client]);
+export default function FamilyConnectionTest({client, onOwnStory, renderBook, renderRecording, renderSharedStories, renderSubjectStories, renderSupporterPhoto, renderPrivacy, renderStarting, renderSubjectPhoto, renderTheme, renderDelivery, fixtureUpload = false, allowProduction = false}) {
+  const api = useMemo(() => createFamilyApi(client,{allowProduction}), [client,allowProduction]);
   const [session, setSession] = useState(undefined);
   const [list, setList] = useState([]), [workspace, setWorkspace] = useState(null);
   const [phone, setPhone] = useState(''), [code, setCode] = useState('');

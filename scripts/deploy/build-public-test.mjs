@@ -19,6 +19,7 @@ const settings={
  VITE_COMMERCE_V2_ENABLED:'true',
  VITE_FAMILY_CONNECTION_TEST:'true',
  VITE_FAMILY_PLACE_ENABLED:'true',
+ VITE_FAMILY_PURCHASE_TEST_MODE:process.env.QA_FAMILY_PURCHASE_TEST === 'true' ? 'true' : 'false',
  VITE_BOOK_PDF_ENABLED:'true',VITE_BOOK_PRODUCTION_V2_ENABLED:'true'
 };
 assertPublicTestEnvironment(settings);

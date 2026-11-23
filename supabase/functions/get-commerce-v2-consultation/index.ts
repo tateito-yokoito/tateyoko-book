@@ -27,7 +27,7 @@ serve(async (request) => {
     const id = String(body.consultationId || "");
     if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ success: false, error: "相談申込が見つかりません" }, 400);
     const { data, error } = await admin.from("commerce_v2_consultations")
-      .select("id,order_type,agreed_edition,standard_extra_count,premium_extra_count,status,order_id,requester_user_id,family_invitation_id,gift_recipient_name")
+      .select("id,order_type,agreed_edition,standard_extra_count,premium_extra_count,status,order_id,requester_user_id,family_invitation_id,gift_recipient_name,family_place_person_id,family_place_project_id")
       .eq("id", id).eq("requester_user_id", auth.user.id).maybeSingle();
     if (error || !data) return json({ success: false, error: "相談申込が見つかりません" }, 404);
     return json({ success: true, consultation: {
@@ -36,6 +36,8 @@ serve(async (request) => {
       premiumExtraCount: data.premium_extra_count,
       status: data.status, orderId: data.order_id, familyInvitationId: data.family_invitation_id,
       giftRecipientName: data.gift_recipient_name,
+      familyPersonId: data.family_place_person_id,
+      familyProjectId: data.family_place_project_id,
     } });
   } catch (error) {
     console.error("get commerce v2 consultation error", error);

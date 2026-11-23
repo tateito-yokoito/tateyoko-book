@@ -29,8 +29,8 @@ import { hasKanji, kanaFieldForName, normalizeKanaReading,
 // questions; this route remains disabled in production builds until then.
 const testQuestions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) =>
   ({ id: question.id, slot: index + 1, text: question.content }));
-const BookPurchaseJourneyPreview = import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
-  ? React.lazy(() => import('./BookPurchaseJourneyPreview.jsx')) : null;
+const BookPurchaseJourney = React.lazy(() => import('./BookPurchaseJourneyPreview.jsx'));
+const FamilyProductionEntry = React.lazy(() => import('./FamilyProductionEntry.jsx'));
 
 const emptyPersonDraft = () => ({ family_name: '', given_name: '', family_name_kana: '', given_name_kana: '',
   maiden_name: '', maiden_name_kana: '', birth_year: '', birth_month: '', birth_day: '', gender: '' });
@@ -203,6 +203,9 @@ export default function FamilyPlaceApp() {
   const [visibleBookProjects, setVisibleBookProjects] = useState([]);
   const [projectsStatus, setProjectsStatus] = useState('loading');
   const [booksStatus, setBooksStatus] = useState('loading');
+  const [checkoutProjectId, setCheckoutProjectId] = useState(null);
+  const [consultationProjectId, setConsultationProjectId] = useState(null);
+  const [productionProjectId, setProductionProjectId] = useState(null);
   const [newPerson, setNewPerson] = useState(emptyPersonDraft);
   const [newIsSelf, setNewIsSelf] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -363,6 +366,47 @@ export default function FamilyPlaceApp() {
     window.history.replaceState({}, '', url);
   }, [people, screen]);
   useEffect(() => {
+    if (!familyId || !user || !people.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const consultationProject = params.get('family_purchase_project');
+    const consultationPerson = params.get('family_person');
+    if (params.get('consultation') && consultationProject && consultationPerson
+      && !consultationProjectId && people.some(item => item.id === consultationPerson)) {
+      setConsultationProjectId(consultationProject);
+      setSelectedId(consultationPerson);
+      setBookEntry('person');
+      setScreen('book-preview');
+      return;
+    }
+    const directProject = params.get('family_project');
+    if (directProject && !productionProjectId) {
+      setProductionProjectId(directProject); setScreen('book-production'); return;
+    }
+    if (params.get('checkout') !== 'success' || !params.get('session_id')
+      || !params.get('family_purchase_project') || checkoutProjectId) return;
+    let live = true;
+    supabaseClient.functions.invoke('sync-checkout-session', {
+      body: { sessionId:params.get('session_id') },
+    }).then(({ data, error: syncError }) => {
+      if (!live) return;
+      const target = data?.project;
+      if (syncError || !data?.success || !data?.paid
+        || target?.id !== params.get('family_purchase_project')
+        || !people.some(item => item.id === target.subject_person_id)) {
+        setError('購入した人物と作品を確認できませんでした。購入履歴を確認してください。');
+        return;
+      }
+      setSelectedId(target.subject_person_id);
+      setBookEntry('person');
+      setCheckoutProjectId(target.id);
+      setScreen('book-preview');
+      const clean = new URL(window.location.href);
+      ['checkout','session_id','family_purchase_project'].forEach(key => clean.searchParams.delete(key));
+      window.history.replaceState({}, '', clean);
+    }).catch(() => { if (live) setError('購入状況を確認できませんでした。'); });
+    return () => { live = false; };
+  }, [familyId,user?.id,people,checkoutProjectId,consultationProjectId,productionProjectId]);
+  useEffect(() => {
     const publicId = shelfReturnPublication.current;
     if (!publicId || !familyId || screen !== 'home') return;
     let live = true;
@@ -424,11 +468,39 @@ export default function FamilyPlaceApp() {
     setPublishedBooks([]); setVisibleBookProjects([]); setBooksStatus('loading'); setProjectsStatus('loading'); setScreen('person');
   };
   const openBookIntroduction = (entry = 'home') => {
+    if (consultationProjectId) {
+      const clean = new URL(window.location.href);
+      ['consultation','family_person','family_purchase_project'].forEach(key => clean.searchParams.delete(key));
+      window.history.replaceState({},'',clean);
+    }
+    setCheckoutProjectId(null);
+    setConsultationProjectId(null);
     setBookEntry(entry);
     setError('');
     setScreen('book-preview');
   };
+  const openProduction = id => {
+    const next = new URL(window.location.href);
+    next.searchParams.set('family_project',id);
+    window.history.replaceState({},'',next);
+    setProductionProjectId(id); setScreen('book-production');
+  };
+  const resumeBook = async id => {
+    const { data, error: journeyError } = await supabaseClient.rpc('family_journey',{p:id});
+    if (!journeyError && data?.project_id && data?.can_produce) {
+      openProduction(id); return;
+    }
+    setCheckoutProjectId(id);
+    setBookEntry('person');
+    setScreen('book-preview');
+  };
   const leaveBookIntroduction = () => {
+    if (consultationProjectId) {
+      const clean = new URL(window.location.href);
+      ['consultation','family_person','family_purchase_project'].forEach(key => clean.searchParams.delete(key));
+      window.history.replaceState({},'',clean);
+      setConsultationProjectId(null);
+    }
     if (bookEntry === 'home') { setSelectedId(null); setScreen('home'); return; }
     if (bookEntry === 'books') setActiveTab('books');
     setScreen('person');
@@ -755,7 +827,7 @@ export default function FamilyPlaceApp() {
   const unlinkedPeople = relationAnchorId ? people.filter(item => item.id !== relationAnchorId
     && !relations.some(relation => relation.person_a_id === item.id || relation.person_b_id === item.id)) : [];
   return <FamilyAvatarProvider people={people} relations={relations}><div className={`fp-app ${screen === 'tree' ? 'is-tree' : ''}`}>
-    {screen !== 'home' && screen !== 'person' && screen !== 'tree' && screen !== 'book-preview' &&
+    {screen !== 'home' && screen !== 'person' && screen !== 'tree' && screen !== 'book-preview' && screen !== 'book-production' &&
       <header className={`fp-header ${screen === 'profile' && profileReturnToTree ? 'fp-header-from-tree' : ''}`}>
       <button onClick={() => screen === 'story' ? leaveStory()
           : screen === 'profile' ? (profileReturnToTree ? returnToTree() : setScreen('person'))
@@ -769,7 +841,7 @@ export default function FamilyPlaceApp() {
     {error && <p className="fp-error" role="alert">{error}</p>}
     {screen === 'home' && <FamilyHome people={people} storyCounts={homeStoryCounts}
       onAddPerson={() => startAddPerson()} onOpenPerson={openPerson} onTree={openTree}
-      onOpenBook={BookPurchaseJourneyPreview ? () => openBookIntroduction('home') : null}
+      onOpenBook={() => openBookIntroduction('home')}
       onSwitchAccount={() => supabaseClient.auth.signOut()}/>}
     {screen === 'tree' && <FamilyTree people={people} relations={relations} selfId={selfId}
       centerId={treeCenterId || selfId || people[0]?.id} onCenter={setTreeCenterId}
@@ -826,14 +898,22 @@ export default function FamilyPlaceApp() {
       onTabChange={setActiveTab} onBack={personEntry === 'tree' ? returnToTree : goHome}
       backLabel={personEntry === 'tree' ? '家系図' : 'ホーム'} entryOrigin={personEntry}
       onProfile={() => startProfile()}
-      onOpenBook={BookPurchaseJourneyPreview ? openBookIntroduction : null}
+      onOpenBook={openBookIntroduction}
+      onResumeBook={id => resumeBook(id).catch(() => setError('BOOKを開けませんでした。'))}
       onOpenStory={openStory} busy={busy}
       onAddFact={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}/>}
-    {screen === 'book-preview' && BookPurchaseJourneyPreview && <React.Suspense fallback={<p>画面プレビューを読み込んでいます…</p>}><BookPurchaseJourneyPreview
+    {screen === 'book-preview' && <React.Suspense fallback={<p>BOOK紹介を読み込んでいます…</p>}><BookPurchaseJourney
       key={`${bookEntry}:${bookEntry === 'home' ? '' : person?.id || ''}`}
       person={bookEntry === 'home' ? null : person} people={people} client={supabaseClient}
+      livePurchase={import.meta.env.VITE_PUBLIC_TEST_MODE !== 'true'
+        || import.meta.env.VITE_FAMILY_PURCHASE_TEST_MODE === 'true'} checkoutProjectId={checkoutProjectId}
+      initialProjectId={consultationProjectId}
+      onOpenProduction={openProduction}
       onBack={leaveBookIntroduction}
       onTryFree={id => { if (bookEntry === 'home') setPersonEntry('home'); setSelectedId(id); setActiveTab('ring'); setScreen('person'); }}/></React.Suspense>}
+    {screen === 'book-production' && <React.Suspense fallback={<p>制作ホームを読み込んでいます…</p>}>
+      <FamilyProductionEntry client={supabaseClient} projectId={productionProjectId}/>
+    </React.Suspense>}
     {screen === 'profile' && person && <main className="fp-section"><h1>プロフィール</h1>
       <form className="fp-form" onSubmit={saveProfile}>
         <div className="fp-profile-photo"><span>プロフィール画像（任意）</span>

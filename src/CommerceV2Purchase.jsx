@@ -26,10 +26,12 @@ async function checkoutErrorMessage(invokeError, data, fallback) {
 
 export default function CommerceV2Purchase({ client, projectId, initialOrderType = 'self', familyInvitation = null, onTryFree,
   phase, initialSelection = null, onProceed, onCompleted, projectAccessStatus = null,
-  previewSubjectName = null, onPreviewCheckout, onPreviewBack }) {
+  previewSubjectName = null, onPreviewCheckout, onPreviewBack,
+  familySubject = null, onFamilyCheckoutCompleted = null }) {
   const isPreview = Boolean(previewSubjectName);
   const isSelection = phase === 'selection';
   const isReview = phase === 'review';
+  const linkedConsultationId = new URLSearchParams(window.location.search).get('consultation');
   const [edition, setEdition] = useState(initialSelection?.edition || 'standard');
   const [method, setMethod] = useState(initialSelection?.productionMethod || 'self_or_family');
   const [standardExtraCount, setStandardExtraCount] = useState(initialSelection?.standardExtraCount || 0);
@@ -44,10 +46,9 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [approvedConsultation, setApprovedConsultation] = useState(null);
-  const [consultationLoading, setConsultationLoading] = useState(false);
+  const [consultationLoading, setConsultationLoading] = useState(Boolean(linkedConsultationId));
   const [consultationOpen, setConsultationOpen] = useState(false);
   const requestKey = useRef(newRequestKey());
-  const linkedConsultationId = new URLSearchParams(window.location.search).get('consultation');
   const orderType = approvedConsultation?.orderType || purchaseFor;
   const alreadyPurchased = !isPreview && orderType === 'self' && ['paid', 'gifted', 'legacy'].includes(projectAccessStatus);
   const selection = { edition, productionMethod: method, standardExtraCount, premiumExtraCount, discountCode,
@@ -116,6 +117,15 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           setError(data?.error || '相談内容を確認できませんでした');
           return;
         }
+        if (familySubject && (data.consultation.familyPersonId !== familySubject.id
+          || data.consultation.familyProjectId !== projectId)) {
+          setError('相談と主人公の対応を確認できませんでした');
+          return;
+        }
+        if (!familySubject && (data.consultation.familyPersonId || data.consultation.familyProjectId)) {
+          setError('相談と作品の対応を確認できませんでした');
+          return;
+        }
         setApprovedConsultation(data.consultation);
         if (data.consultation.edition) setEdition(data.consultation.edition);
         setMethod('interview_staff');
@@ -124,7 +134,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         if (data.consultation.giftRecipientName) setGift(current => ({ ...current, recipient_name: data.consultation.giftRecipientName }));
       }).finally(() => { if (active) setConsultationLoading(false); });
     return () => { active = false; };
-  }, [client, linkedConsultationId]);
+  }, [client, linkedConsultationId, familySubject?.id, projectId]);
 
   useEffect(() => {
     let active = true;
@@ -134,8 +144,9 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
     const load = () => client.functions.invoke('create-commerce-v2-checkout', { body: {
       // The public estimate has no purchaser or gift context; the authenticated
       // quote below rechecks the actual order type before Checkout.
-      action: isSelection || isPreview ? 'public_quote' : 'quote', orderType: isSelection || isPreview ? 'self' : orderType,
-      projectId, edition, productionMethod: method,
+      action: (isSelection && !approvedConsultation) || isPreview ? 'public_quote' : 'quote',
+      orderType: (isSelection && !approvedConsultation) || isPreview ? 'self' : orderType,
+      projectId, familyPersonId: familySubject?.id || null, edition, productionMethod: method,
       standardExtraCount, premiumExtraCount, discountCode,
       consultationId: approvedConsultation?.id || null,
     } }).then(async ({ data, error: invokeError }) => {
@@ -149,7 +160,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
     const timer = isSelection ? window.setTimeout(load, 300) : null;
     if (!isSelection) void load();
     return () => { active = false; if (timer) window.clearTimeout(timer); };
-  }, [client, orderType, projectId, edition, method, standardExtraCount, premiumExtraCount, discountCode, approvedConsultation?.id, isSelection, isPreview, alreadyPurchased]);
+  }, [client, orderType, projectId, familySubject?.id, edition, method, standardExtraCount, premiumExtraCount, discountCode, approvedConsultation?.id, isSelection, isPreview, alreadyPurchased]);
 
   const checkout = async () => {
     if (!quote || busy) return;
@@ -163,7 +174,8 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
     try {
       const { data, error: invokeError } = await client.functions.invoke('create-commerce-v2-checkout', { body: {
         action: 'checkout', requestKey: requestKey.current,
-        expectedQuote: quote, orderType, projectId, edition,
+        expectedQuote: quote, orderType, projectId,
+        familyPersonId: familySubject?.id || null, edition,
         productionMethod: method, standardExtraCount, premiumExtraCount,
         discountCode, gift, giftMode: orderType === 'gift' ? giftMode : null,
         consultationId: approvedConsultation?.id || null,
@@ -178,6 +190,10 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         return;
       }
       if (data.completed) {
+        if (familySubject && onFamilyCheckoutCompleted) {
+          await onFamilyCheckoutCompleted(data);
+          return;
+        }
         if (isReview && orderType === 'gift') {
           if (!data.order?.id || !data.gift?.claim_token || !onCompleted) {
             throw new Error('贈り物の購入内容を確認できませんでした');
@@ -223,6 +239,9 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
     }
   };
   if (linkedConsultationId && consultationLoading) return <p className="px-6 py-16 text-center text-white">相談内容を確認しています…</p>;
+  if (linkedConsultationId && !approvedConsultation) return (
+    <p role="alert" className="px-6 py-16 text-center text-[#a34b35]">{error || '相談内容を確認できませんでした。'}</p>
+  );
   if (approvedConsultation?.status === 'paid') return (
     <p className="px-6 py-16 text-center text-white">お支払いが完了しました。スタッフからのご連絡をお待ちください。</p>
   );
@@ -238,7 +257,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         <h1 className="mt-3 font-serif text-3xl leading-relaxed">あなたに合う一冊をお選びください。</h1>
         <product-comparison-media class="mt-6" />
 
-        {!isPreview && !familyInvitation && !approvedConsultation && <div className="mt-9">
+        {!isPreview && !familySubject && !familyInvitation && !approvedConsultation && <div className="mt-9">
           <h2 className="font-serif text-xl">どなたの人生史をつくりますか？</h2>
           <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-[#e9ece5] p-1">
             <button type="button" aria-pressed={orderType === 'self'} className={`rounded-lg px-2 py-3 text-sm ${orderType === 'self' ? 'bg-white font-bold shadow-sm' : ''}`} onClick={() => setPurchaseFor('self')}>自分の人生史</button>
@@ -261,7 +280,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
             </div>
           </div>}
         </div>}
-        {isPreview && <p className="mt-6 text-sm leading-7">{previewSubjectName}さんのBOOKを選択しています。制作を始めるスマホは購入後に決められます。</p>}
+        {(isPreview || familySubject) && <p className="mt-6 text-sm leading-7">{previewSubjectName || familySubject?.name}さんのBOOKを選択しています。制作を始めるスマホは購入後に決められます。</p>}
 
         <div className="mt-9">
           <h2 className="font-serif text-xl">ブックの装いを選ぶ</h2>
@@ -297,7 +316,9 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           <p className="mt-3 text-sm leading-7">お気軽にご相談ください。決済は前後しても構いません。</p>
           {isPreview ? <p className="mt-3 text-sm">まずは家族で始め、必要なら制作途中から相談できます。追加購入は今回の画面プレビュー対象外です。</p> : <>
             <button type="button" aria-expanded={consultationOpen} aria-controls="purchase-consultation-form" className={`mt-3 w-full border border-[#315a49] bg-white px-4 py-3 font-semibold ${consultationOpen ? 'rounded-t-lg border-b-0' : 'rounded-lg'}`} onClick={() => setConsultationOpen(open => !open)}>{consultationOpen ? '事前相談フォームを閉じる' : '事前相談フォームを開く'}</button>
-            {consultationOpen && <div id="purchase-consultation-form" className="rounded-b-lg border border-t-0 border-[#315a49] bg-white"><SupportConsultationInline purchaseSelection={selection} /></div>}
+            {consultationOpen && <div id="purchase-consultation-form" className="rounded-b-lg border border-t-0 border-[#315a49] bg-white"><SupportConsultationInline
+              purchaseSelection={selection} familySubject={familySubject}
+              familyProjectId={projectId} client={client}/></div>}
           </>}
         </div>
 
@@ -310,7 +331,8 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           <p className="mt-2 text-xs leading-6 text-[#65756b]">税込。正式な価格・割引は認証後に再確認します。</p>
         </div>
         {method === 'interview_staff' && <p role="note" className="mt-4 text-sm font-semibold leading-7 text-[#a34b35]">聞き取り制作サポートにお申し込みの方は、必ず事前相談フォームにもご入力ください。</p>}
-        <button type="button" className="mt-5 w-full rounded-full bg-[#244c3c] px-5 py-4 text-lg font-bold text-white disabled:opacity-50" disabled={busy || !quote || !catalogPrices || (orderType === 'gift' && !gift.recipient_name.trim())} onClick={async () => {
+        {method === 'interview_staff' && !approvedConsultation && !isPreview && <p className="mt-2 text-sm leading-6 text-[#65756b]">サポート付きの購入は、事前相談で内容を確認した後に進めます。BOOKだけ先に購入し、制作途中にサポートを相談することもできます。</p>}
+        <button type="button" className="mt-5 w-full rounded-full bg-[#244c3c] px-5 py-4 text-lg font-bold text-white disabled:opacity-50" disabled={busy || !quote || !catalogPrices || (method === 'interview_staff' && !approvedConsultation && !isPreview) || (orderType === 'gift' && !gift.recipient_name.trim())} onClick={async () => {
           setBusy(true); setError('');
           try { await onProceed?.({ ...selection, quotedAmountTotal: quote?.amount_total, quotedDiscountAmount: quote?.discount_amount }); }
           catch (cause) { setError(cause?.message || '購入内容を保存できませんでした。もう一度お試しください。'); setBusy(false); }
@@ -330,7 +352,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
       <div className="mt-8 rounded-2xl border border-white/20 bg-white/[0.05] p-5">
         <dl className="space-y-4">
           <div className="flex justify-between gap-4"><dt className="text-white/70">商品</dt><dd className="text-right">{edition === 'premium' ? 'プレミアム' : 'スタンダード'}</dd></div>
-          <div className="flex justify-between gap-4"><dt className="text-white/70">購入対象</dt><dd className="text-right">{isPreview ? `${previewSubjectName}さんのBOOK` : orderType === 'gift' ? `贈り物・${giftMode === 'family_managed' ? 'あなたのスマホで制作' : '贈り先の方のスマホで制作'}` : '自分の人生史'}</dd></div>
+          <div className="flex justify-between gap-4"><dt className="text-white/70">購入対象</dt><dd className="text-right">{isPreview || familySubject ? `${previewSubjectName || familySubject?.name}さんのBOOK` : orderType === 'gift' ? `贈り物・${giftMode === 'family_managed' ? 'あなたのスマホで制作' : '贈り先の方のスマホで制作'}` : '自分の人生史'}</dd></div>
           {orderType === 'gift' && <div className="flex justify-between gap-4"><dt className="text-white/70">物語のご本人</dt><dd className="text-right">{gift.recipient_name}</dd></div>}
           <div className="flex justify-between gap-4"><dt className="text-white/70">制作方法</dt><dd className="text-right">{method === 'interview_staff' ? 'スタッフに聞き取ってもらう' : '自分・家族で制作する'}</dd></div>
           {standardExtraCount > 0 && <div className="flex justify-between gap-4"><dt className="text-white/70">追加スタンダード冊子</dt><dd>{standardExtraCount}冊</dd></div>}
@@ -350,7 +372,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
       {method === 'interview_staff' && <p role="note" className="mt-5 text-sm font-semibold leading-7 text-rose-200">聞き取り制作サポートにお申し込みの方は、必ず事前相談フォームにもご入力ください。</p>}
       <button type="button" className="mt-8 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote} onClick={checkout}>{isPreview ? '模擬決済画面へ' : 'お支払いへ進む'}</button>
       <button type="button" className="mt-5 w-full text-sm text-white/70 underline" onClick={() => {
-        if (isPreview) { onPreviewBack?.(); return; }
+        if (isPreview || familySubject) { onPreviewBack?.(); return; }
         const url = new URL(window.location.href);
         url.searchParams.delete('purchase_review');
         window.location.assign(url.toString());

@@ -59,9 +59,12 @@ serve(async (request) => {
       || discountCode.length > 64) {
       return json({ success: false, error: "商品・割引コードを確認してください" }, 400);
     }
+    // Interview support requires an agreed consultation for an actual order.
+    // The public product card only needs its catalog price before that step.
+    const interviewEstimate = body.productionMethod === "interview_staff";
     const { data: estimate, error } = await admin.rpc("get_commerce_v2_quote", {
       input_edition: edition,
-      input_production_method: body.productionMethod,
+      input_production_method: interviewEstimate ? "self_or_family" : body.productionMethod,
       input_standard_extra_count: standardCount,
       input_premium_extra_count: premiumCount,
       // An unowned sentinel only skips the per-account coupon check here.
@@ -76,10 +79,19 @@ serve(async (request) => {
       || estimate.currency !== "jpy" || estimate.tax_included !== true) {
       return json({ success: false, error: "割引コードまたは金額を確認できませんでした" }, 400);
     }
+    let supportAmount = 0;
+    if (interviewEstimate) {
+      const { data: support, error: supportError } = await admin.from("commerce_products")
+        .select("amount_jpy,is_active")
+        .eq("product_code", "interview_support_v1").maybeSingle();
+      if (supportError || !support?.is_active || !Number.isInteger(support.amount_jpy))
+        return json({ success: false, error: "サポート料金を確認できませんでした" }, 503);
+      supportAmount = support.amount_jpy;
+    }
     return json({ success: true, quote: {
-      amount_subtotal: estimate.amount_subtotal,
+      amount_subtotal: estimate.amount_subtotal + supportAmount,
       discount_amount: estimate.discount_amount,
-      amount_total: estimate.amount_total,
+      amount_total: estimate.amount_total + supportAmount,
       currency: "jpy", tax_included: true,
     } });
   }
@@ -112,6 +124,7 @@ serve(async (request) => {
     const orderType = body.orderType === "gift" ? "gift" : "self";
     const giftMode = body.giftMode;
     const projectId = orderType === "self" ? String(body.projectId || "") : null;
+    const familyPersonId = body.familyPersonId ? String(body.familyPersonId) : null;
     const consultationId = method === "interview_staff" && body.consultationId
       ? String(body.consultationId) : null;
     const familyInvitationId = body.familyInvitationId ? String(body.familyInvitationId) : null;
@@ -127,7 +140,7 @@ serve(async (request) => {
     }
     if (orderType === "self") {
       const { data: project, error } = await admin.from("book_projects")
-        .select("id,owner_user_id,access_status")
+        .select("id,owner_user_id,access_status,subject_person_id,onboarding_preferences")
         .eq("id", projectId).maybeSingle();
       const { data: familyPayer, error: familyError } = project && project.owner_user_id !== auth.user.id
         ? await admin.rpc("family_supporter", { p: projectId, u: auth.user.id })
@@ -135,6 +148,36 @@ serve(async (request) => {
       if (error || !project || familyError || (project.owner_user_id !== auth.user.id && !familyPayer)
         || ["paid", "gifted", "legacy"].includes(project.access_status)) {
         return json({ success: false, error: "この物語の購入手続きを開始できません" }, 403);
+      }
+      const taggedPersonId = project.onboarding_preferences?.family_place_person_id;
+      if (taggedPersonId && (familyPersonId !== taggedPersonId
+        || project.subject_person_id !== taggedPersonId)) {
+        return json({ success: false, error: "主人公と作品の対応を確認できません" }, 403);
+      }
+    }
+    if (familyPersonId) {
+      if (orderType !== "self" || !projectId) {
+        return json({ success: false, error: "主人公と購入内容を確認してください" }, 400);
+      }
+      const { data: allowed, error: guardError } = await admin.rpc("family_place_checkout_guard", {
+        input_actor: auth.user.id, input_person_id: familyPersonId, input_project_id: projectId,
+      });
+      if (guardError || !allowed) {
+        return json({ success: false, error: "主人公と作品の対応を確認できません" }, 403);
+      }
+    }
+    if (consultationId) {
+      const { data: consultation, error: consultationError } = await admin
+        .from('commerce_v2_consultations')
+        .select('family_place_person_id,family_place_project_id')
+        .eq('id',consultationId).eq('requester_user_id',auth.user.id).maybeSingle();
+      if (consultationError || !consultation
+        || ((consultation.family_place_person_id || consultation.family_place_project_id)
+          && (consultation.family_place_person_id !== familyPersonId
+            || consultation.family_place_project_id !== projectId))
+        || (familyPersonId && (!consultation.family_place_person_id
+          || !consultation.family_place_project_id))) {
+        return json({ success:false,error:'相談と作品の対応を確認できません' },403);
       }
     }
 
@@ -281,10 +324,15 @@ serve(async (request) => {
     }
     const form = new URLSearchParams();
     form.set("mode", "payment");
-    form.set("success_url", returnUrl({ app: "1", entry: "purchase", purchase_for: orderType,
-      checkout_context: "purchase", checkout: "success", session_id: "{CHECKOUT_SESSION_ID}" }));
-    form.set("cancel_url", returnUrl({ app: "1", entry: "purchase", purchase_for: orderType,
-      checkout_context: "purchase", checkout: "cancelled" }));
+    form.set("success_url", familyPersonId
+      ? returnUrl({ app: "family_place", family_purchase_project: projectId!,
+        checkout: "success", session_id: "{CHECKOUT_SESSION_ID}" })
+      : returnUrl({ app: "1", entry: "purchase", purchase_for: orderType,
+        checkout_context: "purchase", checkout: "success", session_id: "{CHECKOUT_SESSION_ID}" }));
+    form.set("cancel_url", familyPersonId
+      ? returnUrl({ app: "family_place", family_purchase_project: projectId!, checkout: "cancelled" })
+      : returnUrl({ app: "1", entry: "purchase", purchase_for: orderType,
+        checkout_context: "purchase", checkout: "cancelled" }));
     if (auth.user.email?.trim()) form.set("customer_email", auth.user.email.trim());
     form.set("expires_at", String(Math.floor(Date.now() / 1000) + 60 * 60));
     form.set("client_reference_id", order.id);

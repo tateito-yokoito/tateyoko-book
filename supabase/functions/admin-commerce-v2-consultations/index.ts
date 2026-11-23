@@ -59,15 +59,32 @@ serve(async (request) => {
       }
       const { data: purchaser, error: purchaserError } = await admin.auth.admin.getUserById(body.purchaserUserId);
       if (purchaserError || !purchaser.user) return json({ success: false, error: "購入者アカウントを確認できません" }, 400);
+      const { data: pending, error: pendingError } = await admin.from("commerce_v2_consultations")
+        .select("requester_user_id,family_place_person_id,family_place_project_id")
+        .eq("id", id).in("status", ["submitted", "in_review"]).maybeSingle();
+      if (pendingError || !pending) return json({ success: false, error: "相談申込が見つかりません" }, 404);
+      if (pending.family_place_person_id && (
+        pending.requester_user_id !== purchaser.user.id
+        || !(await admin.rpc("family_place_checkout_guard", {
+          input_actor: purchaser.user.id,
+          input_person_id: pending.family_place_person_id,
+          input_project_id: pending.family_place_project_id,
+        })).data)) {
+        return json({ success: false, error: "購入者と主人公の対応を確認できません" }, 403);
+      }
       const { data, error } = await admin.from("commerce_v2_consultations")
         .update({ status: "agreed", agreed_edition: body.agreedEdition,
           requester_user_id: purchaser.user.id, agreed_at: new Date().toISOString(),
           updated_at: new Date().toISOString() })
         .eq("id", id).in("status", ["submitted", "in_review"])
-        .select("id,status,agreed_edition,requester_user_id").single();
+        .select("id,status,agreed_edition,requester_user_id,family_place_person_id,family_place_project_id").single();
       if (error) throw error;
       const paymentUrl = new URL(Deno.env.get("APP_URL") || "https://www.tateito-yokoito.jp/");
-      paymentUrl.search = new URLSearchParams({ app: "1", entry: "purchase", consultation: id }).toString();
+      paymentUrl.search = data.family_place_person_id && data.family_place_project_id
+        ? new URLSearchParams({ app: "family_place", consultation: id,
+          family_person: data.family_place_person_id,
+          family_purchase_project: data.family_place_project_id }).toString()
+        : new URLSearchParams({ app: "1", entry: "purchase", consultation: id }).toString();
       return json({ success: true, consultation: data, paymentUrl: paymentUrl.toString() });
     }
     if (body.action === "cancel") {

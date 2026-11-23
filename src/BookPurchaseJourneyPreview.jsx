@@ -4,30 +4,50 @@ import CommerceV2Purchase from './CommerceV2Purchase.jsx';
 import './book-purchase-journey-preview.css';
 
 // TEST-only visual journey. No project, order, payment, or auth handoff is created.
-export default function BookPurchaseJourneyPreview({ person, people = [], client, onBack, onTryFree }) {
-  const [step, setStep] = useState('intro');
+export default function BookPurchaseJourneyPreview({ person, people = [], client, onBack, onTryFree,
+  livePurchase = false, checkoutProjectId = null, initialProjectId = null, onOpenProduction = null }) {
+  const [step, setStep] = useState(checkoutProjectId ? 'setup' : initialProjectId ? 'selection' : 'intro');
   const [selectedPerson, setSelectedPerson] = useState(person || null);
   const [chooseFor, setChooseFor] = useState('selection');
   const [selection, setSelection] = useState(null);
   const [startingPhone, setStartingPhone] = useState(null);
   const [chooseError, setChooseError] = useState('');
   const [choosing, setChoosing] = useState(false);
+  const [projectId, setProjectId] = useState(checkoutProjectId || initialProjectId);
+  const [setupConsent, setSetupConsent] = useState(false);
   const subject = selectedPerson?.display_name || '';
   const steps = { intro: 'BOOK紹介', choose: '主人公を選ぶ', selection: '商品選択', review: '注文内容確認',
     payment: '模擬決済', setup: '制作セットアップ', home: '制作ホーム' };
   const back = () => {
-    if (step === 'intro') onBack();
+    if (step === 'intro' || (livePurchase && step === 'setup')) onBack();
     else setStep(({ choose: 'intro', selection: person ? 'intro' : 'choose', review: 'selection', payment: 'review',
       setup: 'payment', home: 'setup' })[step]);
   };
   const proceed = target => {
-    if (selectedPerson) { if (target === 'free') onTryFree(selectedPerson.id); else setStep('selection'); }
+    if (selectedPerson) { if (target === 'free') onTryFree(selectedPerson.id); else void choosePerson(selectedPerson); }
     else { setChooseFor(target); setStep('choose'); }
   };
   const choosePerson = async item => {
     if (chooseFor === 'free') { setSelectedPerson(item); onTryFree(item.id); return; }
     setChoosing(true); setChooseError('');
     try {
+      if (livePurchase) {
+        const { data: state, error } = await client.rpc('family_place_book_purchase_state', {
+          input_person_id:item.id,
+        });
+        if (error) throw error;
+        if (state?.state !== 'available' && state?.state !== 'reserved') {
+          setChooseError(state?.state === 'subject_consent_required'
+            ? 'ご本人のアカウントによる同意が必要です。現在、この人物の購入は開始できません。'
+            : `${item.display_name}さんのBOOKは本棚から確認してください。`);
+          return;
+        }
+        const { data: reservedId, error: reserveError } = await client.rpc(
+          'family_place_prepare_book_purchase',{input_person_id:item.id});
+        if (reserveError || !reservedId) throw reserveError || new Error('作品を準備できませんでした');
+        setProjectId(reservedId);
+        setSelectedPerson(item); setStep('selection'); return;
+      }
       // A missing visible project is not permission to start checkout. This
       // read only guard keeps the preview honest; the eventual checkout must
       // perform a complete server-side check across all projects and orders.
@@ -51,9 +71,9 @@ export default function BookPurchaseJourneyPreview({ person, people = [], client
       <button type="button" onClick={back}><ChevronLeft aria-hidden="true"/>戻る</button>
       <span>{steps[step]}</span>
     </div>
-    <div className="book-journey-banner" role="status">
+    {!livePurchase && <div className="book-journey-banner" role="status">
       <strong>画面プレビュー</strong>　注文・決済・作品作成・回答保存は行いません。
-    </div>
+    </div>}
     {subject && <p className="book-journey-subject">BOOKの主人公：<strong>{subject}さん</strong></p>}
 
     {step === 'intro' && <section className="book-journey-content">
@@ -79,15 +99,29 @@ export default function BookPurchaseJourneyPreview({ person, people = [], client
     </section>}
 
     {step === 'selection' && <CommerceV2Purchase key="preview-selection" client={client}
-      phase="selection" previewSubjectName={subject} initialSelection={selection}
-      onProceed={value => { setSelection(value); setStep('review'); }}/>}
+      phase="selection" projectId={projectId} previewSubjectName={livePurchase ? null : subject}
+      familySubject={livePurchase ? { id:selectedPerson.id,name:subject } : null}
+      initialSelection={selection}
+      onProceed={async value => {
+        if (livePurchase) {
+          const { data, error } = await client.rpc('family_place_prepare_book_purchase', {
+            input_person_id:selectedPerson.id,
+          });
+          if (error || !data) throw error || new Error('作品を準備できませんでした');
+          setProjectId(data);
+        }
+        setSelection(value); setStep('review');
+      }}/>}
 
     {step === 'review' && <CommerceV2Purchase key="preview-review" client={client}
-      phase="review" previewSubjectName={subject} initialSelection={selection}
+      phase="review" previewSubjectName={livePurchase ? null : subject}
+      familySubject={livePurchase ? { id:selectedPerson.id,name:subject } : null}
+      projectId={projectId} initialSelection={selection}
+      onFamilyCheckoutCompleted={livePurchase ? () => setStep('setup') : null}
       onPreviewCheckout={() => setStep('payment')}
       onPreviewBack={() => setStep('selection')}/>}
 
-    {step === 'payment' && <section className="book-journey-content">
+    {!livePurchase && step === 'payment' && <section className="book-journey-content">
       <h1>決済画面（模擬表示）</h1>
       <p>{subject}さんのBOOK・{selection?.edition === 'premium' ? 'プレミアム' : 'スタンダード'}</p>
       <p>Stripeには移動しません。実際の請求はありません。</p>
@@ -96,7 +130,7 @@ export default function BookPurchaseJourneyPreview({ person, people = [], client
     </section>}
 
     {step === 'setup' && <section className="book-journey-content">
-      <p className="book-journey-kicker">模擬購入完了</p>
+      <p className="book-journey-kicker">{livePurchase ? '購入完了' : '模擬購入完了'}</p>
       <h1>{subject}さんのBOOKを始めましょう。</h1>
       <p>どなたのスマホで制作を始めますか？</p>
       <div className="book-journey-choices">
@@ -104,11 +138,26 @@ export default function BookPurchaseJourneyPreview({ person, people = [], client
         <button type="button" aria-pressed={startingPhone === 'family'} onClick={() => setStartingPhone('family')}><Users/>ご家族のスマホ</button>
       </div>
       <p className="book-journey-note">最初の操作担当を選ぶだけです。家族の参加を制限しません。本人への案内は後から行えます。</p>
+      {livePurchase && <label className="book-journey-note"><input type="checkbox" checked={setupConsent}
+        onChange={event => setSetupConsent(event.target.checked)}/>ご本人がBOOK制作に同意していることを確認しました。</label>}
+      {chooseError && <p role="alert" className="book-journey-note">{chooseError}</p>}
       <button type="button" className="book-journey-primary" disabled={!startingPhone}
-        onClick={() => setStep('home')}>制作ホームへ<ChevronRight aria-hidden="true"/></button>
+        onClick={async () => {
+          if (!livePurchase) { setStep('home'); return; }
+          if (!setupConsent) { setChooseError('ご本人の同意確認が必要です。'); return; }
+          setChoosing(true); setChooseError('');
+          try {
+            const { data, error } = await client.rpc('family_place_start_paid_book', {
+              input_project_id:projectId,input_subject_consent_confirmed:true,
+            });
+            if (error || !data) throw error || new Error('制作を開始できませんでした');
+            onOpenProduction?.(data.project_id);
+          } catch (error) { setChooseError(error.message || '制作を開始できませんでした'); }
+          finally { setChoosing(false); }
+        }}>{choosing ? '準備しています…' : '制作ホームへ'}<ChevronRight aria-hidden="true"/></button>
     </section>}
 
-    {step === 'home' && <section className="book-journey-content">
+    {!livePurchase && step === 'home' && <section className="book-journey-content">
       <p className="book-journey-kicker">制作ホーム・画面プレビュー</p>
       <h1>{subject}さんの人生の物語</h1>
       <div className="book-journey-home-card"><Mic aria-hidden="true"/>

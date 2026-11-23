@@ -40,7 +40,8 @@ function OptionList({ name, options, value, onSelect, multiple = false, compact 
   )}</div>;
 }
 
-export default function SupportConsultationInline({ reviewOnly = false, purchaseSelection = null }) {
+export default function SupportConsultationInline({ reviewOnly = false, purchaseSelection = null,
+  familySubject = null, familyProjectId = null, client = null }) {
   const [values, setValues] = useState(initialValues);
   const [stepIndex, setStepIndex] = useState(0);
   const [error, setError] = useState('');
@@ -55,9 +56,12 @@ export default function SupportConsultationInline({ reviewOnly = false, purchase
   const endpoint = import.meta.env.VITE_SUPABASE_URL || '';
   const publishableKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
   const productionHost = ['tateito-yokoito.jp', 'www.tateito-yokoito.jp'].includes(window.location.hostname);
+  const familyTestHost = familySubject && window.location.hostname.endsWith('.vercel.app')
+    && window.location.hostname.startsWith('tateyoko-book-test-');
   const correctEndpoint = productionHost
     ? endpoint === 'https://wquxjeqkumossjxehdop.supabase.co'
-    : local && params.has('test') && endpoint === 'https://gmyqqcnbuiaghbrxnkaz.supabase.co';
+    : familyTestHost && endpoint === 'https://zpswxefgfabzvxdbtyvq.supabase.co'
+      || local && params.has('test') && endpoint === 'https://gmyqqcnbuiaghbrxnkaz.supabase.co';
   const canSubmit = !preview && correctEndpoint && Boolean(publishableKey);
   const steps = stepsFor(values);
   const index = Math.min(stepIndex, steps.length - 1);
@@ -115,9 +119,16 @@ export default function SupportConsultationInline({ reviewOnly = false, purchase
     setBusy(true);
     setError('');
     try {
+      let accessToken = null;
+      if (familySubject) {
+        const { data: session, error: sessionError } = await client.auth.getSession();
+        accessToken = session?.session?.access_token;
+        if (sessionError || !accessToken || !familyProjectId) throw new Error('ログインと対象作品を確認してください。');
+      }
       const response = await fetch(`${endpoint}/functions/v1/submit-commerce-v2-consultation`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: publishableKey },
+        headers: { 'Content-Type': 'application/json', apikey: publishableKey,
+          ...(accessToken ? { Authorization:`Bearer ${accessToken}` } : {}) },
         body: JSON.stringify({
           requestKey: key.current,
           orderType: purchaseSelection?.purchaseFor === 'gift' ? 'gift' : 'self',
@@ -125,6 +136,8 @@ export default function SupportConsultationInline({ reviewOnly = false, purchase
           standardExtraCount: purchaseSelection?.standardExtraCount || 0,
           premiumExtraCount: purchaseSelection?.premiumExtraCount || 0,
           familyInvitationId: null,
+          familyPersonId: familySubject?.id || null,
+          familyProjectId: familyProjectId || null,
           giftRecipientName: purchaseSelection?.purchaseFor === 'gift' ? purchaseSelection?.recipientName || null : null,
           contactName: values.name.trim(), contactEmail: values.email.trim(), contactPhone: values.phone.trim(),
           consultationText: answers, consentToContact: values.consent, receiveCopy: values.receiveCopy,
