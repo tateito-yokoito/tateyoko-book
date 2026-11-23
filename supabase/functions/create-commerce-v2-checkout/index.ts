@@ -102,7 +102,10 @@ serve(async (request) => {
   if (body.action !== "quote") {
     if (!stripeKey) return json({ success: false, error: "決済の準備が完了していません" }, 503);
     try {
-      requireCommerceV2CheckoutEnabled();
+      // The public BOOK application remains paused. A family-app request may
+      // pass this one gate only after its JWT and person/project ownership are
+      // checked below, before any order or Stripe call.
+      if (!body.familyPersonId) requireCommerceV2CheckoutEnabled();
       requireStripeEnvironment(stripeKey);
       requireCheckoutEnabled();
       const { error: modeError } = await admin.rpc("require_commerce_mode", { input_mode: commerceMode() });
