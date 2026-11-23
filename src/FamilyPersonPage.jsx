@@ -3,6 +3,7 @@ import { BookOpen, ChevronLeft, ChevronRight, LockKeyhole, Plus, UserRound } fro
 import FamilyAvatar from './FamilyAvatar.jsx';
 import WebBookCover, { publicationCoverImageUrl } from './WebBookCover.jsx';
 import { currentPersonAge } from './lib/personAge.js';
+import { parentPersonAppeal } from './lib/parentPersonAppeal.js';
 import './family-person-page.css';
 
 const hasAnswer = row => Boolean(row.body || row.transcript_raw || row.media_count);
@@ -45,11 +46,14 @@ function PublishedBookThumbnail({ book, supabaseClient }) {
 export default function FamilyPersonPage({ person, stories = [], books = [], booksStatus = 'ready',
   facts = [], questions = [], activeTab = 'ring', onTabChange, onBack, onProfile,
   onOpenStory, onAddFact, onRetryBooks, supabaseClient, busy = false,
-  backLabel = 'ホーム', entryOrigin = 'home' }) {
+  backLabel = 'ホーム', entryOrigin = 'home', selfId = null, relations = [],
+  onPurchaseBook }) {
   const [showQuestions, setShowQuestions] = useState(false);
   const saved = stories.filter(hasAnswer);
   const timeline = [...facts];
   const age = currentPersonAge(person);
+  const appeal = parentPersonAppeal(person, selfId, relations);
+  const firstUnanswered = questions.find(question => !saved.some(row => row.question_slot === question.slot));
   return <main className="fp-person-page">
     <header className="fp-person-topbar">
       <button type="button" onClick={onBack} aria-label={`${backLabel}へ戻る`}><ChevronLeft/><span>{backLabel}</span></button>
@@ -75,18 +79,37 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
           onClick={() => onTabChange(key)}>{label}</button>)}
     </div>
     {activeTab === 'ring' && <section className="fp-person-content" role="tabpanel">
-      <h2>年輪</h2><p className="fp-person-section-note">人生の語りを、少しずつ残していく場所です。</p>
+      <h2>年輪</h2>
+      {appeal && !saved.length && <div className="fp-parent-ring" data-appeal={appeal.variant}>
+        <p className="fp-parent-status">{appeal.parent}の人生の歩みや想いは、ここにはまだ残されていません。</p>
+        <h3>{appeal.ringHeadline}</h3>
+        <p>{appeal.parent}が子どもだった頃。<br/>何に夢中になり、何を大切にしてきたのか。<br/>あなたは、どれくらい知っていますか。</p>
+        <div className="fp-parent-first-questions">
+          <strong>まずは、3つの質問から。</strong>
+          <p>声でも、文章でも、写真でも。<br/>一問だけでも大丈夫です。</p>
+          <button type="button" className="fp-parent-primary" disabled={!firstUnanswered || busy}
+            onClick={() => onOpenStory(firstUnanswered)}>{appeal.parent}の人生を聞いてみる<ChevronRight aria-hidden="true"/></button>
+          <button type="button" className="fp-parent-text-button" onClick={() => setShowQuestions(current => !current)}>
+            質問一覧を見る<ChevronRight aria-hidden="true"/></button>
+        </div>
+      </div>}
+      {(!appeal || saved.length > 0) && <p className="fp-person-section-note">人生の語りを、少しずつ残していく場所です。</p>}
       {saved.length ? <div className="fp-person-stories">{saved.map(row =>
         <button type="button" className="fp-person-story" key={row.id}
           onClick={() => onOpenStory(questions[row.question_slot-1])}>
           <BookOpen aria-hidden="true"/><span><strong>{row.visibility === 'private' && <LockKeyhole size={13} aria-label="自分だけ"/>}{row.question_text}</strong></span><ChevronRight aria-hidden="true"/>
         </button>)}</div> : <div className="fp-person-story-empty">まだ語りはありません。<br/>声・文章・写真から、好きな方法で始められます。</div>}
-      <button type="button" className="fp-person-add-story" onClick={() => setShowQuestions(current => !current)}>
-        <Plus aria-hidden="true"/>{saved.length ? '新しい語りを追加する' : '最初の語りを残す'}</button>
+      {(!appeal || saved.length > 0) && <button type="button" className="fp-person-add-story" onClick={() => setShowQuestions(current => !current)}>
+        <Plus aria-hidden="true"/>{saved.length ? '新しい語りを追加する' : '最初の語りを残す'}</button>}
       {showQuestions && <div className="fp-person-questions" aria-label="無料3問">
         {questions.map(question => <button type="button" key={question.id} disabled={busy}
           onClick={() => onOpenStory(question)}>{question.slot}問目：{question.text}<ChevronRight aria-hidden="true"/></button>)}
         <p>質問文は暫定です。</p>
+      </div>}
+      {appeal && <div className="fp-parent-book-bridge">
+        <strong>この語りを、一冊のBOOKに。</strong>
+        <p>無料で残した語りも、そのまま引き継げます。</p>
+        <button type="button" onClick={() => onTabChange('books')}>BOOKについて見る<ChevronRight aria-hidden="true"/></button>
       </div>}
     </section>}
     {activeTab === 'books' && <section className="fp-person-content" role="tabpanel">
@@ -103,7 +126,20 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
                 Webブックを読む<ChevronRight aria-hidden="true"/></a>
             </div>
           </article>)}</div>
-          : <div className="fp-person-story-empty">この人物の完成したBOOKは、まだありません。</div>}
+          : appeal ? <div className="fp-parent-bookshelf" data-appeal={appeal.variant}>
+              <p className="fp-parent-status">{appeal.parent}のBOOKは、まだ制作されていません。</p>
+              <h3>{appeal.bookHeadline}</h3>
+              <p>今は当たり前に聞ける声も、何気ない昔話も、いつか家族の宝物になる。</p>
+              <figure><img src="/site/hp-renewal/book-web-pair-mobile.jpg"
+                alt="縦糸横糸の紙のBOOKとWebブックを並べた商品写真" loading="lazy"/></figure>
+              <p>声や文章で少しずつ語り、写真や肉声も一緒に残せます。紙のBOOKとWebブックで、家族がいつでも振り返れます。</p>
+              <p className="fp-parent-book-carry">無料の3問で残した語りは、制作に引き継げます。</p>
+              <ol><li>質問に沿って語る</li><li>文章と写真を確認する</li><li>BOOKとWebブックを受け取る</li></ol>
+              <div className="fp-parent-prices"><div><strong>スタンダード</strong><span>35,000円（税込）</span><small>上質なソフトカバー</small></div>
+                <div><strong>プレミアム</strong><span>65,000円（税込）</span><small>布貼り上製本・箔押し</small></div></div>
+              {onPurchaseBook && <button type="button" className="fp-parent-primary" disabled={busy}
+                onClick={onPurchaseBook}>{appeal.parent}のBOOKをつくる<ChevronRight aria-hidden="true"/></button>}
+            </div> : <div className="fp-person-story-empty">この人物の完成したBOOKは、まだありません。</div>}
     </section>}
     {activeTab === 'memories' && <section className="fp-person-content" role="tabpanel">
       <h2>思い出</h2><div className="fp-person-story-empty">この人物の思い出は、まだありません。</div>

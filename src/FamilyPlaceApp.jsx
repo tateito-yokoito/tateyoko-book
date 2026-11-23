@@ -756,6 +756,7 @@ export default function FamilyPlaceApp() {
     </main>}
     {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories}
       supabaseClient={supabaseClient}
+      selfId={selfId} relations={relations}
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}
       facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
       onTabChange={setActiveTab} onBack={personEntry === 'tree' ? returnToTree : goHome}
