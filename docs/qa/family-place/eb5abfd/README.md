@@ -1,6 +1,6 @@
 # 家族アプリ・スマートフォン画面確認
 
-対象ソース: `c10e64fb454700999f5668ea82c0c046bd695b9e`。本番デプロイと同じReact画面をローカルでビルドし、Supabase接続だけを架空のメモリ内データに置き換えて撮影。画像に実顧客データや認証情報は含めない。これは本番DBのE2E検証ではない。
+対象ソース: `eb5abfd18e24bc5663833e445d4eddada67d5b34`。本番デプロイと同じReact画面をローカルでビルドし、Supabase接続だけを架空のメモリ内データに置き換えて撮影。画像に実顧客データや認証情報は含めない。これは本番DBのE2E検証ではない。
 
 再取得: `node scripts/qa/capture-family-place.mjs`（Playwright と Chrome が必要）。結果は [results.json](results.json)。対応する実装: [家族アプリ](../../../../src/FamilyPlaceApp.jsx)、[人物ページ](../../../../src/FamilyPersonPage.jsx)、[家系図](../../../../src/FamilyTree.jsx)、[BOOK制作ホーム](../../../../src/home/ApprovedHome.jsx)。
 
