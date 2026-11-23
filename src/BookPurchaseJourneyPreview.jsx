@@ -4,17 +4,47 @@ import CommerceV2Purchase from './CommerceV2Purchase.jsx';
 import './book-purchase-journey-preview.css';
 
 // TEST-only visual journey. No project, order, payment, or auth handoff is created.
-export default function BookPurchaseJourneyPreview({ person, client, onBack, onTryFree }) {
+export default function BookPurchaseJourneyPreview({ person, people = [], client, onBack, onTryFree }) {
   const [step, setStep] = useState('intro');
+  const [selectedPerson, setSelectedPerson] = useState(person || null);
+  const [chooseFor, setChooseFor] = useState('selection');
   const [selection, setSelection] = useState(null);
   const [startingPhone, setStartingPhone] = useState(null);
-  const subject = person.display_name;
-  const steps = { intro: 'BOOK紹介', selection: '商品選択', review: '注文内容確認',
+  const [chooseError, setChooseError] = useState('');
+  const [choosing, setChoosing] = useState(false);
+  const subject = selectedPerson?.display_name || '';
+  const steps = { intro: 'BOOK紹介', choose: '主人公を選ぶ', selection: '商品選択', review: '注文内容確認',
     payment: '模擬決済', setup: '制作セットアップ', home: '制作ホーム' };
   const back = () => {
     if (step === 'intro') onBack();
-    else setStep(({ selection: 'intro', review: 'selection', payment: 'review',
+    else setStep(({ choose: 'intro', selection: person ? 'intro' : 'choose', review: 'selection', payment: 'review',
       setup: 'payment', home: 'setup' })[step]);
+  };
+  const proceed = target => {
+    if (selectedPerson) { if (target === 'free') onTryFree(selectedPerson.id); else setStep('selection'); }
+    else { setChooseFor(target); setStep('choose'); }
+  };
+  const choosePerson = async item => {
+    if (chooseFor === 'free') { setSelectedPerson(item); onTryFree(item.id); return; }
+    setChoosing(true); setChooseError('');
+    try {
+      // A missing visible project is not permission to start checkout. This
+      // read only guard keeps the preview honest; the eventual checkout must
+      // perform a complete server-side check across all projects and orders.
+      const [{ data: projects, error: projectError }, { data: publications, error: publicationError }] = await Promise.all([
+        client.from('book_projects').select('id,access_status').eq('subject_person_id', item.id),
+        client.rpc('list_family_place_person_books', { input_person_id:item.id }),
+      ]);
+      if (projectError || publicationError) throw new Error('BOOKの状態を確認できませんでした。');
+      if ((projects || []).some(project => ['paid','gifted','legacy'].includes(project.access_status))
+        || (publications || []).length) {
+        setChooseError(`${item.display_name}さんには購入済みのBOOKがあります。人物ページの本棚から確認してください。`);
+        return;
+      }
+      setSelectedPerson(item);
+      setStep('selection');
+    } catch (error) { setChooseError(error.message || 'BOOKの状態を確認できませんでした。'); }
+    finally { setChoosing(false); }
   };
   return <main className={`book-journey-preview ${step === 'review' ? 'book-journey-review' : ''}`}>
     <div className="book-journey-top">
@@ -24,19 +54,28 @@ export default function BookPurchaseJourneyPreview({ person, client, onBack, onT
     <div className="book-journey-banner" role="status">
       <strong>画面プレビュー</strong>　注文・決済・作品作成・回答保存は行いません。
     </div>
-    <p className="book-journey-subject">BOOKの主人公：<strong>{subject}さん</strong></p>
+    {subject && <p className="book-journey-subject">BOOKの主人公：<strong>{subject}さん</strong></p>}
 
     {step === 'intro' && <section className="book-journey-content">
       <p className="book-journey-kicker">縦糸∞横糸｜人生のBOOK</p>
-      <h1>{subject}さんの人生を、家族に残せる一冊に。</h1>
+      <h1>{subject ? `${subject}さんの人生を、家族に残せる一冊に。` : '家族の人生を、一冊のBOOKに。'}</h1>
       <div className="book-journey-value">
         <p>家族でも知らない、人生がある。</p>
         <p>声で答えるだけで、一冊の本に。</p>
         <p>声も残り、家族の中で物語が生き続ける。</p>
       </div>
-      <button type="button" className="book-journey-primary" onClick={() => setStep('selection')}>BOOKを作る<ChevronRight aria-hidden="true"/></button>
-      <button type="button" className="book-journey-secondary" onClick={onTryFree}>まずは無料3問を試す</button>
+      <button type="button" className="book-journey-primary" onClick={() => proceed('selection')}>BOOKを作る<ChevronRight aria-hidden="true"/></button>
+      <button type="button" className="book-journey-secondary" onClick={() => proceed('free')}>まずは無料3問を試す</button>
       <p className="book-journey-note">無料3問は購入の必須条件ではありません。</p>
+    </section>}
+
+    {step === 'choose' && <section className="book-journey-content">
+      <h1>誰の人生をBOOKにしますか？</h1>
+      {people.length ? <div className="book-journey-choices">{people.map(item =>
+        <button type="button" key={item.id} disabled={choosing} onClick={() => choosePerson(item)}>
+          {item.display_name}さん<ChevronRight aria-hidden="true"/></button>)}</div>
+        : <p>先に家族を登録してください。</p>}
+      {chooseError && <p role="alert" className="book-journey-note">{chooseError}</p>}
     </section>}
 
     {step === 'selection' && <CommerceV2Purchase key="preview-selection" client={client}

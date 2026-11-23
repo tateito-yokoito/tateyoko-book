@@ -29,6 +29,7 @@ const state = {
   family_person_profile_facts: [],
   family_free_stories: [],
   family_free_story_media: [],
+  book_projects: [],
 };
 
 const clone = value => value == null ? value : structuredClone(value);
@@ -110,6 +111,11 @@ const client = {
     throw Error(`Unexpected RPC: ${name}`);
   },
   functions: { invoke: async (name, options = {}) => {
+    if (name === 'create-commerce-v2-checkout' && options.body?.action === 'public_quote') {
+      const amount = options.body.edition === 'premium' ? 65000 : 35000;
+      return { data: { success:true, quote: { amount_subtotal:amount,
+        discount_amount:0, amount_total:amount, currency:'jpy', tax_included:true } }, error:null };
+    }
     if (name === 'public-voice') return { data: options.body?.action === 'asset'
       ? { success: false } : { success: true, publication }, error: null };
     throw Error(`Unexpected function: ${name}`);

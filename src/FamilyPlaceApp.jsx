@@ -12,7 +12,7 @@ import FamilyRelationshipEditor from './FamilyRelationshipEditor.jsx';
 import { familyRelationSuggestions } from './lib/familyTreeModel.js';
 import PortraitCropEditor from './PortraitCropEditor.jsx';
 import {
-  ensureFamilyPlace, familyPlacePeople, familyPlacePublishedBooks, addFamilyPlacePerson, updateFamilyPlacePerson,
+  ensureFamilyPlace, familyPlacePeople, familyPlacePublishedBooks, familyPlaceVisibleBookProjects, addFamilyPlacePerson, updateFamilyPlacePerson,
   familyPlaceRelations, familyRelationDecisions, saveFamilyRelationDecision,
   saveFamilyPlaceRelation, removeFamilyPlaceRelation,
   personNameParts, uploadFamilyPlacePortrait, downloadFamilyPlacePortrait, familyPlacePortraitUrl,
@@ -183,6 +183,7 @@ export default function FamilyPlaceApp() {
   const [selfId, setSelfId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [personEntry, setPersonEntry] = useState('home');
+  const [bookEntry, setBookEntry] = useState('home');
   const [screen, setScreen] = useState('home');
   const [profile, setProfile] = useState(null);
   const [profileReturnToTree, setProfileReturnToTree] = useState(false);
@@ -199,6 +200,8 @@ export default function FamilyPlaceApp() {
   const [facts, setFacts] = useState([]);
   const [stories, setStories] = useState([]);
   const [publishedBooks, setPublishedBooks] = useState([]);
+  const [visibleBookProjects, setVisibleBookProjects] = useState([]);
+  const [projectsStatus, setProjectsStatus] = useState('loading');
   const [booksStatus, setBooksStatus] = useState('loading');
   const [newPerson, setNewPerson] = useState(emptyPersonDraft);
   const [newIsSelf, setNewIsSelf] = useState(false);
@@ -281,10 +284,12 @@ export default function FamilyPlaceApp() {
   const loadPerson = useCallback(async personId => {
     const epoch = ++personLoadEpoch.current;
     setBooksStatus('loading');
-    const [nextFacts, nextStories, bookResult] = await Promise.all([
+    const [nextFacts, nextStories, bookResult, projectResult] = await Promise.all([
       familyPlaceFacts(supabaseClient, personId),
       familyPlaceStories(supabaseClient, personId),
       familyPlacePublishedBooks(supabaseClient, personId)
+        .then(data => ({ data })).catch(error => ({ error })),
+      familyPlaceVisibleBookProjects(supabaseClient, personId)
         .then(data => ({ data })).catch(error => ({ error })),
     ]);
     if (epoch !== personLoadEpoch.current) return;
@@ -292,6 +297,8 @@ export default function FamilyPlaceApp() {
     setStories(nextStories);
     if (bookResult.error) { setPublishedBooks([]); setBooksStatus('error'); }
     else { setPublishedBooks(bookResult.data); setBooksStatus('ready'); }
+    if (projectResult.error) { setVisibleBookProjects([]); setProjectsStatus('error'); }
+    else { setVisibleBookProjects(projectResult.data); setProjectsStatus('ready'); }
   }, []);
   useEffect(() => {
     let live = true;
@@ -414,7 +421,17 @@ export default function FamilyPlaceApp() {
     setProfileReturnToTree(false);
     setPersonEntry(entry);
     setError(''); setSelectedId(id); setActiveTab('ring');
-    setPublishedBooks([]); setBooksStatus('loading'); setScreen('person');
+    setPublishedBooks([]); setVisibleBookProjects([]); setBooksStatus('loading'); setProjectsStatus('loading'); setScreen('person');
+  };
+  const openBookIntroduction = (entry = 'home') => {
+    setBookEntry(entry);
+    setError('');
+    setScreen('book-preview');
+  };
+  const leaveBookIntroduction = () => {
+    if (bookEntry === 'home') { setSelectedId(null); setScreen('home'); return; }
+    if (bookEntry === 'books') setActiveTab('books');
+    setScreen('person');
   };
   const goHome = async () => {
     if (screen === 'recording' && guardRef.current) {
@@ -752,6 +769,7 @@ export default function FamilyPlaceApp() {
     {error && <p className="fp-error" role="alert">{error}</p>}
     {screen === 'home' && <FamilyHome people={people} storyCounts={homeStoryCounts}
       onAddPerson={() => startAddPerson()} onOpenPerson={openPerson} onTree={openTree}
+      onOpenBook={BookPurchaseJourneyPreview ? () => openBookIntroduction('home') : null}
       onSwitchAccount={() => supabaseClient.auth.signOut()}/>}
     {screen === 'tree' && <FamilyTree people={people} relations={relations} selfId={selfId}
       centerId={treeCenterId || selfId || people[0]?.id} onCenter={setTreeCenterId}
@@ -803,18 +821,19 @@ export default function FamilyPlaceApp() {
     {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories}
       supabaseClient={supabaseClient}
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}
+      visibleBookProjects={visibleBookProjects} projectsStatus={projectsStatus}
       facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
       onTabChange={setActiveTab} onBack={personEntry === 'tree' ? returnToTree : goHome}
       backLabel={personEntry === 'tree' ? '家系図' : 'ホーム'} entryOrigin={personEntry}
       onProfile={() => startProfile()}
-      onBookPreview={import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
-        ? () => setScreen('book-preview') : null}
+      onOpenBook={BookPurchaseJourneyPreview ? openBookIntroduction : null}
       onOpenStory={openStory} busy={busy}
       onAddFact={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}/>}
-    {screen === 'book-preview' && person && BookPurchaseJourneyPreview && <React.Suspense fallback={<p>画面プレビューを読み込んでいます…</p>}><BookPurchaseJourneyPreview
-      person={person} client={supabaseClient}
-      onBack={() => setScreen('person')}
-      onTryFree={() => { setScreen('person'); setActiveTab('ring'); }}/></React.Suspense>}
+    {screen === 'book-preview' && BookPurchaseJourneyPreview && <React.Suspense fallback={<p>画面プレビューを読み込んでいます…</p>}><BookPurchaseJourneyPreview
+      key={`${bookEntry}:${bookEntry === 'home' ? '' : person?.id || ''}`}
+      person={bookEntry === 'home' ? null : person} people={people} client={supabaseClient}
+      onBack={leaveBookIntroduction}
+      onTryFree={id => { if (bookEntry === 'home') setPersonEntry('home'); setSelectedId(id); setActiveTab('ring'); setScreen('person'); }}/></React.Suspense>}
     {screen === 'profile' && person && <main className="fp-section"><h1>プロフィール</h1>
       <form className="fp-form" onSubmit={saveProfile}>
         <div className="fp-profile-photo"><span>プロフィール画像（任意）</span>

@@ -26,6 +26,17 @@ export async function familyPlacePublishedBooks(client, personId) {
     .sort((a, b) => (Date.parse(b.published_at) || 0) - (Date.parse(a.published_at) || 0));
 }
 
+// This is deliberately limited to projects the current session can read under
+// existing BOOK RLS. Checkout must use a separate server-side, complete status
+// check; an empty result here must never authorize a second purchase.
+export async function familyPlaceVisibleBookProjects(client, personId) {
+  const { data, error } = await client.from('book_projects')
+    .select('id,subject_person_id,owner_user_id,access_status,status,created_at')
+    .eq('subject_person_id', personId).order('created_at', { ascending:false });
+  if (error) throw error;
+  return data || [];
+}
+
 export function personNameParts(person) {
   if (person?.family_name || person?.given_name) return {
     family_name: person.family_name || '', given_name: person.given_name || '',

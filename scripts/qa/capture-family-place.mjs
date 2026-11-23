@@ -34,9 +34,15 @@ const mime = name => ({ '.html':'text/html', '.js':'text/javascript', '.css':'te
 
 try {
   process.env.VITE_FAMILY_PLACE_ENABLED = 'true';
-  process.env.VITE_PUBLIC_TEST_MODE = 'false';
-  process.env.VITE_SUPABASE_URL = 'https://fixture.invalid';
-  process.env.VITE_SUPABASE_ANON_KEY = 'fixture-only';
+  process.env.VITE_PUBLIC_TEST_MODE = process.env.QA_PURCHASE_PREVIEW === '1' ? 'true' : 'false';
+  process.env.VITE_SUPABASE_URL = process.env.QA_PURCHASE_PREVIEW === '1'
+    ? 'https://zpswxefgfabzvxdbtyvq.supabase.co' : 'https://fixture.invalid';
+  process.env.VITE_SUPABASE_ANON_KEY = process.env.QA_PURCHASE_PREVIEW === '1'
+    ? (process.env.QA_SUPABASE_ANON_KEY || '') : 'fixture-only';
+  if (process.env.QA_PURCHASE_PREVIEW === '1') {
+    process.env.VITE_EXPERIENCE_V2_TEST_ONLY = 'true';
+    process.env.VITE_EXPERIENCE_NOTIFICATIONS_ENABLED = 'false';
+  }
   await build({ root, configFile: false, mode: 'production',
     plugins: [react()],
     resolve: { alias: { '@supabase/supabase-js': path.join(root, 'scripts/qa/family-capture-client.js') } },
@@ -67,8 +73,9 @@ try {
       return route.abort('blockedbyclient');
     });
     const page = await ctx.newPage();
+    if (process.env.QA_PURCHASE_PREVIEW === '1') page.setDefaultTimeout(7000);
     const errors = [];
-    page.on('pageerror', error => errors.push(error.message));
+    page.on('pageerror', error => { errors.push(error.message); if (process.env.QA_PURCHASE_PREVIEW === '1') console.error(error.message); });
     await page.goto(`${origin}/?app=family_place&qa=${scenario}`);
     return { ctx, page, errors };
   }
@@ -144,6 +151,41 @@ try {
     await bookHomePage.locator('html').getAttribute('data-qa-action') === 'next-question');
   await bookHome.close();
 
+  if (process.env.QA_PURCHASE_PREVIEW === '1') {
+    const journey = await context('empty');
+    const purchasePage = journey.page;
+    await purchasePage.getByRole('button', { name:'人生のBOOKについて見る' }).click();
+    await purchasePage.getByText('BOOK紹介', { exact:true }).waitFor();
+    record('家族ホーム→共通BOOK紹介', await purchasePage.getByRole('heading',
+      { name:'家族の人生を、一冊のBOOKに。' }).isVisible());
+    await purchasePage.screenshot({ path:path.join(out,'10-home-book-intro.png'), fullPage:true });
+    await purchasePage.getByRole('button', { name:'BOOKを作る' }).click();
+    record('ホーム入口では購入前に主人公を選ぶ', await purchasePage.getByRole('heading',
+      { name:'誰の人生をBOOKにしますか？' }).isVisible());
+    await purchasePage.getByRole('button', { name:/デモ 父郎さん/ }).click();
+    await purchasePage.getByRole('heading', { name:'あなたに合う一冊をお選びください。' }).waitFor();
+    record('商品選択で主人公名を維持', await purchasePage.getByText('BOOKの主人公：').isVisible()
+      && await purchasePage.getByText('デモ 父郎さんのBOOKを選択しています。').isVisible());
+    await purchasePage.screenshot({ path:path.join(out,'11-home-book-selection.png'), fullPage:true });
+    await purchasePage.getByRole('button', { name:'戻る' }).click();
+    await purchasePage.getByRole('button', { name:'戻る' }).click();
+    await purchasePage.getByRole('button', { name:'戻る' }).click();
+    record('BOOK紹介からホームへ戻る', await purchasePage.getByText('家族の人たち').isVisible());
+    await purchasePage.getByRole('button', { name:/デモ 父郎/ }).click();
+    await purchasePage.getByRole('button', { name:'この人の人生を本にする' }).click();
+    record('人物ページ上部→共通BOOK紹介', await purchasePage.getByText('BOOK紹介', { exact:true }).isVisible());
+    await purchasePage.getByRole('button', { name:'戻る' }).click();
+    record('人物上部の戻り先', await purchasePage.getByRole('tab', { name:'年輪' }).isVisible());
+    await purchasePage.getByRole('tab', { name:'本棚' }).click();
+    await purchasePage.getByRole('button', { name:'人生のBOOKについて見る' }).click();
+    await purchasePage.getByRole('button', { name:'戻る' }).click();
+    record('本棚入口の戻り先', await purchasePage.getByRole('tab', { name:'本棚' })
+      .getAttribute('aria-selected') === 'true');
+    await purchasePage.screenshot({ path:path.join(out,'12-parent-shelf-entry.png'), fullPage:true });
+    record('BOOK紹介のブラウザ例外なし', journey.errors.length === 0, journey.errors.join('; '));
+    await journey.ctx.close();
+  }
+
   await writeFile(path.join(out, 'results.json'), `${JSON.stringify({ sourceSha,
     data: '架空のローカル fixture のみ。実顧客データ・認証情報なし。',
     viewport: { width:390, height:844, deviceScaleFactor:2 }, checks }, null, 2)}\n`);
@@ -157,6 +199,9 @@ try {
     `[人物ページ](../../../../src/FamilyPersonPage.jsx)、`+
     `[家系図](../../../../src/FamilyTree.jsx)、`+
     `[BOOK制作ホーム](../../../../src/home/ApprovedHome.jsx)。\n\n`+
+    (process.env.QA_PURCHASE_PREVIEW === '1'
+      ? `BOOK購入導線も同じ架空fixtureで撮影。見積はfixture値（スタンダード35,000円・プレミアム65,000円）で、注文や決済は行わない。\n\n`
+      : '')+
     `| 画像 | 状態 |\n|---|---|\n`+
     `| [01-home.png](01-home.png) | 家族ホーム |\n`+
     `| [02-tree.png](02-tree.png) | 家系図 |\n`+
@@ -167,6 +212,11 @@ try {
     `| [07-parent-shelf-completed.png](07-parent-shelf-completed.png) | 父の本棚・架空の完成BOOK |\n`+
     `| [08-webbook.png](08-webbook.png) | 固定Webブック・架空の内容 |\n`+
     `| [09-book-production-home.png](09-book-production-home.png) | 既存BOOK制作ホームの実コンポーネント・架空の表示条件 |\n`+
+    (process.env.QA_PURCHASE_PREVIEW === '1'
+      ? `| [10-home-book-intro.png](10-home-book-intro.png) | ホームからの共通BOOK紹介 |\n`+
+        `| [11-home-book-selection.png](11-home-book-selection.png) | 対象人物を選んだ商品選択 |\n`+
+        `| [12-parent-shelf-entry.png](12-parent-shelf-entry.png) | 本棚に戻った状態 |\n`
+      : '')+
     `\nBOOK制作ホームはコンポーネントの表示・操作確認。実際の購入後ルートへの遷移はこの fixture では検証していない。\n`);
   console.log(`PASS ${checks.length} transitions and screenshots: ${out}`);
 } finally {

@@ -43,13 +43,18 @@ function PublishedBookThumbnail({ book, supabaseClient }) {
 }
 
 export default function FamilyPersonPage({ person, stories = [], books = [], booksStatus = 'ready',
+  visibleBookProjects = [], projectsStatus = 'ready',
   facts = [], questions = [], activeTab = 'ring', onTabChange, onBack, onProfile,
   onOpenStory, onAddFact, onRetryBooks, supabaseClient, busy = false,
-  backLabel = 'ホーム', entryOrigin = 'home', onBookPreview = null }) {
+  backLabel = 'ホーム', entryOrigin = 'home', onOpenBook = null }) {
   const [showQuestions, setShowQuestions] = useState(false);
   const saved = stories.filter(hasAnswer);
   const timeline = [...facts];
   const age = currentPersonAge(person);
+  const purchasedProject = visibleBookProjects.find(project =>
+    ['paid','gifted','legacy'].includes(project.access_status));
+  const resumeHref = purchasedProject && import.meta.env.VITE_FAMILY_CONNECTION_TEST === 'true'
+    ? `/?app=1&family=1&family_project=${encodeURIComponent(purchasedProject.id)}` : null;
   return <main className="fp-person-page">
     <header className="fp-person-topbar">
       <button type="button" onClick={onBack} aria-label={`${backLabel}へ戻る`}><ChevronLeft/><span>{backLabel}</span></button>
@@ -69,9 +74,17 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
       </div>
     </section>
     <button type="button" className="fp-person-profile" onClick={onProfile}><UserRound aria-hidden="true"/>プロフィールを見る・編集する<ChevronRight aria-hidden="true"/></button>
-    {onBookPreview && <div className="fp-book-preview-entry">
-      <button type="button" onClick={onBookPreview}>この人の人生を本にする<ChevronRight aria-hidden="true"/></button>
-      <small>画面プレビューのみ。注文・決済は行いません。</small>
+    {booksStatus === 'ready' && books.length > 1 && <div className="fp-book-preview-entry">
+      <button type="button" onClick={() => onTabChange('books')}>本棚でBOOKを選ぶ<ChevronRight aria-hidden="true"/></button>
+    </div>}
+    {booksStatus === 'ready' && books.length === 1 && <div className="fp-book-preview-entry">
+      <button type="button" onClick={() => onTabChange('books')}>完成したBOOKを見る<ChevronRight aria-hidden="true"/></button>
+    </div>}
+    {booksStatus === 'ready' && projectsStatus === 'ready' && !books.length && purchasedProject && resumeHref && <div className="fp-book-preview-entry">
+      <a className="fp-book-preview-button" href={resumeHref}>BOOK制作を再開する<ChevronRight aria-hidden="true"/></a>
+    </div>}
+    {onOpenBook && booksStatus === 'ready' && projectsStatus === 'ready' && !books.length && !purchasedProject && <div className="fp-book-preview-entry">
+      <button type="button" onClick={() => onOpenBook('person')}>この人の人生を本にする<ChevronRight aria-hidden="true"/></button>
     </div>}
     <div className="fp-person-tabs" role="tablist" aria-label="人物ページ">
       {[['ring','年輪'],['books','本棚'],['memories','思い出'],['timeline','年表']].map(([key,label]) =>
@@ -107,7 +120,10 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
                 Webブックを読む<ChevronRight aria-hidden="true"/></a>
             </div>
           </article>)}</div>
-          : <div className="fp-person-story-empty">この人物の完成したBOOKは、まだありません。</div>}
+          : <div className="fp-person-story-empty">{purchasedProject ? '制作中のBOOKがあります。' : 'この人物の完成したBOOKは、まだありません。'}
+              {resumeHref && <a className="fp-person-add-story fp-person-resume" href={resumeHref}>BOOK制作を再開する<ChevronRight aria-hidden="true"/></a>}
+              {!purchasedProject && projectsStatus === 'ready' && onOpenBook && <button type="button" className="fp-person-add-story" onClick={() => onOpenBook('books')}>人生のBOOKについて見る<ChevronRight aria-hidden="true"/></button>}
+            </div>}
     </section>}
     {activeTab === 'memories' && <section className="fp-person-content" role="tabpanel">
       <h2>思い出</h2><div className="fp-person-story-empty">この人物の思い出は、まだありません。</div>
