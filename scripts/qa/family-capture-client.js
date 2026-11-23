@@ -112,7 +112,12 @@ const client = {
   },
   functions: { invoke: async (name, options = {}) => {
     if (name === 'create-commerce-v2-checkout' && options.body?.action === 'public_quote') {
-      const amount = options.body.edition === 'premium' ? 65000 : 35000;
+      // Fictional test records; catalog amounts match the read-only production
+      // product list as of this capture. No network request leaves this fixture.
+      const amount = (options.body.edition === 'premium' ? 65000 : 35000)
+        + Number(options.body.standardExtraCount || 0) * 5000
+        + Number(options.body.premiumExtraCount || 0) * 35000
+        + (options.body.productionMethod === 'interview_staff' ? 20000 : 0);
       return { data: { success:true, quote: { amount_subtotal:amount,
         discount_amount:0, amount_total:amount, currency:'jpy', tax_included:true } }, error:null };
     }

@@ -164,6 +164,8 @@ try {
       { name:'誰の人生をBOOKにしますか？' }).isVisible());
     await purchasePage.getByRole('button', { name:/デモ 父郎さん/ }).click();
     await purchasePage.getByRole('heading', { name:'あなたに合う一冊をお選びください。' }).waitFor();
+    await purchasePage.getByText('お支払い合計').waitFor();
+    await purchasePage.getByText('35,000円', { exact:true }).first().waitFor();
     record('商品選択で主人公名を維持', await purchasePage.getByText('BOOKの主人公：').isVisible()
       && await purchasePage.getByText('デモ 父郎さんのBOOKを選択しています。').isVisible());
     await purchasePage.screenshot({ path:path.join(out,'11-home-book-selection.png'), fullPage:true });
