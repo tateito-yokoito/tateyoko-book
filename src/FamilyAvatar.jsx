@@ -11,12 +11,11 @@ export function FamilyAvatarProvider({ people, relations, children }) {
 }
 
 const spriteColumns = { male: 441, female: 735, neutral: 1035 };
-const spriteRows = { child: 255, young: 453, adult: 622, mature: 779, senior: 940,
+const spriteRows = { child: 255, young: 453, adult: 622, mature: 779, senior: 925,
   unknown: 1097 };
 // Crop inside each illustration circle so artwork from neighboring rows stays
-// hidden. The senior row sits directly above the unknown row's dashed guide.
-const illustrationCropSize = 150;
-const seniorCropSize = 120;
+// hidden. The senior illustration is centered at 925, above the dotted guide.
+const illustrationCropSize = 144;
 const unknownCropSize = 120;
 
 export default function FamilyAvatar({ person, className = '' }) {
@@ -27,8 +26,7 @@ export default function FamilyAvatar({ person, className = '' }) {
   const style = person?.gender === 'female' ? 'female' : person?.gender === 'male' ? 'male' : 'neutral';
   const x = spriteColumns[style];
   const y = spriteRows[stage];
-  const cropSize = stage === 'unknown' ? unknownCropSize
-    : stage === 'senior' ? seniorCropSize : illustrationCropSize;
+  const cropSize = stage === 'unknown' ? unknownCropSize : illustrationCropSize;
   return <span className={`family-avatar family-avatar-illustration ${className}`.trim()}
     role="img" aria-label={stage === 'unknown' ? '年齢未登録の人物のイラスト' : '人物のイラスト'}>
     <img src="/assets/family-avatar-final-20261123.png" alt="" aria-hidden="true"
