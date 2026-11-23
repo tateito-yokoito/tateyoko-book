@@ -41,6 +41,11 @@ begin
       or exists(select 1 from public.family_place_early_access where user_id=actor) then
       raise exception 'Demo slot % already has app data or is missing',slot;
     end if;
+    -- Dashboard-created Auth users have no profiles until their first app login.
+    -- BOOK answer rows require profiles(id), so create only the missing demo row.
+    insert into public.profiles(id,email,name)
+      select actor,format('family-demo-0%s@tateito-yokoito.jp',slot),format('架空デモ%s',slot)
+      where not exists(select 1 from public.profiles where id=actor);
     insert into public.family_place_early_access(user_id) values(actor);
     insert into public.families(owner_user_id,name)
       values(actor,format('架空デモ家族%s',slot)) returning id into family;

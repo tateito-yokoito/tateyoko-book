@@ -744,7 +744,8 @@ export default function FamilyPlaceApp() {
     </header>}
     {error && <p className="fp-error" role="alert">{error}</p>}
     {screen === 'home' && <FamilyHome people={people} storyCounts={homeStoryCounts}
-      onAddPerson={() => startAddPerson()} onOpenPerson={openPerson} onTree={openTree}/>}
+      onAddPerson={() => startAddPerson()} onOpenPerson={openPerson} onTree={openTree}
+      onSwitchAccount={() => supabaseClient.auth.signOut()}/>}
     {screen === 'tree' && <FamilyTree people={people} relations={relations} selfId={selfId}
       centerId={treeCenterId || selfId || people[0]?.id} onCenter={setTreeCenterId}
       onAdd={startAddPerson} onOpenPerson={id => openPerson(id, 'tree')} onEditProfile={(id,section) => {

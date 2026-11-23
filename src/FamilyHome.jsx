@@ -4,7 +4,7 @@ import FamilyAvatar from './FamilyAvatar.jsx';
 import './family-place-home.css';
 
 /** The same home is used by the authenticated app and its isolated visual review. */
-export default function FamilyHome({ people = [], storyCounts = {}, onAddPerson, onOpenPerson, onTree }) {
+export default function FamilyHome({ people = [], storyCounts = {}, onAddPerson, onOpenPerson, onTree, onSwitchAccount }) {
   const hasStories = people.some(person => Number(storyCounts[person.id]) > 0);
   return <div className="fp-home-shell">
     <header className="fp-home-header">
@@ -35,6 +35,7 @@ export default function FamilyHome({ people = [], storyCounts = {}, onAddPerson,
             <span className="fp-home-person-copy"><strong>{person.display_name}</strong></span>
             <ChevronRight aria-hidden="true"/>
           </button>)}</div> : <p className="fp-home-people-empty">まだ家族は登録されていません。<br/>自分か家族を一人登録して、家族の場所を始めましょう。</p>}
+        {onSwitchAccount && <button type="button" className="fp-home-switch-account" onClick={onSwitchAccount}>別のアカウントで開く</button>}
       </section>
     </main>
   </div>;
