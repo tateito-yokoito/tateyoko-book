@@ -12,11 +12,11 @@ export function FamilyAvatarProvider({ people, relations, children }) {
 
 const spriteColumns = { male: 441, female: 735, neutral: 1035 };
 const spriteRows = { child: 255, young: 453, adult: 622, mature: 779, senior: 925,
-  unknown: 1097 };
+  unknown: 1090 };
 // Crop inside each illustration circle so artwork from neighboring rows stays
 // hidden. The senior illustration is centered at 925, above the dotted guide.
 const illustrationCropSize = 144;
-const unknownCropSize = 120;
+const unknownCropSize = 130;
 
 export default function FamilyAvatar({ person, className = '' }) {
   const { people, relations } = useContext(AvatarFamilyContext);
