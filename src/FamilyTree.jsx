@@ -243,9 +243,9 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
     </>}
     {addOpen && <div className="ft-suggestion-backdrop" role="presentation"
       onClick={event => { if (event.target === event.currentTarget) setAddOpen(false); }}>
-      <div className="ft-add-choice" role="dialog" aria-modal="true" aria-label="誰を追加しますか？"
+      <div className="ft-add-choice" role="dialog" aria-modal="true" aria-labelledby="ft-add-choice-title"
         onKeyDown={event => { if (event.key === 'Escape') setAddOpen(false); }}>
-        <h2>誰を追加しますか？</h2>
+        <h2 id="ft-add-choice-title">{center.display_name}さんの家族を追加しますか？</h2>
         <div className="ft-add-choice-options">
           {[['father','父'],['mother','母'],['spouse','配偶者'],['child','子ども']].map(([role,label]) =>
             <button type="button" key={role} onClick={() => { setAddOpen(false); onAdd(centerId,role); }}>

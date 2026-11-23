@@ -58,3 +58,4 @@
 .ft-add-choice-options button:nth-child(n+3){grid-column:1/-1}
 .ft-add-choice-options svg{width:18px;height:18px}
 .ft-add-choice-close{width:100%;min-height:44px;margin-top:12px;border:0;background:transparent;color:#6e7665;font-size:15px}
+.ft-header h1,.ft-empty h2,.ft-editor h2,.ft-edit-choice h2,.ft-add-choice h2{font-family:inherit}
