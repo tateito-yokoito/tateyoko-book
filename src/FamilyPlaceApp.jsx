@@ -29,6 +29,8 @@ import { hasKanji, kanaFieldForName, normalizeKanaReading,
 // questions; this route remains disabled in production builds until then.
 const testQuestions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) =>
   ({ id: question.id, slot: index + 1, text: question.content }));
+const BookPurchaseJourneyPreview = import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
+  ? React.lazy(() => import('./BookPurchaseJourneyPreview.jsx')) : null;
 
 const emptyPersonDraft = () => ({ family_name: '', given_name: '', family_name_kana: '', given_name_kana: '',
   maiden_name: '', maiden_name_kana: '', birth_year: '', birth_month: '', birth_day: '', gender: '' });
@@ -731,7 +733,7 @@ export default function FamilyPlaceApp() {
   const unlinkedPeople = relationAnchorId ? people.filter(item => item.id !== relationAnchorId
     && !relations.some(relation => relation.person_a_id === item.id || relation.person_b_id === item.id)) : [];
   return <FamilyAvatarProvider people={people} relations={relations}><div className={`fp-app ${screen === 'tree' ? 'is-tree' : ''}`}>
-    {screen !== 'home' && screen !== 'person' && screen !== 'tree' &&
+    {screen !== 'home' && screen !== 'person' && screen !== 'tree' && screen !== 'book-preview' &&
       <header className={`fp-header ${screen === 'profile' && profileReturnToTree ? 'fp-header-from-tree' : ''}`}>
       <button onClick={() => screen === 'story' ? leaveStory()
           : screen === 'profile' ? (profileReturnToTree ? returnToTree() : setScreen('person'))
@@ -800,8 +802,14 @@ export default function FamilyPlaceApp() {
       onTabChange={setActiveTab} onBack={personEntry === 'tree' ? returnToTree : goHome}
       backLabel={personEntry === 'tree' ? '家系図' : 'ホーム'} entryOrigin={personEntry}
       onProfile={() => startProfile()}
+      onBookPreview={import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
+        ? () => setScreen('book-preview') : null}
       onOpenStory={openStory} busy={busy}
       onAddFact={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}/>}
+    {screen === 'book-preview' && person && BookPurchaseJourneyPreview && <React.Suspense fallback={<p>画面プレビューを読み込んでいます…</p>}><BookPurchaseJourneyPreview
+      person={person} client={supabaseClient}
+      onBack={() => setScreen('person')}
+      onTryFree={() => { setScreen('person'); setActiveTab('ring'); }}/></React.Suspense>}
     {screen === 'profile' && person && <main className="fp-section"><h1>プロフィール</h1>
       <form className="fp-form" onSubmit={saveProfile}>
         <div className="fp-profile-photo"><span>プロフィール画像（任意）</span>
@@ -913,7 +921,7 @@ export default function FamilyPlaceApp() {
       <PhotoCorrectionFlow open={photoOpen} awaitCompletion title="写真を添える"
         onClose={() => setPhotoOpen(false)} onComplete={addPhoto}/>
     </main>}
-    {screen === 'home' ? <FamilyHomeNav onHome={goHome} onStories={goHome} onFamily={openTree}/> : screen === 'person' || screen === 'tree' ? null : <nav className="fp-bottom">
+    {screen === 'home' ? <FamilyHomeNav onHome={goHome} onStories={goHome} onFamily={openTree}/> : screen === 'person' || screen === 'tree' || screen === 'book-preview' ? null : <nav className="fp-bottom">
       <button onClick={goHome}><Home/>ホーム</button>
       <button onClick={() => {setScreen('home');setSelectedId(null);}}><BookOpen/>人生の物語</button>
       <button onClick={openTree}><Users/>家族</button>

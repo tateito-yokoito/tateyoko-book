@@ -45,7 +45,7 @@ function PublishedBookThumbnail({ book, supabaseClient }) {
 export default function FamilyPersonPage({ person, stories = [], books = [], booksStatus = 'ready',
   facts = [], questions = [], activeTab = 'ring', onTabChange, onBack, onProfile,
   onOpenStory, onAddFact, onRetryBooks, supabaseClient, busy = false,
-  backLabel = 'ホーム', entryOrigin = 'home' }) {
+  backLabel = 'ホーム', entryOrigin = 'home', onBookPreview = null }) {
   const [showQuestions, setShowQuestions] = useState(false);
   const saved = stories.filter(hasAnswer);
   const timeline = [...facts];
@@ -69,6 +69,10 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
       </div>
     </section>
     <button type="button" className="fp-person-profile" onClick={onProfile}><UserRound aria-hidden="true"/>プロフィールを見る・編集する<ChevronRight aria-hidden="true"/></button>
+    {onBookPreview && <div className="fp-book-preview-entry">
+      <button type="button" onClick={onBookPreview}>この人の人生を本にする<ChevronRight aria-hidden="true"/></button>
+      <small>画面プレビューのみ。注文・決済は行いません。</small>
+    </div>}
     <div className="fp-person-tabs" role="tablist" aria-label="人物ページ">
       {[['ring','年輪'],['books','本棚'],['memories','思い出'],['timeline','年表']].map(([key,label]) =>
         <button type="button" key={key} role="tab" aria-selected={activeTab===key}
