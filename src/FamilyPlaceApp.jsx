@@ -317,7 +317,12 @@ export default function FamilyPlaceApp() {
     setFamilyId(null);
     setPeople([]);
     setSelectedId(null);
-    supabaseClient.rpc('family_place_access_allowed').then(({ data, error: accessError }) => {
+    // The isolated TEST schema predates the production allowlist RPC. Its
+    // existing authenticated family RLS remains the access boundary here.
+    const accessCheck = import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
+      ? Promise.resolve({ data: true, error: null })
+      : supabaseClient.rpc('family_place_access_allowed');
+    accessCheck.then(({ data, error: accessError }) => {
       if (!live) return;
       if (accessError) throw accessError;
       if (!data) { setAccessState('denied'); return; }
