@@ -686,7 +686,7 @@ export default function FamilyPlaceApp() {
   const relationAnchorId = newPersonAnchorId || selfId;
   const unlinkedPeople = relationAnchorId ? people.filter(item => item.id !== relationAnchorId
     && !relations.some(relation => relation.person_a_id === item.id || relation.person_b_id === item.id)) : [];
-  return <FamilyAvatarProvider people={people} relations={relations}><div className="fp-app">
+  return <FamilyAvatarProvider people={people} relations={relations}><div className={`fp-app ${screen === 'tree' ? 'is-tree' : ''}`}>
     {screen !== 'home' && screen !== 'person' && screen !== 'tree' &&
       <header className={`fp-header ${screen === 'profile' && profileReturnToTree ? 'fp-header-from-tree' : ''}`}>
       <button onClick={() => screen === 'story' ? leaveStory()
@@ -868,7 +868,7 @@ export default function FamilyPlaceApp() {
       <PhotoCorrectionFlow open={photoOpen} awaitCompletion title="写真を添える"
         onClose={() => setPhotoOpen(false)} onComplete={addPhoto}/>
     </main>}
-    {screen === 'home' ? <FamilyHomeNav onHome={goHome} onStories={goHome} onFamily={openTree}/> : screen === 'person' ? null : <nav className="fp-bottom">
+    {screen === 'home' ? <FamilyHomeNav onHome={goHome} onStories={goHome} onFamily={openTree}/> : screen === 'person' || screen === 'tree' ? null : <nav className="fp-bottom">
       <button onClick={goHome}><Home/>ホーム</button>
       <button onClick={() => {setScreen('home');setSelectedId(null);}}><BookOpen/>人生の物語</button>
       <button onClick={openTree}><Users/>家族</button>

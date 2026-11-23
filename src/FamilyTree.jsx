@@ -49,6 +49,7 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
   onOpenPerson, onEditProfile, onHome, onScrollLeft, restoreScrollLeft,
   suggestions = [], promptPersonId = null, onAnswerSuggestion, busy = false }) {
   const [editTargetId, setEditTargetId] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
   const [suggestionToConfirm, setSuggestionToConfirm] = useState(null);
   const suggestionShown = useRef(false);
   const [paths, setPaths] = useState([]);
@@ -236,17 +237,23 @@ export default function FamilyTree({ people, relations, selfId, centerId, onCent
         </div>
         </div>
       </section>
-      <div className="ft-add-actions" aria-label="家族を追加する">
-        <button type="button" onClick={() => onAdd(centerId,'father')}><Plus/>父を追加</button>
-        <button type="button" onClick={() => onAdd(centerId,'mother')}><Plus/>母を追加</button>
-        <button type="button" onClick={() => onAdd(centerId,'spouse')}><Plus/>配偶者を追加</button>
-        <button type="button" onClick={() => onAdd(centerId,'child')}><Plus/>子どもを追加</button>
-      </div>
-      <button type="button" className="ft-life" onClick={() => onOpenPerson(centerId)}>
-        <FamilyAvatar person={center}/><span><strong>{center.display_name}さんの人生を見る</strong><small>プロフィールと年輪へ</small></span><ChevronRight/>
-      </button>
+      <button type="button" className="ft-add-family" aria-haspopup="dialog" aria-expanded={addOpen}
+        onClick={() => setAddOpen(true)}><Plus aria-hidden="true"/><span>家族を追加</span></button>
       {!selfId && <p className="ft-hint">自分が未登録です。通常の人物登録から「自分」を登録できます。</p>}
     </>}
+    {addOpen && <div className="ft-suggestion-backdrop" role="presentation"
+      onClick={event => { if (event.target === event.currentTarget) setAddOpen(false); }}>
+      <div className="ft-add-choice" role="dialog" aria-modal="true" aria-label="誰を追加しますか？"
+        onKeyDown={event => { if (event.key === 'Escape') setAddOpen(false); }}>
+        <h2>誰を追加しますか？</h2>
+        <div className="ft-add-choice-options">
+          {[['father','父'],['mother','母'],['spouse','配偶者'],['child','子ども']].map(([role,label]) =>
+            <button type="button" key={role} onClick={() => { setAddOpen(false); onAdd(centerId,role); }}>
+              {label}<ChevronRight aria-hidden="true"/></button>)}
+        </div>
+        <button type="button" className="ft-add-choice-close" onClick={() => setAddOpen(false)}>閉じる</button>
+      </div>
+    </div>}
     {editTargetId && <div className="ft-suggestion-backdrop" role="presentation">
       <div className="ft-edit-choice" role="dialog" aria-modal="true" aria-label="編集する内容を選ぶ">
         <h2>編集する内容を選ぶ</h2>
