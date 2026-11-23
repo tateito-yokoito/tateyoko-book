@@ -27,6 +27,7 @@ Object.assign(process.env,{
  VITE_COMMERCE_V2_ENABLED:'true',
  VITE_EXPERIENCE_NOTIFICATIONS_ENABLED:'true',
  VITE_LINE_AUTH_ENABLED:'true',VITE_FREE_TRIAL_RETENTION_ENABLED:'true',
+ VITE_FAMILY_PLACE_ENABLED:'true',
  VITE_BOOK_PRODUCTION_V2_ENABLED:String(enableBookProduction),
  VITE_BOOK_PDF_ENABLED:String(enableBookProduction)
 });
@@ -117,6 +118,7 @@ for(const jwt of code.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
  const claims=JSON.parse(Buffer.from(jwt.split('.')[1],'base64url').toString());assert.equal(claims.role,'anon');assert.equal(claims.ref,ref);
 }
 assert.ok(files.some(p=>/AdminReview.*\.js$/.test(p)),'Admin missing');
+assert.ok(files.some(p=>/FamilyPlaceApp.*\.js$/.test(p)),'Family app missing');
 fs.mkdirSync(path.join(outDir,'.vercel'),{recursive:true});
 fs.writeFileSync(path.join(outDir,'.vercel/project.json'),JSON.stringify({projectId:'prj_WZM2OzVMdtm4x6VbwWLeISqMzjM4',orgId:'team_027fdPcnI7A33ybpJtw7Db4D',projectName:'tateyoko-book'}));
 const report={ref,at:new Date().toISOString(),adminBundle:true,sourceMaps:false,testEndpointConfigured:false,bookProductionEnabled:enableBookProduction,deployed:false,

@@ -159,6 +159,8 @@ function EventDateFields({ value, onChange }) {
 
 export default function FamilyPlaceApp() {
   const [user, setUser] = useState(null);
+  const [accessState, setAccessState] = useState('checking');
+  const [verifiedUserId, setVerifiedUserId] = useState(null);
   const [familyId, setFamilyId] = useState(null);
   const [people, setPeople] = useState([]);
   const [relations, setRelations] = useState([]);
@@ -298,8 +300,30 @@ export default function FamilyPlaceApp() {
     return () => { live = false; data.subscription.unsubscribe(); };
   }, []);
   useEffect(() => {
-    if (!user) return;
-    loadHome(user).catch(cause => setError(cause.message || '家族の場所を開けませんでした'));
+    if (!user) {
+      setVerifiedUserId(null);
+      setFamilyId(null);
+      setPeople([]);
+      setSelectedId(null);
+      return;
+    }
+    let live = true;
+    setAccessState('checking');
+    setVerifiedUserId(null);
+    setFamilyId(null);
+    setPeople([]);
+    setSelectedId(null);
+    supabaseClient.rpc('family_place_access_allowed').then(({ data, error: accessError }) => {
+      if (!live) return;
+      if (accessError) throw accessError;
+      if (!data) { setAccessState('denied'); return; }
+      setVerifiedUserId(user.id);
+      setAccessState('allowed');
+      return loadHome(user);
+    }).catch(cause => {
+      if (live) { setAccessState('error'); setError(cause.message || '家族の場所を開けませんでした'); }
+    });
+    return () => { live = false; };
   }, [user?.id, loadHome]);
   useEffect(() => {
     if (!selectedId) return;
@@ -673,8 +697,14 @@ export default function FamilyPlaceApp() {
     }
   };
 
-  if (!user) return <div className="fp-auth"><Scene_Login onLogin={() =>
+  if (!user) return <div className="fp-auth"><Scene_Login existingAccountOnly onLogin={() =>
     supabaseClient.auth.getUser().then(({ data }) => setUser(data.user))} /></div>;
+  if (accessState === 'denied') return <main className="fp-app fp-access-message"><h1>家族の場所</h1>
+    <p>このアカウントは先行利用の対象ではありません。</p>
+    <button type="button" onClick={() => supabaseClient.auth.signOut()}>別のアカウントで開く</button></main>;
+  if (accessState !== 'allowed' || verifiedUserId !== user.id) return <main className="fp-app fp-access-message">
+    <p>{accessState === 'error' ? '家族の場所を開けませんでした。' : '利用権限を確認しています…'}</p>
+    {error && <p role="alert">{error}</p>}</main>;
   if (!familyId) return <main className="fp-app"><p>家族の場所を準備しています…</p>{error && <p role="alert">{error}</p>}</main>;
   if (screen === 'recording' && activeStory) return <div className="fp-recorder">
     <Scene_Recording question={{ content: activeStory.question_text, question_role: 'story_question' }}

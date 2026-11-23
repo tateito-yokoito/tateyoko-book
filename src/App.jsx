@@ -10259,7 +10259,7 @@ function Scene_TokenInvalid({ onBack, issue = "invalid", onRetry }) {
 }
 
 
-export function Scene_Login({ onLogin, giftPreview, familyInvitePreview }) {
+export function Scene_Login({ onLogin, giftPreview, familyInvitePreview, existingAccountOnly = false }) {
   const supporterInvitationUrl = getSupporterInvitationUrlFromCurrentLocation();
   const authReturnUrl = getAuthReturnUrlFromCurrentLocation();
   const isSupporterInviteLogin = Boolean(supporterInvitationUrl);
@@ -10275,7 +10275,7 @@ export function Scene_Login({ onLogin, giftPreview, familyInvitePreview }) {
   const lineAuthEnabled = import.meta.env.VITE_LINE_AUTH_ENABLED === "true"
     && !isTrialEntry && !isGiftEntry && !isFamilyInviteEntry && !isSupporterInviteLogin;
   const [mode, setMode] = useState(
-    isSupporterInviteLogin ? "supporter" : "entry"
+    isSupporterInviteLogin ? "supporter" : existingAccountOnly ? "returning" : "entry"
   ); // entry | new | returning | supporter | pin
   const [authMode, setAuthMode] = useState(null); // new | returning | supporter
   const [email, setEmail] = useState("");
@@ -10392,6 +10392,7 @@ const checkExistingProfileByEmail = async (targetEmail) => {
   const handleSendPin = async (targetMode = mode) => {
     const normalizedEmail = String(email || "").trim().toLowerCase();
     const isNewMode = targetMode === "new";
+    if (existingAccountOnly && isNewMode) return;
     const isSupporterMode = targetMode === "supporter";
     const isReturningMode = targetMode === "returning" || isSupporterMode;
 
@@ -10724,14 +10725,14 @@ if (isNewMode) {
           </div>
 
           <div className="space-y-4">
-            <button
+            {!existingAccountOnly && <button
               type="button"
               onClick={() => setMode("new")}
               disabled={loading}
               className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
             >
               {isFamilyInviteEntry ? "招待を受け取る" : isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
-            </button>
+            </button>}
 
             <button
               type="button"
@@ -10822,14 +10823,14 @@ if (isNewMode) {
             {loading ? "送信中..." : "ログイン用メールを送る"}
           </button>
 
-          <button
+          {!existingAccountOnly && <button
             type="button"
             onClick={goEntry}
             disabled={loading}
             className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
           >
             戻る
-          </button>
+          </button>}
         </div>
       )}
 
@@ -10878,14 +10879,14 @@ if (isNewMode) {
             {loading ? "送信中..." : "ログイン用メールを送る"}
           </button>
 
-          <button
+          {!existingAccountOnly && <button
             type="button"
             onClick={goEntry}
             disabled={loading}
             className="w-full py-3 text-white/45 text-sm underline underline-offset-4"
           >
             戻る
-          </button>
+          </button>}
         </div>
       )}
 
