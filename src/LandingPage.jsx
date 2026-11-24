@@ -202,6 +202,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
               <div className="hp-hero-benefit"><span className="hp-hero-benefit-icon" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><path d="M24 42V24m0 9c-10 0-16-7-16-18 9 0 16 5 16 14m0 2c0-11 6-18 16-18 0 11-6 18-16 18"/></svg></span><p><strong>完成後も、育っていく。</strong><span>季節ごとに、新しい語りを重ねられる。</span></p></div>
             </div>
             <div className="hp-hero-start-actions">
+              <a className="hp-button hp-family-demo-link" href={reviewOnly ? '#hp-review-notice' : '/demo'}>登録不要「家族アプリ」を体験する <span aria-hidden="true">↗</span></a>
               <a className="hp-button" href={reviewOnly ? '#hp-review-notice' : TRIAL}>登録不要の無料3問を試す <span aria-hidden="true">↗</span></a>
               <a className="hp-hero-purchase-link hp-hero-purchase-button" href={reviewOnly ? '#hp-review-notice' : PURCHASE}>{publicPurchaseLabel} <span aria-hidden="true">→</span></a><p className="hp-note">{publicPurchaseNote}</p>
             </div>

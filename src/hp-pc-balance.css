@@ -134,6 +134,16 @@
     position: absolute;
     right: 13px;
   }
+  .landing-site .hp-hero-nov8 .hp-hero-start-actions .hp-family-demo-link {
+    white-space: normal;
+  }
+  .landing-site .hp-hero-nov8 .hp-hero-start-actions .hp-hero-purchase-button,
+  .landing-site .hp-hero-nov8 .hp-hero-start-actions .hp-note {
+    grid-column: 1 / -1;
+  }
+  .landing-site .hp-hero-nov8 .hp-hero-start-actions .hp-note {
+    margin: 0;
+  }
   /* Keep the icons centered in each benefit if a wider layout uses three columns. */
   .landing-site .hp-hero-nov8 .hp-hero-benefit-icons,
   .landing-site .hp-hero-nov8 .hp-hero-benefit > .hp-hero-benefit-icon {
