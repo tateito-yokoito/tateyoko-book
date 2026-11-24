@@ -17,6 +17,8 @@
 .fp-existing-link{margin-top:24px}.fp-existing-link button{width:100%;min-height:44px;margin:5px 0;border:1px solid #cbd9b7;border-radius:12px;background:#fffdf7;color:#3d6429;font-size:15px;text-align:left;padding:8px 13px}
 
 .fp-app.is-tree{padding-bottom:0}
+.fp-public-demo-banner{position:sticky;top:0;z-index:12;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:6px max(14px,calc((100vw - 620px)/2 + 14px));background:#eef2e4;border-bottom:1px solid #d9e1cc;color:#3d572f;font-size:12px;line-height:1.35}
+.fp-public-demo-banner a{flex:none;color:#315d20;font-weight:700;text-decoration:underline;text-underline-offset:3px}
 .fp-section h1,.fp-section h2,.fp-person-head h1{font-family:inherit}
 .fp-demo-login{box-sizing:border-box;max-width:430px;min-height:100vh;margin:0 auto;padding:clamp(40px,12vh,100px) 24px 40px;background:#faf7ef;color:#282b1d;font-family:system-ui,sans-serif}
 .fp-demo-login h1{margin:0 0 14px;font-size:24px;line-height:1.4}

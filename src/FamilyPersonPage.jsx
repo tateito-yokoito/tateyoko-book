@@ -93,14 +93,15 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
     </div>
     {activeTab === 'ring' && <section className="fp-person-content" role="tabpanel">
       <h2>年輪</h2><p className="fp-person-section-note">人生の語りを、少しずつ残していく場所です。</p>
-      {saved.length ? <div className="fp-person-stories">{saved.map(row =>
+      {!questions.length && !saved.length ? <div className="fp-person-story-empty">年輪の体験は、次の段階で公開します。</div>
+      : saved.length ? <div className="fp-person-stories">{saved.map(row =>
         <button type="button" className="fp-person-story" key={row.id}
           onClick={() => onOpenStory(questions[row.question_slot-1])}>
           <BookOpen aria-hidden="true"/><span><strong>{row.visibility === 'private' && <LockKeyhole size={13} aria-label="自分だけ"/>}{row.question_text}</strong></span><ChevronRight aria-hidden="true"/>
         </button>)}</div> : <div className="fp-person-story-empty">まだ語りはありません。<br/>声・文章・写真から、好きな方法で始められます。</div>}
-      <button type="button" className="fp-person-add-story" onClick={() => setShowQuestions(current => !current)}>
-        <Plus aria-hidden="true"/>{saved.length ? '新しい語りを追加する' : '最初の語りを残す'}</button>
-      {showQuestions && <div className="fp-person-questions" aria-label="無料3問">
+      {questions.length > 0 && <button type="button" className="fp-person-add-story" onClick={() => setShowQuestions(current => !current)}>
+        <Plus aria-hidden="true"/>{saved.length ? '新しい語りを追加する' : '最初の語りを残す'}</button>}
+      {questions.length > 0 && showQuestions && <div className="fp-person-questions" aria-label="無料3問">
         {questions.map(question => <button type="button" key={question.id} disabled={busy}
           onClick={() => onOpenStory(question)}>{question.slot}問目：{question.text}<ChevronRight aria-hidden="true"/></button>)}
         <p>質問文は暫定です。</p>

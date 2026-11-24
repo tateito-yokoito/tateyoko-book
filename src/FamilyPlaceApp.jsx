@@ -24,6 +24,7 @@ import './family-place.css';
 import { preparePortraitSource } from './lib/portraitSource.js';
 import { hasKanji, kanaFieldForName, normalizeKanaReading,
   suggestNameReading } from './lib/nameReading.js';
+import { publicDemoClient, publicDemoUser } from './lib/familyPlacePublicDemo.js';
 
 // TEST-only provisional prompts. The owner will select the final person-based
 // questions; this route remains disabled in production builds until then.
@@ -163,8 +164,11 @@ function EventDateFields({ value, onChange }) {
   </fieldset>;
 }
 
-export default function FamilyPlaceApp() {
-  const [user, setUser] = useState(null);
+export default function FamilyPlaceApp({ publicDemo = false }) {
+  const dataClient = publicDemo ? publicDemoClient : supabaseClient;
+  const treeReturnKey = publicDemo ? 'tateyoko.publicDemo.familyTreeReturn.v1'
+    : 'tateyoko.familyTreeReturn.v1';
+  const [user, setUser] = useState(() => publicDemo ? publicDemoUser : null);
   const [demoLoginOpen, setDemoLoginOpen] = useState(false);
   const [accessState, setAccessState] = useState('checking');
   const [verifiedUserId, setVerifiedUserId] = useState(null);
@@ -177,7 +181,7 @@ export default function FamilyPlaceApp() {
   const [promptAfterChange, setPromptAfterChange] = useState(null);
   const [treeCenterId, setTreeCenterId] = useState(null);
   const treeViewRef = useRef((() => {
-    try { return JSON.parse(sessionStorage.getItem('tateyoko.familyTreeReturn.v1')) || {}; }
+    try { return JSON.parse(sessionStorage.getItem(treeReturnKey)) || {}; }
     catch { return {}; }
   })());
   const restoreTreeScrollRef = useRef(false);
@@ -259,27 +263,27 @@ export default function FamilyPlaceApp() {
     // Scene_Login handles both email OTP and LINE. On an OAuth return the
     // session can exist before Scene_Login mounts, so finish the same profile
     // initialization here without creating a legacy BOOK project.
-    await ensureProfileExists(currentUser);
-    const id = await ensureFamilyPlace(supabaseClient, currentUser,
+    if (!publicDemo) await ensureProfileExists(currentUser);
+    const id = await ensureFamilyPlace(dataClient, currentUser,
       currentUser.user_metadata?.display_name
         ? `${currentUser.user_metadata.display_name}さんの家族` : null);
     const [persons, links, nextRelations, nextDecisions] = await Promise.all([
-      familyPlacePeople(supabaseClient, id),
-      supabaseClient.from('user_person_links').select('person_id')
+      familyPlacePeople(dataClient, id),
+      dataClient.from('user_person_links').select('person_id')
         .eq('user_id', currentUser.id).eq('role', 'self'),
-      familyPlaceRelations(supabaseClient, id),
-      familyRelationDecisions(supabaseClient, id),
+      familyPlaceRelations(dataClient, id),
+      familyRelationDecisions(dataClient, id),
     ]);
     if (links.error) throw links.error;
     const portraits = await Promise.all(persons.map(async item => {
       const path = item.portrait_storage_path;
       if (!path) return null;
       if (portraitUrlsRef.current.has(path)) return portraitUrlsRef.current.get(path);
-      const url = await familyPlacePortraitUrl(supabaseClient, path);
+      const url = await familyPlacePortraitUrl(dataClient, path);
       if (url) portraitUrlsRef.current.set(path, url);
       return url;
     }));
-    const storyLists = await Promise.all(persons.map(item => familyPlaceStories(supabaseClient, item.id)));
+    const storyLists = await Promise.all(persons.map(item => familyPlaceStories(dataClient, item.id)));
     const counts = Object.fromEntries(persons.map((item, index) => [item.id,
       storyLists[index].filter(row => row.body || row.transcript_raw || row.media_count).length]));
     setFamilyId(id);
@@ -288,20 +292,20 @@ export default function FamilyPlaceApp() {
     setRelationDecisions(nextDecisions);
     setHomeStoryCounts(counts);
     setSelfId(links.data?.find(link => persons.some(item => item.id === link.person_id))?.person_id || null);
-    if (window.location.pathname === '/login') {
+    if (!publicDemo && window.location.pathname === '/login') {
       window.history.replaceState(window.history.state, '',
         `/app${window.location.search}${window.location.hash}`);
     }
-  }, []);
+  }, [publicDemo]);
   const loadPerson = useCallback(async personId => {
     const epoch = ++personLoadEpoch.current;
     setBooksStatus('loading');
     const [nextFacts, nextStories, bookResult, projectResult] = await Promise.all([
-      familyPlaceFacts(supabaseClient, personId),
-      familyPlaceStories(supabaseClient, personId),
-      familyPlacePublishedBooks(supabaseClient, personId)
+      familyPlaceFacts(dataClient, personId),
+      familyPlaceStories(dataClient, personId),
+      familyPlacePublishedBooks(dataClient, personId)
         .then(data => ({ data })).catch(error => ({ error })),
-      familyPlaceVisibleBookProjects(supabaseClient, personId)
+      familyPlaceVisibleBookProjects(dataClient, personId)
         .then(data => ({ data })).catch(error => ({ error })),
     ]);
     if (epoch !== personLoadEpoch.current) return;
@@ -313,15 +317,16 @@ export default function FamilyPlaceApp() {
     else { setVisibleBookProjects(projectResult.data); setProjectsStatus('ready'); }
   }, []);
   useEffect(() => {
+    if (publicDemo) return undefined;
     let live = true;
-    supabaseClient.auth.getSession().then(({ data }) => {
+    dataClient.auth.getSession().then(({ data }) => {
       if (live) setUser(data.session?.user || null);
     }).catch(() => {});
-    const { data } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+    const { data } = dataClient.auth.onAuthStateChange((_event, session) => {
       if (live) setUser(session?.user || null);
     });
     return () => { live = false; data.subscription.unsubscribe(); };
-  }, []);
+  }, [publicDemo]);
   useEffect(() => {
     if (!user) {
       setVerifiedUserId(null);
@@ -338,9 +343,9 @@ export default function FamilyPlaceApp() {
     setSelectedId(null);
     // The isolated TEST schema predates the production allowlist RPC. Its
     // existing authenticated family RLS remains the access boundary here.
-    const accessCheck = import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
+    const accessCheck = publicDemo || import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
       ? Promise.resolve({ data: true, error: null })
-      : supabaseClient.rpc('family_place_access_allowed');
+      : dataClient.rpc('family_place_access_allowed');
     accessCheck.then(({ data, error: accessError }) => {
       if (!live) return;
       if (accessError) throw accessError;
@@ -352,7 +357,7 @@ export default function FamilyPlaceApp() {
       if (live) { setAccessState('error'); setError(cause.message || '家族の場所を開けませんでした'); }
     });
     return () => { live = false; };
-  }, [user?.id, loadHome]);
+  }, [user?.id, loadHome, publicDemo]);
   useEffect(() => {
     if (!selectedId) return;
     loadPerson(selectedId).catch(cause => setError(cause.message || '人物を開けませんでした'));
@@ -375,6 +380,7 @@ export default function FamilyPlaceApp() {
     window.history.replaceState({}, '', url);
   }, [people, screen]);
   useEffect(() => {
+    if (publicDemo) return undefined;
     if (!familyId || !user || !people.length) return;
     const params = new URLSearchParams(window.location.search);
     const consultationProject = params.get('family_purchase_project');
@@ -394,7 +400,7 @@ export default function FamilyPlaceApp() {
     if (params.get('checkout') !== 'success' || !params.get('session_id')
       || !params.get('family_purchase_project') || checkoutProjectId) return;
     let live = true;
-    supabaseClient.functions.invoke('sync-checkout-session', {
+    dataClient.functions.invoke('sync-checkout-session', {
       body: { sessionId:params.get('session_id') },
     }).then(({ data, error: syncError }) => {
       if (!live) return;
@@ -414,13 +420,14 @@ export default function FamilyPlaceApp() {
       window.history.replaceState({}, '', clean);
     }).catch(() => { if (live) setError('購入状況を確認できませんでした。'); });
     return () => { live = false; };
-  }, [familyId,user?.id,people,checkoutProjectId,consultationProjectId,productionProjectId]);
+  }, [familyId,user?.id,people,checkoutProjectId,consultationProjectId,productionProjectId,publicDemo]);
   useEffect(() => {
+    if (publicDemo) return undefined;
     const publicId = shelfReturnPublication.current;
     if (!publicId || !familyId || screen !== 'home') return;
     let live = true;
     Promise.all(people.map(async item => {
-      try { return (await familyPlacePublishedBooks(supabaseClient, item.id))
+      try { return (await familyPlacePublishedBooks(dataClient, item.id))
         .some(book => book.public_id === publicId) ? item.id : null; }
       catch { return null; }
     })).then(matches => {
@@ -442,7 +449,7 @@ export default function FamilyPlaceApp() {
       if (live) setError('本棚を開けませんでした。もう一度お試しください。');
     });
     return () => { live = false; };
-  }, [familyId, people, screen]);
+  }, [familyId, people, screen, publicDemo]);
   useEffect(() => {
     const warn = event => {
       if (!pendingAudioRef.current && textRef.current === savedTextRef.current) return;
@@ -465,7 +472,7 @@ export default function FamilyPlaceApp() {
 
   const rememberTreeView = () => {
     treeViewRef.current = { ...treeViewRef.current, centerId:treeCenterId, scrollY:window.scrollY };
-    sessionStorage.setItem('tateyoko.familyTreeReturn.v1', JSON.stringify(treeViewRef.current));
+    sessionStorage.setItem(treeReturnKey, JSON.stringify(treeViewRef.current));
   };
   const returnToTree = () => { restoreTreeScrollRef.current = true; setScreen('tree'); };
   const openPerson = (id, entry = 'home') => {
@@ -495,7 +502,7 @@ export default function FamilyPlaceApp() {
     setProductionProjectId(id); setScreen('book-production');
   };
   const resumeBook = async id => {
-    const { data, error: journeyError } = await supabaseClient.rpc('family_journey',{p:id});
+    const { data, error: journeyError } = await dataClient.rpc('family_journey',{p:id});
     if (!journeyError && data?.project_id && data?.can_produce) {
       openProduction(id); return;
     }
@@ -556,7 +563,7 @@ export default function FamilyPlaceApp() {
     try {
       const anchorId = newPersonAnchorId || selfId;
       if (!anchorId || !newPersonRelation) throw new Error('先に関係を選んでください');
-      await saveFamilyPlaceRelation(supabaseClient,familyId,anchorId,otherId,newPersonRelation);
+      await saveFamilyPlaceRelation(dataClient,familyId,anchorId,otherId,newPersonRelation);
       await loadHome(user);
       setPromptAfterChange(otherId);
       setTreeCenterId(anchorId);
@@ -566,14 +573,14 @@ export default function FamilyPlaceApp() {
   };
   const saveRelationship = async (anchorId, otherId, role, relationId = null) => {
     setBusy(true); setError('');
-    try { await saveFamilyPlaceRelation(supabaseClient,familyId,anchorId,otherId,role,relationId);
+    try { await saveFamilyPlaceRelation(dataClient,familyId,anchorId,otherId,role,relationId);
       await loadHome(user); setPromptAfterChange(anchorId); return true;
     } catch (cause) { setError(cause.message || '関係を保存できませんでした'); return false; }
     finally { setBusy(false); }
   };
   const unlinkRelation = async id => {
     setBusy(true); setError('');
-    try { await removeFamilyPlaceRelation(supabaseClient,id);
+    try { await removeFamilyPlaceRelation(dataClient,id);
       await loadHome(user); return true;
     } catch (cause) { setError(cause.message || '関係を解除できませんでした'); return false; }
     finally { setBusy(false); }
@@ -586,10 +593,10 @@ export default function FamilyPlaceApp() {
           ? suggestion.person_a_id : suggestion.person_b_id;
         const other = suggestion.kind === 'shared_child_spouse'
           ? suggestion.person_b_id : suggestion.person_a_id;
-        await saveFamilyPlaceRelation(supabaseClient,familyId,anchor,other,
+        await saveFamilyPlaceRelation(dataClient,familyId,anchor,other,
           suggestion.kind === 'shared_child_spouse' ? 'spouse' : 'parent');
       } else {
-        await saveFamilyRelationDecision(supabaseClient,familyId,suggestion,
+        await saveFamilyRelationDecision(dataClient,familyId,suggestion,
           answer === 'no' ? 'declined' : 'later');
       }
       await loadHome(user);
@@ -605,7 +612,7 @@ export default function FamilyPlaceApp() {
     if (!familyId || !(newPerson.family_name.trim() || newPerson.given_name.trim())) return;
     setBusy(true); setError('');
     try {
-      const id = await addFamilyPlacePerson(supabaseClient, familyId, newPerson, newIsSelf,
+      const id = await addFamilyPlacePerson(dataClient, familyId, newPerson, newIsSelf,
         newPersonRelation ? newPersonAnchorId || selfId : null, newPersonRelation || null);
       await loadHome(user);
       setPromptAfterChange(id);
@@ -622,20 +629,20 @@ export default function FamilyPlaceApp() {
     try {
       // The existing self-person RPC locks by account and returns the existing
       // linked person on retries. Never infer identity from a matching name.
-      const id = await addFamilyPlacePerson(supabaseClient, familyId, onboarding, true);
+      const id = await addFamilyPlacePerson(dataClient, familyId, onboarding, true);
       if (birthPlace.trim()) {
-        const { data: existing, error: lookupError } = await supabaseClient
+        const { data: existing, error: lookupError } = await dataClient
           .from('family_person_profile_facts').select('id')
           .eq('person_id', id).eq('fact_type', 'birth').limit(1);
         if (lookupError) throw lookupError;
-        if (!existing?.length) await saveFamilyPlaceFact(supabaseClient, user.id,
+        if (!existing?.length) await saveFamilyPlaceFact(dataClient, user.id,
           { id, family_id:familyId }, { fact_type:'birth', label:'生まれた場所',
             event_year:onboarding.birth_year, event_month:onboarding.birth_month,
             event_day:onboarding.birth_day, detail:birthPlace });
       }
       // BOOK and family app share this Auth user and profile. Fill only an
       // untouched placeholder so an existing purchaser's name is preserved.
-      const { data: accountProfile, error: profileError } = await supabaseClient
+      const { data: accountProfile, error: profileError } = await dataClient
         .from('profiles').select('display_name,name,family_name,given_name')
         .eq('id', user.id).maybeSingle();
       if (profileError) throw profileError;
@@ -644,7 +651,7 @@ export default function FamilyPlaceApp() {
         && ['','あなた'].includes(accountProfile.name || '')) {
         const fullName = [onboarding.family_name.trim(),onboarding.given_name.trim()]
           .filter(Boolean).join(' ');
-        const { error: updateError } = await supabaseClient.from('profiles').update({
+        const { error: updateError } = await dataClient.from('profiles').update({
           family_name:onboarding.family_name.trim() || null,
           given_name:onboarding.given_name.trim(),
           name:fullName,display_name:fullName,
@@ -685,7 +692,7 @@ export default function FamilyPlaceApp() {
     if (!path) return;
     setBusy(true); setError('');
     try {
-      const source = await downloadFamilyPlacePortrait(supabaseClient, path);
+      const source = await downloadFamilyPlacePortrait(dataClient, path);
       setPortraitSourceFile(source);
       setPortraitSourceIsNew(false);
       setPortraitCandidateIsNew(false);
@@ -704,13 +711,13 @@ export default function FamilyPlaceApp() {
         sourcePath = person.portrait_source_storage_path || person.portrait_storage_path || null;
         if (portraitSourceIsNew) {
           const preparedSource = await preparePortraitSource(portraitSourceFile);
-          sourcePath = await uploadFamilyPlacePortrait(supabaseClient, user.id, person.id, preparedSource);
+          sourcePath = await uploadFamilyPlacePortrait(dataClient, user.id, person.id, preparedSource);
           uploadedPaths.push(sourcePath);
         }
-        newPortraitPath = await uploadFamilyPlacePortrait(supabaseClient, user.id, person.id, profilePhotoFile);
+        newPortraitPath = await uploadFamilyPlacePortrait(dataClient, user.id, person.id, profilePhotoFile);
         uploadedPaths.push(newPortraitPath);
       }
-      await updateFamilyPlacePerson(supabaseClient, person.id, profile,
+      await updateFamilyPlacePerson(dataClient, person.id, profile,
         newPortraitPath || undefined, profilePhotoFile ? sourcePath : undefined);
       committed = true;
       await loadHome(user);
@@ -719,7 +726,7 @@ export default function FamilyPlaceApp() {
       if (profileReturnToTree) returnToTree();
       else setScreen('person');
     } catch (cause) {
-      if (!committed && uploadedPaths.length) await supabaseClient.storage.from('family-person-portraits')
+      if (!committed && uploadedPaths.length) await dataClient.storage.from('family-person-portraits')
         .remove(uploadedPaths).catch(() => {});
       setError(cause.message || '保存できませんでした');
     }
@@ -728,7 +735,7 @@ export default function FamilyPlaceApp() {
   const saveFact = async event => {
     event.preventDefault(); setBusy(true); setError('');
     try {
-      await saveFamilyPlaceFact(supabaseClient, user.id, person, factDraft);
+      await saveFamilyPlaceFact(dataClient, user.id, person, factDraft);
       await loadPerson(person.id);
       setFactDraft(null);
     } catch (cause) { setError(cause.message || '出来事を保存できませんでした'); }
@@ -741,8 +748,8 @@ export default function FamilyPlaceApp() {
       // Only new stories use this default; opening an existing story keeps
       // its stored visibility, including a previously set private key.
       const visibility = 'family';
-      const row = await getOrCreateFamilyPlaceStory(supabaseClient, user.id, person, question, visibility);
-      const items = await familyPlaceMedia(supabaseClient, row.id);
+      const row = await getOrCreateFamilyPlaceStory(dataClient, user.id, person, question, visibility);
+      const items = await familyPlaceMedia(dataClient, row.id);
       storyRef.current = row; setActiveStory(row); setStoryQuestion(question);
       textRef.current = row.body || ''; savedTextRef.current = row.body || '';
       setBody(row.body || ''); replaceMedia(items); setSaveState('saved');
@@ -759,7 +766,7 @@ export default function FamilyPlaceApp() {
       while (textRef.current !== savedTextRef.current) {
         const nextText = textRef.current;
         setSaveState('saving');
-        const updated = await saveFamilyPlaceStory(supabaseClient, storyRef.current, {
+        const updated = await saveFamilyPlaceStory(dataClient, storyRef.current, {
           body: nextText,
           transcript_raw: storyRef.current.transcript_raw || '',
           transcript_readable: storyRef.current.transcript_readable || '',
@@ -790,7 +797,7 @@ export default function FamilyPlaceApp() {
       clearTimeout(saveTimer.current);
       if (textRef.current !== savedTextRef.current || savePromiseRef.current) await flushText();
       setSaveState('saving');
-      const updated = await setFamilyPlaceStoryVisibility(supabaseClient, storyRef.current, next);
+      const updated = await setFamilyPlaceStoryVisibility(dataClient, storyRef.current, next);
       storyRef.current = updated; setActiveStory(updated);
       setSaveState('saved');
     } catch (cause) { setSaveState('failed'); setError(cause.message || '公開範囲を変更できませんでした'); }
@@ -800,8 +807,8 @@ export default function FamilyPlaceApp() {
     clearTimeout(saveTimer.current);
     if (textRef.current !== savedTextRef.current || savePromiseRef.current) await flushText();
     setSaveState('saving');
-    const item = await addFamilyPlaceMedia(supabaseClient, user.id, storyRef.current.id, file, kind, seconds);
-    const refreshed = await familyPlaceMedia(supabaseClient, storyRef.current.id);
+    const item = await addFamilyPlaceMedia(dataClient, user.id, storyRef.current.id, file, kind, seconds);
+    const refreshed = await familyPlaceMedia(dataClient, storyRef.current.id);
     replaceMedia(refreshed); setSaveState('saved');
     await loadPerson(person.id);
     return item;
@@ -812,19 +819,19 @@ export default function FamilyPlaceApp() {
   };
   const processAudio = async path => {
     const story = storyRef.current;
-    const transcript = await supabaseClient.functions.invoke('transcribe-audio', { body: {
+    const transcript = await dataClient.functions.invoke('transcribe-audio', { body: {
       freeStoryId: story.id, answerId: story.id, questionText: story.question_text, audioPaths: [path],
     } });
     if (transcript.error || !transcript.data?.success)
       throw transcript.error || new Error(transcript.data?.error || '文字起こしに失敗しました');
     const raw = transcript.data.transcript_raw || '';
-    const polish = await supabaseClient.functions.invoke('polish-transcript', { body: {
+    const polish = await dataClient.functions.invoke('polish-transcript', { body: {
       freeStoryId: story.id, answerId: story.id, questionText: story.question_text, transcriptRaw: raw,
     } });
     if (polish.error || !polish.data?.success)
       throw polish.error || new Error(polish.data?.error || '文章整形に失敗しました');
     const readable = polish.data.transcript_readable || raw;
-    const updated = await saveFamilyPlaceStory(supabaseClient, storyRef.current, {
+    const updated = await saveFamilyPlaceStory(dataClient, storyRef.current, {
       body: readable, transcript_raw: raw, transcript_readable: readable,
       transcript_essay: polish.data.transcript_essay || '',
     });
@@ -848,16 +855,16 @@ export default function FamilyPlaceApp() {
   };
 
   if (!user) return <div className="fp-auth">{demoLoginOpen
-    ? <FamilyPlaceDemoLogin client={supabaseClient} onBack={() => setDemoLoginOpen(false)}
+    ? <FamilyPlaceDemoLogin client={dataClient} onBack={() => setDemoLoginOpen(false)}
         onAuthenticated={setUser}/>
     : <><Scene_Login existingAccountOnly familyPlaceLogin onLogin={() =>
-      supabaseClient.auth.getUser().then(({ data }) => setUser(data.user))} />
+      dataClient.auth.getUser().then(({ data }) => setUser(data.user))} />
       <button type="button" className="fp-demo-login-entry" onClick={() => setDemoLoginOpen(true)}>
         デモアカウントで開く
       </button></>}</div>;
   if (accessState === 'denied') return <main className="fp-app fp-access-message"><h1>家族の場所</h1>
     <p>このアカウントは先行利用の対象ではありません。</p>
-    <button type="button" onClick={() => supabaseClient.auth.signOut()}>別のアカウントで開く</button></main>;
+    <button type="button" onClick={() => dataClient.auth.signOut()}>別のアカウントで開く</button></main>;
   if (accessState !== 'allowed' || verifiedUserId !== user.id) return <main className="fp-app fp-access-message">
     <p>{accessState === 'error' ? '家族の場所を開けませんでした。' : '利用権限を確認しています…'}</p>
     {error && <p role="alert">{error}</p>}</main>;
@@ -898,6 +905,10 @@ export default function FamilyPlaceApp() {
   const unlinkedPeople = relationAnchorId ? people.filter(item => item.id !== relationAnchorId
     && !relations.some(relation => relation.person_a_id === item.id || relation.person_b_id === item.id)) : [];
   return <FamilyAvatarProvider people={people} relations={relations}><div className={`fp-app ${screen === 'tree' ? 'is-tree' : ''}`}>
+    {publicDemo && <div className="fp-public-demo-banner" role="note">
+      <span>体験デモ・入力はこのブラウザ内だけ</span>
+      <a href="/login">無料で始める</a>
+    </div>}
     {screen !== 'home' && screen !== 'person' && screen !== 'tree' && screen !== 'book-preview' && screen !== 'book-production' &&
       <header className={`fp-header ${screen === 'profile' && profileReturnToTree ? 'fp-header-from-tree' : ''}`}>
       <button onClick={() => screen === 'story' ? leaveStory()
@@ -912,8 +923,8 @@ export default function FamilyPlaceApp() {
     {error && <p className="fp-error" role="alert">{error}</p>}
     {screen === 'home' && <FamilyHome people={people} storyCounts={homeStoryCounts}
       onAddPerson={() => startAddPerson()} onOpenPerson={openPerson} onTree={openTree}
-      onOpenBook={() => openBookIntroduction('home')}
-      onSwitchAccount={() => supabaseClient.auth.signOut()}/>}
+      onOpenBook={publicDemo ? null : () => openBookIntroduction('home')}
+      onSwitchAccount={publicDemo ? null : () => dataClient.auth.signOut()}/>}
     {screen === 'tree' && <FamilyTree people={people} relations={relations} selfId={selfId}
       centerId={treeCenterId || selfId || people[0]?.id} onCenter={setTreeCenterId}
       onAdd={startAddPerson} onOpenPerson={id => openPerson(id, 'tree')} onEditProfile={(id,section) => {
@@ -962,20 +973,20 @@ export default function FamilyPlaceApp() {
       </form>
     </main>}
     {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories}
-      supabaseClient={supabaseClient}
+      supabaseClient={dataClient}
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}
       visibleBookProjects={visibleBookProjects} projectsStatus={projectsStatus}
-      facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
+      facts={familyPlaceTimeline(person,facts)} questions={publicDemo ? [] : testQuestions} activeTab={activeTab}
       onTabChange={setActiveTab} onBack={personEntry === 'tree' ? returnToTree : goHome}
       backLabel={personEntry === 'tree' ? '家系図' : 'ホーム'} entryOrigin={personEntry}
       onProfile={() => startProfile()}
-      onOpenBook={openBookIntroduction}
-      onResumeBook={id => resumeBook(id).catch(() => setError('BOOKを開けませんでした。'))}
-      onOpenStory={openStory} busy={busy}
+      onOpenBook={publicDemo ? null : openBookIntroduction}
+      onResumeBook={publicDemo ? null : id => resumeBook(id).catch(() => setError('BOOKを開けませんでした。'))}
+      onOpenStory={publicDemo ? () => setError('年輪の体験は次の段階で公開します。') : openStory} busy={busy}
       onAddFact={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}/>}
     {screen === 'book-preview' && <React.Suspense fallback={<p>BOOK紹介を読み込んでいます…</p>}><BookPurchaseJourney
       key={`${bookEntry}:${bookEntry === 'home' ? '' : person?.id || ''}`}
-      person={bookEntry === 'home' ? null : person} people={people} client={supabaseClient}
+      person={bookEntry === 'home' ? null : person} people={people} client={dataClient}
       livePurchase={import.meta.env.VITE_PUBLIC_TEST_MODE !== 'true'
         || import.meta.env.VITE_FAMILY_PURCHASE_TEST_MODE === 'true'} checkoutProjectId={checkoutProjectId}
       initialProjectId={consultationProjectId}
@@ -983,7 +994,7 @@ export default function FamilyPlaceApp() {
       onBack={leaveBookIntroduction}
       onTryFree={id => { if (bookEntry === 'home') setPersonEntry('home'); setSelectedId(id); setActiveTab('ring'); setScreen('person'); }}/></React.Suspense>}
     {screen === 'book-production' && <React.Suspense fallback={<p>制作ホームを読み込んでいます…</p>}>
-      <FamilyProductionEntry client={supabaseClient} projectId={productionProjectId}/>
+      <FamilyProductionEntry client={dataClient} projectId={productionProjectId}/>
     </React.Suspense>}
     {screen === 'profile' && person && <main className="fp-section"><h1>プロフィール</h1>
       <form className="fp-form" onSubmit={saveProfile}>

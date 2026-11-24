@@ -29,6 +29,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/demo",
+      "destination": "/index.html"
+    },
+    {
       "source": "/g/:compactToken",
       "destination": "/gift-three-questions.html"
     }

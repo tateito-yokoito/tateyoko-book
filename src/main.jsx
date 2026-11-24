@@ -106,9 +106,12 @@ function RootScreen() {
   // The person-centred free app is isolated until its questions and TEST
   // security checks are approved. Existing BOOK entry points stay unchanged.
   if (params.get('app') === 'family_place'
-    || window.location.pathname === '/app' || window.location.pathname === '/login') {
+    || window.location.pathname === '/app' || window.location.pathname === '/login'
+    || window.location.pathname === '/demo') {
     if (FamilyPlaceApp) {
-      return <React.Suspense fallback={<p>家族の場所を準備しています…</p>}><FamilyPlaceApp /></React.Suspense>;
+      return <React.Suspense fallback={<p>家族の場所を準備しています…</p>}>
+        <FamilyPlaceApp publicDemo={window.location.pathname === '/demo'}/>
+      </React.Suspense>;
     }
     return <main className="min-h-screen p-8">家族の場所は準備中です。</main>;
   }
