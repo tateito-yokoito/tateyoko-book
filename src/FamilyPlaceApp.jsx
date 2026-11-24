@@ -48,7 +48,8 @@ function PersonNameFields({ value, onChange, people = [], firstRegistration = fa
   });
   const changeName = (key, name) => {
     const kanaKey = kanaFieldForName(key);
-    if (!composingRef.current[key] && hasKanji(value?.[key]) && value[key] !== name)
+    if (!composingRef.current[key] && hasKanji(value?.[key]) && value[key] !== name
+      && !(autoFields.has(kanaKey) && name.startsWith(value[key])))
       readingRef.current[key] = '';
     const reading = normalizeKanaReading(name);
     if (reading) readingRef.current[key] = reading;
@@ -72,7 +73,7 @@ function PersonNameFields({ value, onChange, people = [], firstRegistration = fa
       }} onCompositionStart={nameField ? () => {
         composingRef.current[key] = true;
         imeEligibleRef.current[key] = !hasKanji(value?.[key]);
-        readingRef.current[key] = '';
+        readingRef.current[key] = normalizeKanaReading(value?.[key]);
       } : undefined}
       onBeforeInput={nameField ? event => {
         if (!composingRef.current[key] || !imeEligibleRef.current[key]) return;
