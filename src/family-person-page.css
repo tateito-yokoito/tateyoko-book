@@ -23,3 +23,4 @@
 .fp-person-book-empty small,.fp-person-questions p{font-size:11px}
 .fp-person-portrait>.family-avatar{width:100%;height:100%;stroke-width:initial}
 .fp-person-portrait>.family-avatar-illustration>img{height:auto;object-fit:initial}
+.fp-person-memories{display:grid;gap:14px;margin-top:14px}.fp-person-memory{overflow:hidden;border:1px solid #ebe6d9;border-radius:14px;background:#fffefa;box-shadow:0 3px 9px #483c2618}.fp-person-memory>img{display:block;width:100%;max-height:300px;object-fit:cover}.fp-person-memory>div{padding:12px 15px 15px}.fp-person-memory time{display:block;color:#557f2a;font-size:12px}.fp-person-memory strong{display:block;margin-top:3px;font-size:16px}.fp-person-memory p{margin:6px 0 0;white-space:pre-wrap;font-size:14px;line-height:1.65}

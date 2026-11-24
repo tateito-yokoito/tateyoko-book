@@ -32,7 +32,7 @@ function seed() {
     relation('r4','self','spouse','spouse'),
     relation('r5','self','child','parent_child'),
     relation('r6','spouse','child','parent_child'),
-  ], decisions:[], facts:[], media:{}, sessionId:uid() };
+  ], decisions:[], facts:[], stories:[], mediaRows:[], memories:[], media:{}, sessionId:uid() };
 }
 
 let memory = null;
@@ -41,6 +41,9 @@ function read() {
   try {
     const raw = sessionStorage.getItem(KEY);
     memory = raw ? JSON.parse(raw) : seed();
+    memory.stories ||= [];
+    memory.mediaRows ||= [];
+    memory.memories ||= [];
   } catch { memory = seed(); }
   return memory;
 }
@@ -51,9 +54,10 @@ function write() {
 function rows(table) {
   const state = read();
   const name = { persons:'people', family_person_relations:'relations',
-    family_relation_suggestions:'decisions', family_person_profile_facts:'facts' }[table];
+    family_relation_suggestions:'decisions', family_person_profile_facts:'facts',
+    family_free_stories:'stories', family_free_story_media:'mediaRows' }[table];
   if (name) return state[name];
-  if (['user_person_links','family_free_stories','family_free_story_media','book_projects','profiles'].includes(table))
+  if (['user_person_links','book_projects','profiles'].includes(table))
     return table === 'user_person_links' ? [{ user_id:USER_ID, person_id:'self', role:'self' }] : [];
   throw new Error(`公開デモでは ${table} を利用できません`);
 }
@@ -110,6 +114,14 @@ class Query {
       } else if (this.action === 'insert' || this.action === 'upsert') {
         const incoming = (Array.isArray(this.payload) ? this.payload : [this.payload]).map(item => ({ ...item }));
         for (const item of incoming) {
+          if (this.table === 'family_free_stories') {
+            item.revision ||= 1;
+            item.body ||= '';
+            item.transcript_raw ||= '';
+            item.transcript_readable ||= '';
+            item.transcript_essay ||= '';
+            item.updated_at ||= new Date().toISOString();
+          }
           if (this.table === 'family_person_relations') validateRelation(item);
           if (this.table === 'family_relation_suggestions') {
             const existing = source.find(row => row.family_id === item.family_id && row.kind === item.kind
@@ -143,6 +155,14 @@ const fileToDataUrl = file => new Promise((resolve,reject) => {
 const dataUrlToBlob = async url => (await fetch(url)).blob();
 
 export const publicDemoUser = { id:USER_ID, email:null, user_metadata:{} };
+export function publicDemoSessionId() {
+  const key = 'tateyoko.public-family-demo.ai-browser.v1';
+  try {
+    let id = localStorage.getItem(key);
+    if (!id) { id = uid(); localStorage.setItem(key, id); }
+    return id;
+  } catch { return read().sessionId; }
+}
 export const publicDemoClient = {
   from(table) { return {
     select:() => new Query(table), insert:payload => new Query(table,'insert',payload),
@@ -193,3 +213,19 @@ export const publicDemoClient = {
 };
 
 export function resetPublicDemo() { memory = seed(); write(); }
+
+export function publicDemoMemories(personId) {
+  return clone(read().memories.filter(item => item.person_id === personId));
+}
+
+export async function savePublicDemoMemory(personId, values, photoFile) {
+  if (!read().people.some(person => person.id === personId)) throw new Error('人物を確認できません');
+  if (!photoFile?.type?.startsWith('image/')) throw new Error('写真を選んでください');
+  const photoUrl = await fileToDataUrl(photoFile);
+  const item = { id:uid(), person_id:personId, title:values.title.trim().slice(0, 100),
+    event_date:values.event_date || null, comment:values.comment.trim().slice(0, 1000),
+    photo_url:photoUrl, created_at:new Date().toISOString() };
+  read().memories.unshift(item);
+  try { write(); } catch (error) { read().memories.shift(); throw error; }
+  return clone(item);
+}

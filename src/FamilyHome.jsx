@@ -4,7 +4,7 @@ import FamilyAvatar from './FamilyAvatar.jsx';
 import './family-place-home.css';
 
 /** The same home is used by the authenticated app and its isolated visual review. */
-export default function FamilyHome({ people = [], storyCounts = {}, onAddPerson, onOpenPerson, onTree, onOpenBook, onSwitchAccount }) {
+export default function FamilyHome({ people = [], storyCounts = {}, onAddPerson, onOpenPerson, onTree, onOpenBook, onSwitchAccount, sampleBookHref = null }) {
   const hasStories = people.some(person => Number(storyCounts[person.id]) > 0);
   return <div className="fp-home-shell">
     <header className="fp-home-header">
@@ -25,6 +25,9 @@ export default function FamilyHome({ people = [], storyCounts = {}, onAddPerson,
         {onOpenBook && <button type="button" className="fp-home-book-link" onClick={onOpenBook}>
           人生のBOOKについて見る<ChevronRight aria-hidden="true"/>
         </button>}
+        {sampleBookHref && <a className="fp-home-book-link fp-home-sample-book" href={sampleBookHref}>
+          完成BOOKのサンプルを見る<span>紡木 誠さんの人生の物語</span><ChevronRight aria-hidden="true"/>
+        </a>}
         <button type="button" className="fp-home-primary" onClick={onAddPerson}><Plus aria-hidden="true"/>自分・家族を登録する</button>
         <div className="fp-home-shortcuts" aria-label="家族の機能">
           <button type="button" onClick={onTree}><Network aria-hidden="true"/><strong>家系図</strong></button>

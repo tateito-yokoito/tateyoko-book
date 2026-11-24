@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { buildAnswerPrompt, buildCandidateRules } from "../_shared/story-ai-prompts.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireExperienceProcessing } from "../_shared/experience-access.ts";
 import { requireFamilyProjectAccess, familyPendingVoiceScope } from "../_shared/family-access.ts";
@@ -164,17 +165,6 @@ serve(async (req) => {
   }
 });
 
-function buildCandidateRules() {
-  return `
-【固有名詞候補の抽出】
-- 語りに実際に現れた、人名・地名・会社名・学校名などを最大8件まで抽出する
-- 一般名詞や、問いにしか登場しない語は抽出しない
-- 漢字表記に確信がなければ推測で断定せず、聞こえた表記のままconfidenceを低くする
-- readingは分かる場合だけ、context_labelは「母」「勤務先」「出生地」など短く書く
-- これは候補一覧であり、本文を候補に合わせて改変しない
-`.trim();
-}
-
 function buildLifeOutlinePrompt(questionText: string, transcriptRaw: string) {
   return `
 あなたは、家族の語りを本に残す日本語編集者です。
@@ -202,61 +192,6 @@ ${buildCandidateRules()}
   "transcript_readable": "本人の声を残した読みやすい人物紹介文",
   "transcript_essay": "事実を変えずに読み物として整えた人物紹介文",
   "extracted_snippet": "印象的な短い一文",
-  "proper_noun_candidates": [
-    {
-      "term_type": "person|place|organization|school|other",
-      "canonical_value": "語りから聞き取れた固有名詞",
-      "reading": "分かる場合の読み",
-      "context_label": "語り手との関係や意味",
-      "confidence": 0.0
-    }
-  ]
-}
-`.trim();
-}
-
-function buildAnswerPrompt(questionText: string, transcriptRaw: string) {
-  return `
-あなたは、家族の語りを本に残す編集者です。
-
-以下の「問い」と「文字起こし」をもとに、3種類の文章に整えてください。
-
-【最重要ルール】
-- 事実を勝手に足さない
-- 話していない出来事を作らない
-- 話していない感情や教訓を足さない
-- 文章を整える場合も、元の語りの意味を変えない
-- 必ずJSONのみで返す
-- Markdownや説明文は返さない
-
-【問い】
-${questionText || "問いはありません"}
-
-【文字起こし】
-${transcriptRaw}
-
-【3つの出力方針】
-
-1. transcript_clean
-文字起こし確認用。音声に近い状態を保つ。一人称、語尾、方言、言い回しを変えない。
-明らかな誤認識だけ最小限直し、文章として整えすぎない。
-
-2. transcript_readable
-語り調。本人らしい語りを残しつつ、読みやすい文章に整える。
-一人称・語尾・方言・話し方・テンポを残し、重複、言い淀み、句読点、改行を整える。
-
-3. transcript_essay
-作品調。自分史・人生史の文章として読み物らしく作り込む。
-一人称を「私」に寄せ、語尾や話の流れを整えてよいが、事実、感情、教訓を勝手に足さない。
-
-${buildCandidateRules()}
-
-【返却形式】
-{
-  "transcript_clean": "文字起こし確認用の文章",
-  "transcript_readable": "語り調の文章",
-  "transcript_essay": "作品調の文章",
-  "extracted_snippet": "印象的な短い引用風の一文",
   "proper_noun_candidates": [
     {
       "term_type": "person|place|organization|school|other",

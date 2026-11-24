@@ -91,3 +91,7 @@ verify_jwt = false
 # Guest trial uses a per-session capability checked by its dedicated handler.
 [functions.guest-trial]
 verify_jwt = false
+
+# Anonymous demo AI uses a service-role-only atomic quota RPC, never Auth RLS.
+[functions.public-demo-ai]
+verify_jwt = false

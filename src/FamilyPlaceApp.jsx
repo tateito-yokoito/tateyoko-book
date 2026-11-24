@@ -6,6 +6,7 @@ import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
 import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
 import { FamilyAvatarProvider } from './FamilyAvatar.jsx';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
+import { SAMPLE_WEB_BOOK_ID } from './WebBookCover.jsx';
 import FamilyPlaceDemoLogin from './FamilyPlaceDemoLogin.jsx';
 import FamilyTree from './FamilyTree.jsx';
 import FamilyRelationshipEditor from './FamilyRelationshipEditor.jsx';
@@ -24,7 +25,8 @@ import './family-place.css';
 import { preparePortraitSource } from './lib/portraitSource.js';
 import { hasKanji, kanaFieldForName, normalizeKanaReading,
   suggestNameReading } from './lib/nameReading.js';
-import { publicDemoClient, publicDemoUser } from './lib/familyPlacePublicDemo.js';
+import { publicDemoClient, publicDemoUser, publicDemoSessionId, publicDemoMemories,
+  savePublicDemoMemory } from './lib/familyPlacePublicDemo.js';
 
 // TEST-only provisional prompts. The owner will select the final person-based
 // questions; this route remains disabled in production builds until then.
@@ -218,6 +220,11 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
   const [factDraft, setFactDraft] = useState(null);
   const [facts, setFacts] = useState([]);
   const [stories, setStories] = useState([]);
+  const [memories, setMemories] = useState([]);
+  const [memoryDraft, setMemoryDraft] = useState({ title:'', event_date:'', comment:'' });
+  const [memoryPhotoFile, setMemoryPhotoFile] = useState(null);
+  const [memoryPhotoPreview, setMemoryPhotoPreview] = useState('');
+  const [memoryPhotoOpen, setMemoryPhotoOpen] = useState(false);
   const [publishedBooks, setPublishedBooks] = useState([]);
   const [visibleBookProjects, setVisibleBookProjects] = useState([]);
   const [projectsStatus, setProjectsStatus] = useState('loading');
@@ -267,6 +274,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
   }, [screen,profileSection]);
 
   useEffect(() => () => { if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview); }, [profilePhotoPreview]);
+  useEffect(() => () => { if (memoryPhotoPreview) URL.revokeObjectURL(memoryPhotoPreview); }, [memoryPhotoPreview]);
   useEffect(() => () => { portraitUrlsRef.current.forEach(url => URL.revokeObjectURL(url)); }, []);
 
   const loadHome = useCallback(async currentUser => {
@@ -321,11 +329,12 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     if (epoch !== personLoadEpoch.current) return;
     setFacts(nextFacts);
     setStories(nextStories);
+    setMemories(publicDemo ? publicDemoMemories(personId) : []);
     if (bookResult.error) { setPublishedBooks([]); setBooksStatus('error'); }
     else { setPublishedBooks(bookResult.data); setBooksStatus('ready'); }
     if (projectResult.error) { setVisibleBookProjects([]); setProjectsStatus('error'); }
     else { setVisibleBookProjects(projectResult.data); setProjectsStatus('ready'); }
-  }, []);
+  }, [publicDemo]);
   useEffect(() => {
     if (publicDemo) return undefined;
     let live = true;
@@ -827,23 +836,58 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     try { await saveMedia(file, 'photo'); setPhotoOpen(false); }
     catch (cause) { setSaveState('failed'); setError(cause.message || '写真を保存できませんでした'); throw cause; }
   };
-  const processAudio = async path => {
+  const startMemory = () => {
+    setMemoryDraft({ title:'', event_date:'', comment:'' });
+    setMemoryPhotoFile(null); setMemoryPhotoPreview(''); setScreen('memory');
+  };
+  const saveMemory = async event => {
+    event.preventDefault(); setBusy(true); setError('');
+    try {
+      await savePublicDemoMemory(person.id, memoryDraft, memoryPhotoFile);
+      await loadPerson(person.id);
+      setMemoryPhotoFile(null); setMemoryPhotoPreview('');
+      setActiveTab('memories'); setScreen('person');
+    } catch (cause) { setError(cause.message || '思い出を保存できませんでした'); }
+    finally { setBusy(false); }
+  };
+  const processAudio = async (path, durationSeconds = null) => {
     const story = storyRef.current;
+    let raw = '';
+    let polished;
+    if (publicDemo) {
+      const downloaded = await dataClient.storage.from('audio').download(path);
+      if (downloaded.error || !downloaded.data) throw downloaded.error || new Error('音声を開けませんでした');
+      const form = new FormData();
+      form.append('browserId', publicDemoSessionId());
+      form.append('questionText', story.question_text);
+      form.append('durationSeconds', String(durationSeconds ?? mediaRef.current.find(item => item.storage_path === path)?.duration_seconds ?? 0));
+      const audioType = downloaded.data.type.split(';')[0];
+      const audio = downloaded.data.type === audioType ? downloaded.data
+        : new Blob([downloaded.data], { type:audioType });
+      form.append('audio', audio, audioType === 'audio/webm' ? 'demo.webm' : 'demo.m4a');
+      const result = await supabaseClient.functions.invoke('public-demo-ai', { body:form });
+      if (result.error || !result.data?.success)
+        throw result.error || new Error(result.data?.error || 'AIを利用できませんでした');
+      raw = result.data.transcript_raw || '';
+      polished = result.data;
+    } else {
     const transcript = await dataClient.functions.invoke('transcribe-audio', { body: {
       freeStoryId: story.id, answerId: story.id, questionText: story.question_text, audioPaths: [path],
     } });
     if (transcript.error || !transcript.data?.success)
       throw transcript.error || new Error(transcript.data?.error || '文字起こしに失敗しました');
-    const raw = transcript.data.transcript_raw || '';
+    raw = transcript.data.transcript_raw || '';
     const polish = await dataClient.functions.invoke('polish-transcript', { body: {
       freeStoryId: story.id, answerId: story.id, questionText: story.question_text, transcriptRaw: raw,
     } });
     if (polish.error || !polish.data?.success)
       throw polish.error || new Error(polish.data?.error || '文章整形に失敗しました');
-    const readable = polish.data.transcript_readable || raw;
+    polished = polish.data;
+    }
+    const readable = polished.transcript_readable || raw;
     const updated = await saveFamilyPlaceStory(dataClient, storyRef.current, {
       body: readable, transcript_raw: raw, transcript_readable: readable,
-      transcript_essay: polish.data.transcript_essay || '',
+      transcript_essay: polished.transcript_essay || '',
     });
     storyRef.current = updated; setActiveStory(updated);
     textRef.current = readable; savedTextRef.current = readable; setBody(readable);
@@ -855,7 +899,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       const item = await saveMedia(blob, 'audio', Math.round(seconds));
       pendingAudioRef.current = null;
       setScreen('story');
-      try { await processAudio(item.path); }
+      try { await processAudio(item.path, Math.min(30, Math.round(seconds))); }
       catch (cause) { setRecordingError(cause.message || '文字起こしを再試行してください'); }
       return true;
     } catch (cause) {
@@ -899,8 +943,14 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     </form>
   </section></main>;
   if (screen === 'recording' && activeStory) return <div className="fp-recorder">
+    {publicDemo && <div className="fp-public-demo-banner" role="note">
+      <span>体験デモ・入力はこのブラウザ内だけ。今度は、あなたの家族で。</span>
+      <a href="/login">無料で始める</a>
+    </div>}
     <Scene_Recording question={{ content: activeStory.question_text, question_role: 'story_question' }}
-      lightMode autoStart progress={{ currentIndex: 0, total: 1 }}
+      lightMode autoStart={!publicDemo} maxDurationSeconds={publicDemo ? 30 : undefined}
+      preRecordNotice={publicDemo ? '録音した音声は、文字起こし・文章整形のため外部AIへ送信されます。音声と文章はサーバーに保存されず、このブラウザ内に残ります。1回30秒まで。' : ''}
+      progress={{ currentIndex: 0, total: 1 }}
       userName={person?.display_name || 'あなた'}
       referencePhotos={media.filter(item => item.asset_type === 'photo').map(item => item.url)}
       registerExitGuard={guard => { guardRef.current = guard; }}
@@ -916,7 +966,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     && !relations.some(relation => relation.person_a_id === item.id || relation.person_b_id === item.id)) : [];
   return <FamilyAvatarProvider people={people} relations={relations}><div className={`fp-app ${screen === 'tree' ? 'is-tree' : ''}`}>
     {publicDemo && <div className="fp-public-demo-banner" role="note">
-      <span>体験デモ・入力はこのブラウザ内だけ</span>
+      <span>体験デモ・入力はこのブラウザ内だけ。今度は、あなたの家族で。</span>
       <a href="/login">無料で始める</a>
     </div>}
     {screen !== 'home' && screen !== 'person' && screen !== 'tree' && screen !== 'book-preview' && screen !== 'book-production' &&
@@ -924,6 +974,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       <button onClick={() => screen === 'story' ? leaveStory()
           : screen === 'profile' ? (profileReturnToTree ? returnToTree() : setScreen('person'))
           : screen === 'add-person' && newPersonAnchorId ? setScreen('tree')
+          : screen === 'memory' ? setScreen('person')
           : screen === 'person' ? goHome() : setScreen('home')}><ChevronLeft/>{screen === 'profile' && profileReturnToTree ? '家系図に戻る' : '戻る'}</button>
       {screen === 'profile' && profileReturnToTree
         ? <button className="fp-header-person-link" onClick={() => openPerson(person.id, 'tree')}>
@@ -934,6 +985,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     {screen === 'home' && <FamilyHome people={people} storyCounts={homeStoryCounts}
       onAddPerson={() => startAddPerson()} onOpenPerson={openPerson} onTree={openTree}
       onOpenBook={publicDemo ? null : () => openBookIntroduction('home')}
+      sampleBookHref={publicDemo ? `/?voice=${SAMPLE_WEB_BOOK_ID}&demo_return=1` : null}
       onSwitchAccount={publicDemo ? null : () => dataClient.auth.signOut()}/>}
     {screen === 'tree' && <FamilyTree people={people} relations={relations} selfId={selfId}
       centerId={treeCenterId || selfId || people[0]?.id} onCenter={setTreeCenterId}
@@ -983,17 +1035,40 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       </form>
     </main>}
     {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories}
+      memories={memories} onAddMemory={publicDemo ? startMemory : null}
       supabaseClient={dataClient}
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}
       visibleBookProjects={visibleBookProjects} projectsStatus={projectsStatus}
-      facts={familyPlaceTimeline(person,facts)} questions={publicDemo ? [] : testQuestions} activeTab={activeTab}
+      facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
       onTabChange={setActiveTab} onBack={personEntry === 'tree' ? returnToTree : goHome}
       backLabel={personEntry === 'tree' ? '家系図' : 'ホーム'} entryOrigin={personEntry}
       onProfile={() => startProfile()}
       onOpenBook={publicDemo ? null : openBookIntroduction}
       onResumeBook={publicDemo ? null : id => resumeBook(id).catch(() => setError('BOOKを開けませんでした。'))}
-      onOpenStory={publicDemo ? () => setError('年輪の体験は次の段階で公開します。') : openStory} busy={busy}
+      onOpenStory={openStory} busy={busy}
       onAddFact={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}/>}
+    {screen === 'memory' && publicDemo && person && <main className="fp-section fp-memory-editor">
+      <h1>{person.display_name}さんの思い出</h1>
+      <p className="fp-note">写真と一緒に、この日のことを残しましょう。</p>
+      <form className="fp-form" onSubmit={saveMemory}>
+        {memoryPhotoPreview && <img className="fp-memory-preview" src={memoryPhotoPreview} alt="選んだ写真"/>}
+        <button className="fp-outline" type="button" onClick={() => setMemoryPhotoOpen(true)}>
+          {memoryPhotoFile ? '写真を選び直す' : '写真を撮る・選ぶ'}</button>
+        <label>タイトル<input maxLength={100} required value={memoryDraft.title}
+          onChange={event => setMemoryDraft({...memoryDraft,title:event.target.value})}/></label>
+        <label>日付（任意）<input type="date" value={memoryDraft.event_date}
+          onChange={event => setMemoryDraft({...memoryDraft,event_date:event.target.value})}/></label>
+        <label>コメント（任意）<textarea maxLength={1000} value={memoryDraft.comment}
+          onChange={event => setMemoryDraft({...memoryDraft,comment:event.target.value})}/></label>
+        <button className="fp-primary" disabled={busy || !memoryPhotoFile || !memoryDraft.title.trim()}>
+          {busy ? '保存しています…' : '思い出に保存する'}</button>
+      </form>
+      <PhotoCorrectionFlow open={memoryPhotoOpen} awaitCompletion title="思い出の写真"
+        onClose={() => setMemoryPhotoOpen(false)} onComplete={file => {
+          setMemoryPhotoFile(file); setMemoryPhotoPreview(URL.createObjectURL(file));
+          setMemoryPhotoOpen(false);
+        }}/>
+    </main>}
     {screen === 'book-preview' && <React.Suspense fallback={<p>BOOK紹介を読み込んでいます…</p>}><BookPurchaseJourney
       key={`${bookEntry}:${bookEntry === 'home' ? '' : person?.id || ''}`}
       person={bookEntry === 'home' ? null : person} people={people} client={dataClient}

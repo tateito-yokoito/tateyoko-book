@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { buildTranscriptionPrompt } from "../_shared/story-ai-prompts.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireExperienceProcessing } from "../_shared/experience-access.ts";
 import { requireFamilyProjectAccess, requireFamilyAssetAccess, familyPendingVoiceScope } from "../_shared/family-access.ts";
@@ -357,28 +358,6 @@ function scoreContextTerm(term: ContextTerm, referenceText: string) {
     if (Number.isFinite(ageDays)) score += Math.max(0, 4 - ageDays / 30);
   }
   return score;
-}
-
-function buildTranscriptionPrompt(
-  questionText: string,
-  contextTerms: ContextTerm[],
-  previousTranscript: string
-) {
-  const sections: string[] = [];
-  if (questionText) sections.push(`今回の問い: ${questionText.slice(0, 350)}`);
-  if (contextTerms.length > 0) {
-    const terms = contextTerms.map((term) => {
-      const reading = term.reading ? `（${term.reading}）` : "";
-      const context = term.context_label ? `［${term.context_label}］` : "";
-      return `${term.canonical_value}${reading}${context}`;
-    });
-    sections.push(`固有名詞の候補: ${terms.join("、")}`);
-  }
-  if (previousTranscript) {
-    sections.push(`直前の語り: ${previousTranscript.slice(-800)}`);
-  }
-  sections.push("日本語の自然な句読点で、固有名詞は上記の表記を優先してください。");
-  return sections.join("\n").slice(0, 1800);
 }
 
 async function markTermsUsed(

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Play, Pause, Volume2, ChevronDown, ArrowLeft, LibraryBig } from 'lucide-react';
+import { Play, Pause, Volume2, ChevronDown, ArrowLeft, LibraryBig, House } from 'lucide-react';
 import { webBookSections, webBookStorySequence, webBookAudioSequence } from './lib/webBook.js';
 import './web-book.css';
 import WebBookCover from './WebBookCover.jsx';
@@ -19,7 +19,7 @@ const creationDate = value => {
 
 // Same presentation for an authorized draft preview and an immutable published work.
 // This component has no DB client and cannot publish, edit, or change sharing.
-export default function WebBook({ publication, resolveAsset, previewLabel, onClose, returnHref }) {
+export default function WebBook({ publication, resolveAsset, previewLabel, onClose, returnHref, returnLabel = '本棚へ' }) {
   const sections = webBookSections(publication);
   const createdOn = creationDate(publication.publishedAt);
   const sequence = useMemo(()=>webBookStorySequence(publication),[publication]);
@@ -99,7 +99,9 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
   return <div className={`wb ${showFixed?'wb-has-player':''}`}>
     {previewLabel&&<aside className="wb-preview">{previewLabel}{onClose&&<button onClick={onClose}>確認を終える</button>}</aside>}
     <header className="wb-header"><img src="/brand-logo-official.svg" alt="縦糸横糸"/><span>Webブック</span>
-      {returnHref && <a className="wb-shelf-link" href={returnHref}><LibraryBig size={18} aria-hidden="true"/>本棚へ</a>}
+      {returnHref && <a className="wb-shelf-link" href={returnHref}>
+        {returnLabel === '体験デモへ' ? <House size={18} aria-hidden="true"/> : <LibraryBig size={18} aria-hidden="true"/>}
+        {returnLabel}</a>}
     </header>
     <main>
       {story ? <article className="wb-story"><button className="wb-back" onClick={() => {setStory(null);window.scrollTo?.({top:0});}}><ArrowLeft size={17}/>目次へ戻る</button>

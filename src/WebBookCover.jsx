@@ -2,8 +2,9 @@ import React from 'react';
 import CoverPhotoFrame from './CoverPhotoFrame.jsx';
 import './web-book.css';
 
+export const SAMPLE_WEB_BOOK_ID = '0ae7500b3ee6507721663b40c02ea7dc3c5de4f7be949288';
 export const publicationCoverImageUrl = publicId =>
-  publicId === '0ae7500b3ee6507721663b40c02ea7dc3c5de4f7be949288'
+  publicId === SAMPLE_WEB_BOOK_ID
     ? '/site/webbook-sample-cover-sage.jpg' : '';
 
 // The reader and the bookshelf render the same fixed publication cover.

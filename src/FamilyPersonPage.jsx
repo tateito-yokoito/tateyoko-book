@@ -43,6 +43,7 @@ function PublishedBookThumbnail({ book, supabaseClient }) {
 }
 
 export default function FamilyPersonPage({ person, stories = [], books = [], booksStatus = 'ready',
+  memories = [], onAddMemory = null,
   visibleBookProjects = [], projectsStatus = 'ready',
   facts = [], questions = [], activeTab = 'ring', onTabChange, onBack, onProfile,
   onOpenStory, onAddFact, onRetryBooks, supabaseClient, busy = false,
@@ -127,7 +128,17 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
             </div>}
     </section>}
     {activeTab === 'memories' && <section className="fp-person-content" role="tabpanel">
-      <h2>思い出</h2><div className="fp-person-story-empty">この人物の思い出は、まだありません。</div>
+      <h2>思い出</h2>
+      {memories.length ? <div className="fp-person-memories">{memories.map(item =>
+        <article className="fp-person-memory" key={item.id}>
+          <img src={item.photo_url} alt={item.title || '思い出の写真'}/>
+          <div>{item.event_date && <time>{item.event_date}</time>}
+            {item.title && <strong>{item.title}</strong>}
+            {item.comment && <p>{item.comment}</p>}</div>
+        </article>)}</div>
+        : <div className="fp-person-story-empty">この人物の思い出は、まだありません。</div>}
+      {onAddMemory && <button type="button" className="fp-person-add-story" onClick={onAddMemory}>
+        <Plus aria-hidden="true"/>写真と思い出を残す</button>}
     </section>}
     {activeTab === 'timeline' && <section className="fp-person-content" role="tabpanel">
       <h2>年表</h2>

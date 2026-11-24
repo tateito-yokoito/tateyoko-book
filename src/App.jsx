@@ -19330,6 +19330,8 @@ export function Scene_Recording({
   storyProgress = progress,
   userName,
   autoStart = false,
+  maxDurationSeconds = RECORDING_LIMIT_SECONDS,
+  preRecordNotice = '',
   seasonalMode = false,
   referencePhotos = [],
   onBack,
@@ -19453,7 +19455,7 @@ useEffect(() => {
       const seconds = clockRef.current.seconds();
       timeRef.current = seconds;
       setTime(seconds);
-      if (seconds >= RECORDING_LIMIT_SECONDS) stop("limit");
+      if (seconds >= maxDurationSeconds) stop("limit");
     };
     recordingTimerRef.current = setInterval(tick, 250);
     tick();
@@ -19471,7 +19473,7 @@ useEffect(() => {
 
     document.body.classList.remove("is-recording");
   };
-}, [step, isPaused]);
+}, [step, isPaused, maxDurationSeconds]);
 
 useEffect(() => {
     console.log("[recording-debug] mounted", {
@@ -20037,6 +20039,7 @@ return (
   <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} progressOverride={seasonalMode ? '1 / 1' : null} onBack={onBack ? () => requestSafeExit(onBack) : null} />
 
   <RecordingQuestionPrompt question={question} />
+  {step === 0 && preRecordNotice && <p className="mx-5 mt-4 text-sm leading-relaxed text-current">{preRecordNotice}</p>}
 
   {referencePhotos.length > 0 && <div className="sm-recording-photos" aria-label="語りながら見る写真">
     {referencePhotos.map((url, index) => <img key={url} src={url} alt={`参考の写真 ${index + 1}`} />)}
@@ -20277,7 +20280,7 @@ return (
           <p className="text-white/50 text-sm mt-3">次の保存操作まで文章は確定しません。</p>
         </div>}
         {data.wholeTextPolishError && <p role="status" className="mb-5 text-amber-200">{data.wholeTextPolishError}</p>}
-        {data.recordingStopReason === "limit" && <p role="status" className="mb-5 text-white/70 text-[1rem] leading-loose text-center">{RECORDING_LIMIT_NOTICE}</p>}
+        {data.recordingStopReason === "limit" && <p role="status" className="mb-5 text-white/70 text-[1rem] leading-loose text-center">{maxDurationSeconds < RECORDING_LIMIT_SECONDS ? `${maxDurationSeconds}秒になったため、録音を区切りました。` : RECORDING_LIMIT_NOTICE}</p>}
         {hasTranscriptionError && (
           <div className="glass-card p-5 mb-6">
             <p className="text-white/75 text-[1rem] leading-loose mb-3">
