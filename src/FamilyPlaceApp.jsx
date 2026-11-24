@@ -1007,7 +1007,10 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
         startProfile(people.find(item => item.id === id), true, section);
       }} onHome={goHome} restoreScrollLeft={treeViewRef.current.centerId === treeCenterId
         ? treeViewRef.current.scrollLeft : null}
-      onScrollLeft={scrollLeft => { treeViewRef.current.scrollLeft = scrollLeft;
+      restoreScrollTop={treeViewRef.current.centerId === treeCenterId
+        ? treeViewRef.current.scrollTop : null}
+      onScrollLeft={(scrollLeft, scrollTop) => { treeViewRef.current.scrollLeft = scrollLeft;
+        treeViewRef.current.scrollTop = scrollTop;
         treeViewRef.current.centerId = treeCenterId; }}
       suggestions={relationshipSuggestions} promptPersonId={promptAfterChange}
       onAnswerSuggestion={answerRelationshipSuggestion} busy={busy}/>}
