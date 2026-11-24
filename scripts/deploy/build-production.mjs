@@ -97,6 +97,7 @@ for(const compiled of filesUnder(outDir).filter(p=>/\.(?:html|js|css)$/.test(p))
  }
 }
 const config=JSON.parse(fs.readFileSync('scripts/deploy/public-test.vercel.json','utf8').replaceAll('zpswxefgfabzvxdbtyvq',ref));
+config.rewrites=JSON.parse(fs.readFileSync('vercel.json','utf8')).rewrites;
 for(const route of config.headers||[])for(const header of route.headers||[]){
  if(header.key==='X-Tateyoko-Environment')header.value='production';
  if(header.key==='Content-Security-Policy')header.value=header.value.replace("frame-ancestors 'none'","frame-ancestors 'self'");
