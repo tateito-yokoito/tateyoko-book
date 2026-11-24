@@ -113,6 +113,11 @@
     margin: 0;
     padding: 0;
   }
+  .landing-site .hp-hero-nov8 .hp-hero-start-actions .hp-hero-free-note {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 16px;
+  }
   .landing-site .hp-hero-nov8 .hp-hero-start-actions :is(.hp-button, .hp-hero-purchase-button) {
     position: relative;
     display: flex;
