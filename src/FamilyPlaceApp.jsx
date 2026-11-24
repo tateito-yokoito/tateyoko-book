@@ -226,6 +226,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
   const [memoryPhotoPreview, setMemoryPhotoPreview] = useState('');
   const [memoryPhotoOpen, setMemoryPhotoOpen] = useState(false);
   const [publishedBooks, setPublishedBooks] = useState([]);
+  const [demoPublishedBook, setDemoPublishedBook] = useState(null);
   const [visibleBookProjects, setVisibleBookProjects] = useState([]);
   const [projectsStatus, setProjectsStatus] = useState('loading');
   const [booksStatus, setBooksStatus] = useState('loading');
@@ -321,8 +322,21 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     const [nextFacts, nextStories, bookResult, projectResult] = await Promise.all([
       familyPlaceFacts(dataClient, personId),
       familyPlaceStories(dataClient, personId),
-      familyPlacePublishedBooks(dataClient, personId)
-        .then(data => ({ data })).catch(error => ({ error })),
+      publicDemo && personId === 'self'
+        ? supabaseClient.functions.invoke('public-voice', {
+          body: { publicId:SAMPLE_WEB_BOOK_ID },
+        }).then(({ data, error }) => {
+          if (error || !data?.success || data.publication?.subjectName !== '紡木 誠')
+            throw error || new Error('完成BOOKのサンプルを読み込めませんでした');
+          return { data:[{
+            publication_id:SAMPLE_WEB_BOOK_ID, public_id:SAMPLE_WEB_BOOK_ID,
+            title:data.publication.title, subtitle:data.publication.subtitle,
+            subject_name:data.publication.subjectName,
+            published_at:data.publication.publishedAt,
+          }], publication:data.publication };
+        }).catch(error => ({ error }))
+        : familyPlacePublishedBooks(dataClient, personId)
+          .then(data => ({ data })).catch(error => ({ error })),
       familyPlaceVisibleBookProjects(dataClient, personId)
         .then(data => ({ data })).catch(error => ({ error })),
     ]);
@@ -330,8 +344,8 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     setFacts(nextFacts);
     setStories(nextStories);
     setMemories(publicDemo ? publicDemoMemories(personId) : []);
-    if (bookResult.error) { setPublishedBooks([]); setBooksStatus('error'); }
-    else { setPublishedBooks(bookResult.data); setBooksStatus('ready'); }
+    if (bookResult.error) { setPublishedBooks([]); setDemoPublishedBook(null); setBooksStatus('error'); }
+    else { setPublishedBooks(bookResult.data); setDemoPublishedBook(bookResult.publication || null); setBooksStatus('ready'); }
     if (projectResult.error) { setVisibleBookProjects([]); setProjectsStatus('error'); }
     else { setVisibleBookProjects(projectResult.data); setProjectsStatus('ready'); }
   }, [publicDemo]);
@@ -1036,8 +1050,9 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     </main>}
     {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories}
       memories={memories} onAddMemory={publicDemo ? startMemory : null}
-      supabaseClient={dataClient}
+      supabaseClient={publicDemo ? supabaseClient : dataClient}
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}
+      publishedPublication={demoPublishedBook} publicDemo={publicDemo}
       visibleBookProjects={visibleBookProjects} projectsStatus={projectsStatus}
       facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
       onTabChange={setActiveTab} onBack={personEntry === 'tree' ? returnToTree : goHome}

@@ -185,9 +185,11 @@ function RootScreen() {
       <PublishedWebBook
         supabaseClient={adminSupabaseClient}
         publicId={publicId}
-        returnLabel={params.get('demo_return') === '1' && publicId === SAMPLE_WEB_BOOK_ID ? '体験デモへ' : '本棚へ'}
-        returnHref={params.get('demo_return') === '1' && publicId === SAMPLE_WEB_BOOK_ID
-          ? '/demo' : /^[a-f0-9]{48}$/i.test(publicId)
+        returnLabel={params.has('demo_return') && publicId === SAMPLE_WEB_BOOK_ID
+          ? params.get('demo_return') === 'books' ? '本棚へ' : '体験デモへ' : '本棚へ'}
+        returnHref={params.has('demo_return') && publicId === SAMPLE_WEB_BOOK_ID
+          ? params.get('demo_return') === 'books' ? '/demo?person=self&tab=books' : '/demo'
+          : /^[a-f0-9]{48}$/i.test(publicId)
           && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(shelfPerson)
           ? `/?app=family_place&person=${encodeURIComponent(shelfPerson)}&tab=books&origin=${shelfOrigin}` : null}
       />

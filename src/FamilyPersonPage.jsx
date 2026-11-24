@@ -10,13 +10,14 @@ const bookDate = value => value ? new Intl.DateTimeFormat('ja-JP', {
   year: 'numeric', month: 'long', timeZone: 'Asia/Tokyo',
 }).format(new Date(value)) : '';
 
-function PublishedBookThumbnail({ book, supabaseClient }) {
-  const [publication, setPublication] = useState(null);
+function PublishedBookThumbnail({ book, supabaseClient, preloadedPublication = null }) {
+  const [publication, setPublication] = useState(preloadedPublication);
   const [coverUrl, setCoverUrl] = useState('');
   useEffect(() => {
     let live = true;
-    setPublication(null);
+    setPublication(preloadedPublication);
     setCoverUrl('');
+    if (preloadedPublication) return undefined;
     (async () => {
       let accessToken = '';
       try { accessToken = JSON.parse(localStorage.getItem(`tateyoko.voice.${book.public_id}.access.v1`) || '{}').token || ''; }
@@ -33,7 +34,7 @@ function PublishedBookThumbnail({ book, supabaseClient }) {
       if (live && !asset.error && asset.data?.success) setCoverUrl(asset.data.asset?.url || '');
     })().catch(() => {});
     return () => { live = false; };
-  }, [book.public_id, supabaseClient]);
+  }, [book.public_id, supabaseClient, preloadedPublication]);
   const cover = { title: book.title || '人生の物語', subtitle: book.subtitle || '',
     subjectName: book.subject_name || '', ...publication,
     coverImageUrl: publicationCoverImageUrl(book.public_id) };
@@ -44,12 +45,19 @@ function PublishedBookThumbnail({ book, supabaseClient }) {
 
 export default function FamilyPersonPage({ person, stories = [], books = [], booksStatus = 'ready',
   memories = [], onAddMemory = null,
+  publishedPublication = null, publicDemo = false,
   visibleBookProjects = [], projectsStatus = 'ready',
   facts = [], questions = [], activeTab = 'ring', onTabChange, onBack, onProfile,
   onOpenStory, onAddFact, onRetryBooks, supabaseClient, busy = false,
   backLabel = 'ホーム', entryOrigin = 'home', onOpenBook = null, onResumeBook = null }) {
   const [showQuestions, setShowQuestions] = useState(false);
   const saved = stories.filter(hasAnswer);
+  const publishedChapters = new Map();
+  for (const item of publishedPublication?.items || []) {
+    const title = item.chapterTitle || 'その他の語り';
+    if (!publishedChapters.has(title)) publishedChapters.set(title, []);
+    publishedChapters.get(title).push(item);
+  }
   const timeline = [...facts];
   const age = currentPersonAge(person);
   const purchasedProject = visibleBookProjects.find(project =>
@@ -107,6 +115,20 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
           onClick={() => onOpenStory(question)}>{question.slot}問目：{question.text}<ChevronRight aria-hidden="true"/></button>)}
         <p>質問文は暫定です。</p>
       </div>}
+      {publishedChapters.size > 0 && <section className="fp-published-ring" aria-label="完成BOOKから残された語り">
+        <h2>完成BOOKから</h2>
+        <p className="fp-person-section-note">完成したBOOKの語りを、テーマごとに振り返れます。</p>
+        {[...publishedChapters].map(([title, items]) => <details className="fp-published-chapter" key={title}>
+          <summary><span>{title}</span><small>{items.length}つの語り</small></summary>
+          <div className="fp-published-chapter-stories">{items.map(item => <details key={item.order}>
+            <summary>{item.question || '人生の語り'}</summary>
+            {item.transcript && <p>{item.transcript}</p>}
+            {(item.audio?.length > 0 || item.photos?.length > 0) &&
+              <small>{item.audio?.length > 0 ? '声' : ''}{item.audio?.length > 0 && item.photos?.length > 0 ? '・' : ''}{item.photos?.length > 0 ? '写真' : ''}はWebブックで見られます。</small>}
+          </details>)}</div>
+        </details>)}
+        <a href={`/?voice=${encodeURIComponent(books[0].public_id)}&demo_return=books`}>完成Webブックを開く<ChevronRight aria-hidden="true"/></a>
+      </section>}
     </section>}
     {activeTab === 'books' && <section className="fp-person-content" role="tabpanel">
       <h2>本棚</h2>
@@ -114,11 +136,14 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
         : booksStatus === 'error' ? <div className="fp-person-story-empty" role="alert">本棚を読み込めませんでした。<button type="button" onClick={onRetryBooks}>もう一度試す</button></div>
         : books.length ? <div className="fp-person-books">{books.map(book =>
           <article className="fp-person-book" key={book.publication_id}>
-            <PublishedBookThumbnail book={book} supabaseClient={supabaseClient}/>
+            <PublishedBookThumbnail book={book} supabaseClient={supabaseClient}
+              preloadedPublication={publicDemo && book.public_id === books[0]?.public_id ? publishedPublication : null}/>
             <div className="fp-person-book-copy"><strong>{book.title || '人生の物語'}</strong>
               {book.subtitle && <small>{book.subtitle}</small>}
               {book.published_at && <time>{bookDate(book.published_at)} 公開</time>}
-              <a href={`/?voice=${encodeURIComponent(book.public_id)}&family_shelf=${encodeURIComponent(person.id)}&origin=${entryOrigin}`}>
+              <a href={publicDemo
+                ? `/?voice=${encodeURIComponent(book.public_id)}&demo_return=books`
+                : `/?voice=${encodeURIComponent(book.public_id)}&family_shelf=${encodeURIComponent(person.id)}&origin=${entryOrigin}`}>
                 Webブックを読む<ChevronRight aria-hidden="true"/></a>
             </div>
           </article>)}</div>
