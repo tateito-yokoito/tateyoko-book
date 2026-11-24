@@ -6,7 +6,7 @@
       "main": false
     }
   },
-  "buildCommand": "VITE_LINE_AUTH_ENABLED=true npm run build",
+  "buildCommand": "VITE_LINE_AUTH_ENABLED=true VITE_FAMILY_PLACE_ENABLED=true npm run build",
   "outputDirectory": "dist",
   "headers": [
     {
