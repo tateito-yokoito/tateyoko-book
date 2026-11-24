@@ -39,7 +39,7 @@ serve(async request => {
     const browserId = String(form.get('browserId') || '');
     const questionText = String(form.get('questionText') || '').slice(0, 350);
     const durationSeconds = Number(form.get('durationSeconds'));
-    if (!(audio instanceof File) || !['audio/mp4','audio/webm','audio/aac','audio/mpeg','audio/ogg'].includes(audio.type)
+    if (!(audio instanceof File) || !['audio/mp4','audio/webm','audio/aac','audio/mpeg','audio/ogg','audio/wav'].includes(audio.type)
       || audio.size < 100 || audio.size > 1_000_000 || !Number.isFinite(durationSeconds)
       || durationSeconds <= 0 || durationSeconds > 30 || !/^[a-f0-9-]{36}$/i.test(browserId))
       return respond({ error:'30秒以内の録音を確認してください' }, 400);
