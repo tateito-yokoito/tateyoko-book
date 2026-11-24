@@ -39,6 +39,7 @@ const emptyPersonDraft = () => ({ family_name: '', given_name: '', family_name_k
 function PersonNameFields({ value, onChange, people = [], firstRegistration = false }) {
   const readingRef = useRef({});
   const imeEligibleRef = useRef({});
+  const composingRef = useRef({});
   const [autoFields, setAutoFields] = useState(() => new Set());
   const markAuto = (key, enabled) => setAutoFields(previous => {
     const next = new Set(previous);
@@ -47,7 +48,8 @@ function PersonNameFields({ value, onChange, people = [], firstRegistration = fa
   });
   const changeName = (key, name) => {
     const kanaKey = kanaFieldForName(key);
-    if (hasKanji(value?.[key]) && value[key] !== name) readingRef.current[key] = '';
+    if (!composingRef.current[key] && hasKanji(value?.[key]) && value[key] !== name)
+      readingRef.current[key] = '';
     const reading = normalizeKanaReading(name);
     if (reading) readingRef.current[key] = reading;
     const candidate = suggestNameReading(people,key,name,readingRef.current[key]);
@@ -68,8 +70,14 @@ function PersonNameFields({ value, onChange, people = [], firstRegistration = fa
         if (nameField) changeName(key,event.target.value);
         else { markAuto(key,false); onChange({ ...value, [key]:event.target.value }); }
       }} onCompositionStart={nameField ? () => {
+        composingRef.current[key] = true;
         imeEligibleRef.current[key] = !hasKanji(value?.[key]);
         readingRef.current[key] = '';
+      } : undefined}
+      onBeforeInput={nameField ? event => {
+        if (!composingRef.current[key] || !imeEligibleRef.current[key]) return;
+        const reading = normalizeKanaReading(event.nativeEvent?.data);
+        if (reading) readingRef.current[key] = reading;
       } : undefined}
       onCompositionUpdate={nameField ? event => {
         const reading = normalizeKanaReading(event.data);
@@ -77,6 +85,7 @@ function PersonNameFields({ value, onChange, people = [], firstRegistration = fa
       } : undefined}
       onCompositionEnd={nameField ? event => {
         if (imeEligibleRef.current[key]) changeName(key,event.currentTarget.value);
+        composingRef.current[key] = false;
         imeEligibleRef.current[key] = false;
       } : undefined}
       onBlur={nameField ? () => { readingRef.current[key] = ''; } : undefined}/>
