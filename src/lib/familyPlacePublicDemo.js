@@ -1,7 +1,7 @@
 // Local data source for the public, unauthenticated family-tree experience.
 // It implements only the Supabase operations used by the shared family UI.
 // Nothing in this module sends demo input to a server.
-const KEY = 'tateyoko.public-family-demo.v1';
+const KEY = 'tateyoko.public-family-demo.v2';
 const FAMILY_ID = 'demo-family';
 const USER_ID = 'demo-user';
 const uid = () => crypto.randomUUID();
@@ -9,15 +9,16 @@ const clone = value => structuredClone(value);
 
 function seed() {
   const people = [
-    ['self','架空','光','male',1984],
-    ['father','架空','誠','male',1958],
-    ['mother','架空','春子','female',1960],
-    ['spouse','架空','あかり','female',1986],
-    ['child','架空','実','',2016],
+    ['self','紡木','誠','male',1981],
+    ['father','紡木','健一','male',1958],
+    ['mother','紡木','和子','female',1960],
+    ['spouse','紡木','由美','female',1983],
+    ['child','紡木','悠','',2016],
   ].map(([id,family_name,given_name,gender,birth_year], index) => ({
     id, family_id:FAMILY_ID, family_name, given_name,
     display_name:`${family_name} ${given_name}`, gender:gender || null, birth_year,
-    birth_month:null, birth_day:null, death_year:null, notes:null,
+    birth_month:id === 'self' ? 4 : null,
+    birth_day:id === 'self' ? 28 : null, death_year:null, notes:null,
     family_name_kana:null, given_name_kana:null, maiden_name:null,
     maiden_name_kana:null, portrait_storage_path:null,
     portrait_source_storage_path:null, created_at:new Date(2020,0,index+1).toISOString(),
