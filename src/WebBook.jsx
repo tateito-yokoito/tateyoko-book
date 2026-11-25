@@ -35,6 +35,7 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
     return [...chapters.entries()];
   }, [sections.other]);
   const [story, setStory] = useState(null);
+  const [coverVariant, setCoverVariant] = useState('a');
   const [opened, setOpened] = useState(new Set());
   const [playing, setPlaying] = useState(null);
   const [active, setActive] = useState(null);
@@ -97,10 +98,12 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
     return <section className="wb-milestone">{closing&&<h2>おわりの章</h2>}<div>{video || item.audio?.length ? button(item,0,video,label):null}<button className="wb-title-button" onClick={() => openStory(item)}>{label}</button></div></section>;
   };
   const row = item => <div className="wb-question" key={item.order}>{item.audio?.length ? button(item,0,null,`${item.question}を聴く`):null}<button className="wb-title-button" onClick={() => openStory(item)}>{item.question || item.chapterTitle}</button><small>{time(audioTotal(item.audio))}</small></div>;
-  return <div className={`wb ${showFixed?'wb-has-player':''}`}>
+  const compareCovers = import.meta.env.VITE_WEB_BOOK_COVER_COMPARISON === 'true';
+  return <div className={`wb ${showFixed?'wb-has-player':''} ${compareCovers ? `wb-cover-compact wb-cover-${coverVariant}` : ''}`}>
     {previewLabel&&<aside className="wb-preview">{previewLabel}{onClose&&<button onClick={onClose}>確認を終える</button>}</aside>}
-    <header className="wb-header"><a className="wb-brand-link" href="/" target="_blank" rel="noopener noreferrer" aria-label="たて糸♾️よこ糸 公式サイトを新しいタブで開く"><strong>たて糸♾️よこ糸</strong><small>公式サイト ↗</small></a>
-      {returnHref && <button type="button" className="wb-shelf-link" onClick={() => setLeaveConfirm(true)}>家族アプリへ ↗</button>}
+    {compareCovers && <aside className="wb-cover-comparison" aria-label="表紙サイズ比較">表紙サイズ <button type="button" aria-pressed={coverVariant==='a'} onClick={()=>setCoverVariant('a')}>A・80％</button><button type="button" aria-pressed={coverVariant==='b'} onClick={()=>setCoverVariant('b')}>B・70％</button></aside>}
+    <header className="wb-header"><div className="wb-header-inner"><a className="wb-brand-link" href="/" target="_blank" rel="noopener noreferrer" aria-label="たて糸♾️よこ糸 公式サイトを新しいタブで開く"><strong>たて糸♾️よこ糸</strong><small>公式サイト ↗</small></a>
+      {returnHref && <button type="button" className="wb-shelf-link" onClick={() => setLeaveConfirm(true)}>家族アプリへ ↗</button>}</div>
     </header>
     {leaveConfirm && <div className="wb-leave-backdrop" onClick={() => setLeaveConfirm(false)}>
       <section className="wb-leave-dialog" role="dialog" aria-modal="true" aria-labelledby="wb-leave-title" onClick={event => event.stopPropagation()}>
@@ -128,7 +131,7 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
         {(publication.subjectName || createdOn) && <div className="wb-cover-meta">
           {publication.subjectName}{publication.subjectName && createdOn && '｜'}{createdOn && `${createdOn} 作成`}
         </div>}
-        {!!audioSequence.length&&<div className="wb-listen-book-entry"><p className="wb-listen-label">連続再生</p><button className="wb-listen-book" onClick={()=>startContinuous()}><Play size={18} aria-hidden="true"/>声で、この人生を辿る</button></div>}
+        {!!audioSequence.length&&<div className="wb-listen-book-entry"><button className="wb-listen-book" onClick={()=>startContinuous()}><Play size={18} aria-hidden="true"/>声で、この人生を辿る</button></div>}
         {sections.now.some(Boolean)&&<section className="wb-now"><h2>今の私</h2>{sections.now.map((item,i)=>item&&<div className="wb-now-row" key={item.order}><div><button className="wb-title-button" onClick={()=>openStory(item)}>{i===0?'最近の暮らし':'日々の楽しみ'}</button>{item.transcript&&<p>{item.transcript}</p>}</div>{item.audio?.length?button(item,0,null,`${i===0?'最近の暮らし':'日々の楽しみ'}を聴く`):null}</div>)}</section>}
         {milestone(sections.opening)}
         {!!sections.themes.length&&<section className="wb-themes"><h2>人生をたどる</h2>{sections.themes.map(theme=><section key={theme.code}><button className="wb-theme" aria-expanded={opened.has(theme.code)} onClick={()=>toggleChapter(theme.code)}><img src={theme.image} alt=""/><span className="wb-number">{String(theme.order).padStart(2,'0')}</span><span>{theme.label}</span><span className="wb-chapter-count">{theme.items.length}つの語り</span><ChevronDown size={18} style={{transform:opened.has(theme.code)?'rotate(180deg)':undefined}}/></button>{opened.has(theme.code)&&<div className="wb-questions">{theme.items.map(row)}</div>}</section>)}</section>}
@@ -138,7 +141,6 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
         {sections.unassignedVideos.map(v=><section className="wb-inline" key={v.videoIndex}>{button(null,0,v,'映像を見る')}<span>{v.title||'映像を見る'}</span></section>)}
       </>}
       {storyEntry?.isLast&&<footer className="wb-book-ending">また、この人生に逢いにくる。<small>縦糸横糸 Webブック</small><button className="wb-back" onClick={()=>{setStory(null);window.scrollTo?.({top:0});}}>目次へ戻る</button></footer>}
-      {(!story || storyEntry?.isLast) && <footer className="wb-service-credit"><p>このWebブックは『たて糸♾️よこ糸』で制作されました。</p><a href="/" target="_blank" rel="noopener noreferrer">たて糸♾️よこ糸について ↗</a></footer>}
     </main>
     {showFixed&&<aside className="wb-player" aria-label="再生プレイヤー">
       {activeEntry&&<p className="wb-player-chapter">{activeEntry.chapterLabel}</p>}

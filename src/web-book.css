@@ -43,13 +43,31 @@
 .wb-brand-link{display:flex;flex-direction:column;min-width:0;color:#365b3c;text-decoration:none;font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;line-height:1.35}
 .wb-brand-link strong{font-size:15px;white-space:nowrap}.wb-brand-link small{font-size:11px;font-weight:400}
 .wb-shelf-link{border:0;background:none;padding:10px 0;min-height:44px;font-size:13px;font-weight:600}
-.wb-brand-link:focus-visible,.wb-shelf-link:focus-visible,.wb-service-credit a:focus-visible,.wb-leave-dialog a:focus-visible{outline:2px solid #416955;outline-offset:3px}
+.wb-brand-link:focus-visible,.wb-shelf-link:focus-visible,.wb-leave-dialog a:focus-visible{outline:2px solid #416955;outline-offset:3px}
 .wb-leave-backdrop{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:#1a2d2599;font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif}
 .wb-leave-dialog{width:min(100%,420px);padding:28px 24px;border-radius:20px;background:#fffef9;box-shadow:0 18px 50px #10251b38;text-align:center}
 .wb-leave-dialog h2{font-size:21px;font-weight:700;letter-spacing:0;margin:0 0 14px}.wb-leave-dialog p{font-size:15px;line-height:1.8}
 .wb-leave-actions{display:grid;gap:10px;margin-top:24px}.wb-leave-actions a,.wb-leave-actions button{display:grid;place-items:center;min-height:48px;border:1px solid #527b32;border-radius:999px;text-decoration:none;font-size:16px;font-weight:700}
 .wb-leave-actions a{background:#527b32;color:white}.wb-leave-actions button{background:transparent;color:#365b3c}
 .wb-leave-fallback{display:block;margin-top:17px;color:#365b3c;font-size:13px;text-underline-offset:3px}
-.wb-service-credit{margin-top:70px;border-top:1px solid var(--wb-rule);padding-top:24px!important;padding-bottom:30px;font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-size:13px!important;letter-spacing:0!important;line-height:1.8}
-.wb-service-credit a{display:inline-block;margin-top:10px;color:#365b3c;font-size:14px;text-underline-offset:3px}
 @media(max-width:360px){.wb-brand-link strong{font-size:13px}.wb-shelf-link{font-size:12px}}
+.wb-header{max-width:none;padding:0;background:#eef2eb;border-bottom:1px solid #d9e2d8}
+.wb-header-inner{width:min(100%,640px);height:68px;margin:auto;padding:0 26px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.wb-brand-link strong{font-size:15px}.wb-shelf-link{font-size:14px;flex:none}
+.wb-cover-comparison{position:fixed;z-index:25;left:50%;bottom:12px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;width:max-content;max-width:calc(100% - 20px);padding:6px 9px;border:1px solid #b8c8b7;border-radius:999px;background:#fffef9f2;box-shadow:0 5px 18px #21352820;font:12px 'Noto Sans JP',sans-serif}
+.wb-cover-comparison button{min-height:36px;padding:4px 10px;border:1px solid #81977e;border-radius:999px;background:transparent;font-size:12px}
+.wb-cover-comparison button[aria-pressed=true]{background:#416955;color:#fff;border-color:#416955}
+.wb-cover-a{--wb-cover-scale:.8}.wb-cover-b{--wb-cover-scale:.7}
+@media(max-width:600px){
+  .wb-cover-compact .wb-cover-reference,.wb-cover-compact .wb-cover-print{width:calc(100% * var(--wb-cover-scale));margin-top:18px}
+  .wb-cover-compact .wb-cover-print{container-type:inline-size}
+  .wb-cover-compact .wb-cover-print .wb-name h1{font-size:8cqw}
+  .wb-cover-compact .wb-cover-print .wb-book-title{font-size:4.3cqw}
+  .wb-cover-compact .wb-cover-print .wb-subtitle{font-size:5cqw}
+  .wb-cover-compact .wb-cover-print .wb-date{font-size:3.4cqw}
+  .wb-cover-compact .wb-cover-print .wb-cover-brand{font-size:4.5cqw}
+  .wb-cover-compact .wb-cover-meta{width:calc(100% * var(--wb-cover-scale));margin:8px auto 20px;font-size:clamp(11px,3vw,14px);overflow-wrap:anywhere}
+  .wb-cover-compact .wb-listen-book{margin-bottom:22px}
+  .wb-cover-compact .wb-themes{margin-top:24px}
+}
+@media(max-width:360px){.wb-header-inner{padding-inline:16px;gap:8px}.wb-brand-link strong{font-size:13px}.wb-shelf-link{font-size:12px}}

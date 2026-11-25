@@ -15,6 +15,7 @@ execFileSync('node',['--test',
 const ref='wquxjeqkumossjxehdop';
 assert.equal(process.env.RELEASE_PRODUCTION_REF,ref);
 const enableBookProduction=process.env.RELEASE_ENABLE_BOOK_V2==='true';
+const webBookPreview=process.env.RELEASE_WEB_BOOK_PREVIEW==='true';
 const cli=process.env.QA_SUPABASE_CLI;
 const raw=cli?execFileSync(cli,['projects','api-keys','--project-ref',ref,'--output','json'],{encoding:'utf8',stdio:['ignore','pipe','pipe']}):null;
 const anon=raw?JSON.parse(raw.slice(raw.indexOf('['))).find(k=>k.name==='anon')?.api_key:process.env.RELEASE_SUPABASE_ANON_KEY;
@@ -29,7 +30,8 @@ Object.assign(process.env,{
  VITE_LINE_AUTH_ENABLED:'true',VITE_FREE_TRIAL_RETENTION_ENABLED:'true',
  VITE_FAMILY_PLACE_ENABLED:'true',
  VITE_BOOK_PRODUCTION_V2_ENABLED:String(enableBookProduction),
- VITE_BOOK_PDF_ENABLED:String(enableBookProduction)
+ VITE_BOOK_PDF_ENABLED:String(enableBookProduction),
+ VITE_WEB_BOOK_COVER_COMPARISON:String(webBookPreview)
 });
 const root=process.cwd(),outDir=path.join(root,'output/production-stage');
 const filesUnder=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?filesUnder(path.join(dir,e.name)):[path.join(dir,e.name)]);
@@ -99,7 +101,7 @@ for(const compiled of filesUnder(outDir).filter(p=>/\.(?:html|js|css)$/.test(p))
 const config=JSON.parse(fs.readFileSync('scripts/deploy/public-test.vercel.json','utf8').replaceAll('zpswxefgfabzvxdbtyvq',ref));
 config.rewrites=JSON.parse(fs.readFileSync('vercel.json','utf8')).rewrites;
 for(const route of config.headers||[])for(const header of route.headers||[]){
- if(header.key==='X-Tateyoko-Environment')header.value='production';
+ if(header.key==='X-Tateyoko-Environment')header.value=webBookPreview?'preview':'production';
  if(header.key==='Content-Security-Policy')header.value=header.value.replace("frame-ancestors 'none'","frame-ancestors 'self'");
 }
 // Prevent premature indexing until the remaining physical-device/print checks.
@@ -122,7 +124,7 @@ assert.ok(files.some(p=>/AdminReview.*\.js$/.test(p)),'Admin missing');
 assert.ok(files.some(p=>/FamilyPlaceApp.*\.js$/.test(p)),'Family app missing');
 fs.mkdirSync(path.join(outDir,'.vercel'),{recursive:true});
 fs.writeFileSync(path.join(outDir,'.vercel/project.json'),JSON.stringify({projectId:'prj_WZM2OzVMdtm4x6VbwWLeISqMzjM4',orgId:'team_027fdPcnI7A33ybpJtw7Db4D',projectName:'tateyoko-book'}));
-const report={ref,at:new Date().toISOString(),adminBundle:true,sourceMaps:false,testEndpointConfigured:false,bookProductionEnabled:enableBookProduction,deployed:false,
+const report={ref,at:new Date().toISOString(),adminBundle:true,sourceMaps:false,testEndpointConfigured:false,bookProductionEnabled:enableBookProduction,webBookPreview,deployed:false,
  files:files.map(p=>({file:path.relative(outDir,p),sha256:crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')}))};
 fs.mkdirSync('output/production-cutover-20260916',{recursive:true});
 fs.writeFileSync('output/production-cutover-20260916/build-manifest.json',JSON.stringify(report,null,2));
