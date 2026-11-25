@@ -102,7 +102,7 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
   return <div className={`wb ${showFixed?'wb-has-player':''} ${compareCovers ? `wb-cover-compact wb-cover-${coverVariant}` : ''}`}>
     {previewLabel&&<aside className="wb-preview">{previewLabel}{onClose&&<button onClick={onClose}>確認を終える</button>}</aside>}
     {compareCovers && <aside className="wb-cover-comparison" aria-label="表紙サイズ比較">表紙サイズ <button type="button" aria-pressed={coverVariant==='a'} onClick={()=>setCoverVariant('a')}>A・80％</button><button type="button" aria-pressed={coverVariant==='b'} onClick={()=>setCoverVariant('b')}>B・70％</button></aside>}
-    <header className="wb-header"><div className="wb-header-inner"><a className="wb-brand-link" href="/" target="_blank" rel="noopener noreferrer" aria-label="たて糸♾️よこ糸 公式サイトを新しいタブで開く"><strong>たて糸♾️よこ糸</strong><small>公式サイト ↗</small></a>
+    <header className="wb-header"><div className="wb-header-inner"><a className="wb-brand-link" href="https://www.tateito-yokoito.jp/" target="_blank" rel="noopener noreferrer" aria-label="たて糸♾️よこ糸 公式サイトを新しいタブで開く"><strong>たて糸♾️よこ糸</strong><small>公式サイト ↗</small></a>
       {returnHref && <button type="button" className="wb-shelf-link" onClick={() => setLeaveConfirm(true)}>家族アプリへ ↗</button>}</div>
     </header>
     {leaveConfirm && <div className="wb-leave-backdrop" onClick={() => setLeaveConfirm(false)}>
