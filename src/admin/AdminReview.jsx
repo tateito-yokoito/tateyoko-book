@@ -50,6 +50,7 @@ import CoreDailyKpis from './CoreDailyKpis.jsx';
 import Ga4Summary from './Ga4Summary.jsx';
 import {normalizeUserQuestions} from '../App.jsx';
 import { AccountOverview, ProjectOverview } from './AdminDetailOverview.jsx';
+import AccountDeletionPanel from './AccountDeletionPanel.jsx';
 
 const TAB_ITEMS = [
   { id: "attention", label: "要対応", icon: AlertCircle },
@@ -1377,6 +1378,7 @@ function AccountDetailPanel({
   onOpenAccount,
   onMoveToTrash,
   onRestore,
+  onDeleted,
   canTrash,
   hiddenEntry,
   trashLoading,
@@ -1462,6 +1464,9 @@ function AccountDetailPanel({
                   最新の件数と影響範囲を再取得し、確認画面を表示します。この時点では停止しません。
                 </p>
               </section>
+            )}
+            {canTrash && !hiddenEntry && (
+              <AccountDeletionPanel client={supabaseClient} account={account} onDeleted={onDeleted} />
             )}
           </div>
         )}
@@ -3117,6 +3122,11 @@ export default function AdminReview({ supabaseClient }) {
             owned_project_count: accountDetail?.owned_projects?.length || 0
           })}
           onRestore={restoreFromTrash}
+          onDeleted={async () => {
+            setAccountDetailId(null);
+            setAccountDetail(null);
+            await loadDashboard();
+          }}
           onClose={() => { accountDetailRequestRef.current += 1; setTrashActionError(""); setAccountDetailId(null); setAccountDetail(null); }}
         />
       )}
