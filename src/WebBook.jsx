@@ -35,7 +35,6 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
     return [...chapters.entries()];
   }, [sections.other]);
   const [story, setStory] = useState(null);
-  const [coverVariant, setCoverVariant] = useState('a');
   const [opened, setOpened] = useState(new Set());
   const [playing, setPlaying] = useState(null);
   const [active, setActive] = useState(null);
@@ -98,11 +97,9 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
     return <section className="wb-milestone">{closing&&<h2>おわりの章</h2>}<div>{video || item.audio?.length ? button(item,0,video,label):null}<button className="wb-title-button" onClick={() => openStory(item)}>{label}</button></div></section>;
   };
   const row = item => <div className="wb-question" key={item.order}>{item.audio?.length ? button(item,0,null,`${item.question}を聴く`):null}<button className="wb-title-button" onClick={() => openStory(item)}>{item.question || item.chapterTitle}</button><small>{time(audioTotal(item.audio))}</small></div>;
-  const compareCovers = import.meta.env.VITE_WEB_BOOK_COVER_COMPARISON === 'true';
-  return <div className={`wb ${showFixed?'wb-has-player':''} ${compareCovers ? `wb-cover-compact wb-cover-${coverVariant}` : ''}`}>
+  return <div className={`wb wb-cover-compact ${showFixed?'wb-has-player':''}`}>
     {previewLabel&&<aside className="wb-preview">{previewLabel}{onClose&&<button onClick={onClose}>確認を終える</button>}</aside>}
-    {compareCovers && <aside className="wb-cover-comparison" aria-label="表紙サイズ比較">表紙サイズ <button type="button" aria-pressed={coverVariant==='a'} onClick={()=>setCoverVariant('a')}>A・80％</button><button type="button" aria-pressed={coverVariant==='b'} onClick={()=>setCoverVariant('b')}>B・70％</button></aside>}
-    <header className="wb-header"><div className="wb-header-inner"><a className="wb-brand-link" href="https://www.tateito-yokoito.jp/" target="_blank" rel="noopener noreferrer" aria-label="たて糸♾️よこ糸 公式サイトを新しいタブで開く"><strong>たて糸♾️よこ糸</strong><small>公式サイト ↗</small></a>
+    <header className="wb-header"><div className="wb-header-inner"><a className="wb-brand-link" href="https://www.tateito-yokoito.jp/" target="_blank" rel="noopener noreferrer" aria-label="たて糸♾️よこ糸 公式サイトを新しいタブで開く">たて糸♾️よこ糸</a>
       {returnHref && <button type="button" className="wb-shelf-link" onClick={() => setLeaveConfirm(true)}>家族アプリへ ↗</button>}</div>
     </header>
     {leaveConfirm && <div className="wb-leave-backdrop" onClick={() => setLeaveConfirm(false)}>

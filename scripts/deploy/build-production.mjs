@@ -30,8 +30,7 @@ Object.assign(process.env,{
  VITE_LINE_AUTH_ENABLED:'true',VITE_FREE_TRIAL_RETENTION_ENABLED:'true',
  VITE_FAMILY_PLACE_ENABLED:'true',
  VITE_BOOK_PRODUCTION_V2_ENABLED:String(enableBookProduction),
- VITE_BOOK_PDF_ENABLED:String(enableBookProduction),
- VITE_WEB_BOOK_COVER_COMPARISON:String(webBookPreview)
+ VITE_BOOK_PDF_ENABLED:String(enableBookProduction)
 });
 const root=process.cwd(),outDir=path.join(root,'output/production-stage');
 const filesUnder=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?filesUnder(path.join(dir,e.name)):[path.join(dir,e.name)]);
