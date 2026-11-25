@@ -99,8 +99,8 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
   const row = item => <div className="wb-question" key={item.order}>{item.audio?.length ? button(item,0,null,`${item.question}を聴く`):null}<button className="wb-title-button" onClick={() => openStory(item)}>{item.question || item.chapterTitle}</button><small>{time(audioTotal(item.audio))}</small></div>;
   return <div className={`wb wb-cover-compact ${showFixed?'wb-has-player':''}`}>
     {previewLabel&&<aside className="wb-preview">{previewLabel}{onClose&&<button onClick={onClose}>確認を終える</button>}</aside>}
-    <header className="wb-header"><div className="wb-header-inner"><a className="wb-brand-link" href="https://www.tateito-yokoito.jp/" target="_blank" rel="noopener noreferrer" aria-label="たて糸♾️よこ糸 公式サイトを新しいタブで開く">たて糸♾️よこ糸</a>
-      {returnHref && <button type="button" className="wb-shelf-link" onClick={() => setLeaveConfirm(true)}>家族アプリへ ↗</button>}</div>
+    <header className="wb-header"><div className="wb-header-inner"><a className="wb-brand-link" href="https://www.tateito-yokoito.jp/" target="_blank" rel="noopener noreferrer" aria-label="たて糸♾️よこ糸サイトを新しいタブで開く">たて糸♾️よこ糸サイト</a>
+      {returnHref && <button type="button" className="wb-shelf-link" onClick={() => setLeaveConfirm(true)}>家族アプリ ↗</button>}</div>
     </header>
     {leaveConfirm && <div className="wb-leave-backdrop" onClick={() => setLeaveConfirm(false)}>
       <section className="wb-leave-dialog" role="dialog" aria-modal="true" aria-labelledby="wb-leave-title" onClick={event => event.stopPropagation()}>

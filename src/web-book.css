@@ -49,10 +49,10 @@
 .wb-leave-actions{display:grid;gap:10px;margin-top:24px}.wb-leave-actions a,.wb-leave-actions button{display:grid;place-items:center;min-height:48px;border:1px solid #527b32;border-radius:999px;text-decoration:none;font-size:16px;font-weight:700}
 .wb-leave-actions a{background:#527b32;color:white}.wb-leave-actions button{background:transparent;color:#365b3c}
 .wb-leave-fallback{display:block;margin-top:17px;color:#365b3c;font-size:13px;text-underline-offset:3px}
-.wb-header{max-width:none;padding:0;background:#eef2eb;border-bottom:1px solid #d9e2d8}
-.wb-header-inner{width:min(100%,640px);height:68px;margin:auto;padding:0 26px;display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:12px}
-.wb-header-inner>.wb-brand-link,.wb-header-inner>.wb-shelf-link{display:flex;align-items:center;justify-content:center;min-width:0;min-height:44px;margin:0;padding:6px 5px;border:1px solid #c5d3c3;border-bottom:2px solid #6e8a70;border-radius:5px;background:#e1e9df;color:#305b40;font-size:14px;font-weight:600;line-height:1.2;white-space:nowrap;text-align:center;cursor:pointer}
-.wb-header-inner>.wb-brand-link:hover,.wb-header-inner>.wb-shelf-link:hover{background:#d5e3d2}
+.wb-header{max-width:none;padding:0;background:#f3f2ee;border-bottom:1px solid #e2e0d9}
+.wb-header-inner{width:min(100%,640px);height:60px;margin:auto;padding:0 26px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.wb-header-inner>.wb-brand-link,.wb-header-inner>.wb-shelf-link{display:inline-flex;align-items:center;min-width:0;min-height:44px;margin:0;padding:0;border:0;border-radius:0;background:transparent;color:#305b40;font-size:14px;font-weight:600;line-height:1.2;white-space:nowrap;text-align:left;cursor:pointer}
+.wb-header-inner>.wb-brand-link:hover,.wb-header-inner>.wb-shelf-link:hover{text-decoration:underline;text-underline-offset:4px}
 .wb-cover-compact{--wb-cover-scale:.7}
 @media(max-width:600px){
   .wb-cover-compact .wb-cover-reference,.wb-cover-compact .wb-cover-print{width:calc(100% * var(--wb-cover-scale));margin-top:18px}
