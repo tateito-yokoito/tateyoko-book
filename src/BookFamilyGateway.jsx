@@ -11,7 +11,7 @@ export default function BookFamilyGateway({ client, publicId }) {
       const result = await bookFamilyAccess(client, publicId);
       if (!live) return;
       if (result.status === 'allowed') {
-        window.location.replace(`/app?tab=books&publication=${encodeURIComponent(publicId)}`);
+        window.location.replace('/app');
       } else setStatus(result.status);
     };
     void check();
@@ -29,7 +29,7 @@ export default function BookFamilyGateway({ client, publicId }) {
           <h1>家族のページへ</h1>
           <p>このBOOKは、家族の人生を残し、育んでいく『たて糸♾️よこ糸』から生まれました。</p>
           <div className="book-family-gateway-actions">
-            <a href={`/login?return_book=${encodeURIComponent(publicId)}`}>無料で始める</a>
+            <a href="/">たて糸♾️よこ糸とは</a>
             <a href={`/login?return_book=${encodeURIComponent(publicId)}`}>ログイン</a>
           </div>
         </> : <>

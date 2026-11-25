@@ -187,8 +187,8 @@ function RootScreen() {
         supabaseClient={adminSupabaseClient}
         publicId={publicId}
         returnLabel="家族のページへ"
-        returnHref={params.has('demo_return') && publicId === SAMPLE_WEB_BOOK_ID
-          ? '/demo?person=self&tab=books'
+        returnHref={publicId === SAMPLE_WEB_BOOK_ID
+          ? '/demo'
           : /^[a-f0-9]{48}$/i.test(publicId)
           ? `/?book_family=${encodeURIComponent(publicId)}` : null}
       />
