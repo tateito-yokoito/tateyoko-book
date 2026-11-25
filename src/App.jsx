@@ -10299,13 +10299,14 @@ export function Scene_Login({ onLogin, giftPreview, familyInvitePreview,
   };
 
   const handleStartLineRegistration = async () => {
-    if (!familyName.trim() || !givenName.trim()) {
+    if (!familyPlaceLogin && (!familyName.trim() || !givenName.trim())) {
       alert("お名前を入力してください。");
       return;
     }
     setLoading(true);
     try {
-      saveLineRegistrationDraft(window.sessionStorage, { familyName, givenName });
+      if (familyPlaceLogin) takeLineRegistrationDraft(window.sessionStorage);
+      else saveLineRegistrationDraft(window.sessionStorage, { familyName, givenName });
       const { error } = await startLineSignIn(supabaseClient, authReturnUrl);
       if (error) throw error;
     } catch (error) {
@@ -10402,7 +10403,7 @@ const checkExistingProfileByEmail = async (targetEmail) => {
       return;
     }
 
-    if (isNewMode && (!familyName.trim() || !givenName.trim())) {
+    if (isNewMode && !familyPlaceLogin && (!familyName.trim() || !givenName.trim())) {
       alert("お名前を入力してください。");
       return;
     }
@@ -10438,7 +10439,7 @@ if (isNewMode) {
     const { error } = await supabaseClient.auth.signInWithOtp({
       email: normalizedEmail,
       options: isNewMode
-        ? {
+        ? familyPlaceLogin ? { emailRedirectTo: authReturnUrl } : {
             emailRedirectTo: authReturnUrl,
             data: {
               family_name: familyName.trim(),
@@ -10546,7 +10547,7 @@ if (isNewMode) {
     const preferredName = givenName ? `${givenName}さん` : fullName || "あなた";
 
     const registrationData =
-      authMode === "new"
+      authMode === "new" && !familyPlaceLogin
         ? {
             email: normalizedEmail,
             familyName,
@@ -10708,6 +10709,13 @@ if (isNewMode) {
                   購入後もそのまま引き継がれます。
                 </p>
               </>
+            ) : familyPlaceLogin ? (
+              <>
+                <p className="text-[1.1rem] text-white/90">家族の物語をはじめる</p>
+                <p className="text-white/55 text-[0.95rem] leading-loose">
+                  はじめての方も、以前に利用した方も、同じアカウントで続けられます。
+                </p>
+              </>
             ) : (
               <>
                 <p className="text-[1.1rem] text-white/90">
@@ -10766,11 +10774,11 @@ if (isNewMode) {
             </p>
 
             <p className="ui-small">
-              {lineAuthEnabled ? "お名前を入力して、LINEかメールを選んでください。" : "お名前とメールアドレスを教えてください。"}
+              {familyPlaceLogin ? "LINEかメールアドレスを選んでください。お名前は認証後に登録できます。" : lineAuthEnabled ? "お名前を入力して、LINEかメールを選んでください。" : "お名前とメールアドレスを教えてください。"}
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {!familyPlaceLogin && <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="ui-label mb-2">姓</p>
               <input
@@ -10790,14 +10798,14 @@ if (isNewMode) {
                 onChange={e => setGivenName(e.target.value)}
               />
             </div>
-          </div>
+          </div>}
 
           {lineAuthEnabled && (
             <button
               type="button"
               onClick={handleStartLineRegistration}
-              disabled={!familyName.trim() || !givenName.trim() || loading}
-              className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${!familyName.trim() || !givenName.trim() || loading ? "opacity-40" : ""}`}
+              disabled={(!familyPlaceLogin && (!familyName.trim() || !givenName.trim())) || loading}
+              className={`btn-quiet bg-white/10 w-full py-4 rounded-full text-white ${(!familyPlaceLogin && (!familyName.trim() || !givenName.trim())) || loading ? "opacity-40" : ""}`}
             >
               {loading ? "LINEを開いています..." : "LINEで続ける"}
             </button>
@@ -10816,9 +10824,9 @@ if (isNewMode) {
           <button
             type="button"
             onClick={() => handleSendPin("new")}
-            disabled={!email || !familyName || !givenName || loading}
+            disabled={!email || (!familyPlaceLogin && (!familyName || !givenName)) || loading}
             className={`btn-quiet w-full py-4 rounded-full text-sm ${
-              !email || !familyName || !givenName || loading ? "opacity-40" : ""
+              !email || (!familyPlaceLogin && (!familyName || !givenName)) || loading ? "opacity-40" : ""
             }`}
           >
             {loading ? "送信中..." : "ログイン用メールを送る"}
