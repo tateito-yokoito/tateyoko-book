@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Play, Pause, Volume2, ChevronDown, ArrowLeft, House } from 'lucide-react';
+import { Play, Pause, Volume2, ChevronDown, ArrowLeft } from 'lucide-react';
 import { webBookSections, webBookStorySequence, webBookAudioSequence } from './lib/webBook.js';
 import './web-book.css';
 import WebBookCover from './WebBookCover.jsx';
@@ -19,7 +19,8 @@ const creationDate = value => {
 
 // Same presentation for an authorized draft preview and an immutable published work.
 // This component has no DB client and cannot publish, edit, or change sharing.
-export default function WebBook({ publication, resolveAsset, previewLabel, onClose, returnHref, returnLabel = '家族のページへ' }) {
+export default function WebBook({ publication, resolveAsset, previewLabel, onClose, returnHref }) {
+  const [leaveConfirm, setLeaveConfirm] = useState(false);
   const sections = webBookSections(publication);
   const createdOn = creationDate(publication.publishedAt);
   const sequence = useMemo(()=>webBookStorySequence(publication),[publication]);
@@ -98,11 +99,17 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
   const row = item => <div className="wb-question" key={item.order}>{item.audio?.length ? button(item,0,null,`${item.question}を聴く`):null}<button className="wb-title-button" onClick={() => openStory(item)}>{item.question || item.chapterTitle}</button><small>{time(audioTotal(item.audio))}</small></div>;
   return <div className={`wb ${showFixed?'wb-has-player':''}`}>
     {previewLabel&&<aside className="wb-preview">{previewLabel}{onClose&&<button onClick={onClose}>確認を終える</button>}</aside>}
-    <header className="wb-header"><img src="/brand-logo-official.svg" alt="縦糸横糸"/><span>Webブック</span>
-      {returnHref && <a className="wb-shelf-link" href={returnHref}>
-        <House size={18} aria-hidden="true"/>
-        {returnLabel}</a>}
+    <header className="wb-header"><a className="wb-brand-link" href="/" target="_blank" rel="noopener noreferrer" aria-label="たて糸♾️よこ糸 公式サイトを新しいタブで開く"><strong>たて糸♾️よこ糸</strong><small>公式サイト ↗</small></a>
+      {returnHref && <button type="button" className="wb-shelf-link" onClick={() => setLeaveConfirm(true)}>家族アプリへ ↗</button>}
     </header>
+    {leaveConfirm && <div className="wb-leave-backdrop" onClick={() => setLeaveConfirm(false)}>
+      <section className="wb-leave-dialog" role="dialog" aria-modal="true" aria-labelledby="wb-leave-title" onClick={event => event.stopPropagation()}>
+        <h2 id="wb-leave-title">家族アプリを開きますか？</h2>
+        <p>このWebブックを開いたまま、<br/>新しいタブで開きます。</p>
+        <div className="wb-leave-actions"><a href={returnHref} target="_blank" rel="noopener noreferrer" onClick={() => setLeaveConfirm(false)}>開く ↗</a><button type="button" onClick={() => setLeaveConfirm(false)}>キャンセル</button></div>
+        <a className="wb-leave-fallback" href={returnHref}>別タブで開けない場合は、このタブで開く</a>
+      </section>
+    </div>}
     <main>
       {story ? <article className="wb-story"><button className="wb-back" onClick={() => {setStory(null);window.scrollTo?.({top:0});}}><ArrowLeft size={17}/>目次へ戻る</button>
         <p className="wb-eyebrow">{story.contributionId ? `${story.contributorName || '大切な人'}の語り` : story.chapterTitle}</p><h1>{story.question}</h1>
@@ -131,6 +138,7 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
         {sections.unassignedVideos.map(v=><section className="wb-inline" key={v.videoIndex}>{button(null,0,v,'映像を見る')}<span>{v.title||'映像を見る'}</span></section>)}
       </>}
       {storyEntry?.isLast&&<footer className="wb-book-ending">また、この人生に逢いにくる。<small>縦糸横糸 Webブック</small><button className="wb-back" onClick={()=>{setStory(null);window.scrollTo?.({top:0});}}>目次へ戻る</button></footer>}
+      {(!story || storyEntry?.isLast) && <footer className="wb-service-credit"><p>このWebブックは『たて糸♾️よこ糸』で制作されました。</p><a href="/" target="_blank" rel="noopener noreferrer">たて糸♾️よこ糸について ↗</a></footer>}
     </main>
     {showFixed&&<aside className="wb-player" aria-label="再生プレイヤー">
       {activeEntry&&<p className="wb-player-chapter">{activeEntry.chapterLabel}</p>}

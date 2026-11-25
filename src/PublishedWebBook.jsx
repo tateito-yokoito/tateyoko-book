@@ -11,7 +11,7 @@ function readAccess(publicId) {
 
 // The printed QR identifies a publication. Its reader deliberately shares the
 // exact presentation component used by the administrator's draft preview.
-export default function PublishedWebBook({ supabaseClient, publicId, returnHref = null, returnLabel = '家族のページへ' }) {
+export default function PublishedWebBook({ supabaseClient, publicId, returnHref = null }) {
   const [state, setState] = useState({ status: 'loading', publication: null, invalidCode: false });
   const [code, setCode] = useState('');
   const assetCache = useRef(new Map());
@@ -64,7 +64,7 @@ export default function PublishedWebBook({ supabaseClient, publicId, returnHref 
     // printed cover until the sample is republished with a cover asset.
     const sampleCover = publicationCoverImageUrl(publicId);
     return <WebBook publication={{ ...state.publication, coverImageUrl: sampleCover }}
-      resolveAsset={resolveAsset} returnHref={returnHref} returnLabel={returnLabel} />;
+      resolveAsset={resolveAsset} returnHref={returnHref} />;
   }
   return <main className="wb wb-message">
     {state.status === 'loading' && <p role="status">Webブックを読み込んでいます…</p>}

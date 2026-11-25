@@ -12,6 +12,10 @@ export default function BookFamilyGateway({ client, publicId }) {
       if (!live) return;
       if (result.status === 'allowed') {
         window.location.replace('/app');
+      } else if (result.status === 'signed-out') {
+        window.location.replace(`/login?return_book=${encodeURIComponent(publicId)}`);
+      } else if (result.status === 'other-family') {
+        window.location.replace('/app');
       } else setStatus(result.status);
     };
     void check();
