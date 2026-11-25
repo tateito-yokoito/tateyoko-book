@@ -20,7 +20,8 @@ const creationDate = value => {
 // Same presentation for an authorized draft preview and an immutable published work.
 // This component has no DB client and cannot publish, edit, or change sharing.
 export default function WebBook({ publication, resolveAsset, previewLabel, onClose, returnHref }) {
-  const [leaveConfirm, setLeaveConfirm] = useState(false);
+  const [leaveConfirm, setLeaveConfirm] = useState(null);
+  const leaveHref = leaveConfirm === 'site' ? 'https://www.tateito-yokoito.jp/' : returnHref;
   const sections = webBookSections(publication);
   const createdOn = creationDate(publication.publishedAt);
   const sequence = useMemo(()=>webBookStorySequence(publication),[publication]);
@@ -99,15 +100,15 @@ export default function WebBook({ publication, resolveAsset, previewLabel, onClo
   const row = item => <div className="wb-question" key={item.order}>{item.audio?.length ? button(item,0,null,`${item.question}を聴く`):null}<button className="wb-title-button" onClick={() => openStory(item)}>{item.question || item.chapterTitle}</button><small>{time(audioTotal(item.audio))}</small></div>;
   return <div className={`wb wb-cover-compact ${showFixed?'wb-has-player':''}`}>
     {previewLabel&&<aside className="wb-preview">{previewLabel}{onClose&&<button onClick={onClose}>確認を終える</button>}</aside>}
-    <header className="wb-header"><div className="wb-header-inner"><a className="wb-brand-link" href="https://www.tateito-yokoito.jp/" target="_blank" rel="noopener noreferrer" aria-label="たて糸♾️よこ糸サイトを新しいタブで開く">たて糸♾️よこ糸サイト</a>
-      {returnHref && <button type="button" className="wb-shelf-link" onClick={() => setLeaveConfirm(true)}>家族アプリ ↗</button>}</div>
+    <header className="wb-header"><div className="wb-header-inner"><button type="button" className="wb-brand-link" onClick={() => setLeaveConfirm('site')}>たて糸♾️よこ糸サイト</button>
+      {returnHref && <button type="button" className="wb-shelf-link" onClick={() => setLeaveConfirm('family')}>家族アプリ ↗</button>}</div>
     </header>
-    {leaveConfirm && <div className="wb-leave-backdrop" onClick={() => setLeaveConfirm(false)}>
+    {leaveConfirm && <div className="wb-leave-backdrop" onClick={() => setLeaveConfirm(null)}>
       <section className="wb-leave-dialog" role="dialog" aria-modal="true" aria-labelledby="wb-leave-title" onClick={event => event.stopPropagation()}>
-        <h2 id="wb-leave-title">家族アプリを開きますか？</h2>
+        <h2 id="wb-leave-title">{leaveConfirm === 'site' ? <>たて糸♾️よこ糸<br/>ご紹介サイトを開きますか？</> : '家族アプリを開きますか？'}</h2>
         <p>このWebブックを開いたまま、<br/>新しいタブで開きます。</p>
-        <div className="wb-leave-actions"><a href={returnHref} target="_blank" rel="noopener noreferrer" onClick={() => setLeaveConfirm(false)}>開く ↗</a><button type="button" onClick={() => setLeaveConfirm(false)}>キャンセル</button></div>
-        <a className="wb-leave-fallback" href={returnHref}>別タブで開けない場合は、このタブで開く</a>
+        <div className="wb-leave-actions"><a href={leaveHref} target="_blank" rel="noopener noreferrer" onClick={() => setLeaveConfirm(null)}>開く ↗</a><button type="button" onClick={() => setLeaveConfirm(null)}>キャンセル</button></div>
+        <a className="wb-leave-fallback" href={leaveHref}>別タブで開けない場合は、このタブで開く</a>
       </section>
     </div>}
     <main>
