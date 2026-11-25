@@ -143,7 +143,7 @@ export default function FamilyPersonPage({ person, stories = [], books = [], boo
               {book.published_at && <time>{bookDate(book.published_at)} 公開</time>}
               <a href={publicDemo
                 ? `/?voice=${encodeURIComponent(book.public_id)}&demo_return=books`
-                : `/?voice=${encodeURIComponent(book.public_id)}&family_shelf=${encodeURIComponent(person.id)}&origin=${entryOrigin}`}>
+                : `/?voice=${encodeURIComponent(book.public_id)}`}>
                 Webブックを読む<ChevronRight aria-hidden="true"/></a>
             </div>
           </article>)}</div>

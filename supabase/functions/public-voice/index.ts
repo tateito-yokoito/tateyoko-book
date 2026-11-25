@@ -81,7 +81,7 @@ serve(async (req) => {
     }
 
     if (action === "asset") {
-      return createAssetResponse({ admin, body, publication });
+      return await createAssetResponse({ admin, body, publication });
     }
 
     const { data: itemRows, error: itemsError } = await admin

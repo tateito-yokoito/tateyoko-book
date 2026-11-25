@@ -312,7 +312,10 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     setHomeStoryCounts(counts);
     setSelfId(links.data?.find(link => persons.some(item => item.id === link.person_id))?.person_id || null);
     if (!publicDemo && window.location.pathname === '/login') {
-      window.history.replaceState(window.history.state, '',
+      const returnBook = new URLSearchParams(window.location.search).get('return_book');
+      if (/^[a-f0-9]{48}$/i.test(returnBook || ''))
+        window.location.replace(`/?book_family=${encodeURIComponent(returnBook)}`);
+      else window.history.replaceState(window.history.state, '',
         `/app${window.location.search}${window.location.hash}`);
     }
   }, [publicDemo]);
@@ -382,7 +385,14 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     accessCheck.then(({ data, error: accessError }) => {
       if (!live) return;
       if (accessError) throw accessError;
-      if (!data) { setAccessState('denied'); return; }
+      if (!data) {
+        const returnBook = window.location.pathname === '/login'
+          ? new URLSearchParams(window.location.search).get('return_book') : null;
+        if (/^[a-f0-9]{48}$/i.test(returnBook || ''))
+          window.location.replace(`/?book_family=${encodeURIComponent(returnBook)}`);
+        else setAccessState('denied');
+        return;
+      }
       setVerifiedUserId(user.id);
       setAccessState('allowed');
       return loadHome(user);

@@ -11,7 +11,7 @@ function readAccess(publicId) {
 
 // The printed QR identifies a publication. Its reader deliberately shares the
 // exact presentation component used by the administrator's draft preview.
-export default function PublishedWebBook({ supabaseClient, publicId, returnHref = null, returnLabel = '本棚へ' }) {
+export default function PublishedWebBook({ supabaseClient, publicId, returnHref = null, returnLabel = '家族のページへ' }) {
   const [state, setState] = useState({ status: 'loading', publication: null, invalidCode: false });
   const [code, setCode] = useState('');
   const assetCache = useRef(new Map());

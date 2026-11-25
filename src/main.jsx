@@ -10,6 +10,7 @@ import { canonicalPurchaseUrl } from './lib/canonicalPurchaseUrl.js';
 import GiftThreeQuestionsPage from "./gift-three-questions.jsx";
 import VoiceLibraryPage from "./VoiceLibraryPage.jsx";
 import PublishedWebBook from "./PublishedWebBook.jsx";
+import BookFamilyGateway from './BookFamilyGateway.jsx';
 import { SAMPLE_WEB_BOOK_ID } from './WebBookCover.jsx';
 import { ThemeMemoryRequestRecipient } from "./ThemeMemoryRequestFlow.jsx";
 import StoryRequestRecipient from "./StoryRequestRecipient.jsx";
@@ -104,6 +105,8 @@ function PurchaseHandoffGate({ token }) {
 
 function RootScreen() {
   const params = new URLSearchParams(window.location.search);
+  if (params.has('book_family')) return <BookFamilyGateway
+    client={adminSupabaseClient} publicId={params.get('book_family') || ''}/>;
   // The person-centred free app is isolated until its questions and TEST
   // security checks are approved. Existing BOOK entry points stay unchanged.
   if (params.get('app') === 'family_place'
@@ -179,19 +182,15 @@ function RootScreen() {
 
   if (params.has("voice")) {
     const publicId = params.get("voice") || "";
-    const shelfPerson = params.get('family_shelf') || '';
-    const shelfOrigin = params.get('origin') === 'tree' ? 'tree' : 'home';
     return (
       <PublishedWebBook
         supabaseClient={adminSupabaseClient}
         publicId={publicId}
-        returnLabel={params.has('demo_return') && publicId === SAMPLE_WEB_BOOK_ID
-          ? params.get('demo_return') === 'books' ? '本棚へ' : '体験デモへ' : '本棚へ'}
+        returnLabel="家族のページへ"
         returnHref={params.has('demo_return') && publicId === SAMPLE_WEB_BOOK_ID
-          ? params.get('demo_return') === 'books' ? '/demo?person=self&tab=books' : '/demo'
+          ? '/demo?person=self&tab=books'
           : /^[a-f0-9]{48}$/i.test(publicId)
-          && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(shelfPerson)
-          ? `/?app=family_place&person=${encodeURIComponent(shelfPerson)}&tab=books&origin=${shelfOrigin}` : null}
+          ? `/?book_family=${encodeURIComponent(publicId)}` : null}
       />
     );
   }
