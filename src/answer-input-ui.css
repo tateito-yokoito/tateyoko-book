@@ -27,7 +27,7 @@
 .answer-review__summary{padding:14px 16px;border:1px solid var(--answer-line,var(--book-line, #c9cfc5));border-radius:10px;background:var(--answer-surface,var(--book-surface, #fffdf8));color:var(--answer-ink,var(--book-ink, #26352f));line-height:1.8}
 .answer-review__summary p{margin:0;white-space:pre-wrap}
 .answer-review__summary audio{display:block;width:100%;margin-top:8px}
-.answer-review__finish{width:100%;min-height:56px;border:0;border-radius:10px;background:var(--answer-green,var(--book-primary, #284c40));color:#fff;font-size:1rem;cursor:pointer}
+.answer-review__finish{width:100%;min-height:56px;border:0;border-radius:10px;background:var(--answer-green,var(--book-primary, #284c40));color:#fff;-webkit-text-fill-color:#fff;font-size:1rem;cursor:pointer}
 .answer-review__finish:disabled{opacity:.45;cursor:default}
 @media(max-width:359px){.answer-entry-choices button{font-size:.92rem;gap:5px}}
 
@@ -62,6 +62,7 @@
 .answer-text-layout--light textarea{background:var(--book-surface, #fffdf8);border-color:var(--book-line, #aebdaf);color:var(--book-ink, #26352f)}
 .answer-text-layout--light button{color:var(--book-primary, #284c40)}
 .answer-text-layout--light button.bg-white{background:var(--book-primary, #284c40);color:#fff;-webkit-text-fill-color:#fff}
+.answer-text-layout--light button.answer-review__finish{color:#fff;-webkit-text-fill-color:#fff}
 .answer-text-layout--light [role="dialog"]>div{background:var(--book-surface, #fffdf8);color:var(--book-ink, #26352f)}
 .answer-text-layout--light [role="dialog"] button.bg-white{background:var(--book-primary, #284c40);color:#fff}
 
