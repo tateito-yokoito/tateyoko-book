@@ -19,6 +19,7 @@ import {
 import { AnswerReview } from './AnswerInputUI.jsx';
 import { AnswerTextFields, AnswerTextLayout } from './AnswerTextShared.jsx';
 import TrialCompletionExperience from './TrialCompletionExperience.jsx';
+import './book-question-font-review.css';
 
 // TEST preview only. These are the production React scenes with inert, fictional props.
 const screens = [
@@ -50,6 +51,26 @@ const previewQuestion = {
   reassurance_text: '短くても大丈夫です。',
 };
 const open = key => window.location.assign(`?book_ui_review=${key}`);
+const questionFontOptions = [
+  ['a', 'A｜現行の明朝', 'Noto Serif JP · 400'],
+  ['b', 'B｜一段階太い明朝', 'Noto Serif JP · 500'],
+  ['c', 'C｜細めのゴシック', 'Noto Sans JP · 400'],
+];
+
+function QuestionFontComparison() {
+  return <main className="book-question-font-review">
+    <a href="?book_ui_review=index">← 画面一覧</a>
+    <h1>質問文の書体を比べる</h1>
+    <p>3案とも同じ質問・画面幅です。スマートフォンでは左右にスワイプして比較できます。変更するのは質問文の書体と太さだけです。</p>
+    <div className="book-question-font-review__screens">
+      {questionFontOptions.map(([key, label, font]) => <section key={key} aria-label={label}>
+        <div className="book-question-font-review__heading"><strong>{label}</strong><span>{font}</span></div>
+        <iframe title={label} src={`?book_ui_review=answer&question_font=${key}`} />
+        <a href={`?book_ui_review=answer&question_font=${key}`}>画面全体を見る ↗</a>
+      </section>)}
+    </div>
+  </main>;
+}
 
 function AnswerWritingPreview() {
   const [body, setBody] = React.useState('');
@@ -65,6 +86,7 @@ function AnswerWritingPreview() {
 }
 
 export default function BookUiReview({ screen }) {
+  if (screen === 'question_fonts') return <QuestionFontComparison />;
   if (!screen || screen === 'index' || !screens.some(([key]) => key === screen)) {
     return <main className="book-ui-review-index">
       <p>画面確認用プレビュー · 架空データ</p>
@@ -73,6 +95,7 @@ export default function BookUiReview({ screen }) {
       <nav aria-label="確認する画面">{screens.map(([key, label]) =>
         <a key={key} href={`?book_ui_review=${key}`}>{label} <span aria-hidden="true">›</span></a>
       )}
+        <a href="?book_ui_review=question_fonts">質問文の書体 A・B・C 比較 <span aria-hidden="true">›</span></a>
         <a href="/?app=1&entry=purchase">商品選択・認証入口 <span aria-hidden="true">›</span></a>
         <a href="/?commerce_review_preview=1">注文の最終確認 <span aria-hidden="true">›</span></a>
       </nav>
@@ -123,8 +146,9 @@ export default function BookUiReview({ screen }) {
     settings: <Scene_SettingsHome onBack={noop} onOpenDelivery={noop} onOpenPrivacy={noop}
       onOpenSupporters={noop} onOpenProfile={noop} onOpenContract={noop} />,
   }[screen];
+  const questionFont = screen === 'answer' ? new URLSearchParams(window.location.search).get('question_font') : null;
   return <>
-    <div className="app-container app-container--book-light book-ui-review-scene">{view}</div>
+    <div className={`app-container app-container--book-light book-ui-review-scene${['b', 'c'].includes(questionFont) ? ` book-question-font--${questionFont}` : ''}`}>{view}</div>
     <a className="book-ui-review-back" href="?book_ui_review=index">画面一覧</a>
   </>;
 }
