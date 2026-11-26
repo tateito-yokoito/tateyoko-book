@@ -15,6 +15,7 @@ import { SAMPLE_WEB_BOOK_ID } from './WebBookCover.jsx';
 import { ThemeMemoryRequestRecipient } from "./ThemeMemoryRequestFlow.jsx";
 import StoryRequestRecipient from "./StoryRequestRecipient.jsx";
 import "./index.css";
+import "./book-user-light.css";
 import "./hp-pc-balance.css";
 import FamilyConnectionTest from './FamilyConnectionTest.jsx';
 import FamilyRecordingFlow from './FamilyRecordingFlow.jsx';
@@ -31,6 +32,8 @@ const AdminReview = import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
   ? null : React.lazy(() => import('./admin/AdminReview.jsx'));
 const guestTrialEnabled = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true';
 const GuestTrialFlow = guestTrialEnabled ? React.lazy(() => import('./GuestTrialFlow.jsx')) : null;
+const BookUiReview = import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
+  ? React.lazy(() => import('./BookUiReview.jsx')) : null;
 const FamilyPlaceApp = import.meta.env.DEV || import.meta.env.VITE_FAMILY_PLACE_ENABLED === 'true'
   ? React.lazy(() => import('./FamilyPlaceApp.jsx')) : null;
 
@@ -105,6 +108,9 @@ function PurchaseHandoffGate({ token }) {
 
 function RootScreen() {
   const params = new URLSearchParams(window.location.search);
+  if (BookUiReview && params.has('book_ui_review')) {
+    return <React.Suspense fallback={<p>画面を準備しています…</p>}><BookUiReview screen={params.get('book_ui_review')} /></React.Suspense>;
+  }
   if (params.has('book_family')) return <BookFamilyGateway
     client={adminSupabaseClient} publicId={params.get('book_family') || ''}/>;
   // The person-centred free app is isolated until its questions and TEST
@@ -125,14 +131,14 @@ function RootScreen() {
     ? readCommercePurchaseIntent(window.localStorage) : null;
 
   if (GuestTrialFlow && params.has('guest_trial')) {
-    return <React.Suspense fallback={<p>体験を準備しています…</p>}><GuestTrialFlow /></React.Suspense>;
+    return <div className="book-user-light"><React.Suspense fallback={<p>体験を準備しています…</p>}><GuestTrialFlow /></React.Suspense></div>;
   }
 
   const handoffToken = purchaseHandoffToken(params.toString());
   if (import.meta.env.VITE_COMMERCE_V2_ENABLED === 'true'
     && params.get('entry') === 'purchase' && commercePurchaseReviewRequested()
     && !params.has('checkout') && handoffToken)
-    return <PurchaseHandoffGate token={handoffToken} />;
+    return <div className="book-user-light"><PurchaseHandoffGate token={handoffToken} /></div>;
 
   if (import.meta.env.VITE_COMMERCE_V2_ENABLED === 'true'
     && params.get('entry') === 'purchase' && commercePurchaseReviewRequested()
@@ -160,23 +166,23 @@ function RootScreen() {
     return <GiftThreeQuestionsPage />;
   }
 
-  if (params.has('supporter_sms')) return <SupporterSmsEntry client={adminSupabaseClient} inviteId={params.get('supporter_sms')} renderInvitation={props=><Scene_SupporterInviteReceived {...props} />} />;
+  if (params.has('supporter_sms')) return <div className="book-user-light"><SupporterSmsEntry client={adminSupabaseClient} inviteId={params.get('supporter_sms')} renderInvitation={props=><Scene_SupporterInviteReceived {...props} />} /></div>;
 
   if (import.meta.env.VITE_FAMILY_CONNECTION_TEST === 'true' && shouldOpenApplication()) {
     return <FamilyTestGate params={params} />;
   }
 
   if (params.has("memory_request")) {
-    if (params.has("request_token")) return <StoryRequestRecipient
+    if (params.has("request_token")) return <div className="book-user-light"><StoryRequestRecipient
       client={adminSupabaseClient}
       requestId={params.get("memory_request") || ""}
       requestToken={params.get("request_token") || ""}
-    />;
+    /></div>;
     return (
-      <ThemeMemoryRequestRecipient
+      <div className="book-user-light"><ThemeMemoryRequestRecipient
         supabaseClient={adminSupabaseClient}
         requestId={params.get("memory_request") || ""}
-      />
+      /></div>
     );
   }
 

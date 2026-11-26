@@ -7949,7 +7949,7 @@ setScene(1);
   };
 
   return (
-    <div className={`app-container ${scene === "family_invite_received" ? "app-container--family-invitation" : ""} ${TRIAL_CONVERSION_ENABLED && scene === "trial_complete" ? "app-container--trial-conversion" : ""} ${["onboarding_preferences", "notification_setup", "sharing_setup"].includes(scene) ? "app-container--desktop-setup" : ""} ${showSupportedStoryHeader ? "app-container--supported-story" : ""}`}>
+    <div className={`app-container app-container--book-light ${scene === "family_invite_received" ? "app-container--family-invitation" : ""} ${TRIAL_CONVERSION_ENABLED && scene === "trial_complete" ? "app-container--trial-conversion" : ""} ${["onboarding_preferences", "notification_setup", "sharing_setup"].includes(scene) ? "app-container--desktop-setup" : ""} ${showSupportedStoryHeader ? "app-container--supported-story" : ""}`}>
       <PersistentStorySkyBackdrop active={QUESTION_BACKGROUND === "sky" && (scene === 1 || scene === 3)} />
       {showSupportedStoryHeader && <SupporterContextFrame
         headerOnly
@@ -11366,7 +11366,7 @@ function Scene_PurchaseStart({
   );
 }
 
-function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFinish, ...connection }) {
+export function Scene_TrialComplete({ status, error, familyInvitation, onPurchase, onFinish, ...connection }) {
   if (TRIAL_CONVERSION_ENABLED && !COMMERCE_V2_ENABLED) return <TrialCompletionConnected {...connection} familyInvitation={familyInvitation}
     onPurchase={onPurchase} onPaidContinue={() => onPurchase({resumePaid:true})} onFinish={onFinish} />;
   const isWorking = status === "starting" || status === "checking";
@@ -11469,7 +11469,7 @@ function Scene_StaffContactWaiting() {
   );
 }
 
-function Scene_PurchaseSuccess({ hasTrial, onContinue }) {
+export function Scene_PurchaseSuccess({ hasTrial, onContinue }) {
   return (
     <div className="h-full flex flex-col items-center justify-center fade-enter px-6 text-center">
       <p className="text-[0.9375rem] tracking-[0.08em] text-amber-100/78">
@@ -11495,7 +11495,7 @@ function Scene_PurchaseSuccess({ hasTrial, onContinue }) {
   );
 }
 
-function Scene_GiftPurchaseSuccess({ order, gift, familyManaged = false, onStartManaged, onFinish }) {
+export function Scene_GiftPurchaseSuccess({ order, gift, familyManaged = false, onStartManaged, onFinish }) {
   const [copied, setCopied] = useState(false);
   const [consent, setConsent] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -11601,7 +11601,7 @@ function Scene_FamilyInvitePurchaseSuccess({ onFinish }) {
   );
 }
 
-function Scene_GiftReceived({ preview, onContinue }) {
+export function Scene_GiftReceived({ preview, onContinue }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -12560,7 +12560,7 @@ function Scene_ThemeResume({ theme, questionNumber, carriedTrial, onReviewCarrie
   );
 }
 
-function Scene_ThemeGuide({ onContinue }) {
+export function Scene_ThemeGuide({ onContinue }) {
   return (
     <div className="flow-scene-shell fade-enter answer-light-page">
       <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col">
