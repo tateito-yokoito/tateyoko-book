@@ -49,7 +49,8 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
   visibleBookProjects = [], projectsStatus = 'ready',
   facts = [], questions = [], activeTab = 'ring', onTabChange, onBack, onProfile,
   onOpenStory, onAddFact, onRetryBooks, supabaseClient, busy = false,
-  backLabel = 'ホーム', entryOrigin = 'home', onOpenBook = null, onResumeBook = null }) {
+  backLabel = 'ホーム', entryOrigin = 'home', onOpenBook = null, onResumeBook = null,
+  ringPreviewContent = null }) {
   const [showQuestions, setShowQuestions] = useState(false);
   const saved = stories.filter(hasAnswer);
   const savedCount = saved.length + bookStories.length;
@@ -102,6 +103,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
           onClick={() => onTabChange(key)}>{label}</button>)}
     </div>
     {activeTab === 'ring' && <section className="fp-person-content" role="tabpanel">
+      {ringPreviewContent || <>
       <h2>年輪</h2><p className="fp-person-section-note">人生の語りを、少しずつ残していく場所です。</p>
       {!questions.length && !savedCount ? <div className="fp-person-story-empty">年輪の体験は、次の段階で公開します。</div>
       : savedCount ? <div className="fp-person-stories">{saved.map(row =>
@@ -135,6 +137,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
         </details>)}
         <a href={`/?voice=${encodeURIComponent(books[0].public_id)}&demo_return=books`}>完成Webブックを開く<ChevronRight aria-hidden="true"/></a>
       </section>}
+      </>}
     </section>}
     {activeTab === 'books' && <section className="fp-person-content" role="tabpanel">
       <h2>本棚</h2>
