@@ -79,7 +79,7 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
             <span><strong>{theme}</strong><small>{rows.length}つの語り</small></span><ChevronDown aria-hidden="true"/>
           </button>
           {opened && <div className="fp-ring-theme-rows">{rows.map(story => <button className="fp-ring-story-row" key={`${story.source}-${story.id}`} type="button" onClick={() => openStory(story)}>
-            <span><strong>{story.visibility === 'private' && <LockKeyhole size={14} aria-label="自分だけ"/>}{story.question}</strong><small>{story.body}</small></span><ChevronRight aria-hidden="true"/>
+            <span><strong>{story.visibility === 'private' && <LockKeyhole size={14} aria-label="自分だけ"/>}{story.question}</strong><small>{story.body || '写真・音声で残した語り'}</small></span><ChevronRight aria-hidden="true"/>
           </button>)}</div>}
         </section>;
       })}</div>
@@ -102,7 +102,9 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
         <button type="button" className="fp-ring-cancel" onClick={() => setEditing(false)}>キャンセル</button>
       </div> : <article className="fp-ring-detail">
         <p className="fp-ring-detail-kicker">{selected.visibility === 'private' ? <><LockKeyhole size={16}/> 自分だけの語り</> : '家族と共有する語り'}</p>
-        <h2>{selected.question}</h2><p className="fp-ring-detail-body">{selected.body}</p>
+        <h2>{selected.question}</h2>{selected.body
+          ? <p className="fp-ring-detail-body">{selected.body}</p>
+          : <p className="fp-ring-detail-body">写真・音声で残した語りです。</p>}
         {media.filter(item => item.kind === 'photo').map(item => <img key={item.id} className="fp-ring-detail-photo" src={item.url} alt="語りに添えられた写真"/>)}
         {media.filter(item => item.kind === 'audio').map(item => <audio key={item.id} controls preload="none" src={item.url} aria-label="語りの音声"/>)}
         {media.filter(item => item.kind === 'video').map(item => <video key={item.id} controls playsInline preload="metadata" src={item.url} aria-label="語りの動画"/>)}

@@ -266,8 +266,24 @@ export async function familyPlaceBookStories(client, personId, projects, freeSto
       text_revision:edition.revision, ring_edition:edition,
     });
   }
+  const mediaOnlyIds = [...byAnswerId.values()].filter(answer =>
+    !String(answer.transcript_edited || answer.transcript_readable || answer.transcript_clean || '').trim())
+    .map(answer => answer.id);
+  const mediaAnswerIds = new Set();
+  if (mediaOnlyIds.length) {
+    const [assetResult, videoResult, ringResult] = await Promise.all([
+      client.from('media_assets').select('answer_id').in('answer_id', mediaOnlyIds),
+      client.from('video_stories').select('source_answer_id').in('source_answer_id', mediaOnlyIds),
+      client.from('family_ring_story_media').select('answer_id').in('answer_id', mediaOnlyIds),
+    ]);
+    for (const result of [assetResult, videoResult, ringResult]) {
+      if (result.error) throw result.error;
+      for (const row of result.data || []) mediaAnswerIds.add(row.answer_id || row.source_answer_id);
+    }
+  }
   const saved = [...byAnswerId.values()].filter(answer =>
-    String(answer.transcript_edited || answer.transcript_readable || answer.transcript_clean || '').trim());
+    String(answer.transcript_edited || answer.transcript_readable || answer.transcript_clean || '').trim()
+      || mediaAnswerIds.has(answer.id));
   if (!saved.length) return [];
   const questionIds = [...new Set(saved.map(answer => answer.user_question_id).filter(Boolean))];
   const { data: questions, error: questionError } = questionIds.length
