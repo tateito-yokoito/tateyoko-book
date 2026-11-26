@@ -11900,7 +11900,7 @@ export function Scene_OnboardingOverview({ onNext }) {
           ))}
         </div>
 
-        <button type="button" onClick={onNext} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-base font-medium text-white">
+        <button type="button" onClick={onNext} className="btn-quiet book-primary-action mt-10 w-full rounded-full bg-white/10 py-4 text-base font-medium text-white">
           サービスの進め方を見る
         </button>
       </div>
@@ -11948,7 +11948,7 @@ export function Scene_OnboardingPace({ onNext }) {
       <button
         type="button"
         onClick={onNext}
-        className="btn-quiet mt-4 bg-white/10 w-full py-4 rounded-full text-white"
+        className="btn-quiet book-primary-action mt-4 bg-white/10 w-full py-4 rounded-full text-white"
       >
         はじめの会話へ
       </button>
@@ -12440,7 +12440,7 @@ export function Scene_HajimariComplete({ onContinue, hasTrialStories = false }) 
             </label>)}
           </div>
         </fieldset>}
-        <button type="button" disabled={hasTrialStories && !trialCarryDecision} onClick={() => onContinue(trialCarryDecision)} className="btn-quiet mt-10 w-full rounded-full bg-white/10 py-4 text-white disabled:cursor-not-allowed disabled:opacity-40">
+        <button type="button" disabled={hasTrialStories && !trialCarryDecision} onClick={() => onContinue(trialCarryDecision)} className="btn-quiet book-primary-action mt-10 w-full rounded-full bg-white/10 py-4 text-white disabled:cursor-not-allowed disabled:opacity-40">
           {EXPERIENCE_V2_ENABLED ? "本編をはじめる" : "最初のテーマを見る"}
         </button>
       </div>
@@ -12603,7 +12603,7 @@ export function Scene_ThemeGuide({ onContinue }) {
           <button
             type="button"
             onClick={onContinue}
-            className="btn-quiet w-full rounded-full bg-white/10 py-4 text-white"
+            className="btn-quiet book-primary-action w-full rounded-full bg-white/10 py-4 text-white"
           >
             これからの歩き方を整える
           </button>

@@ -7,7 +7,6 @@ import {
   Scene_HajimariComplete,
   Scene_ThemeComplete,
   Scene_OwnStoryEntry,
-  Scene_TrialComplete,
   Scene_PurchaseSuccess,
   Scene_GiftPurchaseSuccess,
   Scene_GiftReceived,
@@ -19,6 +18,7 @@ import {
 } from './App.jsx';
 import { AnswerReview } from './AnswerInputUI.jsx';
 import { AnswerTextFields, AnswerTextLayout } from './AnswerTextShared.jsx';
+import TrialCompletionExperience from './TrialCompletionExperience.jsx';
 
 // TEST preview only. These are the production React scenes with inert, fictional props.
 const screens = [
@@ -98,7 +98,13 @@ export default function BookUiReview({ screen }) {
         onPhoto={noop} canFinish onFinish={() => open('home')} />
     </div>,
     entry: <Scene_OwnStoryEntry onBack={noop} onTryFree={noop} onPurchase={noop} />,
-    trial_done: <Scene_TrialComplete status="ready" onPurchase={noop} onFinish={noop} />,
+    trial_done: <TrialCompletionExperience
+      stories={[
+        { id: 'preview-1', question: '子どもの頃、夢中だったことは何ですか？', text: '家族で出かけた海のことを、今でもよく覚えています。', audio: [], photos: [], state: 'ready' },
+        { id: 'preview-2', question: '忘れられない出会いはありますか？', text: '友人と出会った日のことが、今も心に残っています。', audio: [], photos: [], state: 'ready' },
+        { id: 'preview-3', question: 'これまで大切にしてきたことは何ですか？', text: '身近な人と過ごす時間を大切にしてきました。', audio: [], photos: [], state: 'ready' },
+      ]}
+      subjectName="紡木 誠" quote={{ amount_total: 35000 }} reviewOnly onPurchase={noop} onFinish={noop} />,
     purchase_done: <Scene_PurchaseSuccess onContinue={noop} />,
     gift_done: <Scene_GiftPurchaseSuccess order={{}} gift={{ recipient_name: '紡木 由美' }} onFinish={noop} />,
     gift_received: <Scene_GiftReceived preview={{ recipient_name: '紡木 由美', purchaser_name: '紡木 誠', gift_message: '家族の物語を、一緒に残していこう。' }} onContinue={noop} />,

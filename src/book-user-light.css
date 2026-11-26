@@ -57,6 +57,13 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
   backdrop-filter: none;
 }
 :is(.app-container--book-light, .book-user-light) .btn-quiet:active { background: var(--book-page); }
+:is(.app-container--book-light, .book-user-light) .book-primary-action {
+  min-height: 52px;
+  background: var(--book-primary) !important;
+  border-color: var(--book-primary) !important;
+  color: var(--book-on-primary) !important;
+  font-size: var(--book-button-size);
+}
 :is(.app-container--book-light, .book-user-light) input.quiet-input {
   color: var(--book-ink);
   border-bottom-color: var(--book-line);
