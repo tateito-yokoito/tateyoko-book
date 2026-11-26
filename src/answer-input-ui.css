@@ -61,7 +61,7 @@
 .answer-text-layout--light [class*="border-white"]{border-color:var(--book-line, #c9cfc5)}
 .answer-text-layout--light textarea{background:var(--book-surface, #fffdf8);border-color:var(--book-line, #aebdaf);color:var(--book-ink, #26352f)}
 .answer-text-layout--light button{color:var(--book-primary, #284c40)}
-.answer-text-layout--light button.bg-white{background:var(--book-primary, #284c40);color:#fff}
+.answer-text-layout--light button.bg-white{background:var(--book-primary, #284c40);color:#fff;-webkit-text-fill-color:#fff}
 .answer-text-layout--light [role="dialog"]>div{background:var(--book-surface, #fffdf8);color:var(--book-ink, #26352f)}
 .answer-text-layout--light [role="dialog"] button.bg-white{background:var(--book-primary, #284c40);color:#fff}
 

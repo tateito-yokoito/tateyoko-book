@@ -24,8 +24,8 @@ export function resolveBookTheme(question = {}, answer = {}) {
   if (current) return { themeCode: current.code, themeLabel: current.label, themeOrder: current.order };
   const legacy = legacyChapters.find(([chapter]) => chapter === hint);
   if (legacy) return { themeCode: `legacy-${legacy[2]}`, themeLabel: legacy[1], themeOrder: legacy[2] };
-  if (hint === "はじめの会話" || hint === "体験の一頁") {
-    return { themeCode: "book-intro", themeLabel: "はじまり", themeOrder: 0 };
+  if (hint === "はじまりの章" || hint === "はじめの会話" || hint === "体験の一頁") {
+    return { themeCode: "book-intro", themeLabel: "はじまりの章", themeOrder: 0 };
   }
   return { themeCode: "", themeLabel: "", themeOrder: null };
 }
