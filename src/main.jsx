@@ -4,6 +4,7 @@ import App, { Scene_BookBuilder, Scene_Login, Scene_SupporterInviteReceived, sup
 import { SupporterSmsEntry } from './SupporterSms.jsx';
 import LandingPage from "./LandingPage.jsx";
 import PurchaseSelectionEntry from './PurchaseSelectionEntry.jsx';
+import CommerceV2Purchase from './CommerceV2Purchase.jsx';
 import { commercePurchaseReviewRequested, readCommercePurchaseIntent, saveCommercePurchaseIntent } from './lib/commercePurchaseIntent.js';
 import { purchaseHandoffToken, restorePurchaseHandoff, savePendingGuestHandoff } from './lib/commercePurchaseHandoff.js';
 import { canonicalPurchaseUrl } from './lib/canonicalPurchaseUrl.js';
@@ -105,6 +106,12 @@ function PurchaseHandoffGate({ token }) {
 
 function RootScreen() {
   const params = new URLSearchParams(window.location.search);
+  if (import.meta.env.VITE_PUBLIC_TEST_MODE === 'true' && params.has('commerce_review_preview'))
+    return <CommerceV2Purchase client={adminSupabaseClient} phase="review"
+      previewSubjectName="紡木 誠"
+      initialSelection={{ edition: 'standard', productionMethod: 'self_or_family',
+        standardExtraCount: 0, premiumExtraCount: 0, discountCode: '', purchaseFor: 'self' }}
+      onPreviewCheckout={() => window.alert('画面プレビューです。注文・決済は行いません。')} />;
   if (params.has('book_family')) return <BookFamilyGateway
     client={adminSupabaseClient} publicId={params.get('book_family') || ''}/>;
   // The person-centred free app is isolated until its questions and TEST

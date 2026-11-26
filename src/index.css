@@ -21,6 +21,11 @@ body {
   width: 100%;
 }
 
+body:has(.commerce-v2-review) {
+  background-color: #f8f7f2;
+  color: #243b31;
+}
+
 .app-container {
   --font-ui: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
   --font-display: 'Noto Serif JP', 'Hiragino Mincho ProN', serif;

@@ -345,36 +345,37 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   );
 
   if (isReview) return (
-    <section className="mx-auto max-w-2xl px-6 py-12 text-white">
-      {isPreview && <p role="status" className="mb-5 rounded-lg border border-amber-300 bg-amber-100 p-3 text-sm font-bold text-amber-950">画面プレビュー：実際の注文・決済は行いません。対象：{previewSubjectName}さん</p>}
-      <h1 className="text-2xl">注文内容の最終確認</h1>
-      <p className="mt-3 text-sm leading-7 text-white/75">お支払いの前に、選んだ内容と認証後の金額をご確認ください。</p>
-      <div className="mt-8 rounded-2xl border border-white/20 bg-white/[0.05] p-5">
-        <dl className="space-y-4">
-          <div className="flex justify-between gap-4"><dt className="text-white/70">商品</dt><dd className="text-right">{edition === 'premium' ? 'プレミアム' : 'スタンダード'}</dd></div>
-          <div className="flex justify-between gap-4"><dt className="text-white/70">購入対象</dt><dd className="text-right">{isPreview || familySubject ? `${previewSubjectName || familySubject?.name}さんのBOOK` : orderType === 'gift' ? `贈り物・${giftMode === 'family_managed' ? 'あなたのスマホで制作' : '贈り先の方のスマホで制作'}` : '自分の人生史'}</dd></div>
-          {orderType === 'gift' && <div className="flex justify-between gap-4"><dt className="text-white/70">物語のご本人</dt><dd className="text-right">{gift.recipient_name}</dd></div>}
-          <div className="flex justify-between gap-4"><dt className="text-white/70">制作方法</dt><dd className="text-right">{method === 'interview_staff' ? 'スタッフに聞き取ってもらう' : '自分・家族で制作する'}</dd></div>
-          {standardExtraCount > 0 && <div className="flex justify-between gap-4"><dt className="text-white/70">追加スタンダード冊子</dt><dd>{standardExtraCount}冊</dd></div>}
-          {premiumExtraCount > 0 && <div className="flex justify-between gap-4"><dt className="text-white/70">追加プレミアム冊子</dt><dd>{premiumExtraCount}冊</dd></div>}
-          {discountCode.trim() && <div className="flex justify-between gap-4"><dt className="text-white/70">割引コード</dt><dd className="break-all text-right">{discountCode.trim()}</dd></div>}
+    <section className="commerce-v2-review mx-auto min-h-[100dvh] w-full max-w-2xl bg-[#f8f7f2] px-5 pb-12 pt-10 font-sans text-[#243b31] sm:px-8 sm:pt-14">
+      {isPreview && <p role="status" className="mb-6 rounded-xl border border-[#d8d6bf] bg-[#f3f1e4] px-4 py-3 text-sm leading-6 text-[#555e42]">画面プレビュー：実際の注文・決済は行いません。対象：{previewSubjectName}さん</p>}
+      <p className="text-xs font-semibold tracking-[0.16em] text-[#6b805f]">BOOKのお申し込み</p>
+      <h1 className="mt-3 text-[1.65rem] font-semibold leading-relaxed tracking-[0.02em] sm:text-[1.85rem]">注文内容の最終確認</h1>
+      <p className="mt-2 text-[0.95rem] leading-7 text-[#5d6c61]">お支払いの前に、選んだ内容と認証後の金額をご確認ください。</p>
+      <div className="mt-7 overflow-hidden rounded-2xl border border-[#dce2d7] bg-[#fffefa] shadow-[0_8px_24px_rgba(38,57,44,0.045)]">
+        <dl className="space-y-0 px-5 pt-2 sm:px-7">
+          <div className="flex justify-between gap-5 border-b border-[#e8ebe4] py-4 text-[0.95rem]"><dt className="shrink-0 text-[#647367]">商品</dt><dd className="text-right font-semibold">{edition === 'premium' ? 'プレミアム' : 'スタンダード'}</dd></div>
+          <div className="flex justify-between gap-5 border-b border-[#e8ebe4] py-4 text-[0.95rem]"><dt className="shrink-0 text-[#647367]">購入対象</dt><dd className="text-right font-semibold">{isPreview || familySubject ? `${previewSubjectName || familySubject?.name}さんのBOOK` : orderType === 'gift' ? `贈り物・${giftMode === 'family_managed' ? 'あなたのスマホで制作' : '贈り先の方のスマホで制作'}` : '自分の人生史'}</dd></div>
+          {orderType === 'gift' && <div className="flex justify-between gap-5 border-b border-[#e8ebe4] py-4 text-[0.95rem]"><dt className="shrink-0 text-[#647367]">物語のご本人</dt><dd className="text-right">{gift.recipient_name}</dd></div>}
+          <div className="flex justify-between gap-5 border-b border-[#e8ebe4] py-4 text-[0.95rem]"><dt className="shrink-0 text-[#647367]">制作方法</dt><dd className="text-right">{method === 'interview_staff' ? 'スタッフに聞き取ってもらう' : '自分・家族で制作する'}</dd></div>
+          {standardExtraCount > 0 && <div className="flex justify-between gap-5 border-b border-[#e8ebe4] py-4 text-[0.95rem]"><dt className="text-[#647367]">追加スタンダード冊子</dt><dd>{standardExtraCount}冊</dd></div>}
+          {premiumExtraCount > 0 && <div className="flex justify-between gap-5 border-b border-[#e8ebe4] py-4 text-[0.95rem]"><dt className="text-[#647367]">追加プレミアム冊子</dt><dd>{premiumExtraCount}冊</dd></div>}
+          {discountCode.trim() && <div className="flex justify-between gap-5 py-4 text-[0.95rem]"><dt className="shrink-0 text-[#647367]">割引コード</dt><dd className="break-all text-right">{discountCode.trim()}</dd></div>}
         </dl>
-        <div className="mt-6 space-y-3 border-t border-white/20 pt-5" aria-live="polite">
-          <p className="flex justify-between gap-4"><span className="text-white/70">商品・オプション</span><span>{quote ? Number(quote.amount_subtotal).toLocaleString('ja-JP') + '円' : '確認中'}</span></p>
-          <p className="flex justify-between gap-4"><span className="text-white/70">割引</span><span>{quote ? '−' + Number(quote.discount_amount || 0).toLocaleString('ja-JP') + '円' : '—'}</span></p>
-          <p className="flex justify-between gap-4 border-t border-white/20 pt-4 text-xl"><span>お支払い合計</span><strong>{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : error ? '確認できませんでした' : '確認中'}</strong></p>
+        <div className="space-y-3 border-t border-[#dce2d7] bg-[#f3f6ef] px-5 py-5 sm:px-7" aria-live="polite">
+          <p className="flex justify-between gap-4 text-[0.95rem]"><span className="text-[#5d6c61]">商品・オプション</span><span>{quote ? Number(quote.amount_subtotal).toLocaleString('ja-JP') + '円' : '確認中'}</span></p>
+          <p className="flex justify-between gap-4 text-[0.95rem]"><span className="text-[#5d6c61]">割引</span><span>{quote ? '−' + Number(quote.discount_amount || 0).toLocaleString('ja-JP') + '円' : '—'}</span></p>
+          <p className="flex justify-between gap-4 border-t border-[#dce2d7] pt-4 text-[1.1rem]"><span className="font-semibold">お支払い合計</span><strong className="text-[1.25rem] text-[#345b39]">{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : error ? '確認できませんでした' : '確認中'}</strong></p>
         </div>
       </div>
-      <label className="mt-6 block text-sm font-semibold">割引コード（お持ちの方）
-        <input className="mt-2 w-full rounded-lg border border-white/30 bg-white px-4 py-3 text-base text-slate-900" value={discountCode} onChange={event => { setDiscountCode(event.target.value); requestKey.current = newRequestKey(); }} />
+      <label className="mt-7 block text-[0.95rem] font-semibold">割引コード（お持ちの方）
+        <input className="mt-2 w-full rounded-xl border border-[#cbd5c8] bg-white px-4 py-3 text-base text-[#243b31] outline-none focus:border-[#4e7925] focus:ring-2 focus:ring-[#4e7925]/20" value={discountCode} onChange={event => { setDiscountCode(event.target.value); requestKey.current = newRequestKey(); }} />
       </label>
       {initialSelection?.quotedAmountTotal != null && quote
         && Number(quote.amount_total) !== initialSelection.quotedAmountTotal &&
-        <p role="status" className="mt-5 rounded-xl border border-amber-200/50 p-4 text-sm leading-6 text-amber-100">認証後の割引条件または商品価格が変わりました。選択時のお支払い合計は{initialSelection.quotedAmountTotal.toLocaleString('ja-JP')}円、現在は{Number(quote.amount_total).toLocaleString('ja-JP')}円です。新しい金額を確認してからお進みください。</p>}
-      {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
-      {method === 'interview_staff' && <p role="note" className="mt-5 text-sm font-semibold leading-7 text-rose-200">聞き取り制作サポートにお申し込みの方は、必ず事前相談フォームにもご入力ください。</p>}
-      <button type="button" className="mt-8 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote} onClick={checkout}>{isPreview ? '模擬決済画面へ' : 'お支払いへ進む'}</button>
-      <button type="button" className="mt-5 w-full text-sm text-white/70 underline" onClick={() => {
+        <p role="status" className="mt-5 rounded-xl border border-[#e1d5af] bg-[#fbf5df] p-4 text-sm leading-6 text-[#63582c]">認証後の割引条件または商品価格が変わりました。選択時のお支払い合計は{initialSelection.quotedAmountTotal.toLocaleString('ja-JP')}円、現在は{Number(quote.amount_total).toLocaleString('ja-JP')}円です。新しい金額を確認してからお進みください。</p>}
+      {error && <p role="alert" className="mt-5 rounded-xl bg-[#fbefeb] p-4 text-sm leading-6 text-[#9a4b37]">{error}</p>}
+      {method === 'interview_staff' && <p role="note" className="mt-5 text-sm font-semibold leading-7 text-[#9a4b37]">聞き取り制作サポートにお申し込みの方は、必ず事前相談フォームにもご入力ください。</p>}
+      <button type="button" className="mt-8 min-h-14 w-full rounded-full bg-[#4e7925] px-5 py-3 text-base font-semibold text-white shadow-sm disabled:opacity-50" disabled={busy || !quote} onClick={checkout}>{isPreview ? '模擬決済画面へ' : 'お支払いへ進む'}</button>
+      <button type="button" className="mt-5 min-h-11 w-full text-sm font-medium text-[#4f6953] underline underline-offset-4" onClick={() => {
         if (isPreview || familySubject) { onPreviewBack?.(); return; }
         const url = new URL(window.location.href);
         url.searchParams.delete('purchase_review');
