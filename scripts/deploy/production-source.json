@@ -1,11 +1,11 @@
 {
   "site": "https://www.tateito-yokoito.jp/",
   "deployedAt": "2026-11-26",
-  "vercelDeploymentId": "dpl_DMtrkwSmqKQy8jL5cw78KPDm4TJE",
-  "sourceBranch": "codex/book-review-production",
-  "sourceCommit": "ec500690169ca60163d555770c006a38a1a6cbf7",
-  "mainJsAsset": "assets/app-BDw8nsmi.js",
-  "mainJsSha256": "e9565068f0eefc13b752a293d682022fa99eb40abf5e8ff8f115a73efffe7bdc",
+  "vercelDeploymentId": "dpl_7QTkLveRLSKmKcFmCupQX3K534t5",
+  "sourceBranch": "codex/book-review-subject-space-20261126",
+  "sourceCommit": "027dbf88c0cfa0da0ad4f7c85502049974acd089",
+  "mainJsAsset": "assets/app-5aKkChnr.js",
+  "mainJsSha256": "a71356ef9ece22d186f7f1b0c166111da7f20bea397f54ba7884939bb91c6a3a",
   "entryJsAsset": "assets/index-Be25SE7n.js",
   "entryJsSha256": "4a804a488f7cc98fc1a520ec435a0f6149e3a97746475dca01015d1634a03f06"
 }
