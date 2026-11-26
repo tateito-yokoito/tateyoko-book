@@ -237,6 +237,51 @@ export async function familyPlaceStories(client, personId) {
   return data.map(item => ({ ...item, media_count: counts.get(item.id) || 0 }));
 }
 
+// Read only formally saved BOOK answers. The caller's BOOK RLS decides which
+// answers are visible; local recording and writing drafts are never queried.
+export async function familyPlaceBookStories(client, personId, projects, freeStories = []) {
+  const ids = (projects || []).filter(project => project.status === 'active'
+    && ['paid', 'gifted', 'legacy'].includes(project.access_status)).map(project => project.id);
+  if (!ids.length) return [];
+  const { data: answers, error } = await client.from('answers')
+    .select('id,book_project_id,user_question_id,question_id,sequence_order,transcript_edited,transcript_readable,transcript_clean,access_override')
+    .eq('subject_person_id', personId).in('book_project_id', ids)
+    .order('sequence_order');
+  if (error) throw error;
+  const saved = (answers || []).filter(answer =>
+    String(answer.transcript_edited || answer.transcript_readable || answer.transcript_clean || '').trim());
+  if (!saved.length) return [];
+  const questionIds = [...new Set(saved.map(answer => answer.user_question_id).filter(Boolean))];
+  const { data: questions, error: questionError } = questionIds.length
+    ? await client.from('user_questions')
+      .select('id,question_id,question_text_snapshot,custom_question_text,status,answered_at,meta_json')
+      .in('id', questionIds)
+    : { data: [], error: null };
+  if (questionError) throw questionError;
+  const byId = new Map((questions || []).map(question => [question.id, question]));
+  const freeKeys = new Set(freeStories.filter(story =>
+    story.body || story.transcript_raw || story.media_count).map(story => story.question_key));
+  const { data: mappings, error: mapError } = freeKeys.size
+    ? await client.from('person_story_question_map')
+      .select('story_question_key,book_question_id').eq('enabled', true)
+      .in('story_question_key', [...freeKeys])
+    : { data: [], error: null };
+  if (mapError) throw mapError;
+  const mirroredQuestions = new Set((mappings || []).map(map => map.book_question_id));
+  return saved.flatMap(answer => {
+    const question = byId.get(answer.user_question_id);
+    if (!question || (question.status !== 'answered' && !question.answered_at)
+      || question.meta_json?.onboarding_group === 'trial_experience'
+      || question.meta_json?.include_in_book_body === false
+      || question.meta_json?.include_in_book_body === 'false'
+      || mirroredQuestions.has(question?.question_id || answer.question_id)) return [];
+    return [{ id: answer.id, book_project_id: answer.book_project_id,
+      question_text: question?.question_text_snapshot || question?.custom_question_text || '人生の語り',
+      body: answer.transcript_edited || answer.transcript_readable || answer.transcript_clean,
+      visibility: answer.access_override === 'private_forever' ? 'private' : 'family' }];
+  });
+}
+
 export async function getOrCreateFamilyPlaceStory(client, userId, person, question, visibility) {
   const existing = await client.from('family_free_stories').select('*')
     .eq('person_id', person.id).eq('question_slot', question.slot).maybeSingle();

@@ -17,7 +17,7 @@ import {
   familyPlaceRelations, familyRelationDecisions, saveFamilyRelationDecision,
   saveFamilyPlaceRelation, removeFamilyPlaceRelation,
   personNameParts, uploadFamilyPlacePortrait, downloadFamilyPlacePortrait, familyPlacePortraitUrl,
-  familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories,
+  familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories, familyPlaceBookStories,
   getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, addFamilyPlaceMedia,
   setFamilyPlaceStoryVisibility, revokeFamilyPlaceMediaUrls,
 } from './lib/familyPlaceData.js';
@@ -235,6 +235,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
   const [factDraft, setFactDraft] = useState(null);
   const [facts, setFacts] = useState([]);
   const [stories, setStories] = useState([]);
+  const [bookStories, setBookStories] = useState([]);
   const [memories, setMemories] = useState([]);
   const [memoryDraft, setMemoryDraft] = useState({ title:'', event_date:'', comment:'' });
   const [memoryPhotoFile, setMemoryPhotoFile] = useState(null);
@@ -364,8 +365,18 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     setMemories(publicDemo ? publicDemoMemories(personId) : []);
     if (bookResult.error) { setPublishedBooks([]); setDemoPublishedBook(null); setBooksStatus('error'); }
     else { setPublishedBooks(bookResult.data); setDemoPublishedBook(bookResult.publication || null); setBooksStatus('ready'); }
-    if (projectResult.error) { setVisibleBookProjects([]); setProjectsStatus('error'); }
-    else { setVisibleBookProjects(projectResult.data); setProjectsStatus('ready'); }
+    if (projectResult.error) { setVisibleBookProjects([]); setBookStories([]); setProjectsStatus('error'); }
+    else {
+      setVisibleBookProjects(projectResult.data);
+      const nextBookStories = publicDemo ? [] : await familyPlaceBookStories(dataClient, personId,
+        projectResult.data, nextStories).catch(error => {
+        console.warn('BOOKの語りを読み込めませんでした', error);
+        return [];
+      });
+      if (epoch !== personLoadEpoch.current) return;
+      setBookStories(nextBookStories);
+      setProjectsStatus('ready');
+    }
   }, [publicDemo]);
   useEffect(() => {
     if (publicDemo) return undefined;
@@ -383,6 +394,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       setVerifiedUserId(null);
       setFamilyId(null);
       setPeople([]);
+      setBookStories([]);
       setSelectedId(null);
       return;
     }
@@ -539,7 +551,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     setProfileReturnToTree(false);
     setPersonEntry(entry);
     setError(''); setSelectedId(id); setActiveTab('ring');
-    setPublishedBooks([]); setVisibleBookProjects([]); setBooksStatus('loading'); setProjectsStatus('loading'); setScreen('person');
+    setPublishedBooks([]); setVisibleBookProjects([]); setBookStories([]); setBooksStatus('loading'); setProjectsStatus('loading'); setScreen('person');
   };
   const openBookIntroduction = (entry = 'home') => {
     if (consultationProjectId) {
@@ -1076,7 +1088,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
         <button className="fp-primary" disabled={busy}>{newPersonAnchorId ? '登録して家系図を見る' : '登録して人物ページを見る'}</button>
       </form>
     </main>}
-    {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories}
+    {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories} bookStories={bookStories}
       memories={memories} onAddMemory={publicDemo ? startMemory : null}
       supabaseClient={publicDemo ? supabaseClient : dataClient}
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}

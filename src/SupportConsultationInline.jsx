@@ -59,7 +59,8 @@ export default function SupportConsultationInline({ reviewOnly = false, purchase
   const familyTestHost = familySubject && window.location.hostname.endsWith('.vercel.app')
     && window.location.hostname.startsWith('tateyoko-book-test-');
   const correctEndpoint = productionHost
-    ? endpoint === 'https://wquxjeqkumossjxehdop.supabase.co'
+    ? import.meta.env.VITE_PUBLIC_TEST_MODE !== 'true'
+      && endpoint === 'https://wquxjeqkumossjxehdop.supabase.co'
     : familyTestHost && endpoint === 'https://zpswxefgfabzvxdbtyvq.supabase.co'
       || local && params.has('test') && endpoint === 'https://gmyqqcnbuiaghbrxnkaz.supabase.co';
   const canSubmit = !preview && correctEndpoint && Boolean(publishableKey);

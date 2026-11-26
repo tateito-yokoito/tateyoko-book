@@ -50,7 +50,8 @@ export default function SupportConsultationPage() {
   const endpoint = import.meta.env.VITE_SUPABASE_URL || '';
   const publishableKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
   const correctEndpoint = productionHost
-    ? endpoint === 'https://wquxjeqkumossjxehdop.supabase.co'
+    ? import.meta.env.VITE_PUBLIC_TEST_MODE !== 'true'
+      && endpoint === 'https://wquxjeqkumossjxehdop.supabase.co'
     : testMode && endpoint === 'https://gmyqqcnbuiaghbrxnkaz.supabase.co';
   const canSubmit = !preview && correctEndpoint && Boolean(publishableKey);
   const privacyUrl = local ? '/hp-nov8-full-preview.html?hp_preview_nov8=1&info=privacy' : '/?info=privacy';
