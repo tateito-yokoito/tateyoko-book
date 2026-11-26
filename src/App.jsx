@@ -8214,6 +8214,12 @@ if (getProjectRoleInviteTokenFromUrl()) {
       {scene === "purchase_start" && (
         COMMERCE_V2_ENABLED ? (
           purchaseSelection ? <CommerceV2Purchase client={supabaseClient} projectId={foundation?.project?.id}
+            familySubject={purchaseSelection.purchaseFor !== 'gift'
+              && foundation?.project?.onboarding_preferences?.family_place_person_id
+                === foundation?.project?.subject_person_id
+              && foundation?.person?.id === foundation?.project?.subject_person_id
+              ? { id: foundation.person.id, name: foundation.person.display_name }
+              : null}
             projectAccessStatus={foundation?.project?.access_status}
             phase="review" initialSelection={purchaseSelection}
             onCompleted={finishGiftCheckoutAsPaid}
@@ -10593,7 +10599,7 @@ if (isNewMode) {
   };
 
   return (
-    <div className="h-full flex flex-col items-center justify-center fade-enter px-4 text-center overflow-y-auto">
+    <div className={`h-full flex flex-col items-center justify-center fade-enter px-4 text-center overflow-y-auto ${mode === 'entry' && !isFamilyInviteEntry && !isGiftEntry && !isTrialEntry && !familyPlaceLogin ? 'book-auth-entry' : ''}`}>
       {mode === "supporter" && (
         <div className="w-full max-w-[320px] space-y-8 py-10 fade-enter">
           <div className="space-y-5 text-narrative">
@@ -10718,11 +10724,12 @@ if (isNewMode) {
               </>
             ) : (
               <>
-                <p className="text-[1.1rem] text-white/90">
+                <p className="book-auth-entry-brand">たて糸♾️よこ糸BOOK</p>
+                <p className="book-auth-entry-title text-[1.1rem] text-white/90">
                   この物語を開くために
                 </p>
 
-                <p className="text-white/55 text-[0.95rem] leading-loose">
+                <p className="book-auth-entry-copy text-white/55 text-[0.95rem] leading-loose">
                   {lineAuthEnabled ? (
                     <>はじめての方は、お名前を入力してLINEで進めます。<br />前回の続きも、同じ方法で開けます。メールも選べます。</>
                   ) : (

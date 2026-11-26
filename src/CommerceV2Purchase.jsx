@@ -373,7 +373,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
       {method === 'interview_staff' && <p role="note" className="mt-5 text-sm font-semibold leading-7 text-rose-200">聞き取り制作サポートにお申し込みの方は、必ず事前相談フォームにもご入力ください。</p>}
       <button type="button" className="mt-8 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote} onClick={checkout}>{isPreview ? '模擬決済画面へ' : 'お支払いへ進む'}</button>
       <button type="button" className="mt-5 w-full text-sm text-white/70 underline" onClick={() => {
-        if (isPreview || familySubject) { onPreviewBack?.(); return; }
+        if (onPreviewBack) { onPreviewBack(); return; }
         const url = new URL(window.location.href);
         url.searchParams.delete('purchase_review');
         window.location.assign(url.toString());
