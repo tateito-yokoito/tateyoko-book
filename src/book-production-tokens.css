@@ -2,6 +2,7 @@
 :is(body:has(.app-container--book-light), body:has(.book-user-light), .app-container--book-light, .book-user-light, .book-ui-review-index) {
   --book-page: #f8f7f2;
   --book-surface: #fffefa;
+  --book-question-surface: #f0f1eb;
   --book-ink: #243b31;
   --book-muted: #53665b;
   --book-primary: #284c40;

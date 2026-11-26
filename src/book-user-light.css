@@ -87,8 +87,21 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
   justify-content: center;
   padding-bottom: calc(clamp(24px, 4dvh, 36px) + var(--question-lift));
 }
-.app-container--book-light .story-sky-surface.question-background-navy .question-flow-content--entry .reading-question > .recording-question-card {
-  padding: 28px 0 30px;
+.app-container--book-light .story-sky-surface.answer-light-recorder.question-background-navy .question-flow-content--entry .reading-question > .recording-question-card {
+  padding: 28px 16px 30px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--book-question-surface);
+  box-shadow: none;
+}
+.app-container--book-light .story-sky-surface.answer-light-recorder.question-background-navy .story-sky-content.question-flow-content--entry .reading-question > .recording-question-card p {
+  font-size: 1.425rem;
+}
+@media (max-width: 359px) {
+  .app-container--book-light .story-sky-surface.answer-light-recorder.question-background-navy .question-flow-content--entry .reading-question > .recording-question-card {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
 }
 .app-container--book-light .question-flow-content--entry .reading-question .recording-question-hint {
   width: 100%;

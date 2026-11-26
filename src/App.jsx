@@ -8214,12 +8214,6 @@ if (getProjectRoleInviteTokenFromUrl()) {
       {scene === "purchase_start" && (
         COMMERCE_V2_ENABLED ? (
           purchaseSelection ? <CommerceV2Purchase client={supabaseClient} projectId={foundation?.project?.id}
-            familySubject={purchaseSelection.purchaseFor !== 'gift'
-              && foundation?.project?.onboarding_preferences?.family_place_person_id
-                === foundation?.project?.subject_person_id
-              && foundation?.person?.id === foundation?.project?.subject_person_id
-              ? { id: foundation.person.id, name: foundation.person.display_name }
-              : null}
             projectAccessStatus={foundation?.project?.access_status}
             phase="review" initialSelection={purchaseSelection}
             onCompleted={finishGiftCheckoutAsPaid}
