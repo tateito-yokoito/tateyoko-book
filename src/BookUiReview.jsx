@@ -52,16 +52,16 @@ const previewQuestion = {
 };
 const open = key => window.location.assign(`?book_ui_review=${key}`);
 const questionFontOptions = [
-  ['a', 'A｜現行の明朝', 'Noto Serif JP · 400'],
-  ['b', 'B｜一段階太い明朝', 'Noto Serif JP · 500'],
-  ['c', 'C｜細めのゴシック', 'Noto Sans JP · 400'],
+  ['a', 'A｜基準', 'Noto Serif JP · 500'],
+  ['b', 'B｜少し太め', 'Noto Serif JP · 550'],
+  ['c', 'C｜さらに少し太め', 'Noto Serif JP · 600'],
 ];
 
 function QuestionFontComparison() {
   return <main className="book-question-font-review">
     <a href="?book_ui_review=index">← 画面一覧</a>
-    <h1>質問文の書体を比べる</h1>
-    <p>3案とも同じ質問・画面幅です。スマートフォンでは左右にスワイプして比較できます。変更するのは質問文の書体と太さだけです。</p>
+    <h1>質問文の太さを比べる</h1>
+    <p>3案とも同じ質問・画面幅・明朝体です。スマートフォンでは左右にスワイプして比較できます。変更するのは質問文の太さだけです。</p>
     <div className="book-question-font-review__screens">
       {questionFontOptions.map(([key, label, font]) => <section key={key} aria-label={label}>
         <div className="book-question-font-review__heading"><strong>{label}</strong><span>{font}</span></div>
@@ -95,7 +95,7 @@ export default function BookUiReview({ screen }) {
       <nav aria-label="確認する画面">{screens.map(([key, label]) =>
         <a key={key} href={`?book_ui_review=${key}`}>{label} <span aria-hidden="true">›</span></a>
       )}
-        <a href="?book_ui_review=question_fonts">質問文の書体 A・B・C 比較 <span aria-hidden="true">›</span></a>
+        <a href="?book_ui_review=question_fonts">質問文の太さ A・B・C 比較 <span aria-hidden="true">›</span></a>
         <a href="/?app=1&entry=purchase">商品選択・認証入口 <span aria-hidden="true">›</span></a>
         <a href="/?commerce_review_preview=1">注文の最終確認 <span aria-hidden="true">›</span></a>
       </nav>
@@ -148,7 +148,7 @@ export default function BookUiReview({ screen }) {
   }[screen];
   const questionFont = screen === 'answer' ? new URLSearchParams(window.location.search).get('question_font') : null;
   return <>
-    <div className={`app-container app-container--book-light book-ui-review-scene${['b', 'c'].includes(questionFont) ? ` book-question-font--${questionFont}` : ''}`}>{view}</div>
+    <div className={`app-container app-container--book-light book-ui-review-scene${['a', 'b', 'c'].includes(questionFont) ? ` book-question-font--${questionFont}` : ''}`}>{view}</div>
     <a className="book-ui-review-back" href="?book_ui_review=index">画面一覧</a>
   </>;
 }
