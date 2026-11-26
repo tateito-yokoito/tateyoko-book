@@ -1,13 +1,22 @@
 /* Shared BOOK customer palette. The family app and public Web book have their own styles. */
 body:has(:is(.app-container--book-light, .book-user-light)) {
-  background: #f8f7f2;
-  color: #243b31;
+  background: var(--book-page);
+  color: var(--book-ink);
 }
 
 :is(.app-container--book-light, .book-user-light) {
-  background: #f8f7f2;
-  color: #243b31;
-  font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+  background: var(--book-page);
+  color: var(--book-ink);
+  font-family: var(--book-ui-font);
+}
+
+:is(.app-container--book-light, .book-user-light) :is(button, input, textarea, select) {
+  font-family: var(--book-ui-font);
+}
+
+/* Keep functional labels readable on phones; larger heading sizes are untouched. */
+:is(.app-container--book-light, .book-user-light) :is(.text-xs, [class*="text-[0.62rem]"], [class*="text-[0.7rem]"], [class*="text-[0.72rem]"], [class*="text-[0.8rem]"], [class*="text-[0.82rem]"], [class*="text-[0.85rem]"]) {
+  font-size: var(--book-helper-size) !important;
 }
 
 :is(.app-container--book-light, .book-user-light) .text-narrative,
@@ -19,51 +28,51 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
 
 /* Existing screens use translucent white utilities against the former navy canvas. */
 :is(.app-container--book-light, .book-user-light) :is([class*="text-white"], [class*="text-slate-300"], [class*="text-slate-400"]) {
-  color: #34483c !important;
+  color: var(--book-ink) !important;
 }
 :is(.app-container--book-light, .book-user-light) :is([class*="text-white/2"], [class*="text-white/3"], [class*="text-white/4"], [class*="text-slate-400"]) {
-  color: #68776b !important;
+  color: var(--book-muted) !important;
 }
 :is(.app-container--book-light, .book-user-light) :is([class*="text-amber-100"], [class*="text-amber-50"]) {
-  color: #5e745b !important;
+  color: var(--book-accent) !important;
 }
 :is(.app-container--book-light, .book-user-light) :is([class*="text-rose-200"], [class*="text-red-100"]) {
-  color: #a34b35 !important;
+  color: var(--book-error) !important;
 }
 :is(.app-container--book-light, .book-user-light) :is([class*="border-white"], [class*="border-slate-700"], [class*="border-slate-800"]) {
-  border-color: #dce3d8 !important;
+  border-color: var(--book-line) !important;
 }
 :is(.app-container--book-light, .book-user-light) :is([class*="bg-white/"], [class*="bg-slate-800"], [class*="bg-slate-900"], [class*="bg-slate-950"], [class*="bg-[#0f172a]"], [class*="bg-[#172337]"], [class*="bg-[#111b30]"]) {
-  background-color: #fffefa !important;
+  background-color: var(--book-surface) !important;
 }
 :is(.app-container--book-light, .book-user-light) .glass-card {
-  background: #fffefa;
-  border-color: #dce3d8;
+  background: var(--book-surface);
+  border-color: var(--book-line);
   box-shadow: 0 8px 24px rgb(43 61 46 / 4%);
 }
 :is(.app-container--book-light, .book-user-light) .btn-quiet {
-  background: #fffefa;
-  border-color: #b7cbb1;
-  color: #345b39;
+  background: var(--book-surface);
+  border-color: var(--book-line);
+  color: var(--book-primary);
   backdrop-filter: none;
 }
-:is(.app-container--book-light, .book-user-light) .btn-quiet:active { background: #edf3e8; }
+:is(.app-container--book-light, .book-user-light) .btn-quiet:active { background: var(--book-page); }
 :is(.app-container--book-light, .book-user-light) input.quiet-input {
-  color: #243b31;
-  border-bottom-color: #b7cbb1;
+  color: var(--book-ink);
+  border-bottom-color: var(--book-line);
 }
-:is(.app-container--book-light, .book-user-light) input.quiet-input:focus { border-bottom-color: #4e7925; }
+:is(.app-container--book-light, .book-user-light) input.quiet-input:focus { border-bottom-color: var(--book-primary); }
 :is(.app-container--book-light, .book-user-light) input::placeholder,
-:is(.app-container--book-light, .book-user-light) textarea::placeholder { color: #879487; }
+:is(.app-container--book-light, .book-user-light) textarea::placeholder { color: var(--book-muted); }
 :is(.app-container--book-light, .book-user-light) :is(input, textarea, select):is([class*="bg-white/["], [class*="bg-slate-900"]) {
-  background: #fffefa !important;
-  color: #243b31 !important;
-  border-color: #b7cbb1 !important;
+  background: var(--book-surface) !important;
+  color: var(--book-ink) !important;
+  border-color: var(--book-line) !important;
 }
 :is(.app-container--book-light, .book-user-light) :is(button, a)[class~="bg-white"][class~="text-slate-900"],
 :is(.app-container--book-light, .book-user-light) button[class*="bg-[#f5f3ed]"],
 :is(.app-container--book-light, .book-user-light) button[class*="bg-[#e8e4d8]"] {
-  background: #4e7925 !important;
+  background: var(--book-primary) !important;
   color: #fff !important;
 }
 :is(.app-container--book-light, .book-user-light) :is(button, a)[class~="bg-white"][class~="text-slate-900"] :is([class*="text-white"], [class*="text-slate"]) {
@@ -71,48 +80,48 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
 }
 
 /* The published home has a dedicated stylesheet and needs its own color mapping. */
-.app-container--book-light .approved-home { background: #f8f7f2; color: #243b31; }
+.app-container--book-light .approved-home { background: var(--book-page); color: var(--book-ink); }
 .app-container--book-light .approved-home .ah-sky {
-  background: linear-gradient(#8baec1, #d4ddda 70%, #f8f7f2);
+  background: linear-gradient(#8baec1, #d4ddda 70%, var(--book-page));
 }
 .app-container--book-light .approved-home .ah-sky::after {
-  background: linear-gradient(transparent 55%, #f8f7f2);
+  background: linear-gradient(transparent 55%, var(--book-page));
 }
 .app-container--book-light .approved-home :is(.ah-journey, .ah-row) {
-  background: #fffefa;
-  border-color: #dce3d8;
-  color: #243b31;
+  background: var(--book-surface);
+  border-color: var(--book-line);
+  color: var(--book-ink);
 }
-.app-container--book-light .approved-home :is(.ah-theme > span, h2, .ah-count, .ah-own-entry h1) { color: #647367; }
-.app-container--book-light .approved-home .ah-row > svg { color: #5c7a57; }
+.app-container--book-light .approved-home :is(.ah-theme > span, h2, .ah-count, .ah-own-entry h1) { color: var(--book-muted); }
+.app-container--book-light .approved-home .ah-row > svg { color: var(--book-accent); }
 .app-container--book-light .approved-home :is(.ah-primary, .ah-own-actions button) {
-  background: #4e7925;
+  background: var(--book-primary);
   color: #fff;
 }
-.app-container--book-light .approved-home .ah-theme h1 { color: #243b31; }
-.app-container--book-light .approved-home .ah-footer { border-color: #dce3d8; }
-.app-container--book-light .approved-home .ah-footer button { color: #345b39; }
+.app-container--book-light .approved-home .ah-theme h1 { color: var(--book-ink); }
+.app-container--book-light .approved-home .ah-footer { border-color: var(--book-line); }
+.app-container--book-light .approved-home .ah-footer button { color: var(--book-primary); }
 
 .book-ui-review-index {
   min-height: 100dvh;
   box-sizing: border-box;
   padding: calc(env(safe-area-inset-top) + 2.5rem) 1.5rem 3rem;
-  background: #f8f7f2;
-  color: #243b31;
-  font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+  background: var(--book-page);
+  color: var(--book-ink);
+  font-family: var(--book-ui-font);
 }
-.book-ui-review-index > p:first-child { color: #6b805f; font-size: .8rem; font-weight: 600; }
+.book-ui-review-index > p:first-child { color: var(--book-accent); font-size: .8rem; font-weight: 600; }
 .book-ui-review-index h1 { margin: 1rem 0; font-size: 1.55rem; }
 .book-ui-review-index > p { line-height: 1.7; }
 .book-ui-review-index nav { display: grid; gap: .65rem; margin-top: 2rem; }
 .book-ui-review-index nav a {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 1rem 1.2rem; border: 1px solid #dce3d8; border-radius: .9rem;
-  background: #fffefa; color: #345b39; text-decoration: none;
+  padding: 1rem 1.2rem; border: 1px solid var(--book-line); border-radius: .9rem;
+  background: var(--book-surface); color: var(--book-primary); text-decoration: none;
 }
 .book-ui-review-back {
   position: fixed; z-index: 80; right: 1rem; bottom: calc(env(safe-area-inset-bottom) + 1rem);
-  padding: .6rem 1rem; border-radius: 999px; background: #4e7925; color: #fff;
+  padding: .6rem 1rem; border-radius: 999px; background: var(--book-primary); color: #fff;
   font: 600 .8rem 'Noto Sans JP', sans-serif; text-decoration: none;
   box-shadow: 0 3px 15px #283b2a33;
 }
@@ -120,9 +129,9 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
   width: min(100%, 480px);
   margin: 0 auto;
   padding: 1.5rem .25rem;
-  background: #f5f2ea;
-  color: #26352f;
-  font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', sans-serif;
+  background: var(--book-page);
+  color: var(--book-ink);
+  font-family: var(--book-ui-font);
 }
 .book-ui-review-answer h1 {
   margin: 0 0 2rem;
@@ -136,7 +145,7 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
   color: #fff !important;
 }
 
-.book-user-light { min-height: 100dvh; background: #f8f7f2; color: #243b31; font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif; }
+.book-user-light { min-height: 100dvh; background: var(--book-page); color: var(--book-ink); font-family: var(--book-ui-font); }
 
 /* The photographic sky treatment is intentional; preserve contrast over images. */
 .app-container--book-light .story-sky-surface:not(.answer-light-recorder) [class*="text-white"] {

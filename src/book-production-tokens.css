@@ -1,0 +1,18 @@
+/* BOOK customer journey only. Change these values to retune every production screen. */
+:is(body:has(.app-container--book-light), body:has(.book-user-light), .app-container--book-light, .book-user-light, .book-ui-review-index) {
+  --book-page: #f8f7f2;
+  --book-surface: #fffefa;
+  --book-ink: #243b31;
+  --book-muted: #53665b;
+  --book-primary: #284c40;
+  --book-on-primary: #fff;
+  --book-line: #c9cfc5;
+  --book-accent: #5c7a57;
+  --book-error: #a34b35;
+  --book-focus: #ad5a41;
+  --book-ui-font: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+  --book-display-font: 'Noto Serif JP', 'Hiragino Mincho ProN', serif;
+  --book-body-size: 1rem;
+  --book-helper-size: .875rem;
+  --book-button-size: 1rem;
+}
