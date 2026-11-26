@@ -116,6 +116,19 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
   font: 600 .8rem 'Noto Sans JP', sans-serif; text-decoration: none;
   box-shadow: 0 3px 15px #283b2a33;
 }
+.book-ui-review-answer {
+  width: min(100%, 480px);
+  margin: 0 auto;
+  padding: 1.5rem .25rem;
+  background: #f5f2ea;
+  color: #26352f;
+  font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', sans-serif;
+}
+.book-ui-review-answer h1 {
+  margin: 0 0 2rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
 
 /* Keep media previews and explicit dark controls legible on their own backgrounds. */
 .app-container--book-light :is([class*="bg-[#244c3c]"], [class*="bg-[#28473e]"], [class*="bg-[#4e7925]"]) [class*="text-white"],

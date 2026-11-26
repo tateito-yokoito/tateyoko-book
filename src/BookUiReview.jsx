@@ -14,11 +14,19 @@ import {
   Scene_ThemeGuide,
   Scene_BookBuilder,
   Scene_StoryPages,
+  Scene1_MyPage,
+  Scene_Recording,
 } from './App.jsx';
+import { AnswerReview } from './AnswerInputUI.jsx';
+import { AnswerTextFields, AnswerTextLayout } from './AnswerTextShared.jsx';
 
 // TEST preview only. These are the production React scenes with inert, fictional props.
 const screens = [
   ['home', '制作ホーム'],
+  ['answer', '問いと回答方法'],
+  ['answer_write', '文章で回答'],
+  ['answer_voice', '音声で回答'],
+  ['answer_review', '回答を振り返る'],
   ['entry', '物語の開始'],
   ['trial_done', '無料3問の完了'],
   ['purchase_done', '購入完了'],
@@ -34,6 +42,27 @@ const screens = [
   ['settings', '設定・家族参加'],
 ];
 const noop = () => {};
+const previewQuestion = {
+  user_question_id: 'preview-question', sequence_order: 1,
+  content: '子どもの頃、夢中だったことは何ですか？',
+  theme_code: 'childhood', theme_order: 1,
+  prompt_hint: '思い浮かぶ一場面から話してください。',
+  reassurance_text: '短くても大丈夫です。',
+};
+const open = key => window.location.assign(`?book_ui_review=${key}`);
+
+function AnswerWritingPreview() {
+  const [body, setBody] = React.useState('');
+  const [showStyles, setShowStyles] = React.useState(false);
+  const [status, setStatus] = React.useState('プレビュー · 入力内容は保存されません');
+  return <AnswerTextLayout question={previewQuestion} theme="幼い頃" progress="1 / 30"
+    light onBack={() => open('answer')}>
+    <AnswerTextFields value={body} onChange={setBody} status={status}
+      showStyles={showStyles} onToggleStyles={() => setShowStyles(value => !value)}
+      onPolish={() => setStatus('プレビューではAI処理を実行しません')}
+      onSave={() => { setStatus('プレビューでは保存しません'); open('answer_review'); }} />
+  </AnswerTextLayout>;
+}
 
 export default function BookUiReview({ screen }) {
   if (!screen || screen === 'index' || !screens.some(([key]) => key === screen)) {
@@ -55,6 +84,19 @@ export default function BookUiReview({ screen }) {
       onStartTalking={noop} onStartPhotoStory={noop} onOpenQuestionLibrary={noop}
       onOpenStoryPages={noop} onOpenBookBuilder={noop} onOpenSettings={noop}
       onOpenShelf={noop} onShareWithFriend={noop} />,
+    answer: <Scene1_MyPage question={previewQuestion} lightMode userName="紡木 誠"
+      progress={{ currentIndex: 0, total: 30 }}
+      onBack={() => open('home')} onNext={() => open('answer_voice')}
+      onWrite={() => open('answer_write')} onPhoto={noop} onEndToday={() => open('home')} />,
+    answer_write: <AnswerWritingPreview />,
+    answer_voice: <Scene_Recording question={previewQuestion} lightMode userName="紡木 誠"
+      progress={{ currentIndex: 0, total: 30 }} onBack={() => open('answer')}
+      onComplete={() => open('answer_review')} />,
+    answer_review: <div className="book-ui-review-answer"><h1>この問いの語り</h1>
+      <AnswerReview body="家族と出かけた海のことを、今でもよく覚えています。"
+        showChoices onVoice={() => open('answer_voice')} onWrite={() => open('answer_write')}
+        onPhoto={noop} canFinish onFinish={() => open('home')} />
+    </div>,
     entry: <Scene_OwnStoryEntry onBack={noop} onTryFree={noop} onPurchase={noop} />,
     trial_done: <Scene_TrialComplete status="ready" onPurchase={noop} onFinish={noop} />,
     purchase_done: <Scene_PurchaseSuccess onContinue={noop} />,
