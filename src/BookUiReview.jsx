@@ -51,8 +51,9 @@ const previewQuestion = {
   reassurance_text: '短くても大丈夫です。',
 };
 const previewQuestionLengths = {
-  short: '好きな遊びは何でしたか？',
-  long: '子どもの頃に暮らしていた家や通学路、家族や友人と過ごした時間を思い返すと、いまでも心に残っている出来事はどんなものですか？',
+  short: 'その頃、どんな遊びが好きでしたか？',
+  standard: '子どもの頃の家や、その周りで覚えている風景を教えてください。',
+  long: '旅や日々の習慣、家庭の味など、暮らしの中で残しておきたい思い出はありますか？',
 };
 const open = key => window.location.assign(`?book_ui_review=${key}`);
 const questionFontOptions = [
@@ -80,15 +81,20 @@ function QuestionLayoutComparison() {
   const cases = [['short', '短い質問'], ['standard', '標準的な質問'], ['long', '長い質問']];
   return <main className="book-question-font-review">
     <a href="?book_ui_review=index">← 画面一覧</a>
-    <h1>質問画面の余白を比べる</h1>
-    <p>実際の質問画面を同じ幅で表示しています。スマートフォンでは左右にスワイプできます。</p>
-    <div className="book-question-font-review__screens">
+    <h1>質問画面 A・B 比較</h1>
+    <p>現行BOOKの質問を使用。Aは枠なし、Bは薄い背景です。スマートフォンでは各組を左右にスワイプできます。</p>
+    <div className="book-question-layout-compare">
       {cases.map(([key, label]) => <section key={key} aria-label={label}>
-        <div className="book-question-font-review__heading"><strong>{label}</strong><span>Noto Serif JP · 550</span></div>
-        <iframe title={label} src={`?book_ui_review=answer&question_length=${key}`} />
-        <a href={`?book_ui_review=answer&question_length=${key}`}>画面全体を見る ↗</a>
-        {key === 'long' && <a className="book-question-font-review__zoom" href="?book_ui_review=answer&question_length=long&text_scale=large">文字を拡大して見る ↗</a>}
+        <h2>{label} <small>{previewQuestionLengths[key].length}文字</small></h2>
+        <div className="book-question-layout-compare__pair">
+          {['a', 'b'].map(style => <div className="book-question-layout-compare__variant" key={style}>
+            <div className="book-question-font-review__heading"><strong>{style.toUpperCase()}｜{style === 'a' ? '枠なし' : '薄い背景'}</strong><span>Noto Serif JP · 550</span></div>
+            <iframe title={`${label} ${style.toUpperCase()}案`} src={`?book_ui_review=answer&question_length=${key}&question_style=${style}`} />
+            <a href={`?book_ui_review=answer&question_length=${key}&question_style=${style}`}>画面全体を見る ↗</a>
+          </div>)}
+        </div>
       </section>)}
+      <a href="?book_ui_review=answer&question_length=long&question_style=a&text_scale=large">長い質問を拡大文字で見る ↗</a>
     </div>
   </main>;
 }
@@ -175,9 +181,10 @@ export default function BookUiReview({ screen }) {
       onOpenSupporters={noop} onOpenProfile={noop} onOpenContract={noop} />,
   }[screen];
   const questionFont = screen === 'answer' ? reviewParams.get('question_font') : null;
+  const questionStyle = screen === 'answer' ? reviewParams.get('question_style') : null;
   const largeText = screen === 'answer' && reviewParams.get('text_scale') === 'large';
   return <>
-    <div className={`app-container app-container--book-light book-ui-review-scene${['a', 'b', 'c'].includes(questionFont) ? ` book-question-font--${questionFont}` : ''}${largeText ? ' book-ui-review-scene--large-text' : ''}`}>{view}</div>
+    <div className={`app-container app-container--book-light book-ui-review-scene${['a', 'b', 'c'].includes(questionFont) ? ` book-question-font--${questionFont}` : ''}${['a', 'b'].includes(questionStyle) ? ` book-question-layout--${questionStyle}` : ''}${largeText ? ' book-ui-review-scene--large-text' : ''}`}>{view}</div>
     <a className={`book-ui-review-back${screen === 'answer' ? ' book-ui-review-back--question' : ''}`} href="?book_ui_review=index">画面一覧</a>
   </>;
 }

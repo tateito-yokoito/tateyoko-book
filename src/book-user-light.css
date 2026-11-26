@@ -74,13 +74,14 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
   flex: 1 0 auto;
   flex-direction: column;
   justify-content: center;
+  padding-bottom: clamp(24px, 4dvh, 36px);
 }
 .app-container--book-light .story-sky-surface.question-background-navy .question-flow-content--entry .reading-question > .recording-question-card {
   padding: 28px 0 30px;
 }
 .app-container--book-light .question-flow-content--entry .reading-question .recording-question-hint {
   width: 100%;
-  margin: 0 auto;
+  margin: 14px auto 0;
   text-align: center;
   font-family: var(--book-ui-font);
 }
