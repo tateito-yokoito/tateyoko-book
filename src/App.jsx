@@ -19143,7 +19143,7 @@ export function Scene1_MyPage({
       </div>}
 
       {!isTokenMode() && (
-        <div className="mt-5 flex shrink-0 items-center justify-center gap-3 pb-2">
+        <div className="question-flow-end-actions mt-5 flex shrink-0 items-center justify-center gap-3 pb-2">
           {onSkip && (!isOnboardingQuestion || question?.onboarding_group === "starting_motivation") && (
             <button
               onClick={onSkip}

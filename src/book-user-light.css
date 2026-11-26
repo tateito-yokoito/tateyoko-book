@@ -75,19 +75,24 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
   .app-container--book-light .recording-question-ending--phrase { white-space: normal; }
   .app-container--book-light .recording-question-ending-tail { white-space: nowrap; }
 }
+.app-container--book-light .question-flow-content--entry {
+  --question-lift: clamp(0px, calc(10dvh - 60px), 25px);
+  --question-hint-gap: 28px;
+  --question-end-space: clamp(0px, calc(4.4dvh - 26px), 11px);
+}
 .app-container--book-light .question-flow-content--entry .reading-question {
   display: flex;
   flex: 1 0 auto;
   flex-direction: column;
   justify-content: center;
-  padding-bottom: clamp(24px, 4dvh, 36px);
+  padding-bottom: calc(clamp(24px, 4dvh, 36px) + var(--question-lift));
 }
 .app-container--book-light .story-sky-surface.question-background-navy .question-flow-content--entry .reading-question > .recording-question-card {
   padding: 28px 0 30px;
 }
 .app-container--book-light .question-flow-content--entry .reading-question .recording-question-hint {
   width: 100%;
-  margin: 14px auto 0;
+  margin: var(--question-hint-gap) auto 0;
   text-align: center;
   font-family: var(--book-ui-font);
 }
@@ -101,6 +106,9 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
 }
 .app-container--book-light .question-flow-content--entry .answer-entry-choices {
   gap: 10px;
+}
+.app-container--book-light .question-flow-content--entry .question-flow-end-actions {
+  margin-bottom: var(--question-end-space);
 }
 :is(.app-container--book-light, .book-user-light) input.quiet-input {
   color: var(--book-ink);
