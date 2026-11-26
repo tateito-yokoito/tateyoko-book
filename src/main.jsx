@@ -104,14 +104,21 @@ function PurchaseHandoffGate({ token }) {
   return <main className="flex min-h-screen items-center justify-center text-white">購入内容を確認しています…</main>;
 }
 
+function CommerceReviewDesignPreview() {
+  const [phase, setPhase] = React.useState('review');
+  const [selection, setSelection] = React.useState({ edition: 'standard', productionMethod: 'self_or_family',
+    standardExtraCount: 0, premiumExtraCount: 0, discountCode: '', purchaseFor: 'self' });
+  return <CommerceV2Purchase key={phase} client={adminSupabaseClient} phase={phase}
+    previewSubjectName="紡木 誠" initialSelection={selection}
+    onProceed={value => { setSelection(value); setPhase('review'); }}
+    onPreviewBack={() => setPhase('selection')}
+    onPreviewCheckout={() => window.alert('画面プレビューです。注文・決済は行いません。')} />;
+}
+
 function RootScreen() {
   const params = new URLSearchParams(window.location.search);
   if (import.meta.env.VITE_PUBLIC_TEST_MODE === 'true' && params.has('commerce_review_preview'))
-    return <CommerceV2Purchase client={adminSupabaseClient} phase="review"
-      previewSubjectName="紡木 誠"
-      initialSelection={{ edition: 'standard', productionMethod: 'self_or_family',
-        standardExtraCount: 0, premiumExtraCount: 0, discountCode: '', purchaseFor: 'self' }}
-      onPreviewCheckout={() => window.alert('画面プレビューです。注文・決済は行いません。')} />;
+    return <CommerceReviewDesignPreview />;
   if (params.has('book_family')) return <BookFamilyGateway
     client={adminSupabaseClient} publicId={params.get('book_family') || ''}/>;
   // The person-centred free app is isolated until its questions and TEST
