@@ -365,6 +365,9 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
           <p className="flex justify-between gap-4 border-t border-white/20 pt-4 text-xl"><span>お支払い合計</span><strong>{quote ? Number(quote.amount_total).toLocaleString('ja-JP') + '円（税込）' : error ? '確認できませんでした' : '確認中'}</strong></p>
         </div>
       </div>
+      <label className="mt-6 block text-sm font-semibold">割引コード（お持ちの方）
+        <input className="mt-2 w-full rounded-lg border border-white/30 bg-white px-4 py-3 text-base text-slate-900" value={discountCode} onChange={event => { setDiscountCode(event.target.value); requestKey.current = newRequestKey(); }} />
+      </label>
       {initialSelection?.quotedAmountTotal != null && quote
         && Number(quote.amount_total) !== initialSelection.quotedAmountTotal &&
         <p role="status" className="mt-5 rounded-xl border border-amber-200/50 p-4 text-sm leading-6 text-amber-100">認証後の割引条件または商品価格が変わりました。選択時のお支払い合計は{initialSelection.quotedAmountTotal.toLocaleString('ja-JP')}円、現在は{Number(quote.amount_total).toLocaleString('ja-JP')}円です。新しい金額を確認してからお進みください。</p>}
