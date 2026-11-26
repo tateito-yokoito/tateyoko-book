@@ -83,6 +83,14 @@ fs.copyFileSync('public/family-place-mobile-redirect.js',path.join(outDir,'famil
 // production overlay is not reused for the TEST deployment.
 await build({configFile:'vite.postcta-overlay.config.js',envDir:false,
  build:{outDir:path.join(outDir,'assets'),emptyOutDir:false}});
+// Some production-only fallback URLs remain in shared components after Vite
+// compilation. Replace them with a non-routable address in the isolated TEST
+// artifact so no missing TEST setting can ever fall through to production.
+for(const file of filesUnder(outDir).filter(p=>p.endsWith('.js'))){
+ const content=fs.readFileSync(file,'utf8');
+ if(content.includes('wquxjeqkumossjxehdop'))
+  fs.writeFileSync(file,content.replaceAll('https://wquxjeqkumossjxehdop.supabase.co','https://invalid-production-ref.test.invalid'));
+}
 const files=filesUnder(outDir);
 assert.ok(files.every(p=>!/(?:private|\.env|sourcemap|AdminReview|\.map$)/i.test(path.relative(outDir,p))));
 const code=files.filter(p=>/\.(js|html|json)$/.test(p)).map(p=>fs.readFileSync(p,'utf8')).join('\n');
