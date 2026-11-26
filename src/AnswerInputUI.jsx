@@ -39,7 +39,9 @@ export function AnswerReview({ body = '', photos = [], audio = [], onOpenPhoto,
     </div>}
     {showChoices && <AnswerEntryChoices onVoice={onVoice} onWrite={onWrite} onPhoto={onPhoto} />}
     <AnswerSaveStatus state={saveState} onRetry={onRetry} hasContent={Boolean(body.trim() || photos.length || audio.length)} />
-    <button type="button" className="answer-review__finish" disabled={!canFinish} onClick={onFinish}>{finishLabel}</button>
+    <button type="button" className="answer-review__finish" disabled={!canFinish} onClick={onFinish} aria-label={finishLabel}>
+      <span style={{ color: '#fff', WebkitTextFillColor: '#fff' }}>{finishLabel}</span>
+    </button>
   </div>;
 }
 
