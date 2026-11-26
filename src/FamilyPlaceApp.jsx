@@ -18,9 +18,12 @@ import {
   saveFamilyPlaceRelation, removeFamilyPlaceRelation,
   personNameParts, uploadFamilyPlacePortrait, downloadFamilyPlacePortrait, familyPlacePortraitUrl,
   familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories, familyPlaceBookStories,
-  getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, addFamilyPlaceMedia,
+  getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, familyPlaceBookMedia,
+  updateFamilyPlaceBookStory, addFamilyRingPhoto, addFamilyPlaceMedia,
   setFamilyPlaceStoryVisibility, revokeFamilyPlaceMediaUrls,
 } from './lib/familyPlaceData.js';
+import { createFamilyApi } from './lib/familyConnection.js';
+import { createFamilyStoryAccess } from './lib/familyStories.js';
 import './family-place.css';
 import { preparePortraitSource } from './lib/portraitSource.js';
 import { hasKanji, kanaFieldForName, normalizeKanaReading,
@@ -368,11 +371,18 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     if (projectResult.error) { setVisibleBookProjects([]); setBookStories([]); setProjectsStatus('error'); }
     else {
       setVisibleBookProjects(projectResult.data);
-      const nextBookStories = publicDemo ? [] : await familyPlaceBookStories(dataClient, personId,
-        projectResult.data, nextStories).catch(error => {
+      let nextBookStories = [];
+      try {
+        if (!publicDemo) nextBookStories = await familyPlaceBookStories(dataClient, personId,
+          projectResult.data, nextStories, bookResult.data || []);
+      } catch (error) {
         console.warn('BOOKの語りを読み込めませんでした', error);
-        return [];
-      });
+        if (epoch === personLoadEpoch.current) {
+          setBookStories([]);
+          setProjectsStatus('error');
+        }
+        return;
+      }
       if (epoch !== personLoadEpoch.current) return;
       setBookStories(nextBookStories);
       setProjectsStatus('ready');
@@ -837,6 +847,50 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     } catch (cause) { setError(cause.message || '記録を開けませんでした'); }
     finally { setBusy(false); }
   };
+  const saveRingStory = async (story, body) => {
+    let updated;
+    if (story.source === 'book') updated = await updateFamilyPlaceBookStory(dataClient, story, body,
+      story.visibility === 'private');
+    else {
+      const row = stories.find(item => item.id === story.id);
+      if (!row) throw new Error('語りを読み込み直してください。');
+      const saved = await saveFamilyPlaceStory(dataClient, row, {
+        body, transcript_raw:row.transcript_raw || '',
+        transcript_readable:row.transcript_readable || '', transcript_essay:row.transcript_essay || '',
+      });
+      updated = { ...story, body:saved.body, revision:saved.revision };
+    }
+    await loadPerson(person.id);
+    return updated;
+  };
+  const lockRingStory = async (story, locked) => {
+    let updated;
+    if (story.source === 'book') updated = await updateFamilyPlaceBookStory(dataClient, story,
+      story.body, locked);
+    else {
+      const row = stories.find(item => item.id === story.id);
+      if (!row) throw new Error('語りを読み込み直してください。');
+      const saved = await setFamilyPlaceStoryVisibility(dataClient, row, locked ? 'private' : 'family');
+      updated = { ...story, visibility:saved.visibility, revision:saved.revision };
+    }
+    await loadPerson(person.id);
+    return updated;
+  };
+  const loadRingMedia = async story => story.source === 'book'
+    ? familyPlaceBookMedia(dataClient, story.id)
+    : (await familyPlaceMedia(dataClient, story.id)).map(item => ({
+      ...item, kind:item.asset_type,
+    }));
+  const addRingPhoto = async (story, file) => {
+    if (!user || !person || person.id !== selfId) throw new Error('本人の語りだけ編集できます。');
+    if (story.source === 'free') await addFamilyPlaceMedia(dataClient,user.id,story.id,file,'photo');
+    else if (story.completed) await addFamilyRingPhoto(dataClient,user.id,story,person.id,file);
+    else {
+      const api = createFamilyApi(dataClient,{ allowProduction:true });
+      await createFamilyStoryAccess(dataClient,api,story.projectId).addPhoto(file,story.id);
+    }
+    await loadPerson(person.id);
+  };
   const flushText = async () => {
     if (!storyRef.current) return;
     if (savePromiseRef.current) return savePromiseRef.current;
@@ -1098,6 +1152,22 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       </form>
     </main>}
     {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories} bookStories={bookStories}
+      ringStories={[
+        ...stories.filter(row => Boolean(row.body || row.transcript_raw || row.media_count)).map(row => ({
+          source:'free', id:row.id, theme:'無料3問', question:row.question_text,
+          body:row.body || row.transcript_readable || row.transcript_raw || '',
+          visibility:row.visibility, revision:row.revision,
+        })),
+        ...bookStories.map(row => ({ source:'book', id:row.id, projectId:row.book_project_id,
+          theme:row.chapter, question:row.question_text, body:row.body,
+          visibility:row.visibility, text_revision:row.text_revision,
+          selected_style:row.selected_style,
+          completed:publishedBooks.some(book => book.book_project_id === row.book_project_id),
+        })),
+      ]}
+      ringCanEdit={person.id === selfId} onSaveRingStory={saveRingStory}
+      onLockRingStory={lockRingStory} onLoadRingMedia={loadRingMedia}
+      onAddRingPhoto={addRingPhoto}
       memories={memories} onAddMemory={publicDemo ? startMemory : null}
       supabaseClient={publicDemo ? supabaseClient : dataClient}
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}

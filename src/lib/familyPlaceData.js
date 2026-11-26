@@ -239,26 +239,53 @@ export async function familyPlaceStories(client, personId) {
 
 // Read only formally saved BOOK answers. The caller's BOOK RLS decides which
 // answers are visible; local recording and writing drafts are never queried.
-export async function familyPlaceBookStories(client, personId, projects, freeStories = []) {
-  const ids = (projects || []).filter(project => project.status === 'active'
-    && ['paid', 'gifted', 'legacy'].includes(project.access_status)).map(project => project.id);
+export async function familyPlaceBookStories(client, personId, projects, freeStories = [], publishedBooks = []) {
+  const ids = [...new Set([
+    ...(projects || []).filter(project => project.status === 'active'
+      && ['paid', 'gifted', 'legacy'].includes(project.access_status)).map(project => project.id),
+    ...publishedBooks.map(book => book.book_project_id).filter(Boolean),
+  ])];
   if (!ids.length) return [];
   const { data: answers, error } = await client.from('answers')
-    .select('id,book_project_id,user_question_id,question_id,sequence_order,transcript_edited,transcript_readable,transcript_clean,access_override')
+    .select('id,book_project_id,user_question_id,question_id,sequence_order,transcript_edited,transcript_readable,transcript_clean,access_override,selected_style,text_revision')
     .eq('subject_person_id', personId).in('book_project_id', ids)
     .order('sequence_order');
   if (error) throw error;
-  const saved = (answers || []).filter(answer =>
+  const { data: editions, error: editionError } = await client.rpc('family_ring_edited_stories', {
+    input_person_id: personId,
+  });
+  if (editionError) throw editionError;
+  const byAnswerId = new Map((answers || []).map(answer => [answer.id, answer]));
+  for (const edition of editions || []) {
+    if (!ids.includes(edition.book_project_id)) continue;
+    byAnswerId.set(edition.answer_id, {
+      ...byAnswerId.get(edition.answer_id), id:edition.answer_id,
+      book_project_id:edition.book_project_id, user_question_id:edition.question_id,
+      transcript_edited:edition.body,
+      access_override:edition.visibility === 'private' ? 'private_forever' : 'inherit',
+      text_revision:edition.revision, ring_edition:edition,
+    });
+  }
+  const saved = [...byAnswerId.values()].filter(answer =>
     String(answer.transcript_edited || answer.transcript_readable || answer.transcript_clean || '').trim());
   if (!saved.length) return [];
   const questionIds = [...new Set(saved.map(answer => answer.user_question_id).filter(Boolean))];
   const { data: questions, error: questionError } = questionIds.length
     ? await client.from('user_questions')
-      .select('id,question_id,question_text_snapshot,custom_question_text,status,answered_at,meta_json')
+      .select('id,question_id,question_text_snapshot,custom_question_text,chapter,status,answered_at,meta_json')
       .in('id', questionIds)
     : { data: [], error: null };
   if (questionError) throw questionError;
   const byId = new Map((questions || []).map(question => [question.id, question]));
+  const publishedIds = new Set(publishedBooks.map(book => book.book_project_id));
+  const legacyQuestionIds = [...new Set(saved.filter(answer =>
+    !answer.user_question_id && publishedIds.has(answer.book_project_id))
+    .map(answer => answer.question_id).filter(Boolean))];
+  const { data: legacyQuestions, error: legacyError } = legacyQuestionIds.length
+    ? await client.from('questions').select('id,chapter,content').in('id',legacyQuestionIds)
+    : { data:[], error:null };
+  if (legacyError) throw legacyError;
+  const legacyById = new Map((legacyQuestions || []).map(question => [question.id,question]));
   const freeKeys = new Set(freeStories.filter(story =>
     story.body || story.transcript_raw || story.media_count).map(story => story.question_key));
   const { data: mappings, error: mapError } = freeKeys.size
@@ -269,17 +296,100 @@ export async function familyPlaceBookStories(client, personId, projects, freeSto
   if (mapError) throw mapError;
   const mirroredQuestions = new Set((mappings || []).map(map => map.book_question_id));
   return saved.flatMap(answer => {
+    if (answer.ring_edition) return [{
+      id:answer.id, book_project_id:answer.book_project_id,
+      question_text:answer.ring_edition.question_text,
+      body:answer.ring_edition.body,
+      visibility:answer.ring_edition.visibility,
+      chapter:answer.ring_edition.chapter,
+      text_revision:answer.ring_edition.revision,
+      selected_style:answer.selected_style || 'readable',
+    }];
+    if (!answer.user_question_id && publishedIds.has(answer.book_project_id)) {
+      const question = legacyById.get(answer.question_id);
+      if (!question) return [];
+      return [{ id:answer.id, book_project_id:answer.book_project_id,
+        question_text:question.content, chapter:question.chapter || 'その他の語り',
+        body:answer.transcript_edited || answer.transcript_readable || answer.transcript_clean,
+        visibility:answer.access_override === 'private_forever' ? 'private' : 'family',
+        text_revision:answer.text_revision, selected_style:answer.selected_style }];
+    }
     const question = byId.get(answer.user_question_id);
     if (!question || (question.status !== 'answered' && !question.answered_at)
-      || question.meta_json?.onboarding_group === 'trial_experience'
       || question.meta_json?.include_in_book_body === false
       || question.meta_json?.include_in_book_body === 'false'
       || mirroredQuestions.has(question?.question_id || answer.question_id)) return [];
     return [{ id: answer.id, book_project_id: answer.book_project_id,
       question_text: question?.question_text_snapshot || question?.custom_question_text || '人生の語り',
       body: answer.transcript_edited || answer.transcript_readable || answer.transcript_clean,
-      visibility: answer.access_override === 'private_forever' ? 'private' : 'family' }];
+      visibility: answer.access_override === 'private_forever' ? 'private' : 'family',
+      chapter: question.chapter || 'その他の語り',
+      text_revision: answer.text_revision, selected_style: answer.selected_style }];
   });
+}
+
+// A signed URL outlives a privacy change. Keep media behind the current JWT
+// and release each browser object URL when the reading surface closes.
+export async function familyPlaceBookMedia(client, answerId) {
+  const { data: assets, error } = await client.from('media_assets')
+    .select('id,answer_id,asset_type,storage_path').eq('answer_id', answerId);
+  if (error) throw error;
+  const { data: videos, error: videoError } = await client.from('video_stories')
+    .select('id,source_answer_id,video_storage_path,status')
+    .eq('source_answer_id', answerId);
+  if (videoError) throw videoError;
+  const { data: ringPhotos, error: ringPhotoError } = await client.from('family_ring_story_media')
+    .select('id,answer_id,storage_path').eq('answer_id', answerId);
+  if (ringPhotoError) throw ringPhotoError;
+  const sources = [
+    ...(assets || []).filter(item => ['photo','audio'].includes(item.asset_type))
+      .map(item => ({ id:item.id, kind:item.asset_type, bucket:item.asset_type === 'photo' ? 'photos' : 'audio', path:item.storage_path })),
+    ...(videos || []).filter(item => item.status === 'ready' && item.video_storage_path)
+      .map(item => ({ id:item.id, kind:'video', bucket:'videos', path:item.video_storage_path })),
+    ...(ringPhotos || []).map(item => ({ id:item.id, kind:'photo', bucket:'family-ring-media', path:item.storage_path })),
+  ];
+  const opened = [];
+  try {
+    for (const source of sources) {
+      const { data, error: downloadError } = await client.storage.from(source.bucket).download(source.path);
+      if (downloadError || !data) throw downloadError || new Error('メディアを開けませんでした');
+      opened.push({ ...source, url:URL.createObjectURL(data) });
+    }
+    return opened;
+  } catch (cause) {
+    revokeFamilyPlaceMediaUrls(opened);
+    throw cause;
+  }
+}
+
+export async function addFamilyRingPhoto(client, userId, story, personId, file) {
+  const mime = file.type.split(';')[0];
+  const ext = ({ 'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp' })[mime];
+  if (!ext || !file.size || file.size > 25 * 1024 * 1024)
+    throw new Error('JPEG・PNG・WebPの写真を25MB以内で選んでください。');
+  const path = `${userId}/${story.id}/${crypto.randomUUID()}.${ext}`;
+  const bucket = client.storage.from('family-ring-media');
+  const uploaded = await bucket.upload(path,file,{ contentType:mime,upsert:false });
+  if (uploaded.error) throw uploaded.error;
+  const { error } = await client.from('family_ring_story_media').insert({
+    answer_id:story.id, person_id:personId, storage_path:path, uploaded_by:userId,
+  });
+  if (error) {
+    await bucket.remove([path]).catch(() => {});
+    throw error;
+  }
+}
+
+export async function updateFamilyPlaceBookStory(client, story, body, locked) {
+  const { data, error } = await client.rpc('family_ring_update_book_story', {
+    input_answer_id: story.id,
+    input_expected_revision: story.text_revision,
+    input_body: body,
+    input_private: locked,
+  });
+  if (error || !data) throw error || new Error('語りを更新できませんでした。');
+  return { ...story, body:data.body, visibility:data.private ? 'private' : 'family',
+    text_revision:data.text_revision };
 }
 
 export async function getOrCreateFamilyPlaceStory(client, userId, person, question, visibility) {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, LockKeyhole, Plus, UserRound } from 'lucide-react';
 import FamilyAvatar from './FamilyAvatar.jsx';
+import FamilyRingContent from './FamilyRingContent.jsx';
 import WebBookCover, { publicationCoverImageUrl } from './WebBookCover.jsx';
 import { currentPersonAge } from './lib/personAge.js';
 import './family-person-page.css';
@@ -50,7 +51,9 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
   facts = [], questions = [], activeTab = 'ring', onTabChange, onBack, onProfile,
   onOpenStory, onAddFact, onRetryBooks, supabaseClient, busy = false,
   backLabel = 'ホーム', entryOrigin = 'home', onOpenBook = null, onResumeBook = null,
-  ringPreviewContent = null }) {
+  ringPreviewContent = null, ringStories = null, ringCanEdit = false,
+  onSaveRingStory = null, onLockRingStory = null, onLoadRingMedia = null,
+  onAddRingPhoto = null }) {
   const [showQuestions, setShowQuestions] = useState(false);
   const saved = stories.filter(hasAnswer);
   const savedCount = saved.length + bookStories.length;
@@ -103,7 +106,11 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
           onClick={() => onTabChange(key)}>{label}</button>)}
     </div>
     {activeTab === 'ring' && <section className="fp-person-content" role="tabpanel">
-      {ringPreviewContent || <>
+      {ringPreviewContent || (ringStories && <FamilyRingContent key={person.id} stories={ringStories}
+        canEdit={ringCanEdit} onSave={ringCanEdit ? onSaveRingStory : null}
+        onLock={ringCanEdit ? onLockRingStory : null} onLoadMedia={onLoadRingMedia}
+        onAddPhoto={ringCanEdit ? onAddRingPhoto : null}
+        onContinueBook={resume} onAddStory={onOpenStory} questions={questions}/>) || <>
       <h2>年輪</h2><p className="fp-person-section-note">人生の語りを、少しずつ残していく場所です。</p>
       {!questions.length && !savedCount ? <div className="fp-person-story-empty">年輪の体験は、次の段階で公開します。</div>
       : savedCount ? <div className="fp-person-stories">{saved.map(row =>
