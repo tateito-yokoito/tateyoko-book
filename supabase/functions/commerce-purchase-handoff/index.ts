@@ -5,6 +5,8 @@ const liveSite = 'https://www.tateito-yokoito.jp';
 const origins = new Set([liveSite, 'https://tateito-yokoito.jp',
   'http://127.0.0.1:5177', 'http://127.0.0.1:5178',
   'http://localhost:5177', 'http://localhost:5178',
+  ...(Deno.env.get('SUPABASE_URL') === 'https://zpswxefgfabzvxdbtyvq.supabase.co'
+    ? ['https://tateyoko-book-test.vercel.app'] : []),
   Deno.env.get('GUEST_TRIAL_PREVIEW_ORIGIN') || liveSite]);
 const isToken = (value: unknown): value is string =>
   typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
