@@ -347,7 +347,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   if (isReview) return (
     <section className="commerce-v2-review mx-auto min-h-[100dvh] w-full max-w-2xl bg-[#f8f7f2] px-5 pb-12 pt-10 font-sans text-[#243b31] sm:px-8 sm:pt-14">
       {isPreview && <p role="status" className="mb-6 rounded-xl border border-[#d8d6bf] bg-[#f3f1e4] px-4 py-3 text-sm leading-6 text-[#555e42]">画面プレビュー：実際の注文・決済は行いません。対象：{previewSubjectName}さん</p>}
-      <p className="text-xs font-semibold tracking-[0.16em] text-[#6b805f]">BOOKのお申し込み</p>
+      <p className="text-[0.825rem] font-medium tracking-[0.16em] text-[#6b805f]"><strong className="font-bold">たて糸♾️よこ糸BOOK</strong> お申し込み</p>
       <h1 className="mt-3 text-[1.65rem] font-semibold leading-relaxed tracking-[0.02em] sm:text-[1.85rem]">注文内容の最終確認</h1>
       <p className="mt-2 text-[0.95rem] leading-7 text-[#5d6c61]">お支払いの前に、選んだ内容と認証後の金額をご確認ください。</p>
       <div className="mt-7 overflow-hidden rounded-2xl border border-[#dce2d7] bg-[#fffefa] shadow-[0_8px_24px_rgba(38,57,44,0.045)]">
