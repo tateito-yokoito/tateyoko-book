@@ -1,0 +1,908 @@
+{
+  "source": "現行BOOK質問一覧（2026-11-19）の29問",
+  "preview": "B案・Noto Serif JP 550",
+  "viewport": "390x844",
+  "questionCount": 29,
+  "sizes": [
+    100,
+    95,
+    92
+  ],
+  "checks": [
+    {
+      "id": "TY_TRIAL_CHILDHOOD01",
+      "size": 92,
+      "lines": 3,
+      "ending": "いましたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_TRIAL_CHILDHOOD02",
+      "size": 92,
+      "lines": 4,
+      "ending": "どんな人でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_TRIAL_CHILDHOOD03",
+      "size": 92,
+      "lines": 2,
+      "ending": "好きでしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_ONB01",
+      "size": 92,
+      "lines": 2,
+      "ending": "教えてください。",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_ONB02",
+      "size": 92,
+      "lines": 3,
+      "ending": "ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_ONB03",
+      "size": 92,
+      "lines": 3,
+      "ending": "出来事はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q01",
+      "size": 92,
+      "lines": 3,
+      "ending": "いましたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q02",
+      "size": 92,
+      "lines": 3,
+      "ending": "どこでしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q03",
+      "size": 92,
+      "lines": 3,
+      "ending": "教えてください。",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q04",
+      "size": 92,
+      "lines": 3,
+      "ending": "出来事はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q05",
+      "size": 92,
+      "lines": 3,
+      "ending": "どんな方でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q06",
+      "size": 92,
+      "lines": 3,
+      "ending": "何でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q07",
+      "size": 92,
+      "lines": 2,
+      "ending": "何ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q08",
+      "size": 92,
+      "lines": 4,
+      "ending": "ものはありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q09",
+      "size": 92,
+      "lines": 3,
+      "ending": "どこですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q10",
+      "size": 92,
+      "lines": 4,
+      "ending": "思い出はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q11",
+      "size": 92,
+      "lines": 3,
+      "ending": "ましたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q12",
+      "size": 92,
+      "lines": 3,
+      "ending": "何ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q13",
+      "size": 92,
+      "lines": 3,
+      "ending": "姿勢はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q14",
+      "size": 92,
+      "lines": 3,
+      "ending": "どんな方ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q15",
+      "size": 92,
+      "lines": 3,
+      "ending": "ものはありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q16",
+      "size": 92,
+      "lines": 3,
+      "ending": "どんな方でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q17",
+      "size": 92,
+      "lines": 3,
+      "ending": "教えてください。",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q18",
+      "size": 92,
+      "lines": 3,
+      "ending": "出来事はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q19",
+      "size": 92,
+      "lines": 3,
+      "ending": "何でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q20",
+      "size": 92,
+      "lines": 3,
+      "ending": "出来事はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q21",
+      "size": 92,
+      "lines": 3,
+      "ending": "何ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q22",
+      "size": 92,
+      "lines": 3,
+      "ending": "ことはありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_Q23",
+      "size": 92,
+      "lines": 3,
+      "ending": "言葉はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.08px"
+    },
+    {
+      "id": "TY_TRIAL_CHILDHOOD01",
+      "size": 100,
+      "lines": 3,
+      "ending": "いましたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_TRIAL_CHILDHOOD02",
+      "size": 100,
+      "lines": 4,
+      "ending": "どんな人でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_TRIAL_CHILDHOOD03",
+      "size": 100,
+      "lines": 2,
+      "ending": "好きでしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_ONB01",
+      "size": 100,
+      "lines": 2,
+      "ending": "教えてください。",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_ONB02",
+      "size": 100,
+      "lines": 3,
+      "ending": "ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_ONB03",
+      "size": 100,
+      "lines": 3,
+      "ending": "出来事はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q01",
+      "size": 100,
+      "lines": 3,
+      "ending": "いましたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q02",
+      "size": 100,
+      "lines": 3,
+      "ending": "どこでしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q03",
+      "size": 100,
+      "lines": 3,
+      "ending": "教えてください。",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q04",
+      "size": 100,
+      "lines": 3,
+      "ending": "出来事はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q05",
+      "size": 100,
+      "lines": 3,
+      "ending": "どんな方でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q06",
+      "size": 100,
+      "lines": 3,
+      "ending": "何でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q07",
+      "size": 100,
+      "lines": 3,
+      "ending": "何ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q08",
+      "size": 100,
+      "lines": 4,
+      "ending": "ものはありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q09",
+      "size": 100,
+      "lines": 3,
+      "ending": "どこですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q10",
+      "size": 100,
+      "lines": 4,
+      "ending": "思い出はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q11",
+      "size": 100,
+      "lines": 3,
+      "ending": "ましたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q12",
+      "size": 100,
+      "lines": 3,
+      "ending": "何ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q13",
+      "size": 100,
+      "lines": 3,
+      "ending": "姿勢はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q14",
+      "size": 100,
+      "lines": 3,
+      "ending": "どんな方ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q15",
+      "size": 100,
+      "lines": 4,
+      "ending": "ものはありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q16",
+      "size": 100,
+      "lines": 3,
+      "ending": "どんな方でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q17",
+      "size": 100,
+      "lines": 3,
+      "ending": "教えてください。",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q18",
+      "size": 100,
+      "lines": 3,
+      "ending": "出来事はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q19",
+      "size": 100,
+      "lines": 3,
+      "ending": "何でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q20",
+      "size": 100,
+      "lines": 3,
+      "ending": "出来事はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q21",
+      "size": 100,
+      "lines": 3,
+      "ending": "何ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q22",
+      "size": 100,
+      "lines": 3,
+      "ending": "ことはありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_Q23",
+      "size": 100,
+      "lines": 3,
+      "ending": "言葉はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "24px"
+    },
+    {
+      "id": "TY_TRIAL_CHILDHOOD01",
+      "size": 95,
+      "lines": 3,
+      "ending": "いましたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_TRIAL_CHILDHOOD02",
+      "size": 95,
+      "lines": 4,
+      "ending": "どんな人でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_TRIAL_CHILDHOOD03",
+      "size": 95,
+      "lines": 2,
+      "ending": "好きでしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_ONB01",
+      "size": 95,
+      "lines": 2,
+      "ending": "教えてください。",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_ONB02",
+      "size": 95,
+      "lines": 3,
+      "ending": "ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_ONB03",
+      "size": 95,
+      "lines": 3,
+      "ending": "出来事はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q01",
+      "size": 95,
+      "lines": 3,
+      "ending": "いましたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q02",
+      "size": 95,
+      "lines": 3,
+      "ending": "どこでしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q03",
+      "size": 95,
+      "lines": 3,
+      "ending": "教えてください。",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q04",
+      "size": 95,
+      "lines": 3,
+      "ending": "出来事はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q05",
+      "size": 95,
+      "lines": 3,
+      "ending": "どんな方でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q06",
+      "size": 95,
+      "lines": 3,
+      "ending": "何でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q07",
+      "size": 95,
+      "lines": 3,
+      "ending": "何ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q08",
+      "size": 95,
+      "lines": 4,
+      "ending": "ものはありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q09",
+      "size": 95,
+      "lines": 3,
+      "ending": "どこですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q10",
+      "size": 95,
+      "lines": 4,
+      "ending": "思い出はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q11",
+      "size": 95,
+      "lines": 3,
+      "ending": "ましたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q12",
+      "size": 95,
+      "lines": 3,
+      "ending": "何ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q13",
+      "size": 95,
+      "lines": 3,
+      "ending": "姿勢はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q14",
+      "size": 95,
+      "lines": 3,
+      "ending": "どんな方ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q15",
+      "size": 95,
+      "lines": 4,
+      "ending": "ものはありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q16",
+      "size": 95,
+      "lines": 3,
+      "ending": "どんな方でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q17",
+      "size": 95,
+      "lines": 3,
+      "ending": "教えてください。",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q18",
+      "size": 95,
+      "lines": 3,
+      "ending": "出来事はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q19",
+      "size": 95,
+      "lines": 3,
+      "ending": "何でしたか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q20",
+      "size": 95,
+      "lines": 3,
+      "ending": "出来事はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q21",
+      "size": 95,
+      "lines": 3,
+      "ending": "何ですか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q22",
+      "size": 95,
+      "lines": 3,
+      "ending": "ことはありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    },
+    {
+      "id": "TY_Q23",
+      "size": 95,
+      "lines": 3,
+      "ending": "言葉はありますか？",
+      "overflow": false,
+      "requiresScroll": false,
+      "actionsVisible": true,
+      "font": "22.8px"
+    }
+  ],
+  "smallPhone": {
+    "viewport": "320x568",
+    "longestQuestion": [
+      {
+        "size": 100,
+        "requiresScroll": true,
+        "overflow": false
+      },
+      {
+        "size": 95,
+        "requiresScroll": true,
+        "overflow": false
+      },
+      {
+        "size": 92,
+        "requiresScroll": true,
+        "overflow": false
+      }
+    ],
+    "textScale125": {
+      "size": 100,
+      "overflow": false,
+      "endReachable": true
+    }
+  }
+}

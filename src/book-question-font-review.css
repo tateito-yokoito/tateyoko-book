@@ -104,6 +104,15 @@ html:has(.book-ui-review-scene--large-text) { font-size: 125%; }
   background: #f0f1eb;
   box-shadow: none;
 }
+.book-question-layout--b.book-question-size--100 .story-sky-surface.question-background-navy .story-sky-content.question-flow-content .reading-question > .recording-question-card p {
+  font-size: 1.5rem;
+}
+.book-question-layout--b.book-question-size--95 .story-sky-surface.question-background-navy .story-sky-content.question-flow-content .reading-question > .recording-question-card p {
+  font-size: 1.425rem;
+}
+.book-question-layout--b.book-question-size--92 .story-sky-surface.question-background-navy .story-sky-content.question-flow-content .reading-question > .recording-question-card p {
+  font-size: 1.38rem;
+}
 @media (max-width: 359px) {
   .book-question-layout--b .story-sky-surface.question-background-navy .question-flow-content--entry .reading-question > .recording-question-card {
     padding-right: 8px;

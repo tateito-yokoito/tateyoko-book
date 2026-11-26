@@ -69,6 +69,12 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
 .app-container--book-light .story-sky-content .reading-question > .recording-question-card p {
   font-weight: 550;
 }
+.app-container--book-light .recording-question-ending { white-space: nowrap; }
+.app-container--book-light .recording-question-word { white-space: nowrap; }
+@media (max-width: 359px) {
+  .app-container--book-light .recording-question-ending--phrase { white-space: normal; }
+  .app-container--book-light .recording-question-ending-tail { white-space: nowrap; }
+}
 .app-container--book-light .question-flow-content--entry .reading-question {
   display: flex;
   flex: 1 0 auto;

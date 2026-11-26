@@ -99,6 +99,28 @@ function QuestionLayoutComparison() {
   </main>;
 }
 
+function QuestionSizeComparison() {
+  const cases = [['short', '短い質問'], ['standard', '標準的な質問'], ['long', '最長の質問']];
+  const sizes = [['100', 'A｜100％'], ['95', 'B｜95％'], ['92', 'C｜92％']];
+  return <main className="book-question-font-review">
+    <a href="?book_ui_review=index">← 画面一覧</a>
+    <h1>質問文の大きさを比べる</h1>
+    <p>採用した薄い背景のカードを共通にし、質問文の文字サイズだけを比較します。現行BOOKの質問を使用しています。</p>
+    <div className="book-question-layout-compare">
+      {cases.map(([key, label]) => <section key={key} aria-label={label}>
+        <h2>{label} <small>{previewQuestionLengths[key].length}文字</small></h2>
+        <div className="book-question-layout-compare__pair">
+          {sizes.map(([size, heading]) => <div className="book-question-layout-compare__variant" key={size}>
+            <div className="book-question-font-review__heading"><strong>{heading}</strong><span>Noto Serif JP · 550</span></div>
+            <iframe title={`${label} ${heading}`} src={`?book_ui_review=answer&question_length=${key}&question_style=b&question_size=${size}`} />
+            <a href={`?book_ui_review=answer&question_length=${key}&question_style=b&question_size=${size}`}>画面全体を見る ↗</a>
+          </div>)}
+        </div>
+      </section>)}
+    </div>
+  </main>;
+}
+
 function AnswerWritingPreview() {
   const [body, setBody] = React.useState('');
   const [showStyles, setShowStyles] = React.useState(false);
@@ -115,6 +137,7 @@ function AnswerWritingPreview() {
 export default function BookUiReview({ screen }) {
   if (screen === 'question_fonts') return <QuestionFontComparison />;
   if (screen === 'question_layout') return <QuestionLayoutComparison />;
+  if (screen === 'question_sizes') return <QuestionSizeComparison />;
   if (!screen || screen === 'index' || !screens.some(([key]) => key === screen)) {
     return <main className="book-ui-review-index">
       <p>画面確認用プレビュー · 架空データ</p>
@@ -125,6 +148,7 @@ export default function BookUiReview({ screen }) {
       )}
         <a href="?book_ui_review=question_fonts">質問文の太さ A・B・C 比較 <span aria-hidden="true">›</span></a>
         <a href="?book_ui_review=question_layout">質問画面の余白・長さ比較 <span aria-hidden="true">›</span></a>
+        <a href="?book_ui_review=question_sizes">質問文の大きさ A・B・C 比較 <span aria-hidden="true">›</span></a>
         <a href="/?app=1&entry=purchase">商品選択・認証入口 <span aria-hidden="true">›</span></a>
         <a href="/?commerce_review_preview=1">注文の最終確認 <span aria-hidden="true">›</span></a>
       </nav>
@@ -133,7 +157,10 @@ export default function BookUiReview({ screen }) {
 
   const reviewParams = new URLSearchParams(window.location.search);
   const questionLength = reviewParams.get('question_length');
-  const reviewQuestion = Object.hasOwn(previewQuestionLengths, questionLength)
+  const questionOverride = screen === 'answer' ? reviewParams.get('question_text') : null;
+  const reviewQuestion = questionOverride && questionOverride.length <= 160
+    ? { ...previewQuestion, content: questionOverride }
+    : Object.hasOwn(previewQuestionLengths, questionLength)
     ? { ...previewQuestion, content: previewQuestionLengths[questionLength] }
     : previewQuestion;
   const view = {
@@ -182,9 +209,10 @@ export default function BookUiReview({ screen }) {
   }[screen];
   const questionFont = screen === 'answer' ? reviewParams.get('question_font') : null;
   const questionStyle = screen === 'answer' ? reviewParams.get('question_style') : null;
+  const questionSize = screen === 'answer' ? reviewParams.get('question_size') : null;
   const largeText = screen === 'answer' && reviewParams.get('text_scale') === 'large';
   return <>
-    <div className={`app-container app-container--book-light book-ui-review-scene${['a', 'b', 'c'].includes(questionFont) ? ` book-question-font--${questionFont}` : ''}${['a', 'b'].includes(questionStyle) ? ` book-question-layout--${questionStyle}` : ''}${largeText ? ' book-ui-review-scene--large-text' : ''}`}>{view}</div>
+    <div className={`app-container app-container--book-light book-ui-review-scene${['a', 'b', 'c'].includes(questionFont) ? ` book-question-font--${questionFont}` : ''}${['a', 'b'].includes(questionStyle) ? ` book-question-layout--${questionStyle}` : ''}${['100', '95', '92'].includes(questionSize) ? ` book-question-size--${questionSize}` : ''}${largeText ? ' book-ui-review-scene--large-text' : ''}`}>{view}</div>
     <a className={`book-ui-review-back${screen === 'answer' ? ' book-ui-review-back--question' : ''}`} href="?book_ui_review=index">画面一覧</a>
   </>;
 }
