@@ -64,6 +64,37 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
   color: var(--book-on-primary) !important;
   font-size: var(--book-button-size);
 }
+
+/* BOOK question hierarchy: the prompt and guidance grow naturally above the actions. */
+.app-container--book-light .story-sky-content .reading-question > .recording-question-card p {
+  font-weight: 550;
+}
+.app-container--book-light .question-flow-content--entry .reading-question {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  justify-content: center;
+}
+.app-container--book-light .story-sky-surface.question-background-navy .question-flow-content--entry .reading-question > .recording-question-card {
+  padding: 28px 0 30px;
+}
+.app-container--book-light .question-flow-content--entry .reading-question .recording-question-hint {
+  width: 100%;
+  margin: 0 auto;
+  text-align: center;
+  font-family: var(--book-ui-font);
+}
+.app-container--book-light .question-flow-content--entry .reading-question .recording-question-hint p:not(.recording-question-hint-label) {
+  margin: 0;
+  line-height: 1.7;
+  color: var(--book-muted);
+}
+.app-container--book-light .story-sky-surface.question-background-navy .question-flow-content--entry .recording-control-dock--choice {
+  margin-top: clamp(36px, 5dvh, 56px);
+}
+.app-container--book-light .question-flow-content--entry .answer-entry-choices {
+  gap: 10px;
+}
 :is(.app-container--book-light, .book-user-light) input.quiet-input {
   color: var(--book-ink);
   border-bottom-color: var(--book-line);

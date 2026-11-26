@@ -50,6 +50,10 @@ const previewQuestion = {
   prompt_hint: '思い浮かぶ一場面から話してください。',
   reassurance_text: '短くても大丈夫です。',
 };
+const previewQuestionLengths = {
+  short: '好きな遊びは何でしたか？',
+  long: '子どもの頃に暮らしていた家や通学路、家族や友人と過ごした時間を思い返すと、いまでも心に残っている出来事はどんなものですか？',
+};
 const open = key => window.location.assign(`?book_ui_review=${key}`);
 const questionFontOptions = [
   ['a', 'A｜基準', 'Noto Serif JP · 500'],
@@ -72,6 +76,23 @@ function QuestionFontComparison() {
   </main>;
 }
 
+function QuestionLayoutComparison() {
+  const cases = [['short', '短い質問'], ['standard', '標準的な質問'], ['long', '長い質問']];
+  return <main className="book-question-font-review">
+    <a href="?book_ui_review=index">← 画面一覧</a>
+    <h1>質問画面の余白を比べる</h1>
+    <p>実際の質問画面を同じ幅で表示しています。スマートフォンでは左右にスワイプできます。</p>
+    <div className="book-question-font-review__screens">
+      {cases.map(([key, label]) => <section key={key} aria-label={label}>
+        <div className="book-question-font-review__heading"><strong>{label}</strong><span>Noto Serif JP · 550</span></div>
+        <iframe title={label} src={`?book_ui_review=answer&question_length=${key}`} />
+        <a href={`?book_ui_review=answer&question_length=${key}`}>画面全体を見る ↗</a>
+        {key === 'long' && <a className="book-question-font-review__zoom" href="?book_ui_review=answer&question_length=long&text_scale=large">文字を拡大して見る ↗</a>}
+      </section>)}
+    </div>
+  </main>;
+}
+
 function AnswerWritingPreview() {
   const [body, setBody] = React.useState('');
   const [showStyles, setShowStyles] = React.useState(false);
@@ -87,6 +108,7 @@ function AnswerWritingPreview() {
 
 export default function BookUiReview({ screen }) {
   if (screen === 'question_fonts') return <QuestionFontComparison />;
+  if (screen === 'question_layout') return <QuestionLayoutComparison />;
   if (!screen || screen === 'index' || !screens.some(([key]) => key === screen)) {
     return <main className="book-ui-review-index">
       <p>画面確認用プレビュー · 架空データ</p>
@@ -96,18 +118,24 @@ export default function BookUiReview({ screen }) {
         <a key={key} href={`?book_ui_review=${key}`}>{label} <span aria-hidden="true">›</span></a>
       )}
         <a href="?book_ui_review=question_fonts">質問文の太さ A・B・C 比較 <span aria-hidden="true">›</span></a>
+        <a href="?book_ui_review=question_layout">質問画面の余白・長さ比較 <span aria-hidden="true">›</span></a>
         <a href="/?app=1&entry=purchase">商品選択・認証入口 <span aria-hidden="true">›</span></a>
         <a href="/?commerce_review_preview=1">注文の最終確認 <span aria-hidden="true">›</span></a>
       </nav>
     </main>;
   }
 
+  const reviewParams = new URLSearchParams(window.location.search);
+  const questionLength = reviewParams.get('question_length');
+  const reviewQuestion = Object.hasOwn(previewQuestionLengths, questionLength)
+    ? { ...previewQuestion, content: previewQuestionLengths[questionLength] }
+    : previewQuestion;
   const view = {
     home: <Scene_Home userName="紡木 誠" questionSet={[]} currentIndex={0}
       onStartTalking={noop} onStartPhotoStory={noop} onOpenQuestionLibrary={noop}
       onOpenStoryPages={noop} onOpenBookBuilder={noop} onOpenSettings={noop}
       onOpenShelf={noop} onShareWithFriend={noop} />,
-    answer: <Scene1_MyPage question={previewQuestion} lightMode userName="紡木 誠"
+    answer: <Scene1_MyPage question={reviewQuestion} lightMode userName="紡木 誠"
       progress={{ currentIndex: 0, total: 30 }}
       onBack={() => open('home')} onNext={() => open('answer_voice')}
       onWrite={() => open('answer_write')} onPhoto={noop} onEndToday={() => open('home')} />,
@@ -146,9 +174,10 @@ export default function BookUiReview({ screen }) {
     settings: <Scene_SettingsHome onBack={noop} onOpenDelivery={noop} onOpenPrivacy={noop}
       onOpenSupporters={noop} onOpenProfile={noop} onOpenContract={noop} />,
   }[screen];
-  const questionFont = screen === 'answer' ? new URLSearchParams(window.location.search).get('question_font') : null;
+  const questionFont = screen === 'answer' ? reviewParams.get('question_font') : null;
+  const largeText = screen === 'answer' && reviewParams.get('text_scale') === 'large';
   return <>
-    <div className={`app-container app-container--book-light book-ui-review-scene${['a', 'b', 'c'].includes(questionFont) ? ` book-question-font--${questionFont}` : ''}`}>{view}</div>
-    <a className="book-ui-review-back" href="?book_ui_review=index">画面一覧</a>
+    <div className={`app-container app-container--book-light book-ui-review-scene${['a', 'b', 'c'].includes(questionFont) ? ` book-question-font--${questionFont}` : ''}${largeText ? ' book-ui-review-scene--large-text' : ''}`}>{view}</div>
+    <a className={`book-ui-review-back${screen === 'answer' ? ' book-ui-review-back--question' : ''}`} href="?book_ui_review=index">画面一覧</a>
   </>;
 }

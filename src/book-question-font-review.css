@@ -62,3 +62,11 @@
   box-sizing: border-box;
   font-size: 14px;
 }
+.book-question-font-review section > a.book-question-font-review__zoom { margin-left: 12px; }
+html:has(.book-ui-review-scene--large-text) { font-size: 125%; }
+.book-ui-review-back--question {
+  position: static;
+  display: block;
+  width: max-content;
+  margin: 16px auto 32px;
+}

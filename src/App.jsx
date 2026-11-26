@@ -19097,7 +19097,7 @@ export function Scene1_MyPage({
   const sectionLabel = recordingSectionLabel(question);
 
   return (
-    <StorySkySurface className="question-flow-content h-full flex flex-col overflow-y-auto pb-4" skyOverride={skyOverride}
+    <StorySkySurface className="question-flow-content question-flow-content--entry h-full flex flex-col overflow-y-auto pb-4" skyOverride={skyOverride}
       surfaceClassName={brightAnswer ? 'answer-light-recorder' : ''} background={QUESTION_BACKGROUND}>
       <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={onBack} />
 
@@ -19127,7 +19127,7 @@ export function Scene1_MyPage({
       </div>}
 
       {!isTokenMode() && (
-        <div className="mt-5 flex items-center justify-center gap-3 pb-2">
+        <div className="mt-5 flex shrink-0 items-center justify-center gap-3 pb-2">
           {onSkip && (!isOnboardingQuestion || question?.onboarding_group === "starting_motivation") && (
             <button
               onClick={onSkip}
