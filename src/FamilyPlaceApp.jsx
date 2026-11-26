@@ -43,6 +43,10 @@ function PersonNameFields({ value, onChange, people = [], firstRegistration = fa
   const imeEligibleRef = useRef({});
   const composingRef = useRef({});
   const [autoFields, setAutoFields] = useState(() => new Set());
+  const rememberReading = (key, text) => {
+    const reading = normalizeKanaReading(text);
+    if (reading) readingRef.current[key] = reading;
+  };
   const markAuto = (key, enabled) => setAutoFields(previous => {
     const next = new Set(previous);
     if (enabled) next.add(key); else next.delete(key);
@@ -53,8 +57,7 @@ function PersonNameFields({ value, onChange, people = [], firstRegistration = fa
     if (!composingRef.current[key] && hasKanji(value?.[key]) && value[key] !== name
       && !(autoFields.has(kanaKey) && name.startsWith(value[key])))
       readingRef.current[key] = '';
-    const reading = normalizeKanaReading(name);
-    if (reading) readingRef.current[key] = reading;
+    rememberReading(key, name);
     const candidate = suggestNameReading(people,key,name,readingRef.current[key]);
     const next = { ...value, [key]:name };
     if (candidate && (!value?.[kanaKey]?.trim() || autoFields.has(kanaKey))) {
@@ -78,13 +81,15 @@ function PersonNameFields({ value, onChange, people = [], firstRegistration = fa
         readingRef.current[key] = normalizeKanaReading(value?.[key]);
       } : undefined}
       onBeforeInput={nameField ? event => {
+        if (imeEligibleRef.current[key]) rememberReading(key, event.nativeEvent?.data);
+      } : undefined}
+      onInput={nameField ? event => {
         if (!composingRef.current[key] || !imeEligibleRef.current[key]) return;
-        const reading = normalizeKanaReading(event.nativeEvent?.data);
-        if (reading) readingRef.current[key] = reading;
+        rememberReading(key, event.nativeEvent?.data);
+        rememberReading(key, event.currentTarget.value);
       } : undefined}
       onCompositionUpdate={nameField ? event => {
-        const reading = normalizeKanaReading(event.data);
-        if (imeEligibleRef.current[key] && reading) readingRef.current[key] = reading;
+        if (imeEligibleRef.current[key]) rememberReading(key, event.data);
       } : undefined}
       onCompositionEnd={nameField ? event => {
         if (imeEligibleRef.current[key]) changeName(key,event.currentTarget.value);
