@@ -24,7 +24,7 @@ import {
 import './family-place.css';
 import { preparePortraitSource } from './lib/portraitSource.js';
 import { hasKanji, kanaFieldForName, normalizeKanaReading,
-  suggestNameReading } from './lib/nameReading.js';
+  suggestNameReading, dictionaryNameReading } from './lib/nameReading.js';
 import { publicDemoClient, publicDemoUser, publicDemoSessionId, publicDemoMemories,
   savePublicDemoMemory } from './lib/familyPlacePublicDemo.js';
 
@@ -39,6 +39,8 @@ const emptyPersonDraft = () => ({ family_name: '', given_name: '', family_name_k
   maiden_name: '', maiden_name_kana: '', birth_year: '', birth_month: '', birth_day: '', gender: '' });
 
 function PersonNameFields({ value, onChange, people = [], firstRegistration = false }) {
+  const valueRef = useRef(value);
+  valueRef.current = value;
   const readingRef = useRef({});
   const imeEligibleRef = useRef({});
   const composingRef = useRef({});
@@ -68,6 +70,14 @@ function PersonNameFields({ value, onChange, people = [], firstRegistration = fa
       markAuto(kanaKey,false);
     }
     onChange(next);
+    if (!candidate && hasKanji(name)) {
+      void dictionaryNameReading(key,name).then(reading => {
+        if (!reading || valueRef.current[key] !== name || valueRef.current[kanaKey]?.trim()) return;
+        markAuto(kanaKey,true);
+        onChange(current => current[key] === name && !current[kanaKey]?.trim()
+          ? { ...current, [kanaKey]:reading } : current);
+      }).catch(() => {}); // A missing suggestion must never block name entry.
+    }
   };
   const field = (label, key, autoComplete, required = false) => {
     const nameField = Boolean(kanaFieldForName(key));

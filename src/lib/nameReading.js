@@ -27,3 +27,12 @@ export function suggestNameReading(people, field, name, imeReading = '') {
   if (!hasKanji(name)) return '';
   return normalizeKanaReading(imeReading) || knownFamilyReading(people,field,name);
 }
+
+// Loaded only when the keyboard did not expose the pre-conversion kana.
+// This local name dictionary never sends a person's name to a server.
+export async function dictionaryNameReading(field, name) {
+  const category = field === 'maiden_name' ? 'family_name' : field;
+  if (!['family_name', 'given_name'].includes(category) || !hasKanji(name)) return '';
+  const { default: dictionary } = await import('./nameReadingDictionary.json', { with:{ type:'json' } });
+  return normalizeKanaReading(dictionary[category]?.[String(name).trim()]);
+}
