@@ -136,6 +136,7 @@ function GuestTrialExperience() {
   const [savePeople, setSavePeople] = useState([]);
   const [selectedSavePerson, setSelectedSavePerson] = useState(trialPersonId || '');
   const [savedPersonName, setSavedPersonName] = useState('');
+  const [serviceReturnScreen, setServiceReturnScreen] = useState('finished');
   const pendingSaveOpen = useRef(false);
 
   useEffect(() => {
@@ -435,6 +436,7 @@ function GuestTrialExperience() {
   function openBookInformation() {
     if (trialPersonId && session) localStorage.setItem('tateyoko:guest-trial:self:v1',
       JSON.stringify(session));
+    setServiceReturnScreen(screen);
     setScreen('service');
   }
 
@@ -683,13 +685,14 @@ function GuestTrialExperience() {
         <button type="button" onClick={openBookInformation} className="mt-5 min-h-14 w-full rounded-full border border-white/35">BOOKを詳しく見る</button>
       </main>}
       {screen === 'service' && <main className="px-7 py-14">
-        <button type="button" onClick={() => setScreen('finished')} className="text-white/70">← 語りに戻る</button>
+        <button type="button" onClick={() => setScreen(serviceReturnScreen)} className="text-white/70">← 戻る</button>
         <h1 className="mt-8 text-2xl leading-relaxed">たて糸♾️よこ糸BOOKについて</h1>
         <p className="mt-6 leading-loose text-white/75">問いに答えながら人生をたどり、声と文章、写真を一冊のブックとWebブックに残せます。</p>
         <img src="/site/hp-renewal/book-and-webbook-approved.png" alt="縦糸横糸ブックとWebブック" className="mt-8 w-full rounded-2xl" />
         <p className="mt-8 leading-loose text-white/75">商品と金額は購入画面で確認できます。無料3問の語りは購入手続き中も保持され、新規購入が確定した物語に引き継ぎます。</p>
         <a href={guestTrialPurchaseUrl()} className="mt-10 block w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-center text-[#15243a]">商品を選んで購入へ進む</a>
         <button type="button" onClick={openExit} className="mt-5 w-full rounded-full border border-white/35 px-7 py-5">ここで終了する</button>
+        <button type="button" onClick={() => setScreen(serviceReturnScreen)} className="mt-6 flex min-h-11 w-full items-center justify-center text-sm text-[var(--book-muted)] underline">← 無料3問の結果に戻る</button>
       </main>}
       {screen === 'end_choice' && <main className="px-7 py-20 text-center">
         <h1 className="text-2xl">ここで終了する</h1>
