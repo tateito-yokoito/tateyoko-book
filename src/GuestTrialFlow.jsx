@@ -5,6 +5,7 @@ import TrialCompletionExperience, { StoryCard } from './TrialCompletionExperienc
 import ChildhoodTrialIntro from './ChildhoodTrialIntro.jsx';
 import { AnswerBodyEditor, AnswerSummary } from './AnswerInputUI.jsx';
 import { AnswerStyleChoices, AnswerTextCandidate, AnswerTextFields, AnswerTextLayout } from './AnswerTextShared.jsx';
+import { QuestionCopy } from './QuestionCopy.jsx';
 import './guest-trial-finished.css';
 import './guest-trial-navigation.css';
 import { guestCheckout, guestPurchaseStatus, claimGuestPurchase } from './lib/guestPurchaseApi.js';
@@ -605,8 +606,8 @@ function GuestTrialExperience() {
           <button type="button" onClick={() => setScreen(pendingAudioUrl ? 'record' : 'write')} className="min-h-11 text-white/65">← 戻る</button>
           <p className="flex min-h-11 shrink-0 items-center text-[1rem] text-white/75">{index + 1} / 3</p>
         </header>
-        <h1 className="mt-8 text-center text-[1.35rem] leading-[1.8]">{questions[index].content}</h1>
-        <div className="mt-10 rounded-2xl border border-[var(--book-line)] bg-[var(--book-surface)] p-6">
+        <h1 className="mt-8 text-center text-[1.35rem] leading-[1.8]"><QuestionCopy text={questions[index].content} /></h1>
+        <div className="mt-10">
           <GuestTrialPolishControls key={questions[index].id} session={session} question={questions[index]}
             text={transcript} originalText={answers.find(row => row.question_id === questions[index].id)?.transcript || ''}
             onUse={setTranscript} onBlockedChange={setReviewBlocked} disabled={busy || editing || !transcript.trim()} reviewMode>

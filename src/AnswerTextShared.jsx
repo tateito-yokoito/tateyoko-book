@@ -2,13 +2,18 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import QuestionFlowTopBar from './QuestionFlowTopBar.jsx';
 import { AnswerBodyEditor } from './AnswerInputUI.jsx';
+import { QuestionCopy, questionGuidance } from './QuestionCopy.jsx';
 
 export function AnswerTextLayout({ question, theme, progress, onBack, children, light = false }) {
+  const guidance = questionGuidance(question);
   return createPortal(
     <div className={`answer-text-layout fixed inset-0 z-[9999] flex flex-col px-5 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-[calc(0.75rem+env(safe-area-inset-bottom))] overflow-y-auto ${light ? 'answer-light answer-text-layout--light' : 'bg-slate-950 text-white'}`}>
       <div className="mx-auto w-full max-w-xl flex min-h-0 flex-1 flex-col">
         <QuestionFlowTopBar onBack={onBack} theme={theme || question?.theme_label || question?.chapter_label || ''} progress={progress} />
-        <h2 className="text-center text-narrative text-[1.3rem] leading-[1.7] mt-7 mb-4 max-h-[20dvh] overflow-y-auto shrink-0">{question?.content || question?.question_text_snapshot}</h2>
+        <h2 className="text-center text-narrative text-[1.3rem] leading-[1.7] mt-7 mb-4 max-h-[20dvh] overflow-y-auto shrink-0"><QuestionCopy text={question?.content || question?.question_text_snapshot} /></h2>
+        {guidance.length > 0 && <div className="answer-text-guidance" aria-label="話すヒント">
+          {guidance.map(line => <p key={line}>{line}</p>)}
+        </div>}
         {children}
       </div>
     </div>, document.body

@@ -34,6 +34,7 @@ import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
 import WrittenAnswerEditor from "./WrittenAnswerEditor.jsx";
 import { AnswerTextCandidate, AnswerTextFields, AnswerTextLayout } from "./AnswerTextShared.jsx";
+import { QuestionCopy, questionGuidance } from './QuestionCopy.jsx';
 import { AnswerEntryChoices, AnswerPhotoStrip, AnswerReview, AnswerSaveStatus } from './AnswerInputUI.jsx';
 import { BookAnswerPhotoDraft } from './lib/bookAnswerPhotoDraft.js';
 import { draftStorageKey } from './lib/answerTextDraft.js';
@@ -18971,43 +18972,14 @@ function Scene0_Door({ onNext, onHome }) {
   );
 }
 
-const QUESTION_WORD_SEGMENTER = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
-  ? new Intl.Segmenter('ja', { granularity: 'word' }) : null;
-const QUESTION_PHRASE_PATTERN = /(残しておきたい|思い浮かべて|夢中になってきた|大切にしてきた|挑戦してみたい|つながっている)/g;
-
-function renderQuestionWords(text) {
-  return String(text).split(QUESTION_PHRASE_PATTERN).flatMap((part, partIndex) => {
-    if (partIndex % 2 === 1) return <span className="recording-question-word" key={`phrase-${partIndex}`}>{part}</span>;
-    if (!QUESTION_WORD_SEGMENTER) return part;
-    return [...QUESTION_WORD_SEGMENTER.segment(part)].map(({ segment, isWordLike }, wordIndex) => isWordLike
-      ? <span className="recording-question-word" key={`${partIndex}-${wordIndex}`}>{segment}</span>
-      : segment);
-  });
-}
-
 function RecordingQuestionPrompt({ question }) {
-  const isDailyLifeQuestion = /最近は[、,]?\s*どんなふうに.*一日を過ごす/.test(question.content || "");
-  const guidance = (bookendKindForQuestion(question)
-    ? ["短くても大丈夫です。"]
-    : isDailyLifeQuestion
-    ? ["いつもの一日から、よくしていることを一つ。", "特別な出来事でなくても大丈夫です。"]
-    : [question.prompt_hint, question.reassurance_text])
-    .filter(Boolean)
-    .filter((text, index, all) => all.indexOf(text) === index);
-  const questionText = String(question.content || "");
-  const firstPause = questionText.indexOf("、");
-  const displayQuestion = !questionText.includes("\n") && firstPause > 0 && firstPause <= 8
-    && questionText.length - firstPause > 8
-    ? `${questionText.slice(0, firstPause + 1)}\n${questionText.slice(firstPause + 1)}`
-    : questionText;
-  const ending = displayQuestion.match(/(ありますか？|いましたか？|でしたか？|ましたか？|ですか？|ください。)$/)?.[0];
-  const semanticEnding = ending && (displayQuestion.match(/((?:思い出|出来事|もの|姿勢|こと|言葉)はありますか？|(?:何|どこ|どんな方|どんな人)(?:でしたか？|ですか？)|好きでしたか？|教えてください。)$/)?.[0] || ending);
+  const guidance = questionGuidance(question, { bookend: Boolean(bookendKindForQuestion(question)) });
 
   return (
     <div className="space-y-3 reading-question">
       <div className="recording-question-card px-5 py-6 text-center">
         <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
-          {ending ? <>{renderQuestionWords(displayQuestion.slice(0, -semanticEnding.length))}<span className={`recording-question-ending${semanticEnding === ending ? '' : ' recording-question-ending--phrase'}`}>{semanticEnding === ending ? ending : <>{semanticEnding.slice(0, -ending.length)}<span className="recording-question-ending-tail">{ending}</span></>}</span></> : renderQuestionWords(displayQuestion)}
+          <QuestionCopy text={question.content} />
         </p>
       </div>
 

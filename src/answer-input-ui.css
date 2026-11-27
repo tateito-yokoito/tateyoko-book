@@ -68,6 +68,9 @@
 .answer-text-layout--light .question-flow-top-bar{color:var(--book-primary, #3c584b)}
 .answer-text-layout--light .question-flow-top-bar button,.answer-text-layout--light .question-flow-top-bar span,.answer-text-layout--light .question-flow-top-bar p{color:var(--book-primary, #3c584b)}
 .answer-text-layout--light h2,.answer-text-layout--light h3{color:var(--book-ink, #26352f)}
+.answer-text-guidance{margin:0 0 18px;text-align:center;font-family:'Noto Sans JP',sans-serif;font-size:.88rem;line-height:1.65;color:var(--book-muted, #53665b);flex-shrink:0}
+.answer-text-guidance p{margin:0}
+.answer-text-layout--light .answer-text-guidance{color:var(--book-muted, #53665b)}
 .answer-text-layout--light [class*="text-white"],.answer-text-layout--light [class*="text-amber"]{color:var(--book-muted, #53665b)}
 .answer-text-layout--light [class*="border-white"]{border-color:var(--book-line, #c9cfc5)}
 .answer-text-layout--light textarea{background:var(--book-surface, #fffdf8);border-color:var(--book-line, #aebdaf);color:var(--book-ink, #26352f)}

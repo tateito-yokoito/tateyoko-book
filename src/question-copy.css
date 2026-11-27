@@ -1,0 +1,4 @@
+.question-copy-unit { white-space: nowrap; }
+@media (max-width: 359px) {
+  .question-copy-unit { max-width: 100%; }
+}
