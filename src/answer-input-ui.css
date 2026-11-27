@@ -44,8 +44,9 @@
 .answer-light-recorder .recording-action-button{background:var(--book-surface, #fffdf8);border-color:var(--book-line, #a6b7a9);color:var(--book-primary, #284c40)}
 .answer-light-recorder .recording-action-button--stop{background:var(--book-primary, #284c40);border-color:var(--book-primary, #284c40);color:#fff}
 .answer-light-recorder .recording-action-button:disabled{opacity:.55}
-.answer-light-recorder .sm-recording-countdown-dock{position:relative}
-.answer-light-recorder .sm-recording-countdown-number{position:absolute;left:0;right:0;bottom:100%;margin-bottom:4px;pointer-events:none;color:#9ba99b;font:normal 72px/1 'Noto Serif JP','Yu Mincho',serif;text-align:center}
+.answer-light-recorder .sm-recording-countdown-status{min-height:44px;gap:10px}
+.answer-light-recorder .sm-recording-countdown-number{color:var(--book-primary, #284c40);font:500 36px/1 'Noto Sans JP',sans-serif;font-variant-numeric:tabular-nums}
+.answer-light-recorder .sm-recording-countdown-status .sm-recording-countdown-label{color:var(--book-muted, #53665b);font:500 15px/1.5 'Noto Sans JP',sans-serif;letter-spacing:0}
 .answer-light-recorder .sm-recording-photos img{border:1px solid var(--book-line, #c4d2c5)}
 .answer-light-recorder .text-white\/38,.answer-light-recorder .text-white\/70{color:var(--book-muted, #53665b)}
 .answer-light-recorder .recording-control-dock--choice .answer-entry-choices{max-width:480px}

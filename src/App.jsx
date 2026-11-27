@@ -20125,8 +20125,10 @@ return (
       )}
 
       {step === "countdown" && (seasonalMode || lightMode || question?.onboarding_group !== 'trial_experience') && <div className="recording-control-dock sm-recording-countdown-dock mt-4">
-        <div className="sm-recording-countdown-number" aria-live="polite">{countdown}</div>
-        <div className="recording-status-row"><span className="recording-state-label">録音の準備中</span></div>
+        <div className="recording-status-row sm-recording-countdown-status" role="status" aria-live="polite">
+          <span className="sm-recording-countdown-number">{countdown}</span>
+          <span className="sm-recording-countdown-label">まもなく録音します</span>
+        </div>
         <div className="recording-action-row">
           <button type="button" className="recording-action-button" disabled>一時停止</button>
           <button type="button" className="recording-action-button recording-action-button--stop" disabled>録音を終える</button>
