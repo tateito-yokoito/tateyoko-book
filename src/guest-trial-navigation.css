@@ -1,5 +1,7 @@
 /* Trial navigation uses the same BOOK palette and answer surfaces. */
 .guest-trial-flow { background: var(--book-page); color: var(--book-ink); font-family: var(--book-ui-font); }
+.guest-trial-flow .trial-save-confirm-button,
+.guest-trial-flow .trial-book-open-button { color: #fff !important; -webkit-text-fill-color: #fff !important; }
 .guest-trial-flow .guest-trial-question-screen { color: var(--book-ink); }
 .guest-trial-flow .guest-trial-question-screen h1 { font-family: var(--book-display-font); font-weight: 550; }
 .guest-trial-flow .guest-trial-question-screen textarea { background: var(--book-surface); border-color: var(--book-line); color: var(--book-ink); }

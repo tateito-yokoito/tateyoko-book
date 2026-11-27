@@ -690,7 +690,7 @@ function GuestTrialExperience() {
             <h2 id="trial-replace-title" className="text-xl font-semibold">無料3問を置き換えますか？</h2>
             <p className="mt-4 text-sm leading-7">{savePeople.find(item => item.id === selectedSavePerson)?.display_name || 'この人'}さんの年輪にある無料3問の語りと添付を、今回の3問でまとめて置き換えます。以前の内容は元に戻せません。完成済みBOOKは変わりません。</p>
             <button type="button" disabled={busy} onClick={() => confirmRingSave(true)}
-              className="mt-6 min-h-12 w-full rounded-full bg-[var(--book-primary)] text-white disabled:opacity-50">{busy ? '置き換えています…' : '3問を置き換える'}</button>
+              className="trial-save-confirm-button mt-6 min-h-12 w-full rounded-full bg-[var(--book-primary)] text-white disabled:opacity-50">{busy ? '置き換えています…' : '3問を置き換える'}</button>
             <button type="button" disabled={busy} onClick={() => { setConfirmReplace(false); setError(''); }}
               className="mt-2 min-h-11 w-full text-[var(--book-muted)]">キャンセル</button>
           </div>
@@ -702,7 +702,7 @@ function GuestTrialExperience() {
         <h1 className="mt-8 text-2xl text-[#203a34]">年輪から語りを追加できます</h1>
         <p className="mt-4 leading-loose text-[#455650]">このアカウントではBOOK制作を始めています。無料３問の語りは保存・置き換えせず、家族アプリの年輪から語りを追加できます。</p>
         <a href={savePeople.length === 1 ? `/app?person=${encodeURIComponent(savePeople[0].id)}&tab=ring` : '/app'}
-          className="mt-9 flex min-h-14 items-center justify-center rounded-full bg-[#28473e] px-5 text-white">年輪を開く</a>
+          className="trial-book-open-button mt-9 flex min-h-14 items-center justify-center rounded-full bg-[#28473e] px-5 text-white">年輪を開く</a>
       </main>}
       {screen === 'ring_saved' && <main className="mx-auto max-w-md px-7 py-20 text-center">
         <h1 className="text-2xl leading-relaxed">{savedPersonName}さんの「年輪」に保存しました</h1>
