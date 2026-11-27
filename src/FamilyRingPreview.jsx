@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { BookOpen } from 'lucide-react';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
 import { SAMPLE_WEB_BOOK_ID } from './WebBookCover.jsx';
+import { STORY_PHOTO_LIMIT, storyPhotoLimitMessage } from './lib/storyPhotoLimit.js';
 import './family-ring-preview.css';
 
 const person = { id:'preview-person', display_name:'紡木 誠', family_name:'紡木', given_name:'誠', gender:'male', birth_year:1981, notes:'家族の時間と、写真を大切にしています。' };
@@ -14,7 +15,8 @@ const initialStories = [
   ['学生時代','仲の良かった友達や、心に残っている先生はどんな方でしたか？','いつも話を聞いてくれる友人がいました。卒業後も手紙を交わしました。'],
   ['仕事と家族','仕事を始めた頃、どんな気持ちでしたか？','毎日が新しい発見で、緊張と楽しさが一緒にありました。'],
   ['仕事と家族','家族と過ごす時間で、大切にしていることは何ですか？','何気ない夕食の会話を、これからも大切にしたいです。'],
-].map(([theme,question,body],index) => ({ source:'book', id:`preview-${index+1}`, projectId:'preview-project', theme, question, body, visibility:index===5?'private':'family', hasAudio:index===2 || index===5, completed:false, preview:true }));
+].map(([theme,question,body],index) => ({ source:'book', id:`preview-${index+1}`, projectId:'preview-project', theme, question, body, visibility:index===5?'private':'family', hasAudio:index===2 || index===5, photoCount:index===2?1:0, completed:false, preview:true }));
+const previewPhotos = { 'preview-3':['/site/theme-childhood-classroom.jpg'] };
 const memory = { id:'preview-memory', photo_url:'/site/webbook-sample-cover-sage.jpg', title:'家族で歩いた春の日', event_date:'2023-04-08', comment:'桜の下で、これからのことを話しました。' };
 const facts = [
   { id:'preview-fact-1', year:1981, label:'岩手県で生まれる', detail:'家族の最初の記録' },
@@ -34,8 +36,11 @@ export default function FamilyRingPreview() {
   const visibleStories = showRecords ? stories.map(story => ({...story,completed:mode==='complete'})) : [];
   const onSave = async (story,body) => {
     const updated={...story,body,hasAudio:story.hasAudio || Boolean(
-      storyMedia.current[story.id]?.some(item => item.kind === 'audio'))};
-    setStories(current => current.map(row => row.id===story.id ? {...row,body,hasAudio:updated.hasAudio} : row));
+      storyMedia.current[story.id]?.some(item => item.kind === 'audio')),
+      photoCount:(previewPhotos[story.id]?.length || 0)
+        + (storyMedia.current[story.id] || []).filter(item => item.kind === 'photo').length};
+    setStories(current => current.map(row => row.id===story.id
+      ? {...row,body,hasAudio:updated.hasAudio,photoCount:updated.photoCount} : row));
     return updated;
   };
   const onLock = async (story,locked) => {
@@ -44,15 +49,32 @@ export default function FamilyRingPreview() {
     return updated;
   };
   const onAddMedia = (story,file,kind) => {
+    if (kind === 'photo' && (previewPhotos[story.id]?.length || 0)
+      + (storyMedia.current[story.id] || []).filter(item => item.kind === 'photo').length >= STORY_PHOTO_LIMIT)
+      throw new Error(storyPhotoLimitMessage);
     storyMedia.current[story.id] = [
       ...(storyMedia.current[story.id] || []),{id:crypto.randomUUID(),kind,blob:file},
     ];
-    if (kind === 'audio') setStories(current => current.map(row =>
-      row.id === story.id ? {...row,hasAudio:true} : row));
+    setStories(current => current.map(row => row.id === story.id
+      ? {...row,hasAudio:row.hasAudio || kind === 'audio',
+        photoCount:(row.photoCount || 0) + (kind === 'photo' ? 1 : 0)} : row));
   };
-  const onLoadMedia = async story => (storyMedia.current[story.id] || []).map(item => ({
-    id:item.id,kind:item.kind,url:URL.createObjectURL(item.blob),
-  }));
+  const onLoadMedia = async story => [
+    ...(previewPhotos[story.id] || []).map((url,index) => ({
+      id:`sample-${story.id}-${index}`,kind:'photo',url,
+    })),
+    ...(storyMedia.current[story.id] || []).map(item => ({
+      id:item.id,kind:item.kind,url:URL.createObjectURL(item.blob),
+    })),
+  ];
+  const onLoadListPhotos = async story => [
+    ...(previewPhotos[story.id] || []).map((url,index) => ({
+      id:`sample-${story.id}-${index}`,kind:'photo',url,
+    })),
+    ...(storyMedia.current[story.id] || []).filter(item => item.kind === 'photo')
+      .slice(0,Math.max(0,3-(previewPhotos[story.id]?.length || 0)))
+      .map(item => ({id:item.id,kind:'photo',url:URL.createObjectURL(item.blob)})),
+  ].slice(0,3);
   const explain = () => setNotice('このPreviewは架空データです。実際の登録・制作データは変更しません。');
   return <div className="fp-ring-preview-shell">
     <div className="fp-ring-preview-controls">
@@ -70,6 +92,7 @@ export default function FamilyRingPreview() {
         ? `思い出を振り返ると、${body.trim()} その時間が、今の自分につながっています。`
         : `${body.trim().replace(/。?$/,'。')}`}
       onLoadRingMedia={onLoadMedia} onAddRingPhoto={(story,file) => onAddMedia(story,file,'photo')}
+      onLoadRingListPhotos={onLoadListPhotos}
       onAddRingVoice={async (story,blob,_seconds,options) => {
         if (options?.analyzeOnly) return {raw:'家族と過ごした日のことを、今も覚えています。',
           readable:'家族と過ごした日のことを、今も覚えています。',

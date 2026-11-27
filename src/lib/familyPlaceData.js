@@ -234,12 +234,15 @@ export async function familyPlaceStories(client, personId) {
   if (mediaError) throw mediaError;
   const counts = new Map();
   const audioIds = new Set();
+  const photoCounts = new Map();
   for (const item of media || []) {
     counts.set(item.story_id, (counts.get(item.story_id) || 0) + 1);
     if (item.asset_type === 'audio') audioIds.add(item.story_id);
+    if (item.asset_type === 'photo')
+      photoCounts.set(item.story_id, (photoCounts.get(item.story_id) || 0) + 1);
   }
   return data.map(item => ({ ...item, media_count: counts.get(item.id) || 0,
-    has_audio: audioIds.has(item.id) }));
+    has_audio: audioIds.has(item.id), photo_count: photoCounts.get(item.id) || 0 }));
 }
 
 // Read only formally saved BOOK answers. The caller's BOOK RLS decides which
@@ -290,18 +293,25 @@ export async function familyPlaceBookStories(client, personId, projects, freeSto
     String(answer.transcript_edited || answer.transcript_readable || answer.transcript_clean || '').trim()
       || mediaAnswerIds.has(answer.id));
   if (!saved.length) return [];
-  const [audioResult, ringMediaResult] = await Promise.all([
-    client.from('media_assets').select('answer_id').eq('asset_type','audio')
+  const [mediaResult, ringMediaResult] = await Promise.all([
+    client.from('media_assets').select('answer_id,asset_type')
       .in('answer_id', saved.map(answer => answer.id)),
     client.from('family_ring_story_media').select('answer_id,storage_path')
       .in('answer_id', saved.map(answer => answer.id)),
   ]);
-  if (audioResult.error) throw audioResult.error;
+  if (mediaResult.error) throw mediaResult.error;
   if (ringMediaResult.error) throw ringMediaResult.error;
-  const audioAnswerIds = new Set((audioResult.data || []).map(asset => asset.answer_id));
+  const audioAnswerIds = new Set();
+  const photoCounts = new Map();
+  for (const asset of mediaResult.data || []) {
+    if (asset.asset_type === 'audio') audioAnswerIds.add(asset.answer_id);
+    if (asset.asset_type === 'photo')
+      photoCounts.set(asset.answer_id, (photoCounts.get(asset.answer_id) || 0) + 1);
+  }
   for (const asset of ringMediaResult.data || []) {
     if (/\.(?:m4a|webm|aac|mp3|wav|ogg)$/i.test(asset.storage_path || ''))
       audioAnswerIds.add(asset.answer_id);
+    else photoCounts.set(asset.answer_id, (photoCounts.get(asset.answer_id) || 0) + 1);
   }
   const questionIds = [...new Set(saved.map(answer => answer.user_question_id).filter(Boolean))];
   const { data: questions, error: questionError } = questionIds.length
@@ -361,12 +371,13 @@ export async function familyPlaceBookStories(client, personId, projects, freeSto
       chapter: question.chapter || 'その他の語り',
       text_revision: answer.text_revision, selected_style: answer.selected_style,
       sequence_order: answer.sequence_order }];
-  }).map(row => ({ ...row, has_audio: audioAnswerIds.has(row.id) }));
+  }).map(row => ({ ...row, has_audio: audioAnswerIds.has(row.id),
+    photo_count: photoCounts.get(row.id) || 0 }));
 }
 
 // A signed URL outlives a privacy change. Keep media behind the current JWT
 // and release each browser object URL when the reading surface closes.
-export async function familyPlaceBookMedia(client, answerId) {
+export async function familyPlaceBookMedia(client, answerId, options = {}) {
   const { data: assets, error } = await client.from('media_assets')
     .select('id,answer_id,asset_type,storage_path').eq('answer_id', answerId);
   if (error) throw error;
@@ -384,9 +395,11 @@ export async function familyPlaceBookMedia(client, answerId) {
       .map(item => ({ id:item.id, kind:'video', bucket:'videos', path:item.video_storage_path })),
     ...(ringPhotos || []).map(item => ({ id:item.id, kind:item.asset_type || 'photo', bucket:'family-ring-media', path:item.storage_path })),
   ];
+  const selected = sources.filter(source => !options.kind || source.kind === options.kind)
+    .slice(0, options.limit || undefined);
   const opened = [];
   try {
-    for (const source of sources) {
+    for (const source of selected) {
       const { data, error: downloadError } = await client.storage.from(source.bucket).download(source.path);
       if (downloadError || !data) throw downloadError || new Error('メディアを開けませんでした');
       opened.push({ ...source, url:URL.createObjectURL(data) });
@@ -471,14 +484,16 @@ export async function setFamilyPlaceStoryVisibility(client, story, visibility) {
   return data;
 }
 
-export async function familyPlaceMedia(client, storyId) {
+export async function familyPlaceMedia(client, storyId, options = {}) {
   const { data, error } = await client.from('family_free_story_media')
     .select('id,story_id,asset_type,storage_bucket,storage_path,duration_seconds,created_at')
     .eq('story_id', storyId).order('created_at');
   if (error) throw error;
+  const selected = (data || []).filter(item => !options.kind || item.asset_type === options.kind)
+    .slice(0, options.limit || undefined);
   const opened = [];
   try {
-    for (const item of data || []) {
+    for (const item of selected) {
       // Download through the caller's JWT each time. A signed URL would remain
       // usable after a key or collaborator permission changes.
       const downloaded = await client.storage.from(item.storage_bucket || 'family-free-media')

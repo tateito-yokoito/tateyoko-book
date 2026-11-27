@@ -24,6 +24,7 @@ import {
 } from './lib/familyPlaceData.js';
 import { createFamilyApi } from './lib/familyConnection.js';
 import { createFamilyStoryAccess } from './lib/familyStories.js';
+import { STORY_PHOTO_LIMIT, storyPhotoLimitMessage } from './lib/storyPhotoLimit.js';
 import './family-place.css';
 import { preparePortraitSource } from './lib/portraitSource.js';
 import { hasKanji, kanaFieldForName, normalizeKanaReading,
@@ -916,8 +917,28 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     : (await familyPlaceMedia(dataClient, story.id)).map(item => ({
       ...item, kind:item.asset_type,
     }));
+  const loadRingListPhotos = async story => story.source === 'book'
+    ? familyPlaceBookMedia(dataClient, story.id, { kind:'photo', limit:3 })
+    : familyPlaceMedia(dataClient, story.id, { kind:'photo', limit:3 });
   const addRingPhoto = async (story, file) => {
     if (!user || !person || person.id !== selfId) throw new Error('本人の語りだけ編集できます。');
+    const count = async (table, column, kind = null) => {
+      let query = dataClient.from(table).select('id',{count:'exact',head:true}).eq(column,story.id);
+      if (kind) query = query.eq('asset_type',kind);
+      const result = await query;
+      if (result.error) throw result.error;
+      return result.count || 0;
+    };
+    const photoCount = story.source === 'free'
+      ? await count('family_free_story_media','story_id','photo')
+      : await (async () => {
+        const { data, error } = await dataClient.from('family_ring_story_media')
+          .select('storage_path').eq('answer_id',story.id);
+        if (error) throw error;
+        return await count('media_assets','answer_id','photo')
+          + (data || []).filter(item => !/\.(?:m4a|webm|aac|mp3|wav|ogg)$/i.test(item.storage_path || '')).length;
+      })();
+    if (photoCount >= STORY_PHOTO_LIMIT) throw new Error(storyPhotoLimitMessage);
     if (story.source === 'free') await addFamilyPlaceMedia(dataClient,user.id,story.id,file,'photo');
     else if (story.completed) await addFamilyRingPhoto(dataClient,user.id,story,person.id,file);
     else {
@@ -1221,6 +1242,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
           source:'free', id:row.id, theme:'無料3問', question:row.question_text,
           body:row.body || row.transcript_readable || row.transcript_raw || '',
           visibility:row.visibility, revision:row.revision, hasAudio:row.has_audio,
+          photoCount:row.photo_count,
         })),
         ...bookStories.map(row => ({ source:'book', id:row.id, projectId:row.book_project_id,
           theme:row.chapter, question:row.question_text, body:row.body,
@@ -1228,11 +1250,13 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
           visibility:row.visibility, text_revision:row.text_revision,
           selected_style:row.selected_style,
           hasAudio:row.has_audio,
+          photoCount:row.photo_count,
           completed:publishedBooks.some(book => book.book_project_id === row.book_project_id),
         })),
       ]}
       ringCanEdit={person.id === selfId} onSaveRingStory={saveRingStory}
       onLockRingStory={lockRingStory} onLoadRingMedia={loadRingMedia}
+      onLoadRingListPhotos={loadRingListPhotos}
       onAddRingPhoto={addRingPhoto}
       onAddRingVoice={publicDemo ? null : addRingVoice}
       onPolishRingStory={publicDemo ? null : polishRingStory}

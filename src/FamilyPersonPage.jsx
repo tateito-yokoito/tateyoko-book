@@ -53,6 +53,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
   backLabel = 'ホーム', entryOrigin = 'home', onOpenBook = null, onResumeBook = null,
   ringPreviewContent = null, ringStories = null, ringCanEdit = false,
   onSaveRingStory = null, onLockRingStory = null, onLoadRingMedia = null,
+  onLoadRingListPhotos = null,
   onAddRingPhoto = null, onAddRingVoice = null, onPolishRingStory = null }) {
   const [showQuestions, setShowQuestions] = useState(false);
   const [ringDetailOpen, setRingDetailOpen] = useState(false);
@@ -112,6 +113,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
         onDetailChange={setRingDetailOpen}
         canEdit={ringCanEdit} onSave={ringCanEdit ? onSaveRingStory : null}
         onLock={ringCanEdit ? onLockRingStory : null} onLoadMedia={onLoadRingMedia}
+        onLoadListPhotos={onLoadRingListPhotos}
         onAddPhoto={ringCanEdit ? onAddRingPhoto : null}
         onAddVoice={ringCanEdit ? onAddRingVoice : null}
         onPolish={ringCanEdit ? onPolishRingStory : null}

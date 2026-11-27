@@ -52,6 +52,9 @@
 .fp-ring-story-row small.has-audio{box-sizing:border-box;width:calc(100% + 16px);margin-left:-16px;padding-left:19px}
 .fp-ring-story-row small.has-audio svg{left:0}
 .fp-ring-story-row>span{transform:translateX(5px)}
+.fp-ring-story-photos{display:flex;align-items:center;gap:7px;margin-top:9px}
+.fp-ring-story-photos img{display:block;width:72px;height:56px;flex:none;object-fit:cover;border:1px solid #e3e8de;border-radius:7px}
+.fp-ring-story-more{color:#637762;font:500 11px/1.4 "Noto Sans JP",sans-serif;white-space:nowrap}
 .fp-ring-themes{gap:9.6px}
 
 /* The year-ring editor uses the same answer controls as BOOK, in the family palette. */

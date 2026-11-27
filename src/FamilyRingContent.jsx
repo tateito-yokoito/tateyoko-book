@@ -3,17 +3,20 @@ import { ChevronDown, ChevronLeft, ChevronRight, Ellipsis, LockKeyhole, Volume2 
 import { AnswerBodyEditor, AnswerEntryChoices, AnswerPhotoStrip } from './AnswerInputUI.jsx';
 import { AnswerPolishChoices, AnswerTextCandidate } from './AnswerTextShared.jsx';
 import { PhotoCorrectionFlow, Scene_Recording } from './App.jsx';
+import { STORY_PHOTO_LIMIT, storyPhotoLimitMessage } from './lib/storyPhotoLimit.js';
 import './family-ring-preview.css';
 
 // The same reading surface is used by the family app and its isolated review.
 export default function FamilyRingContent({ stories, canEdit = false, onSave, onLock,
-  onLoadMedia, onAddPhoto, onAddVoice, onPolish, onAddStory, onDetailChange, questions = [], loading = false }) {
+  onLoadMedia, onLoadListPhotos, onAddPhoto, onAddVoice, onPolish, onAddStory, onDetailChange,
+  questions = [], loading = false }) {
   const [openTheme, setOpenTheme] = useState('');
   const [selected, setSelected] = useState(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [media, setMedia] = useState([]);
+  const [listPhotos, setListPhotos] = useState({});
   const [mediaError, setMediaError] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -31,6 +34,30 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
   const listScroll = useRef(0);
   const restoreListScroll = useRef(false);
   const mediaRequest = useRef(0);
+  const listPhotoLoader = useRef(onLoadListPhotos);
+  listPhotoLoader.current = onLoadListPhotos;
+  const activeTheme = selected ? '' : openTheme === '-' ? '' : openTheme || themes[0] || '';
+  const listPhotoRows = stories.filter(story =>
+    (story.theme || 'その他の語り') === activeTheme && story.photoCount > 0);
+  const listPhotoKey = `${activeTheme}:${listPhotoRows.map(story =>
+    `${story.source}-${story.id}-${story.photoCount}`).join('|')}`;
+  useEffect(() => {
+    let active = true;
+    let opened = [];
+    setListPhotos({});
+    if (listPhotoRows.length && listPhotoLoader.current) {
+      Promise.all(listPhotoRows.map(async story => {
+        try { return [story.id, await listPhotoLoader.current(story)]; }
+        catch { return [story.id, []]; }
+      })).then(entries => {
+        const photos = entries.flatMap(([,items]) => items);
+        if (!active) { revoke(photos); return; }
+        opened = photos;
+        setListPhotos(Object.fromEntries(entries));
+      });
+    }
+    return () => { active = false; revoke(opened); };
+  }, [listPhotoKey]);
   useLayoutEffect(() => {
     if (!restoreListScroll.current || selected) return;
     restoreListScroll.current = false;
@@ -93,6 +120,10 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
   };
   const addPhoto = async file => {
     if (!file || !onAddPhoto || busy) return;
+    if (media.filter(item => item.kind === 'photo').length >= STORY_PHOTO_LIMIT) {
+      setMessage(storyPhotoLimitMessage);
+      return;
+    }
     setBusy(true); setMessage('');
     try {
       await onAddPhoto(selected,file);
@@ -170,7 +201,12 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
             <strong>{theme}<small>（{rows.length}）</small></strong><ChevronDown aria-hidden="true"/>
           </button>
           {opened && <div className="fp-ring-theme-rows">{rows.map(story => <button className="fp-ring-story-row" key={`${story.source}-${story.id}`} type="button" onClick={() => openStory(story)}>
-            <span><strong>{story.visibility === 'private' && <LockKeyhole size={14} aria-label="自分だけ"/>}{story.question}</strong><small className={story.hasAudio ? 'has-audio' : undefined}>{story.hasAudio && <Volume2 size={14} aria-label="音声あり"/>}{story.body || '写真・音声で残した語り'}</small></span><ChevronRight aria-hidden="true"/>
+            <span><strong>{story.visibility === 'private' && <LockKeyhole size={14} aria-label="自分だけ"/>}{story.question}</strong><small className={story.hasAudio ? 'has-audio' : undefined}>{story.hasAudio && <Volume2 size={14} aria-label="音声あり"/>}{story.body || '写真・音声で残した語り'}</small>
+              {listPhotos[story.id]?.length > 0 && <span className="fp-ring-story-photos">
+                {listPhotos[story.id].map((photo,index) => <img key={photo.id} src={photo.url} alt={`語りに添えた写真 ${index+1}`} loading="lazy"/>)}
+                {story.photoCount > listPhotos[story.id].length && <span className="fp-ring-story-more">ほか{story.photoCount-listPhotos[story.id].length}枚</span>}
+              </span>}
+            </span><ChevronRight aria-hidden="true"/>
           </button>)}</div>}
         </section>;
       })}</div>
