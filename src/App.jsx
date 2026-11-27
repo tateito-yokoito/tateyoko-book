@@ -6149,8 +6149,10 @@ const advanceAfterTheme = async order => {
     await beginBookend(kind, kind === "intro" ? "theme_intro" : "story_pages");
     return;
   }
-  if (order < STORY_THEMES.length) {
-    await savePendingThemeTransition(order, "intro");
+  const nextQuestion = nextThemeQuestion(questionsDB, order);
+  if (nextQuestion) {
+    const nextOrder = Number(questionsDB[nextQuestion.index]?.theme_order);
+    await savePendingThemeTransition(nextOrder - 1, "intro");
     setScene("theme_intro");
   } else {
     await savePendingThemeTransition(null);
