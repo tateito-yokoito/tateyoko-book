@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, Ellipsis, LockKeyhole } from 'lucide-react';
 import './family-ring-preview.css';
 
 // The same reading surface is used by the family app and its isolated review.
 export default function FamilyRingContent({ stories, canEdit = false, onSave, onLock,
-  onLoadMedia, onAddPhoto, onContinueBook, onAddStory, questions = [], loading = false }) {
+  onLoadMedia, onAddPhoto, onContinueBook, onAddStory, onDetailChange, questions = [], loading = false }) {
   const [openTheme, setOpenTheme] = useState('');
   const [selected, setSelected] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -16,6 +16,16 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
   const [message, setMessage] = useState('');
   const [showQuestions, setShowQuestions] = useState(false);
   const themes = [...new Set(stories.map(story => story.theme || 'その他の語り'))];
+  const orderedStories = themes.flatMap(theme => stories.filter(story => (story.theme || 'その他の語り') === theme));
+  const selectedIndex = selected ? orderedStories.findIndex(story => story.source === selected.source && story.id === selected.id) : -1;
+  const listScroll = useRef(0);
+  const restoreListScroll = useRef(false);
+  const mediaRequest = useRef(0);
+  useLayoutEffect(() => {
+    if (!restoreListScroll.current || selected) return;
+    restoreListScroll.current = false;
+    requestAnimationFrame(() => window.scrollTo({ top: listScroll.current, behavior: 'instant' }));
+  }, [selected]);
   const revoke = items => items.forEach(item => { if (item.url?.startsWith('blob:')) URL.revokeObjectURL(item.url); });
   useEffect(() => () => revoke(media), [media]);
   useEffect(() => {
@@ -23,17 +33,25 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
     const latest = stories.find(story => story.source === selected.source && story.id === selected.id);
     if (latest && !editing) setSelected(latest);
   }, [stories]);
-  const openStory = async story => {
+  const openStory = async (story, keepListScroll = false) => {
+    const request = ++mediaRequest.current;
+    if (!keepListScroll) listScroll.current = window.scrollY;
     setSelected(story); setEditing(false); setMenuOpen(false); setMessage('');
+    onDetailChange?.(true);
     setMediaError(''); setMedia([]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (!onLoadMedia) return;
-    try { setMedia(await onLoadMedia(story)); }
-    catch { setMediaError('写真・音声を読み込めませんでした。'); }
+    try {
+      const nextMedia = await onLoadMedia(story);
+      if (request === mediaRequest.current) setMedia(nextMedia);
+      else revoke(nextMedia);
+    } catch { if (request === mediaRequest.current) setMediaError('写真・音声を読み込めませんでした。'); }
   };
   const goBack = () => {
+    mediaRequest.current += 1;
     setSelected(null); setEditing(false); setMenuOpen(false); setMedia([]);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    onDetailChange?.(false);
+    restoreListScroll.current = true;
   };
   const save = async () => {
     if (!draft.trim() || !onSave || busy) return;
@@ -68,7 +86,7 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
   };
   return <div className="fp-ring-review">
     {!selected ? <>
-      <div className="fp-ring-review-heading"><div><h2>年輪</h2><p>語りを、テーマごとに読み返す。</p></div><span>{stories.length}つの語り</span></div>
+      <div className="fp-ring-review-heading"><div><h2>これまでの語り</h2><p>テーマを開いて、語りを読み返す。</p></div><span>{stories.length}つの語り</span></div>
       {loading && <p className="fp-ring-message" role="status">語りを読み込んでいます。</p>}
       {!loading && !stories.length && <div className="fp-person-story-empty">まだ語りはありません。<br/>声・文章・写真から、好きな方法で始められます。</div>}
       <div className="fp-ring-themes">{themes.map((theme, index) => {
@@ -93,6 +111,11 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
             {onLock && <button type="button" role="menuitem" onClick={toggleLock}>{selected.visibility === 'private' ? 'ロックを外す' : '自分だけにロックする'}</button>}</div>}
         </div>}
       </div>
+      <nav className="fp-ring-story-navigation" aria-label="前後の語り">
+        <button type="button" disabled={selectedIndex <= 0} onClick={() => openStory(orderedStories[selectedIndex - 1], true)}>〈 前の語り</button>
+        <span>{selectedIndex + 1} / {orderedStories.length}</span>
+        <button type="button" disabled={selectedIndex < 0 || selectedIndex >= orderedStories.length - 1} onClick={() => openStory(orderedStories[selectedIndex + 1], true)}>次の語り 〉</button>
+      </nav>
       {editing ? <div className="fp-ring-editor"><h2>{selected.question}</h2><label htmlFor="fp-ring-draft">語りの本文</label>
         <textarea id="fp-ring-draft" value={draft} onChange={event => setDraft(event.target.value)}/>
         {onAddPhoto && <label className="fp-ring-photo-add">写真を追加する<input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={addPhoto}/></label>}

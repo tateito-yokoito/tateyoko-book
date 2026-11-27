@@ -55,6 +55,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
   onSaveRingStory = null, onLockRingStory = null, onLoadRingMedia = null,
   onAddRingPhoto = null }) {
   const [showQuestions, setShowQuestions] = useState(false);
+  const [ringDetailOpen, setRingDetailOpen] = useState(false);
   const saved = stories.filter(hasAnswer);
   const savedCount = saved.length + bookStories.length;
   const publishedChapters = new Map();
@@ -69,10 +70,10 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
     ['paid','gifted','legacy'].includes(project.access_status));
   const resume = purchasedProject && onResumeBook
     ? () => onResumeBook(purchasedProject.id) : null;
-  return <main className="fp-person-page">
+  return <main className={`fp-person-page${ringDetailOpen && activeTab === 'ring' ? ' fp-person-page-detail' : ''}`}>
     <header className="fp-person-topbar">
       <button type="button" onClick={onBack} aria-label={`${backLabel}へ戻る`}><ChevronLeft/><span>{backLabel}</span></button>
-      <strong>{person.display_name}さん</strong><span aria-hidden="true"/>
+      {ringDetailOpen && activeTab === 'ring' ? <span className="fp-person-compact-identity"><span className="fp-person-compact-avatar"><FamilyAvatar person={person}/></span><strong>{person.display_name}</strong></span> : <strong>人物ページ</strong>}<span aria-hidden="true"/>
     </header>
     <section className="fp-person-intro">
       <div className="fp-person-portrait" aria-label={person.portrait_url ? undefined : 'プロフィール写真未登録'}>
@@ -86,8 +87,8 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
           {person.death_year ? `・${person.death_year}年逝去` : ''}</p>}
         {person.notes && <p className="fp-person-bio">{person.notes}</p>}
       </div>
+      <button type="button" className="fp-person-profile" onClick={onProfile} aria-label="プロフィールを見る・編集する"><UserRound aria-hidden="true"/><span>編集</span></button>
     </section>
-    <button type="button" className="fp-person-profile" onClick={onProfile}><UserRound aria-hidden="true"/>プロフィールを見る・編集する<ChevronRight aria-hidden="true"/></button>
     {booksStatus === 'ready' && books.length > 1 && <div className="fp-book-preview-entry">
       <button type="button" onClick={() => onTabChange('books')}>本棚でBOOKを選ぶ<ChevronRight aria-hidden="true"/></button>
     </div>}
@@ -103,10 +104,11 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
     <div className="fp-person-tabs" role="tablist" aria-label="人物ページ">
       {[['ring','年輪'],['books','本棚'],['memories','思い出'],['timeline','年表']].map(([key,label]) =>
         <button type="button" key={key} role="tab" aria-selected={activeTab===key}
-          onClick={() => onTabChange(key)}>{label}</button>)}
+          onClick={() => { setRingDetailOpen(false); onTabChange(key); }}>{label}</button>)}
     </div>
     {activeTab === 'ring' && <section className="fp-person-content" role="tabpanel">
       {ringPreviewContent || (ringStories && <FamilyRingContent key={person.id} stories={ringStories}
+        onDetailChange={setRingDetailOpen}
         canEdit={ringCanEdit} onSave={ringCanEdit ? onSaveRingStory : null}
         onLock={ringCanEdit ? onLockRingStory : null} onLoadMedia={onLoadRingMedia}
         onAddPhoto={ringCanEdit ? onAddRingPhoto : null}
@@ -147,7 +149,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
       </>}
     </section>}
     {activeTab === 'books' && <section className="fp-person-content" role="tabpanel">
-      <h2>本棚</h2>
+      <h2>この人のBOOK</h2>
       {booksStatus === 'loading' ? <p className="fp-person-story-empty" role="status">本棚を読み込んでいます。</p>
         : booksStatus === 'error' ? <div className="fp-person-story-empty" role="alert">本棚を読み込めませんでした。<button type="button" onClick={onRetryBooks}>もう一度試す</button></div>
         : books.length ? <div className="fp-person-books">{books.map(book =>
@@ -163,13 +165,12 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
                 Webブックを読む<ChevronRight aria-hidden="true"/></a>
             </div>
           </article>)}</div>
-          : <div className="fp-person-story-empty">{purchasedProject ? '制作中のBOOKがあります。' : 'この人物の完成したBOOKは、まだありません。'}
-              {resume && <button type="button" className="fp-person-add-story fp-person-resume" onClick={resume}>BOOK制作を再開する<ChevronRight aria-hidden="true"/></button>}
+          : <div className="fp-person-story-empty">{purchasedProject ? '制作中のBOOKがあります。上の「BOOK制作を再開する」から続きを開けます。' : '完成したBOOKはまだありません。これから、この人の物語を一冊にしていけます。'}
               {!purchasedProject && projectsStatus === 'ready' && onOpenBook && <button type="button" className="fp-person-add-story" onClick={() => onOpenBook('books')}>人生のBOOKについて見る<ChevronRight aria-hidden="true"/></button>}
             </div>}
     </section>}
     {activeTab === 'memories' && <section className="fp-person-content" role="tabpanel">
-      <h2>思い出</h2>
+      <h2>写真と思い出</h2>
       {memories.length ? <div className="fp-person-memories">{memories.map(item =>
         <article className="fp-person-memory" key={item.id}>
           <img src={item.photo_url} alt={item.title || '思い出の写真'}/>
@@ -177,17 +178,17 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
             {item.title && <strong>{item.title}</strong>}
             {item.comment && <p>{item.comment}</p>}</div>
         </article>)}</div>
-        : <div className="fp-person-story-empty">この人物の思い出は、まだありません。</div>}
+        : <div className="fp-person-story-empty">これからの思い出を、写真と一緒に残せます。<br/>一枚の写真から、家族の会話が始まります。</div>}
       {onAddMemory && <button type="button" className="fp-person-add-story" onClick={onAddMemory}>
         <Plus aria-hidden="true"/>写真と思い出を残す</button>}
     </section>}
     {activeTab === 'timeline' && <section className="fp-person-content" role="tabpanel">
-      <h2>年表</h2>
+      <h2>人生の年表</h2>
       {timeline.length ? <div className="fp-person-timeline">{timeline.map(item =>
         <article key={item.id} className="fp-person-event">
           <time>{item.year ? `${item.year}年${item.month ? item.month+'月' : ''}${item.day ? item.day+'日' : ''}` : '時期未登録'}</time>
           <strong>{item.label}</strong>{item.detail && <p>{item.detail}</p>}
-        </article>)}</div> : <div className="fp-person-story-empty">プロフィールに登録した出来事が、ここに時系列で並びます。</div>}
+        </article>)}</div> : <div className="fp-person-story-empty">生まれた年や家族との出来事から、年表が育っていきます。<br/>思い出したことから少しずつ残せます。</div>}
       <button type="button" className="fp-person-add-story" onClick={onAddFact}><Plus aria-hidden="true"/>出来事を登録する</button>
     </section>}
   </main>;

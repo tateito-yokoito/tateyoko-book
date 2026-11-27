@@ -111,7 +111,7 @@ function PurchaseHandoffGate({ token }) {
 
 function RootScreen() {
   const params = new URLSearchParams(window.location.search);
-  if (FamilyRingPreview && params.has('family_ring_review')) {
+  if (FamilyRingPreview && (params.has('family_ring_review') || params.has('family_person_review'))) {
     return <React.Suspense fallback={<p>年輪を準備しています…</p>}><FamilyRingPreview /></React.Suspense>;
   }
   if (BookUiReview && params.has('book_ui_review')) {
