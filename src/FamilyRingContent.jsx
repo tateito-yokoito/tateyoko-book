@@ -170,7 +170,7 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
             <strong>{theme}<small>（{rows.length}）</small></strong><ChevronDown aria-hidden="true"/>
           </button>
           {opened && <div className="fp-ring-theme-rows">{rows.map(story => <button className="fp-ring-story-row" key={`${story.source}-${story.id}`} type="button" onClick={() => openStory(story)}>
-            <span><strong>{story.visibility === 'private' && <LockKeyhole size={14} aria-label="自分だけ"/>}{story.question}</strong><small>{story.hasAudio && <Volume2 size={14} aria-label="音声あり"/>}{story.body || '写真・音声で残した語り'}</small></span><ChevronRight aria-hidden="true"/>
+            <span><strong>{story.visibility === 'private' && <LockKeyhole size={14} aria-label="自分だけ"/>}{story.question}</strong><small className={story.hasAudio ? 'has-audio' : undefined}>{story.hasAudio && <Volume2 size={14} aria-label="音声あり"/>}{story.body || '写真・音声で残した語り'}</small></span><ChevronRight aria-hidden="true"/>
           </button>)}</div>}
         </section>;
       })}</div>

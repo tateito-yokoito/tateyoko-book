@@ -49,6 +49,8 @@
 .fp-ring-story-row strong svg,.fp-ring-story-row small svg{position:absolute;left:-16px;width:14px;height:14px;color:#6b825f}
 .fp-ring-story-row strong svg{top:4px}
 .fp-ring-story-row small svg{top:3px}
+.fp-ring-story-row small.has-audio{box-sizing:border-box;width:calc(100% + 16px);margin-left:-16px;padding-left:16px}
+.fp-ring-story-row small.has-audio svg{left:0}
 .fp-ring-story-row>span{transform:translateX(5px)}
 .fp-ring-themes{gap:9.6px}
 
