@@ -3331,8 +3331,11 @@ function App() {
   const [recordingRecoveryBusy, setRecordingRecoveryBusy] = useState(false);
   const [recordingRecoveryError, setRecordingRecoveryError] = useState('');
   const [recordingRecoveryDismissed, setRecordingRecoveryDismissed] = useState(false);
+  const isObsoleteInitialRecording = attempt => attempt.mode === 'initial'
+    && questionsDB.some(question => Number(question.sequence_order) === Number(attempt.sequence_order ?? attempt.sequenceOrder)
+      && (question.status === 'answered' || Boolean(question.answered_at)));
   useEffect(() => {
-    if (!user?.id || !foundation?.project?.id) {
+    if (!user?.id || !foundation?.project?.id || questionsDB.length === 0) {
       setRecoverableRecordings([]);
       return undefined;
     }
@@ -3343,7 +3346,7 @@ function App() {
         .eq('user_id', user.id).eq('book_project_id', foundation.project.id)
         .eq('state', 'planned').order('created_at', { ascending: false }).limit(8);
       if (error || cancelled) return;
-      const available = await Promise.all((data || []).map(async attempt => {
+      const available = await Promise.all((data || []).filter(attempt => !isObsoleteInitialRecording(attempt)).map(async attempt => {
         const paths = attempt.storage_paths || [];
         if (!paths.length) return null;
         const urls = await Promise.all(paths.map(path => supabaseClient.storage
@@ -3354,18 +3357,18 @@ function App() {
       if (!cancelled) setRecoverableRecordings(available.filter(Boolean));
     })();
     return () => { cancelled = true; };
-  }, [user?.id, foundation?.project?.id, scene]);
+  }, [user?.id, foundation?.project?.id, scene, questionsDB]);
   useEffect(() => {
-    if (!user?.id || !foundation?.project?.id) {
+    if (!user?.id || !foundation?.project?.id || questionsDB.length === 0) {
       setLocalRecordingDrafts([]);
       return undefined;
     }
     let cancelled = false;
     listAnswerRecordingDrafts(user.id, foundation.project.id)
-      .then(drafts => { if (!cancelled) setLocalRecordingDrafts(drafts); })
+      .then(drafts => { if (!cancelled) setLocalRecordingDrafts(drafts.filter(draft => !isObsoleteInitialRecording(draft))); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [user?.id, foundation?.project?.id]);
+  }, [user?.id, foundation?.project?.id, questionsDB]);
   const journeyRef = useRef(null);
   if (!journeyRef.current) journeyRef.current = createSupportJourney(supabaseClient, {
     enabled: import.meta.env.VITE_SUPPORT_JOURNEY_ENABLED === 'true',
@@ -5293,6 +5296,13 @@ const resumeStagedRecording = async attempt => {
     const questionIndex = questionsDB.findIndex(question =>
       Number(question.sequence_order) === Number(attempt.sequence_order));
     if (questionIndex < 0) throw new Error('この問いを確認できませんでした');
+    if (attempt.mode === 'initial') {
+      const { data: savedAnswer, error: savedAnswerError } = await supabaseClient.from('answers')
+        .select('id').eq('user_id', user.id).eq('book_project_id', foundation.project.id)
+        .eq('sequence_order', attempt.sequence_order).maybeSingle();
+      if (savedAnswerError) throw savedAnswerError;
+      if (savedAnswer) throw new Error('この問いは保存済みです。制作の続きから進めてください。');
+    }
     let answer = null;
     let existingAudioPaths = [];
     if (attempt.mode !== 'initial') {
