@@ -33,8 +33,9 @@ export default function FamilyRingPreview() {
   const showRecords = mode !== 'empty';
   const visibleStories = showRecords ? stories.map(story => ({...story,completed:mode==='complete'})) : [];
   const onSave = async (story,body) => {
-    const updated={...story,body};
-    setStories(current => current.map(row => row.id===story.id ? updated : row));
+    const updated={...story,body,hasAudio:story.hasAudio || Boolean(
+      storyMedia.current[story.id]?.some(item => item.kind === 'audio'))};
+    setStories(current => current.map(row => row.id===story.id ? {...row,body,hasAudio:updated.hasAudio} : row));
     return updated;
   };
   const onLock = async (story,locked) => {
@@ -46,6 +47,8 @@ export default function FamilyRingPreview() {
     storyMedia.current[story.id] = [
       ...(storyMedia.current[story.id] || []),{id:crypto.randomUUID(),kind,blob:file},
     ];
+    if (kind === 'audio') setStories(current => current.map(row =>
+      row.id === story.id ? {...row,hasAudio:true} : row));
   };
   const onLoadMedia = async story => (storyMedia.current[story.id] || []).map(item => ({
     id:item.id,kind:item.kind,url:URL.createObjectURL(item.blob),

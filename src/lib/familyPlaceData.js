@@ -290,10 +290,19 @@ export async function familyPlaceBookStories(client, personId, projects, freeSto
     String(answer.transcript_edited || answer.transcript_readable || answer.transcript_clean || '').trim()
       || mediaAnswerIds.has(answer.id));
   if (!saved.length) return [];
-  const { data: audioAssets, error: audioError } = await client.from('media_assets')
-    .select('answer_id').eq('asset_type','audio').in('answer_id', saved.map(answer => answer.id));
-  if (audioError) throw audioError;
-  const audioAnswerIds = new Set((audioAssets || []).map(asset => asset.answer_id));
+  const [audioResult, ringMediaResult] = await Promise.all([
+    client.from('media_assets').select('answer_id').eq('asset_type','audio')
+      .in('answer_id', saved.map(answer => answer.id)),
+    client.from('family_ring_story_media').select('answer_id,storage_path')
+      .in('answer_id', saved.map(answer => answer.id)),
+  ]);
+  if (audioResult.error) throw audioResult.error;
+  if (ringMediaResult.error) throw ringMediaResult.error;
+  const audioAnswerIds = new Set((audioResult.data || []).map(asset => asset.answer_id));
+  for (const asset of ringMediaResult.data || []) {
+    if (/\.(?:m4a|webm|aac|mp3|wav|ogg)$/i.test(asset.storage_path || ''))
+      audioAnswerIds.add(asset.answer_id);
+  }
   const questionIds = [...new Set(saved.map(answer => answer.user_question_id).filter(Boolean))];
   const { data: questions, error: questionError } = questionIds.length
     ? await client.from('user_questions')
