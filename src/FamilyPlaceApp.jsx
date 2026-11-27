@@ -3,7 +3,7 @@ import { BookOpen, ChevronLeft, ChevronRight, Home, Image, Users } from 'lucide-
 import { Scene_Login, Scene_Recording, PhotoCorrectionFlow, ensureProfileExists, supabaseClient } from './App.jsx';
 import { AnswerBodyEditor, AnswerEntryChoices, AnswerReview, AnswerSaveStatus } from './AnswerInputUI.jsx';
 import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
-import { trialPersonUrl } from './lib/guestTrialRing.js';
+import { guestTrialBookStarted, trialPersonUrl } from './lib/guestTrialRing.js';
 import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
 import { FamilyAvatarProvider } from './FamilyAvatar.jsx';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
@@ -249,6 +249,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
   const [publishedBooks, setPublishedBooks] = useState([]);
   const [demoPublishedBook, setDemoPublishedBook] = useState(null);
   const [visibleBookProjects, setVisibleBookProjects] = useState([]);
+  const [accountBookStarted, setAccountBookStarted] = useState(null);
   const [projectsStatus, setProjectsStatus] = useState('loading');
   const [booksStatus, setBooksStatus] = useState('loading');
   const [checkoutProjectId, setCheckoutProjectId] = useState(null);
@@ -406,6 +407,15 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     });
     return () => { live = false; data.subscription.unsubscribe(); };
   }, [publicDemo]);
+  useEffect(() => {
+    if (publicDemo || !user?.id) { setAccountBookStarted(null); return undefined; }
+    let live = true;
+    setAccountBookStarted(null);
+    guestTrialBookStarted(dataClient).then(started => {
+      if (live) setAccountBookStarted(started);
+    }).catch(() => { if (live) setAccountBookStarted(null); });
+    return () => { live = false; };
+  }, [publicDemo, user?.id]);
   useEffect(() => {
     if (!user) {
       setVerifiedUserId(null);
@@ -1279,6 +1289,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}
       publishedPublication={demoPublishedBook} publicDemo={publicDemo}
       visibleBookProjects={visibleBookProjects} projectsStatus={projectsStatus}
+      accountBookStarted={accountBookStarted}
       facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
       onTabChange={setActiveTab} onBack={personEntry === 'tree' ? returnToTree : goHome}
       backLabel={personEntry === 'tree' ? '家系図' : 'ホーム'} entryOrigin={personEntry}

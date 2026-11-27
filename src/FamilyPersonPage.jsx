@@ -49,6 +49,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
   memories = [], onAddMemory = null,
   publishedPublication = null, publicDemo = false,
   visibleBookProjects = [], projectsStatus = 'ready',
+  accountBookStarted = null,
   facts = [], questions = [], activeTab = 'ring', onTabChange, onBack, onProfile,
   onOpenStory, onTryFreeTrial = null, onAddFact, onRetryBooks, supabaseClient, busy = false,
   backLabel = 'ホーム', entryOrigin = 'home', onOpenBook = null, onResumeBook = null,
@@ -110,7 +111,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
           onClick={() => { setRingDetailOpen(false); onTabChange(key); }}>{label}</button>)}
     </div>
     {activeTab === 'ring' && <section className="fp-person-content" role="tabpanel">
-      {!publicDemo && !purchasedProject && ringCanEdit && saved.length < 3 && onTryFreeTrial &&
+      {!publicDemo && accountBookStarted === false && !purchasedProject && ringCanEdit && saved.length < 3 && onTryFreeTrial &&
         <button type="button" className="fp-person-add-story" onClick={() => onTryFreeTrial(person.id)}>
           {window.localStorage.getItem(trialPersonStorageKey(person.id))
             ? '無料３問の続きを試す' : '無料３問を試す'}

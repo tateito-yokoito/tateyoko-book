@@ -16,7 +16,7 @@ import {
   guestTrialResumeUrl, guestTrialCanonicalUrl, takeGuestTrialResumeToken,
 } from './lib/guestTrialApi.js';
 import { clearGuestTrialPending, guestTrialPurchaseUrl } from './lib/guestTrialClaim.js';
-import { saveGuestTrialToRing, selfTrialPeople } from './lib/guestTrialRing.js';
+import { guestTrialBookStarted, saveGuestTrialToRing, selfTrialPeople } from './lib/guestTrialRing.js';
 
 // The public entry remains on the established flow until the full purchase,
 // recovery, and handoff gate passes. The API always follows this app's
@@ -417,7 +417,7 @@ function GuestTrialExperience() {
       }
       setSavePeople(people);
       setSelectedSavePerson(trialPersonId || (people.length === 1 ? people[0].id : ''));
-      setScreen('choose_person');
+      setScreen(await guestTrialBookStarted(supabaseClient) ? 'book_started' : 'choose_person');
     } catch (cause) { setError(cause.message || '保存先を確認できませんでした。'); }
     finally { setBusy(false); }
   }
@@ -433,7 +433,10 @@ function GuestTrialExperience() {
       setConfirmReplace(false);
       window.location.assign(`/app?person=${encodeURIComponent(selectedSavePerson)}&tab=ring`);
     } catch (cause) {
-      if (cause.code === 'TRIAL_STORY_CONFLICT' && !replaceExisting) setConfirmReplace(true);
+      if (cause.code === 'BOOK_ALREADY_STARTED') {
+        setConfirmReplace(false);
+        setScreen('book_started');
+      } else if (cause.code === 'TRIAL_STORY_CONFLICT' && !replaceExisting) setConfirmReplace(true);
       else setError(cause.message || '年輪へ保存できませんでした。');
     }
     finally { setBusy(false); }
@@ -693,6 +696,13 @@ function GuestTrialExperience() {
           </div>
         </div>}
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
+      </main>}
+      {screen === 'book_started' && <main className="mx-auto max-w-md px-7 py-16">
+        <button type="button" onClick={() => setScreen('finished')} className="min-h-11 text-[#28473e]">← 戻る</button>
+        <h1 className="mt-8 text-2xl text-[#203a34]">年輪から語りを追加できます</h1>
+        <p className="mt-4 leading-loose text-[#455650]">このアカウントではBOOK制作を始めています。無料３問の語りは保存・置き換えせず、家族アプリの年輪から語りを追加できます。</p>
+        <a href={savePeople.length === 1 ? `/app?person=${encodeURIComponent(savePeople[0].id)}&tab=ring` : '/app'}
+          className="mt-9 flex min-h-14 items-center justify-center rounded-full bg-[#28473e] px-5 text-white">年輪を開く</a>
       </main>}
       {screen === 'ring_saved' && <main className="mx-auto max-w-md px-7 py-20 text-center">
         <h1 className="text-2xl leading-relaxed">{savedPersonName}さんの「年輪」に保存しました</h1>

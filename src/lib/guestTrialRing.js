@@ -34,7 +34,11 @@ export async function saveGuestTrialToRing(client, supabaseUrl, session, personI
       conflict.code = 'TRIAL_STORY_CONFLICT';
       throw conflict;
     }
-    if (error.code === '55000') throw new Error('BOOKと共有中の語りや購入済みの体験は、この画面から置き換えられません。');
+    if (error.code === '55000') {
+      const started = new Error('BOOK制作を始めたアカウントでは、年輪から語りを追加してください。');
+      started.code = 'BOOK_ALREADY_STARTED';
+      throw started;
+    }
     throw error;
   }
   const stories = data?.stories || [];
@@ -86,6 +90,12 @@ export async function selfTrialPeople(client) {
     .select('id,display_name').in('id',links.map(row => row.person_id));
   if (peopleError) throw peopleError;
   return people || [];
+}
+
+export async function guestTrialBookStarted(client) {
+  const { data, error } = await client.rpc('guest_trial_book_started');
+  if (error) throw error;
+  return data === true;
 }
 
 export async function linkGuestTrialRingBook(client, token, projectId) {
