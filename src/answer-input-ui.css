@@ -93,6 +93,7 @@
 .answer-voice-review .glass-card button.bg-white\/15{background:#e5ece4;border-color:var(--book-line, #72917f);color:var(--book-primary, #284c40)}
 .answer-voice-review .glass-card textarea{background:#eef2eb;border:1px solid var(--book-line, #a9bdab);border-radius:9px;padding:12px;color:var(--book-ink, #26352f)}
 .answer-voice-review button.btn-quiet,.answer-voice-review button.recording-start-bar{background:var(--book-primary, #284c40);color:#fff}
+:is(.app-container--book-light,.book-user-light) .answer-voice-review button.btn-quiet{color:var(--book-on-primary, #fff) !important}
 .answer-voice-review [role="status"]{color:var(--book-muted, #53665b)}
 .answer-voice-review [role="alert"]{color:var(--book-error, #8a392c)}
 

@@ -4950,8 +4950,12 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
   const telemetryQuestion = questionsDB[progress.currentIndex] || null;
   // A failed upload retries with new immutable paths; a transcription retry
   // reuses the already uploaded attempt and never uploads the same path twice.
-  const telemetryAttemptId = sourceVoiceData.transcriptionFailureStage === 'upload'
-    ? crypto.randomUUID() : sourceVoiceData.recordingAttemptId || crypto.randomUUID();
+  const retryingUploadedAttempt = sourceVoiceData.transcriptionFailureStage === 'transcription'
+    && sourceVoiceData.recordingAttemptId
+    && Array.isArray(sourceVoiceData.newAudioPaths)
+    && sourceVoiceData.newAudioPaths.length > 0;
+  const telemetryAttemptId = retryingUploadedAttempt
+    ? sourceVoiceData.recordingAttemptId : crypto.randomUUID();
   setVoiceData(prev => ({
     ...prev,
     transcriptionStatus: "processing",
@@ -19723,7 +19727,7 @@ const startActualRecording = async (preparedStream = null) => {
     try {
     let stream = streamRef.current;
 
-    if (!stream) {
+    if (!stream || !stream.getAudioTracks().some(track => track.readyState === 'live')) {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: true
       });
@@ -19878,7 +19882,10 @@ mediaRef.current.onstop = () => {
 
       };
 
-mediaRef.current.start(1000);
+// iOS can emit an empty final blob when a timeslice is flushed just before
+// stop. Let its recorder deliver the complete clip in the stop event.
+if (isIOSLikeBrowser()) mediaRef.current.start();
+else mediaRef.current.start(1000);
 unsafeRecordingRef.current = true;
 onJourneyEvent('recording_start');
 clockRef.current.start();
@@ -19887,7 +19894,7 @@ console.log("[recording-debug] MediaRecorder started with timeslice", {
   runId: debugRunIdRef.current,
   recorderState: mediaRef.current.state,
   recorderMimeType: mediaRef.current.mimeType,
-  timesliceMs: 1000
+  timesliceMs: isIOSLikeBrowser() ? null : 1000
 });
 
 console.log("[recording-debug] recorder-only: wave monitor not used while recording", {
@@ -20017,10 +20024,12 @@ const stop = (reason = "manual") => {
         mediaState: mediaRef.current.state
       });
 
-      try {
-        mediaRef.current.requestData?.();
-      } catch (e) {
-        console.warn("media recorder requestData failed", e);
+      if (!isIOSLikeBrowser()) {
+        try {
+          mediaRef.current.requestData?.();
+        } catch (e) {
+          console.warn("media recorder requestData failed", e);
+        }
       }
 
       mediaRef.current.stop();
