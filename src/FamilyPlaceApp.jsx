@@ -1206,6 +1206,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     {screen === 'book-preview' && <React.Suspense fallback={<p>BOOK紹介を読み込んでいます…</p>}><BookPurchaseJourney
       key={`${bookEntry}:${bookEntry === 'home' ? '' : person?.id || ''}`}
       person={bookEntry === 'home' ? null : person} people={people} client={dataClient}
+      selfPersonId={selfId}
       livePurchase={import.meta.env.VITE_PUBLIC_TEST_MODE !== 'true'
         || import.meta.env.VITE_FAMILY_PURCHASE_TEST_MODE === 'true'} checkoutProjectId={checkoutProjectId}
       initialProjectId={consultationProjectId}

@@ -679,3 +679,14 @@ body:has(.commerce-v2-review) { background: #f8f7f2; color: #243b31; }
   .commerce-v2-review dl { padding-right: 1.75rem; padding-left: 1.75rem; }
   .commerce-v2-review > div > div[aria-live="polite"] { padding-right: 1.75rem; padding-left: 1.75rem; }
 }
+
+.commerce-v2-subject-name{margin-top:1.75rem;padding:1.25rem;border:1px solid #dce2d7;border-radius:1rem;background:#fffefa;color:#243b31}
+.commerce-v2-subject-name h2{margin:0;font-size:1.08rem;font-weight:700}
+.commerce-v2-subject-name p{margin:.5rem 0 0;color:#596c60;font-size:.875rem;line-height:1.7}
+.commerce-v2-subject-name-fields{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:1.1rem}
+.commerce-v2-subject-name-fields label{display:grid;gap:.4rem;color:#4b6253;font-size:.875rem;font-weight:600}
+.commerce-v2-subject-name-fields input{min-width:0;width:100%;min-height:48px;padding:.55rem .75rem;border:1px solid #bfcdbf;border-radius:.65rem;background:#fff;color:#243b31;font-size:1rem}
+.commerce-v2-subject-name>button{width:100%;min-height:48px;margin-top:1rem;border:0;border-radius:.75rem;background:#365c40;color:#fff;font-size:.95rem;font-weight:700}
+.commerce-v2-subject-name>button:disabled{opacity:.55}
+.commerce-v2-subject-name p[role=status]{color:#366747}
+.commerce-v2-subject-name p[role=alert]{color:#9a4b37}

@@ -27,7 +27,7 @@ async function checkoutErrorMessage(invokeError, data, fallback) {
 export default function CommerceV2Purchase({ client, projectId, initialOrderType = 'self', familyInvitation = null, onTryFree,
   phase, initialSelection = null, onProceed, onCompleted, projectAccessStatus = null,
   previewSubjectName = null, onPreviewCheckout, onPreviewBack,
-  familySubject = null, onFamilyCheckoutCompleted = null }) {
+  familySubject = null, onFamilyCheckoutCompleted = null, onSubjectNameConfirmed = null }) {
   const isPreview = Boolean(previewSubjectName);
   const isSelection = phase === 'selection';
   const isReview = phase === 'review';
@@ -48,11 +48,67 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   const [approvedConsultation, setApprovedConsultation] = useState(null);
   const [consultationLoading, setConsultationLoading] = useState(Boolean(linkedConsultationId));
   const [consultationOpen, setConsultationOpen] = useState(false);
+  const [subjectFamilyName, setSubjectFamilyName] = useState('');
+  const [subjectGivenName, setSubjectGivenName] = useState('');
+  const [subjectPersonId, setSubjectPersonId] = useState(null);
+  const [subjectNameStatus, setSubjectNameStatus] = useState('loading');
+  const [subjectNameError, setSubjectNameError] = useState('');
+  const [confirmedSubjectName, setConfirmedSubjectName] = useState('');
   const requestKey = useRef(newRequestKey());
   const orderType = approvedConsultation?.orderType || purchaseFor;
+  const requiresSubjectName = isReview && !isPreview && orderType === 'self'
+    && (!familySubject || familySubject.isSelf === true);
   const alreadyPurchased = !isPreview && orderType === 'self' && ['paid', 'gifted', 'legacy'].includes(projectAccessStatus);
   const selection = { edition, productionMethod: method, standardExtraCount, premiumExtraCount, discountCode,
     purchaseFor: orderType, giftMode, recipientName: gift.recipient_name };
+
+  useEffect(() => {
+    if (!requiresSubjectName) return;
+    let active = true;
+    setSubjectNameStatus('loading');
+    setSubjectNameError('');
+    (async () => {
+      const { data: userResult, error: userError } = await client.auth.getUser();
+      if (userError || !userResult?.user) throw userError || new Error('ログインを確認できませんでした');
+      const { data: project, error: projectError } = await client.from('book_projects')
+        .select('subject_person_id,owner_user_id').eq('id',projectId).maybeSingle();
+      if (projectError || !project || project.owner_user_id !== userResult.user.id
+        || (familySubject?.id && familySubject.id !== project.subject_person_id))
+        throw projectError || new Error('BOOKとご本人の対応を確認できません');
+      const [{ data: person, error: personError }, { data: profile, error: profileError }] = await Promise.all([
+        client.from('persons').select('id,family_name,given_name').eq('id',project.subject_person_id).maybeSingle(),
+        client.from('profiles').select('family_name,given_name').eq('id',userResult.user.id).maybeSingle(),
+      ]);
+      if (personError || profileError || !person || !profile)
+        throw personError || profileError || new Error('ご本人のプロフィールを確認できません');
+      if (!active) return;
+      setSubjectPersonId(person.id);
+      setSubjectFamilyName(person.family_name || profile.family_name || '');
+      setSubjectGivenName(person.given_name || profile.given_name || '');
+      setSubjectNameStatus('editing');
+    })().catch(cause => {
+      if (active) { setSubjectNameError(cause.message || 'お名前を確認できません'); setSubjectNameStatus('error'); }
+    });
+    return () => { active = false; };
+  }, [client, projectId, requiresSubjectName, familySubject?.id]);
+
+  const confirmSubjectName = async () => {
+    if (!subjectFamilyName.trim() || !subjectGivenName.trim() || !subjectPersonId || subjectNameStatus === 'saving') return;
+    setSubjectNameStatus('saving'); setSubjectNameError('');
+    const { data, error: saveError } = await client.rpc('confirm_own_book_subject_name', {
+      input_project_id:projectId,
+      input_family_name:subjectFamilyName.trim(),
+      input_given_name:subjectGivenName.trim(),
+    });
+    if (saveError || data?.person_id !== subjectPersonId) {
+      setSubjectNameError(saveError?.message || 'BOOKとご本人の対応を確認できません');
+      setSubjectNameStatus('editing');
+      return;
+    }
+    setConfirmedSubjectName(data.display_name);
+    setSubjectNameStatus('confirmed');
+    onSubjectNameConfirmed?.(data.display_name);
+  };
 
   // Derive the displayed product prices from the same server quote used for
   // checkout. A change in the catalog can no longer leave stale card prices.
@@ -165,6 +221,10 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   const checkout = async () => {
     if (!quote || busy) return;
     if (isPreview) { onPreviewCheckout?.({ ...selection, quotedAmountTotal: quote.amount_total }); return; }
+    if (requiresSubjectName && subjectNameStatus !== 'confirmed') {
+      setSubjectNameError('BOOKの主人公のお名前を確認してください。');
+      return;
+    }
     if (orderType === 'gift' && !gift.recipient_name.trim()) {
       setError('贈る相手のお名前を入力してください');
       return;
@@ -350,10 +410,26 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
       <p className="commerce-v2-review-kicker"><strong>たて糸♾️よこ糸BOOK</strong> お申し込み</p>
       <h1 className="text-2xl">注文内容の最終確認</h1>
       <p className="mt-3 text-sm leading-7 text-white/75">お支払いの前に、選んだ内容と認証後の金額をご確認ください。</p>
+      {requiresSubjectName && <section className="commerce-v2-subject-name" aria-label="BOOKの主人公のお名前">
+        <h2>BOOKの主人公のお名前</h2>
+        <p>このお名前をBOOKと家族アプリの本人プロフィールに共通で使用します。</p>
+        {subjectNameStatus === 'loading' ? <p role="status">お名前を確認しています…</p> : <>
+          <div className="commerce-v2-subject-name-fields">
+            <label>姓<input autoComplete="family-name" value={subjectFamilyName} maxLength={80}
+              onChange={event => { setSubjectFamilyName(event.target.value); setSubjectNameStatus('editing'); }} /></label>
+            <label>名<input autoComplete="given-name" value={subjectGivenName} maxLength={80}
+              onChange={event => { setSubjectGivenName(event.target.value); setSubjectNameStatus('editing'); }} /></label>
+          </div>
+          <button type="button" disabled={subjectNameStatus === 'saving' || !subjectFamilyName.trim() || !subjectGivenName.trim()}
+            onClick={confirmSubjectName}>{subjectNameStatus === 'saving' ? '保存しています…' : subjectNameStatus === 'confirmed' ? '確認済み・変更する' : 'この名前で保存する'}</button>
+          {subjectNameStatus === 'confirmed' && <p role="status">{confirmedSubjectName}さんのお名前で、家族アプリとBOOKを揃えました。</p>}
+        </>}
+        {subjectNameError && <p role="alert">{subjectNameError}</p>}
+      </section>}
       <div className="mt-8 rounded-2xl border border-white/20 bg-white/[0.05] p-5">
         <dl className="space-y-4">
           <div className="flex justify-between gap-4"><dt className="text-white/70">商品</dt><dd className="text-right">{edition === 'premium' ? 'プレミアム' : 'スタンダード'}</dd></div>
-          <div className="flex justify-between gap-4"><dt className="text-white/70">購入対象</dt><dd className="text-right">{isPreview || familySubject ? `${previewSubjectName || familySubject?.name}さんのBOOK` : orderType === 'gift' ? `贈り物・${giftMode === 'family_managed' ? 'あなたのスマホで制作' : '贈り先の方のスマホで制作'}` : '自分の人生史'}</dd></div>
+          <div className="flex justify-between gap-4"><dt className="text-white/70">購入対象</dt><dd className="text-right">{confirmedSubjectName ? `${confirmedSubjectName}さんのBOOK` : isPreview || familySubject ? `${previewSubjectName || familySubject?.name}さんのBOOK` : orderType === 'gift' ? `贈り物・${giftMode === 'family_managed' ? 'あなたのスマホで制作' : '贈り先の方のスマホで制作'}` : '自分の人生史'}</dd></div>
           {orderType === 'gift' && <div className="flex justify-between gap-4"><dt className="text-white/70">物語のご本人</dt><dd className="text-right">{gift.recipient_name}</dd></div>}
           <div className="flex justify-between gap-4"><dt className="text-white/70">制作方法</dt><dd className="text-right">{method === 'interview_staff' ? 'スタッフに聞き取ってもらう' : '自分・家族で制作する'}</dd></div>
           {standardExtraCount > 0 && <div className="flex justify-between gap-4"><dt className="text-white/70">追加スタンダード冊子</dt><dd>{standardExtraCount}冊</dd></div>}
@@ -371,7 +447,7 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
         <p role="status" className="mt-5 rounded-xl border border-amber-200/50 p-4 text-sm leading-6 text-amber-100">認証後の割引条件または商品価格が変わりました。選択時のお支払い合計は{initialSelection.quotedAmountTotal.toLocaleString('ja-JP')}円、現在は{Number(quote.amount_total).toLocaleString('ja-JP')}円です。新しい金額を確認してからお進みください。</p>}
       {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       {method === 'interview_staff' && <p role="note" className="mt-5 text-sm font-semibold leading-7 text-rose-200">聞き取り制作サポートにお申し込みの方は、必ず事前相談フォームにもご入力ください。</p>}
-      <button type="button" className="mt-8 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote} onClick={checkout}>{isPreview ? '模擬決済画面へ' : 'お支払いへ進む'}</button>
+      <button type="button" className="mt-8 w-full rounded-full bg-white py-4 text-slate-900 disabled:opacity-50" disabled={busy || !quote || (requiresSubjectName && subjectNameStatus !== 'confirmed')} onClick={checkout}>{isPreview ? '模擬決済画面へ' : 'お支払いへ進む'}</button>
       <button type="button" className="mt-5 w-full text-sm text-white/70 underline" onClick={() => {
         if (isPreview || familySubject) { onPreviewBack?.(); return; }
         const url = new URL(window.location.href);
