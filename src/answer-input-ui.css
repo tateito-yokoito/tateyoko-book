@@ -36,6 +36,7 @@
 .photo-correction-light [class*="text-white"]{color:#49624e!important}
 .photo-correction-light [class*="border-white"]{border-color:#cbd8c8!important}
 .photo-correction-light button.btn-quiet{background:#315b45!important;color:#fff!important;-webkit-text-fill-color:#fff}
+.photo-correction-light .text-narrative{font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN",sans-serif}
 .photo-correction-light button:not(.btn-quiet){font-family:"Noto Sans JP",sans-serif}
 @media(max-width:359px){.answer-entry-choices button{font-size:.92rem;gap:5px}}
 
