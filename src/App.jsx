@@ -37,7 +37,7 @@ import { BookAnswerPhotoDraft } from './lib/bookAnswerPhotoDraft.js';
 import { draftStorageKey } from './lib/answerTextDraft.js';
 import QuestionFlowTopBar from "./QuestionFlowTopBar.jsx";
 import { nextThemeQuestion } from "./lib/nextThemeQuestion.js";
-import { getFirstMainStoryIndex } from "./lib/firstMainStoryQuestion.js";
+import { getFirstMainStoryIndex, firstMainStoryTransitionState } from "./lib/firstMainStoryQuestion.js";
 import { deleteAnswerRecordingDraft, listAnswerRecordingDrafts, saveAnswerRecordingDraft } from './lib/answerRecordingDraft.js';
 import BookendInvitation from "./BookendInvitation.jsx";
 import { BOOKEND_PROMPTS, bookendKindForQuestion, bookendKindForVideo } from "./lib/bookends.js";
@@ -6492,7 +6492,12 @@ const leaveLifeOutlineMilestone = async ({ continueNow }) => {
           new Date().toISOString(),
         theme_guide_completed_at:
           foundation.project.theme_guide_completed_at || new Date().toISOString(),
-        onboarding_ritual_step: "completed"
+        onboarding_ritual_step: "completed",
+        // The first theme is now active. Keeping its intro transition would
+        // interpret a reload as an invitation to start theme 2 instead.
+        theme_experience_state: firstMainStoryTransitionState(
+          foundation.project.theme_experience_state
+        )
       })
       .eq("id", foundation.project.id)
       .select()

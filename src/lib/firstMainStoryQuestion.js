@@ -19,3 +19,11 @@ export function getFirstMainStoryIndex(questionSet) {
     question?.include_in_story_list !== false
   );
 }
+
+export function firstMainStoryTransitionState(themeExperienceState) {
+  return {
+    ...(themeExperienceState || {}),
+    pending_transition_order: null,
+    pending_transition_phase: null
+  };
+}
