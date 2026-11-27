@@ -19,7 +19,7 @@ import {
   personNameParts, uploadFamilyPlacePortrait, downloadFamilyPlacePortrait, familyPlacePortraitUrl,
   familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories, familyPlaceBookStories,
   getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, familyPlaceBookMedia,
-  updateFamilyPlaceBookStory, addFamilyRingPhoto, addFamilyPlaceMedia,
+  updateFamilyPlaceBookStory, addFamilyRingPhoto, addPersonalBookStoryPhoto, addFamilyPlaceMedia,
   setFamilyPlaceStoryVisibility, revokeFamilyPlaceMediaUrls,
 } from './lib/familyPlaceData.js';
 import { createFamilyApi } from './lib/familyConnection.js';
@@ -942,8 +942,12 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     if (story.source === 'free') await addFamilyPlaceMedia(dataClient,user.id,story.id,file,'photo');
     else if (story.completed) await addFamilyRingPhoto(dataClient,user.id,story,person.id,file);
     else {
-      const api = createFamilyApi(dataClient,{ allowProduction:true });
-      await createFamilyStoryAccess(dataClient,api,story.projectId).addPhoto(file,story.id);
+      const { data:managed, error:managedError } = await dataClient.rpc('family_managed',{p:story.projectId});
+      if (managedError) throw managedError;
+      if (managed) {
+        const api = createFamilyApi(dataClient,{ allowProduction:true });
+        await createFamilyStoryAccess(dataClient,api,story.projectId).addPhoto(file,story.id);
+      } else await addPersonalBookStoryPhoto(dataClient,user,story,person,file);
     }
     await loadPerson(person.id);
   };

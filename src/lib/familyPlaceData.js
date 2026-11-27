@@ -431,6 +431,36 @@ export async function addFamilyRingPhoto(client, userId, story, personId, file) 
   }
 }
 
+// A self-purchased BOOK has no family_subject_bindings row. Its answer photos
+// use the same media_assets/photos path as the BOOK editor, not family_uploads.
+export async function addPersonalBookStoryPhoto(client, user, story, person, file) {
+  const mime = file.type.split(';')[0];
+  const ext = ({ 'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp' })[mime];
+  if (!ext || !file.size || file.size > 25 * 1024 * 1024)
+    throw new Error('JPEG・PNG・WebPの写真を25MB以内で選んでください。');
+  const { data:answer, error:answerError } = await client.from('answers')
+    .select('id,user_id,book_project_id,subject_person_id')
+    .eq('id', story.id).maybeSingle();
+  if (answerError || !answer || answer.user_id !== user.id
+    || answer.book_project_id !== story.projectId
+    || answer.subject_person_id !== person.id)
+    throw new Error('本人の制作中BOOKの語りだけ写真を追加できます。');
+  const path = `${user.id}/${story.projectId}/${story.id}/photo-${crypto.randomUUID()}.${ext}`;
+  const bucket = client.storage.from('photos');
+  const uploaded = await bucket.upload(path,file,{ contentType:mime,upsert:false });
+  if (uploaded.error) throw uploaded.error;
+  const { error } = await client.from('media_assets').insert({
+    answer_id:story.id, user_id:user.id, family_id:person.family_id,
+    book_project_id:story.projectId, person_id:person.id,
+    asset_type:'photo', storage_path:path,
+    meta_json:{ source:'year_ring', content_type:mime },
+  });
+  if (error) {
+    await bucket.remove([path]).catch(() => {});
+    throw error;
+  }
+}
+
 export async function updateFamilyPlaceBookStory(client, story, body, locked) {
   const { data, error } = await client.rpc('family_ring_update_book_story', {
     input_answer_id: story.id,
