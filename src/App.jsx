@@ -9626,7 +9626,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
           progress={progress}
           storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
           question={currentQ}
-          lightMode={hasFullProjectAccess(foundation?.project)}
+          lightMode={hasFullProjectAccess(foundation?.project) || currentQ?.onboarding_group === 'trial_experience'}
           userName={user?.name || "あなた"}
           onBack={() => bookPhotoEnabled && progress.currentIndex > 0
             ? void stepBookQuestion(-1)
@@ -9661,7 +9661,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
           userId={user.id}
           projectId={foundation.project.id}
           question={writingQuestion}
-          lightMode={hasFullProjectAccess(foundation?.project)}
+          lightMode={hasFullProjectAccess(foundation?.project) || writingQuestion?.onboarding_group === 'trial_experience'}
           answer={bookSavedAnswerReview?.questionId === writingQuestion.user_question_id
             ? bookSavedAnswerReview.answer : null}
           themeLabel={recordingSectionLabel(writingQuestion)}
@@ -9681,7 +9681,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
       {scene === 3 && (
 <Scene_Recording
   question={currentQ}
-  lightMode={hasFullProjectAccess(foundation?.project)}
+  lightMode={hasFullProjectAccess(foundation?.project) || currentQ?.onboarding_group === 'trial_experience'}
   progress={progress}
   storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
   userName={user?.name || "あなた"}
@@ -9704,7 +9704,7 @@ onComplete={handleRecordComplete}
   canCommitMedia={!bookPhotoEnabled || (bookPhotoSaveState !== 'failed' && bookPhotoSaveState !== 'saving')}
   photoSaveState={bookPhotoSaveState}
   onPhotoRetry={retryBookAnswerPhoto}
-  light={hasFullProjectAccess(foundation?.project) || currentQ?.onboarding_group !== 'trial_experience'}
+  light
   isLifeOutline={currentQ?.onboarding_group === "life_outline"}
   isLastLifeOutline={
     currentQ?.onboarding_group === "life_outline" &&

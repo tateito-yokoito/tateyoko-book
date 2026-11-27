@@ -65,3 +65,17 @@
 }
 .guest-trial-finished-primary { margin-top: 45px; border: 0; background: #e9e5d9; color: #15243a; font-weight: 600; }
 .guest-trial-finished-secondary { margin-top: 15px; border: 1px solid rgba(255, 255, 255, .4); background: transparent; color: #f6f4ef; }
+
+/* Unique completion copy follows the shared BOOK tokens; answer cards stay shared. */
+.guest-trial-flow .guest-trial-finished { color: var(--book-ink); }
+.guest-trial-flow .guest-trial-finished > h1 { color: var(--book-ink); }
+.guest-trial-flow .guest-trial-finished-answers .tc-story { border-color: var(--book-line); }
+.guest-trial-flow .guest-trial-finished-answers .tc-number,
+.guest-trial-flow .guest-trial-finished-answers .tc-story-excerpt,
+.guest-trial-flow .guest-trial-finished-answers .tc-story > p,
+.guest-trial-flow .guest-trial-finished-answers .tc-text-button,
+.guest-trial-flow .guest-trial-finished-answers .tc-audio,
+.guest-trial-flow .guest-trial-finished-answers details { color: var(--book-muted); }
+.guest-trial-flow .guest-trial-finished-answers .tc-story h2 { color: var(--book-ink); }
+.guest-trial-flow .guest-trial-finished-primary { background: var(--book-primary); color: var(--book-on-primary); -webkit-text-fill-color: var(--book-on-primary); }
+.guest-trial-flow .guest-trial-finished-secondary { border-color: var(--book-line); color: var(--book-primary); }
