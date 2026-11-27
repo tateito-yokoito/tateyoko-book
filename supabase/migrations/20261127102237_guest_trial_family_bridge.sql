@@ -35,7 +35,8 @@ declare
   family_uuid uuid;
   result jsonb := '[]'::jsonb;
 begin
-  if actor is null or input_token_hash !~ '^[a-f0-9]{64}$'
+  if actor is null or not public.family_place_access_allowed()
+    or input_token_hash !~ '^[a-f0-9]{64}$'
     or input_person_id is null or input_through_slot not between 1 and 3 then
     raise exception 'Invalid trial save' using errcode='42501';
   end if;
