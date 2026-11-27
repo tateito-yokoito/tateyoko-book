@@ -8208,6 +8208,17 @@ if (getProjectRoleInviteTokenFromUrl()) {
                 ? "trial_expired"
                 : hasCompletedFreeTrial(questionsDB) ? "trial_complete" : 0);
             }} /> : <PurchaseSelectionEntry client={supabaseClient} projectId={foundation?.project?.id}
+              onBack={() => {
+                const url = new URL(window.location.href);
+                if (url.searchParams.get('guest_trial_claim') === '1') {
+                  window.location.assign('/?guest_trial=1');
+                  return;
+                }
+                url.searchParams.delete('entry');
+                url.searchParams.delete('purchase_review');
+                window.history.replaceState({}, '', url);
+                setScene('home');
+              }}
               projectAccessStatus={foundation?.project?.access_status}
               initialOrderType={purchaseFor}
               familyInvitation={commerceV2Invitation || receivedFamilyInvitation}
@@ -9191,6 +9202,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
       {scene === "family_story_payment_review" && familyPaymentInvitation && (
         COMMERCE_V2_ENABLED ?
         <PurchaseSelectionEntry client={supabaseClient} projectId={foundation?.project?.id}
+          onBack={() => {setFamilyPaymentInvitation(null);setScene('home');}}
           initialOrderType="gift" familyInvitation={familyPaymentInvitation} /> :
         TRIAL_CONVERSION_ENABLED && familyPaymentInvitation.pricing_policy_version === '2.0' ?
         <TrialGiftPurchaseReview key={familyPaymentInvitation.id} client={supabaseClient}

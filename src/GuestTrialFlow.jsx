@@ -136,6 +136,7 @@ function GuestTrialExperience() {
   const [savePeople, setSavePeople] = useState([]);
   const [selectedSavePerson, setSelectedSavePerson] = useState(trialPersonId || '');
   const [savedPersonName, setSavedPersonName] = useState('');
+  const [confirmReplace, setConfirmReplace] = useState(false);
   const [serviceReturnScreen, setServiceReturnScreen] = useState('finished');
   const pendingSaveOpen = useRef(false);
 
@@ -421,15 +422,20 @@ function GuestTrialExperience() {
     finally { setBusy(false); }
   }
 
-  async function confirmRingSave() {
+  async function confirmRingSave(replaceExisting = false) {
     if (!selectedSavePerson) { setError('語りを残す人物を選んでください。'); return; }
     setBusy(true); setError('');
     try {
-      const saved = await saveGuestTrialToRing(supabaseClient,TRIAL_API,session,selectedSavePerson,3);
+      const saved = await saveGuestTrialToRing(supabaseClient,TRIAL_API,session,selectedSavePerson,3,
+        { replaceExisting });
       if (saved.length !== 3) throw new Error('3問すべての保存を確認できませんでした。');
       setSavedPersonName(savePeople.find(item => item.id === selectedSavePerson)?.display_name || '本人');
-      setScreen('ring_saved');
-    } catch (cause) { setError(cause.message || '年輪へ保存できませんでした。'); }
+      setConfirmReplace(false);
+      window.location.assign(`/app?person=${encodeURIComponent(selectedSavePerson)}&tab=ring`);
+    } catch (cause) {
+      if (cause.code === 'TRIAL_STORY_CONFLICT' && !replaceExisting) setConfirmReplace(true);
+      else setError(cause.message || '年輪へ保存できませんでした。');
+    }
     finally { setBusy(false); }
   }
 
@@ -668,13 +674,24 @@ function GuestTrialExperience() {
       {screen === 'choose_person' && <main className="mx-auto max-w-md px-7 py-16">
         <button type="button" onClick={() => setScreen('finished')} className="min-h-11 text-white/70">← 戻る</button>
         <h1 className="mt-8 text-2xl">誰の年輪に保存しますか？</h1>
-        <p className="mt-4 leading-loose text-white/70">保存先の本人を確認してください。既存の語りは上書きしません。</p>
+        <p className="mt-4 leading-loose text-white/70">保存先の本人を確認してください。すでに無料3問の語りがある場合は、置き換える前に確認します。</p>
         <div className="mt-8 space-y-3">{savePeople.map(item => <label key={item.id}
           className="flex min-h-14 items-center gap-3 rounded-xl border border-white/30 px-5">
           <input type="radio" name="save-person" checked={selectedSavePerson===item.id}
             onChange={() => setSelectedSavePerson(item.id)}/>{item.display_name}</label>)}</div>
-        <button type="button" disabled={busy || !selectedSavePerson} onClick={confirmRingSave}
+        <button type="button" disabled={busy || !selectedSavePerson} onClick={() => confirmRingSave()}
           className="mt-9 min-h-14 w-full rounded-full bg-[#e9e5d9] text-[#15243a] disabled:opacity-50">{busy ? '保存しています…' : 'この人の年輪に保存する'}</button>
+        {confirmReplace && <div role="dialog" aria-modal="true" aria-labelledby="trial-replace-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
+          <div className="w-full max-w-sm rounded-2xl bg-[var(--book-surface)] p-6 text-[var(--book-ink)]">
+            <h2 id="trial-replace-title" className="text-xl font-semibold">無料3問を置き換えますか？</h2>
+            <p className="mt-4 text-sm leading-7">{savePeople.find(item => item.id === selectedSavePerson)?.display_name || 'この人'}さんの年輪にある無料3問の語りと添付を、今回の3問でまとめて置き換えます。以前の内容は元に戻せません。完成済みBOOKは変わりません。</p>
+            <button type="button" disabled={busy} onClick={() => confirmRingSave(true)}
+              className="mt-6 min-h-12 w-full rounded-full bg-[var(--book-primary)] text-white disabled:opacity-50">{busy ? '置き換えています…' : '3問を置き換える'}</button>
+            <button type="button" disabled={busy} onClick={() => { setConfirmReplace(false); setError(''); }}
+              className="mt-2 min-h-11 w-full text-[var(--book-muted)]">キャンセル</button>
+          </div>
+        </div>}
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
       {screen === 'ring_saved' && <main className="mx-auto max-w-md px-7 py-20 text-center">

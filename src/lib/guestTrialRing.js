@@ -12,18 +12,29 @@ async function tokenHash(token) {
   return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2,'0')).join('');
 }
 
-export async function saveGuestTrialToRing(client, supabaseUrl, session, personId, throughSlot = 3) {
+export async function saveGuestTrialToRing(client, supabaseUrl, session, personId, throughSlot = 3,
+  { replaceExisting = false } = {}) {
   if (!uuidPattern.test(personId || '') || !Number.isInteger(throughSlot)
     || throughSlot < 1 || throughSlot > 3) throw new Error('保存先の人物を選んでください。');
   const { data: identity, error: identityError } = await client.auth.getUser();
   if (identityError || !identity?.user || identity.user.is_anonymous)
     throw new Error('ログインしてから保存してください。');
-  const { data, error } = await client.rpc('save_guest_trial_to_ring', {
-    input_token_hash:await tokenHash(session?.token),
-    input_person_id:personId, input_through_slot:throughSlot,
-  });
+  if (replaceExisting && throughSlot !== 3) throw new Error('3問すべてを確認してください。');
+  const { data, error } = replaceExisting
+    ? await client.rpc('replace_guest_trial_ring_stories', {
+      input_token_hash:await tokenHash(session?.token),input_person_id:personId,
+    })
+    : await client.rpc('save_guest_trial_to_ring', {
+      input_token_hash:await tokenHash(session?.token),
+      input_person_id:personId, input_through_slot:throughSlot,
+    });
   if (error) {
-    if (error.code === '23505') throw new Error('この人物には既に別の語りがあります。上書きせずに停止しました。');
+    if (error.code === '23505') {
+      const conflict = new Error('この人物には既に別の語りがあります。');
+      conflict.code = 'TRIAL_STORY_CONFLICT';
+      throw conflict;
+    }
+    if (error.code === '55000') throw new Error('BOOKと共有中の語りや購入済みの体験は、この画面から置き換えられません。');
     throw error;
   }
   const stories = data?.stories || [];
@@ -42,7 +53,8 @@ export async function saveGuestTrialToRing(client, supabaseUrl, session, personI
     const extension = mimeExtensions[mime];
     if (!extension) throw new Error('録音の形式を確認できませんでした。');
     const blob = await response.blob();
-    const path = `${identity.user.id}/${story.storyId}/guest-trial-${story.questionId}.${extension}`;
+    const trialKey = (await tokenHash(session.token)).slice(0, 12);
+    const path = `${identity.user.id}/${story.storyId}/guest-trial-${story.questionId}-${trialKey}.${extension}`;
     const bucket = client.storage.from('audio');
     const uploaded = await bucket.upload(path,blob,{contentType:mime,upsert:false});
     if (uploaded.error && String(uploaded.error.statusCode) !== '409') throw uploaded.error;
@@ -51,6 +63,14 @@ export async function saveGuestTrialToRing(client, supabaseUrl, session, personI
       storage_path:path,uploaded_by:identity.user.id,
     });
     if (insertError && insertError.code !== '23505') throw insertError;
+  }
+  if (replaceExisting) {
+    for (const media of data?.retiredMedia || []) {
+      if (!media?.bucket || !media?.path) continue;
+      // Metadata was retired atomically. A failed byte cleanup cannot expose
+      // the old attachment or undo the new, confirmed three-story save.
+      await client.storage.from(media.bucket).remove([media.path]).catch(() => {});
+    }
   }
   return stories;
 }

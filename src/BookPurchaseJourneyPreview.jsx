@@ -101,6 +101,7 @@ export default function BookPurchaseJourneyPreview({ person, people = [], client
 
     {step === 'selection' && <CommerceV2Purchase key="preview-selection" client={client}
       phase="selection" projectId={projectId} previewSubjectName={livePurchase ? null : subject}
+      onSelectionBack={back}
       familySubject={livePurchase ? { id:selectedPerson.id,name:subject,isSelf:selectedPerson.id===selfPersonId } : null}
       initialSelection={selection}
       onProceed={async value => {

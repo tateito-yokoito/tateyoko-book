@@ -26,7 +26,7 @@ async function checkoutErrorMessage(invokeError, data, fallback) {
 
 export default function CommerceV2Purchase({ client, projectId, initialOrderType = 'self', familyInvitation = null, onTryFree,
   phase, initialSelection = null, onProceed, onCompleted, projectAccessStatus = null,
-  previewSubjectName = null, onPreviewCheckout, onPreviewBack,
+  previewSubjectName = null, onPreviewCheckout, onPreviewBack, onSelectionBack,
   familySubject = null, onFamilyCheckoutCompleted = null, onSubjectNameConfirmed = null }) {
   const isPreview = Boolean(previewSubjectName);
   const isSelection = phase === 'selection';
@@ -312,6 +312,11 @@ export default function CommerceV2Purchase({ client, projectId, initialOrderType
   if (isSelection) return (
     <section className="min-h-screen bg-[#f8f7f2] px-5 py-8 font-sans text-[#203a34] sm:px-8">
       <div className="mx-auto max-w-2xl">
+        <button type="button" onClick={onSelectionBack || (() => {
+          const url = new URL(window.location.href);
+          window.location.assign(url.searchParams.get('guest_trial_claim') === '1'
+            ? '/?guest_trial=1' : '/');
+        })} className="mb-6 flex min-h-11 items-center text-sm text-[#284c40]">← 戻る</button>
         {isPreview && <p role="status" className="rounded-lg border border-amber-600 bg-amber-50 p-3 text-sm font-bold text-amber-900">画面プレビュー：注文・決済・作品作成は行いません。対象：{previewSubjectName}さん</p>}
         <p className="text-xs tracking-[0.18em] text-[#65756b]">縦糸横糸｜年輪 nenrin</p>
         <h1 className="mt-3 font-serif text-3xl leading-relaxed">あなたに合う一冊をお選びください。</h1>
