@@ -53,7 +53,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
   backLabel = 'ホーム', entryOrigin = 'home', onOpenBook = null, onResumeBook = null,
   ringPreviewContent = null, ringStories = null, ringCanEdit = false,
   onSaveRingStory = null, onLockRingStory = null, onLoadRingMedia = null,
-  onAddRingPhoto = null }) {
+  onAddRingPhoto = null, onAddRingVoice = null }) {
   const [showQuestions, setShowQuestions] = useState(false);
   const [ringDetailOpen, setRingDetailOpen] = useState(false);
   const [showResumeDialog, setShowResumeDialog] = useState(false);
@@ -113,6 +113,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
         canEdit={ringCanEdit} onSave={ringCanEdit ? onSaveRingStory : null}
         onLock={ringCanEdit ? onLockRingStory : null} onLoadMedia={onLoadRingMedia}
         onAddPhoto={ringCanEdit ? onAddRingPhoto : null}
+        onAddVoice={ringCanEdit ? onAddRingVoice : null}
         onAddStory={onOpenStory} questions={questions}/>) || <>
       <h2>年輪</h2><p className="fp-person-section-note">人生の語りを、少しずつ残していく場所です。</p>
       {!questions.length && !savedCount ? <div className="fp-person-story-empty">年輪の体験は、次の段階で公開します。</div>

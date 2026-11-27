@@ -51,3 +51,19 @@
 .fp-ring-story-row small svg{top:3px}
 .fp-ring-story-row>span{transform:translateX(5px)}
 .fp-ring-themes{gap:9.6px}
+
+/* The year-ring editor uses the same answer controls as BOOK, in the family palette. */
+.fp-ring-editor.answer-light{padding:3px 0 34px;background:transparent;--answer-surface:#fffefa;--answer-line:#d8e1d4;--answer-green:#315b45;--answer-muted:#667565}
+.fp-ring-editor-eyebrow{margin:0 0 8px!important;color:#688268!important;font-size:12px!important;font-weight:700;letter-spacing:.08em}
+.fp-ring-editor h2{margin:0 0 9px;font-family:"Noto Serif JP","Yu Mincho",serif;font-size:20px;font-weight:550;line-height:1.65}
+.fp-ring-editor-note{margin:0 0 20px!important;color:#687766!important;font-size:13px!important;line-height:1.6!important}
+.fp-ring-editor .answer-entry-choices{margin-bottom:24px}
+.fp-ring-editor .answer-entry-choices button{min-height:50px;background:#fffefa;border-color:#ccd9ca;border-radius:10px;font-size:13px}
+.fp-ring-editor .fp-ring-editor-label{margin:0 0 8px;color:#49654e;font-size:13px}
+.fp-ring-editor .answer-body-editor{min-height:190px;padding:15px 16px;border:1px solid #c5d4c3;border-radius:12px;background:#fffefa;color:#2c4032;font:400 15px/1.8 "Noto Sans JP",sans-serif}
+.fp-ring-editor .answer-photo-strip{margin:14px 0 4px}
+.fp-ring-editor audio{display:block;width:100%;margin:12px 0}
+.fp-ring-editor-file{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.fp-ring-editor-caution{padding:11px 13px;border-radius:9px;background:#f0f2e9;color:#566b57!important}
+.fp-ring-editor .fp-ring-save{margin-top:18px;background:#315b45;color:#fff;-webkit-text-fill-color:#fff}
+.fp-ring-recorder{min-height:100dvh;background:#faf7ef}

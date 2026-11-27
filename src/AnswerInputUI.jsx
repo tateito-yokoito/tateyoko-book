@@ -45,9 +45,9 @@ export function AnswerReview({ body = '', photos = [], audio = [], onOpenPhoto,
   </div>;
 }
 
-export function AnswerBodyEditor({ value, onChange, disabled = false, label = '回答の文章',
+export function AnswerBodyEditor({ id, value, onChange, disabled = false, label = '回答の文章',
   placeholder = 'ここに思い出を書く', className = '' }) {
-  return <textarea aria-label={label} value={value} disabled={disabled}
+  return <textarea id={id} aria-label={label} value={value} disabled={disabled}
     onChange={event => onChange(event.target.value)} placeholder={placeholder}
     className={`answer-body-editor ${className}`} />;
 }

@@ -1,10 +1,12 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, Ellipsis, LockKeyhole, Volume2 } from 'lucide-react';
+import { AnswerBodyEditor, AnswerEntryChoices, AnswerPhotoStrip } from './AnswerInputUI.jsx';
+import { Scene_Recording } from './App.jsx';
 import './family-ring-preview.css';
 
 // The same reading surface is used by the family app and its isolated review.
 export default function FamilyRingContent({ stories, canEdit = false, onSave, onLock,
-  onLoadMedia, onAddPhoto, onAddStory, onDetailChange, questions = [], loading = false }) {
+  onLoadMedia, onAddPhoto, onAddVoice, onAddStory, onDetailChange, questions = [], loading = false }) {
   const [openTheme, setOpenTheme] = useState('');
   const [selected, setSelected] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -15,6 +17,8 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [showQuestions, setShowQuestions] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const photoInput = useRef(null);
   const themes = [...new Set(stories.map(story => story.theme || 'その他の語り'))];
   const orderedStories = themes.flatMap(theme => stories.filter(story => (story.theme || 'その他の語り') === theme));
   const selectedIndex = selected ? orderedStories.findIndex(story => story.source === selected.source && story.id === selected.id) : -1;
@@ -36,7 +40,7 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
   const openStory = async (story, keepListScroll = false) => {
     const request = ++mediaRequest.current;
     if (!keepListScroll) listScroll.current = window.scrollY;
-    setSelected(story); setEditing(false); setMenuOpen(false); setMessage('');
+    setSelected(story); setEditing(false); setRecording(false); setMenuOpen(false); setMessage('');
     onDetailChange?.(true);
     setMediaError(''); setMedia([]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -49,7 +53,7 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
   };
   const goBack = () => {
     mediaRequest.current += 1;
-    setSelected(null); setEditing(false); setMenuOpen(false); setMedia([]);
+    setSelected(null); setEditing(false); setRecording(false); setMenuOpen(false); setMedia([]);
     onDetailChange?.(false);
     restoreListScroll.current = true;
   };
@@ -84,6 +88,24 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
     } catch (cause) { setMessage(cause.message || '写真を追加できませんでした。'); }
     finally { setBusy(false); event.target.value = ''; }
   };
+  const addVoice = async (_transcript, seconds, _url, blob) => {
+    if (!blob?.size || !onAddVoice || busy) return false;
+    setBusy(true); setMessage('');
+    try {
+      await onAddVoice(selected, blob, Math.round(seconds));
+      setMedia(await onLoadMedia(selected));
+      setRecording(false); setMessage('声を追加しました。');
+      return true;
+    } catch (cause) {
+      setMessage(cause.message || '声を追加できませんでした。');
+      setRecording(false);
+      return false;
+    } finally { setBusy(false); }
+  };
+  if (recording && selected) return <div className="fp-ring-recorder"><Scene_Recording
+    question={{ content:selected.question, question_role:'story_question' }} lightMode
+    progress={{currentIndex:0,total:1}} userName="" autoStart={false}
+    onBack={() => setRecording(false)} onComplete={addVoice}/></div>;
   return <div className="fp-ring-review">
     {!selected ? <>
       <div className="fp-ring-review-heading"><h2>これまでの語り</h2><p>テーマを開いて、語りを読み返す。</p></div>
@@ -115,11 +137,19 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
         <span>{selectedIndex + 1} / {orderedStories.length}</span>
         <button type="button" disabled={selectedIndex < 0 || selectedIndex >= orderedStories.length - 1} onClick={() => openStory(orderedStories[selectedIndex + 1], true)}>次の語り 〉</button>
       </nav>
-      {editing ? <div className="fp-ring-editor"><h2>{selected.question}</h2><label htmlFor="fp-ring-draft">語りの本文</label>
-        <textarea id="fp-ring-draft" value={draft} onChange={event => setDraft(event.target.value)}/>
-        {onAddPhoto && <label className="fp-ring-photo-add">写真を追加する<input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={addPhoto}/></label>}
-        {media.filter(item => item.kind === 'photo').map(item => <img key={item.id} className="fp-ring-detail-photo" src={item.url} alt="語りに添えられた写真"/>)}
-        {selected.completed && <p>変更は年輪に保存されます。完成したBOOKの内容は変わりません。</p>}
+      {editing ? <div className="fp-ring-editor answer-light"><p className="fp-ring-editor-eyebrow">語りを編集</p><h2>{selected.question}</h2>
+        <p className="fp-ring-editor-note">思い出したことを、声や文章で書き足せます。</p>
+        <AnswerEntryChoices onVoice={onAddVoice ? () => setRecording(true) : null}
+          onWrite={() => document.querySelector('.fp-ring-editor .answer-body-editor')?.focus()}
+          onPhoto={onAddPhoto ? () => photoInput.current?.click() : null}/>
+        <label className="fp-ring-editor-label" htmlFor="fp-ring-draft">語りの本文</label>
+        <AnswerBodyEditor id="fp-ring-draft" value={draft} onChange={setDraft} label="語りの本文" placeholder="ここに思い出を書く"/>
+        {onAddPhoto && <input ref={photoInput} className="fp-ring-editor-file" type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={addPhoto} aria-label="写真を追加する"/>}
+        <AnswerPhotoStrip photos={media.filter(item => item.kind === 'photo')}
+          onOpen={item => window.open(item.url, '_blank', 'noopener,noreferrer')}/>
+        {media.filter(item => item.kind === 'audio').map(item => <audio key={item.id} controls preload="none" src={item.url} aria-label="語りの音声"/>)}
+        {message && <p className="fp-ring-message" role="status">{message}</p>}
+        {selected.completed && <p className="fp-ring-editor-caution">変更は年輪に保存されます。完成したBOOKの内容は変わりません。</p>}
         <button type="button" className="fp-ring-save" disabled={!draft.trim() || busy} onClick={save}>{busy ? '保存しています…' : '変更を保存する'}</button>
         <button type="button" className="fp-ring-cancel" onClick={() => setEditing(false)}>キャンセル</button>
       </div> : <article className="fp-ring-detail">

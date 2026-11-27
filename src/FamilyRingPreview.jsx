@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { BookOpen } from 'lucide-react';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
 import { SAMPLE_WEB_BOOK_ID } from './WebBookCover.jsx';
@@ -28,6 +28,7 @@ export default function FamilyRingPreview() {
   const [tab,setTab] = useState('ring');
   const [mode,setMode] = useState('active');
   const [stories,setStories] = useState(initialStories);
+  const storyMedia = useRef({});
   const [notice,setNotice] = useState('');
   const showRecords = mode !== 'empty';
   const visibleStories = showRecords ? stories.map(story => ({...story,completed:mode==='complete'})) : [];
@@ -41,10 +42,18 @@ export default function FamilyRingPreview() {
     setStories(current => current.map(row => row.id===story.id ? updated : row));
     return updated;
   };
+  const onAddMedia = (story,file,kind) => {
+    storyMedia.current[story.id] = [
+      ...(storyMedia.current[story.id] || []),{id:crypto.randomUUID(),kind,blob:file},
+    ];
+  };
+  const onLoadMedia = async story => (storyMedia.current[story.id] || []).map(item => ({
+    id:item.id,kind:item.kind,url:URL.createObjectURL(item.blob),
+  }));
   const explain = () => setNotice('このPreviewは架空データです。実際の登録・制作データは変更しません。');
   return <div className="fp-ring-preview-shell">
     <div className="fp-ring-preview-controls">
-      <p className="fp-ring-preview-banner"><BookOpen size={17}/>人物ページの操作Preview ・ 架空データ</p>
+      <p className="fp-ring-preview-banner"><BookOpen size={17}/>人物ページの操作Preview ・ 架空データ。録音・写真はこの画面内だけで確認できます。</p>
       <div role="group" aria-label="表示する状態">
         {[['active','制作中・記録あり'],['complete','完成済み'],['empty','記録なし']].map(([key,label]) =>
           <button type="button" key={key} aria-pressed={mode===key} onClick={() => {setMode(key);setTab('ring');setNotice('');}}>{label}</button>)}
@@ -54,7 +63,8 @@ export default function FamilyRingPreview() {
     <FamilyPersonPage key={mode} person={person} activeTab={tab} onTabChange={setTab}
       onBack={explain} onProfile={explain} backLabel="ホーム"
       ringStories={visibleStories} ringCanEdit onSaveRingStory={onSave} onLockRingStory={onLock}
-      onLoadRingMedia={async () => []} onAddRingPhoto={null}
+      onLoadRingMedia={onLoadMedia} onAddRingPhoto={(story,file) => onAddMedia(story,file,'photo')}
+      onAddRingVoice={(story,blob) => onAddMedia(story,blob,'audio')}
       books={mode==='complete'?[completedBook]:[]} booksStatus="ready"
       publishedPublication={mode==='complete'?previewPublication:null} publicDemo
       visibleBookProjects={mode==='active'?[{id:'preview-project',access_status:'paid'}]:[]}
