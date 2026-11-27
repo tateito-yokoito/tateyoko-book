@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, LockKeyhole, Plus, UserRound } from 'lucide-react';
 import FamilyAvatar from './FamilyAvatar.jsx';
 import FamilyRingContent from './FamilyRingContent.jsx';
+import { trialPersonStorageKey } from './lib/guestTrialRing.js';
 import WebBookCover, { publicationCoverImageUrl } from './WebBookCover.jsx';
 import { currentPersonAge } from './lib/personAge.js';
 import './family-person-page.css';
@@ -49,7 +50,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
   publishedPublication = null, publicDemo = false,
   visibleBookProjects = [], projectsStatus = 'ready',
   facts = [], questions = [], activeTab = 'ring', onTabChange, onBack, onProfile,
-  onOpenStory, onAddFact, onRetryBooks, supabaseClient, busy = false,
+  onOpenStory, onTryFreeTrial = null, onAddFact, onRetryBooks, supabaseClient, busy = false,
   backLabel = 'ホーム', entryOrigin = 'home', onOpenBook = null, onResumeBook = null,
   ringPreviewContent = null, ringStories = null, ringCanEdit = false,
   onSaveRingStory = null, onLockRingStory = null, onLoadRingMedia = null,
@@ -109,6 +110,11 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
           onClick={() => { setRingDetailOpen(false); onTabChange(key); }}>{label}</button>)}
     </div>
     {activeTab === 'ring' && <section className="fp-person-content" role="tabpanel">
+      {!publicDemo && !purchasedProject && ringCanEdit && saved.length < 3 && onTryFreeTrial &&
+        <button type="button" className="fp-person-add-story" onClick={() => onTryFreeTrial(person.id)}>
+          {window.localStorage.getItem(trialPersonStorageKey(person.id))
+            ? '無料３問の続きを試す' : '無料３問を試す'}
+        </button>}
       {ringPreviewContent || (ringStories && <FamilyRingContent key={person.id} stories={ringStories}
         onDetailChange={setRingDetailOpen}
         canEdit={ringCanEdit} onSave={ringCanEdit ? onSaveRingStory : null}
@@ -117,7 +123,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
         onAddPhoto={ringCanEdit ? onAddRingPhoto : null}
         onAddVoice={ringCanEdit ? onAddRingVoice : null}
         onPolish={ringCanEdit ? onPolishRingStory : null}
-        onAddStory={onOpenStory} questions={questions}/>) || <>
+        onAddStory={purchasedProject ? onOpenStory : null} questions={questions}/>) || <>
       <h2>年輪</h2><p className="fp-person-section-note">人生の語りを、少しずつ残していく場所です。</p>
       {!questions.length && !savedCount ? <div className="fp-person-story-empty">年輪の体験は、次の段階で公開します。</div>
       : savedCount ? <div className="fp-person-stories">{saved.map(row =>

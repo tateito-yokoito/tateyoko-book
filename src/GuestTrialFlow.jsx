@@ -12,6 +12,7 @@ import {
   guestTrialResumeUrl, guestTrialCanonicalUrl, takeGuestTrialResumeToken,
 } from './lib/guestTrialApi.js';
 import { clearGuestTrialPending, guestTrialPurchaseUrl } from './lib/guestTrialClaim.js';
+import { saveGuestTrialToRing, selfTrialPeople } from './lib/guestTrialRing.js';
 
 // The public entry remains on the established flow until the full purchase,
 // recovery, and handoff gate passes. The API always follows this app's
@@ -23,6 +24,7 @@ const developmentPreview = import.meta.env.DEV
 // expose it from the adopted pay-after-login route.
 const purchasePreviewEnabled = false;
 const giftToken = new URLSearchParams(window.location.search).get('gift_trial_token') || null;
+const trialPersonId = new URLSearchParams(window.location.search).get('person') || null;
 const questions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) => ({
   ...question, question_id: question.id, onboarding_group: 'trial_experience',
   content: question.content, prompt_hint: question.hint,
@@ -108,7 +110,7 @@ export default function GuestTrialFlow() {
   useEffect(() => {
     if (!legacyHost) return;
     (async () => {
-      const storageKey = await guestTrialStorageKey(giftToken);
+      const storageKey = await guestTrialStorageKey(giftToken, trialPersonId);
       const saved = readGuestTrialSession(localStorage, storageKey);
       window.location.replace(guestTrialCanonicalUrl(window.location, saved));
     })();
@@ -140,6 +142,10 @@ function GuestTrialExperience() {
   const [resumeUrl, setResumeUrl] = useState('');
   const [shareStatus, setShareStatus] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [savePeople, setSavePeople] = useState([]);
+  const [selectedSavePerson, setSelectedSavePerson] = useState(trialPersonId || '');
+  const [savedPersonName, setSavedPersonName] = useState('');
+  const pendingSaveOpen = useRef(false);
 
   useEffect(() => {
     if (!reviewBlocked) return;
@@ -154,6 +160,16 @@ function GuestTrialExperience() {
     window.addEventListener('hashchange', openResume);
     return () => window.removeEventListener('hashchange', openResume);
   }, []);
+
+  useEffect(() => {
+    if (screen !== 'finished' || !session || pendingSaveOpen.current
+      || new URLSearchParams(window.location.search).get('save') !== '1') return;
+    pendingSaveOpen.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('save');
+    window.history.replaceState(null,'',url);
+    void prepareRingSave();
+  }, [screen,session]);
 
   async function showPaidHandoff() {
     const { data: auth } = await supabaseClient.auth.getSession();
@@ -202,7 +218,7 @@ function GuestTrialExperience() {
   useEffect(() => {
     let live = true;
     (async () => {
-      const nextKey = await guestTrialStorageKey(giftToken);
+      const nextKey = await guestTrialStorageKey(giftToken, trialPersonId);
       if (!live) return;
       setKey(nextKey);
       let saved = null;
@@ -331,6 +347,8 @@ function GuestTrialExperience() {
           ? { ...row, transcript: saved.transcript, transcription_state: 'complete' } : row));
         setEditing(false);
       }
+      if (trialPersonId) await saveGuestTrialToRing(supabaseClient, TRIAL_API,
+        session, trialPersonId, index + 1);
       if (index < 2) {
         setIndex(index + 1); setPendingBlob(null); setPendingAudioUrl('');
         setTranscript(''); setScreen('choice');
@@ -388,6 +406,45 @@ function GuestTrialExperience() {
       setScreen('conversion');
     } catch (cause) { setError(cause.message || '金額を確認できませんでした'); }
     finally { setBusy(false); }
+  }
+
+  async function prepareRingSave() {
+    if (!session) return;
+    setBusy(true); setError('');
+    try {
+      const { data: auth } = await supabaseClient.auth.getSession();
+      if (!auth?.session) {
+        window.location.assign('/login?return_trial=1');
+        return;
+      }
+      const people = await selfTrialPeople(supabaseClient);
+      if (!people.length) {
+        window.location.assign('/login?return_trial=1');
+        return;
+      }
+      setSavePeople(people);
+      setSelectedSavePerson(trialPersonId || (people.length === 1 ? people[0].id : ''));
+      setScreen('choose_person');
+    } catch (cause) { setError(cause.message || '保存先を確認できませんでした。'); }
+    finally { setBusy(false); }
+  }
+
+  async function confirmRingSave() {
+    if (!selectedSavePerson) { setError('語りを残す人物を選んでください。'); return; }
+    setBusy(true); setError('');
+    try {
+      const saved = await saveGuestTrialToRing(supabaseClient,TRIAL_API,session,selectedSavePerson,3);
+      if (saved.length !== 3) throw new Error('3問すべての保存を確認できませんでした。');
+      setSavedPersonName(savePeople.find(item => item.id === selectedSavePerson)?.display_name || '本人');
+      setScreen('ring_saved');
+    } catch (cause) { setError(cause.message || '年輪へ保存できませんでした。'); }
+    finally { setBusy(false); }
+  }
+
+  function openBookInformation() {
+    if (trialPersonId && session) localStorage.setItem('tateyoko:guest-trial:self:v1',
+      JSON.stringify(session));
+    setScreen('service');
   }
 
   function openExit() {
@@ -499,7 +556,7 @@ function GuestTrialExperience() {
     <div className="min-h-[100dvh] w-full">
       {screen === 'loading' && <p className="px-7 py-20">体験を確認しています…</p>}
       {screen === 'intro' && <main className="mx-auto flex min-h-[100dvh] w-full max-w-[690px] flex-col justify-center px-[30px] text-center" style={{ paddingTop: 'calc(64px + env(safe-area-inset-top))', paddingBottom: 'calc(64px + env(safe-area-inset-bottom))' }}>
-        <p className="text-[clamp(16px,4.2vw,22px)] tracking-[0.09em] text-[#28473e]" style={{ fontFamily: 'var(--font-display)' }}>縦糸横糸 ｜ 年輪 nenrin</p>
+        <p className="text-[clamp(16px,4.2vw,22px)] tracking-[0.09em] text-[#28473e]" style={{ fontFamily: 'var(--font-display)' }}>たて糸♾️よこ糸</p>
         <h1 className="mt-[58px] text-[clamp(29px,7.1vw,43px)] font-medium leading-[1.75] tracking-[0.035em] sm:mt-[70px]" style={{ fontFamily: 'var(--font-display)' }}>質問を通じて<br />人生を振り返り、<br />言葉にする。</h1>
         <p className="mt-6 text-[clamp(18px,4.7vw,23px)] leading-[1.85] text-[#455650]">その体験をお試しいただけます。</p>
         <ul className="mx-auto mt-[46px] w-full max-w-[560px] space-y-5 text-left text-[clamp(16px,4.1vw,20px)] leading-[1.9] text-[#455650] sm:mt-[58px]">
@@ -614,42 +671,50 @@ function GuestTrialExperience() {
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
       {screen === 'finished' && <main className="guest-trial-finished">
-        <h1>3問の体験が完了しました</h1>
-        <div className="guest-trial-finished-answers">{stories.map((story, storyIndex) => <StoryCard key={story.id} story={story} index={storyIndex}
-          resolveMedia={async asset => {
-            const response = await guestTrialRequest(TRIAL_API, 'audio', { sessionToken: session.token, questionId: asset.id });
-            return response.url;
-          }} />)}</div>
-        {!giftToken && <section className="guest-trial-reflection" aria-labelledby="guest-trial-reflection-title">
-          <p className="guest-trial-theme">テーマ「幼い頃のこと」</p>
-          <h2 id="guest-trial-reflection-title">3問だけでしたが、<br />いかがでしたか？</h2>
-          <p className="guest-trial-lead">少し懐かしい記憶が、<br />開いたでしょうか。</p>
-          <p className="guest-trial-copy">
-            <span>本編では、語りやすい問いから始まり、</span>
-            <span>大切な人のこと、苦しかった時のこと、</span>
-            <span>大事にしてきたこと、</span>
-            <span>そしてこれからのことまで。</span>
-            <span className="guest-trial-copy-gap">様々なテーマを、少しずつ辿っていきます。</span>
-          </p>
-          <img className="guest-trial-reflection-image" src="/site/guest-trial-album-import-20261107.jpg"
-            alt="アルバムの写真をスマホで取り込み、思い出とともにブックへ残すイメージ" />
-          <p className="guest-trial-copy guest-trial-image-caption">
-            <span>懐かしいアルバム、スマホで撮った写真、</span>
-            <span>簡単に取り込むことができます。</span>
-            <span className="guest-trial-copy-gap">大量に、ではなく、選ぶ。</span>
-            <span>それも縦糸横糸の体験です。</span>
-          </p>
-        </section>}
-        {!giftToken && <button type="button" onClick={() => setScreen('service')}
-          className="guest-trial-finished-primary">縦糸横糸について詳しく見る</button>}
-        {!giftToken && <button type="button" onClick={openExit}
-          className="guest-trial-finished-secondary">ここで終了する</button>}
+        <h1>３問の体験が終わりました。</h1>
+        <p className="mt-5 text-left text-base leading-loose text-white/75">今回の回答を保存すると、家族アプリであとから読み返せます。声で答えた方は、録音も聴き返せます。</p>
+        {!giftToken && <>
+          {trialPersonId
+            ? <a className="guest-trial-finished-primary flex items-center justify-center" href={`/app?person=${encodeURIComponent(trialPersonId)}&tab=ring`}>年輪に戻る</a>
+            : <button type="button" disabled={busy} onClick={prepareRingSave}
+              className="guest-trial-finished-primary">この語りを保存する</button>}
+          <button type="button" onClick={openBookInformation}
+            className="guest-trial-finished-secondary">BOOKを詳しく見る</button>
+          {!trialPersonId && <button type="button" disabled={busy} onClick={discardAndExit}
+            className="mt-6 min-h-11 text-sm text-white/65 underline">今回は保存しない</button>}
+        </>}
         {giftToken && <p className="mt-9 text-sm leading-loose text-white/55">語りは贈り主へ自動で共有されません。</p>}
+        <details className="mt-12 text-left text-sm text-white/75"><summary>今回の３つの語りを読み返す</summary>
+          <div className="guest-trial-finished-answers">{stories.map((story, storyIndex) => <StoryCard key={story.id} story={story} index={storyIndex}
+            resolveMedia={async asset => {
+              const response = await guestTrialRequest(TRIAL_API, 'audio', { sessionToken: session.token, questionId: asset.id });
+              return response.url;
+            }} />)}</div>
+        </details>
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
+      </main>}
+      {screen === 'choose_person' && <main className="mx-auto max-w-md px-7 py-16">
+        <button type="button" onClick={() => setScreen('finished')} className="min-h-11 text-white/70">← 戻る</button>
+        <h1 className="mt-8 text-2xl">誰の年輪に保存しますか？</h1>
+        <p className="mt-4 leading-loose text-white/70">保存先の本人を確認してください。既存の語りは上書きしません。</p>
+        <div className="mt-8 space-y-3">{savePeople.map(item => <label key={item.id}
+          className="flex min-h-14 items-center gap-3 rounded-xl border border-white/30 px-5">
+          <input type="radio" name="save-person" checked={selectedSavePerson===item.id}
+            onChange={() => setSelectedSavePerson(item.id)}/>{item.display_name}</label>)}</div>
+        <button type="button" disabled={busy || !selectedSavePerson} onClick={confirmRingSave}
+          className="mt-9 min-h-14 w-full rounded-full bg-[#e9e5d9] text-[#15243a] disabled:opacity-50">{busy ? '保存しています…' : 'この人の年輪に保存する'}</button>
+        {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
+      </main>}
+      {screen === 'ring_saved' && <main className="mx-auto max-w-md px-7 py-20 text-center">
+        <h1 className="text-2xl leading-relaxed">{savedPersonName}さんの「年輪」に保存しました</h1>
+        <p className="mt-6 leading-loose text-white/70">いつでも読み返し、声を聴き直せます。</p>
+        <a href={`/app?person=${encodeURIComponent(selectedSavePerson)}&tab=ring`}
+          className="mt-10 flex min-h-14 items-center justify-center rounded-full bg-[#e9e5d9] text-[#15243a]">年輪を開く</a>
+        <button type="button" onClick={openBookInformation} className="mt-5 min-h-14 w-full rounded-full border border-white/35">BOOKを詳しく見る</button>
       </main>}
       {screen === 'service' && <main className="px-7 py-14">
         <button type="button" onClick={() => setScreen('finished')} className="text-white/70">← 語りに戻る</button>
-        <h1 className="mt-8 text-2xl leading-relaxed">縦糸横糸ブックについて</h1>
+        <h1 className="mt-8 text-2xl leading-relaxed">たて糸♾️よこ糸BOOKについて</h1>
         <p className="mt-6 leading-loose text-white/75">問いに答えながら人生をたどり、声と文章、写真を一冊のブックとWebブックに残せます。</p>
         <img src="/site/hp-renewal/book-and-webbook-approved.png" alt="縦糸横糸ブックとWebブック" className="mt-8 w-full rounded-2xl" />
         <p className="mt-8 leading-loose text-white/75">商品と金額は購入画面で確認できます。無料3問の語りは購入手続き中も保持され、新規購入が確定した物語に引き継ぎます。</p>

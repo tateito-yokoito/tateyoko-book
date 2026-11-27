@@ -1,5 +1,6 @@
 import { readGuestTrialSession } from './guestTrialApi.js';
 import { clearPendingGuestHandoff, pendingGuestHandoff } from './commercePurchaseHandoff.js';
+import { linkGuestTrialRingBook } from './guestTrialRing.js';
 
 export const GUEST_TRIAL_CLAIM_PARAM = 'guest_trial_claim';
 const storageKey = 'tateyoko:guest-trial:self:v1';
@@ -63,6 +64,7 @@ export async function claimGuestTrialForProject(client, projectId, storage = win
     throw new Error(data?.error || await functionErrorMessage(error)
       || '無料3問を物語へ引き継げませんでした。もう一度お試しください。');
   }
+  if (saved?.token) await linkGuestTrialRingBook(client,saved.token,projectId);
   clearGuestTrialPending(storage);
   return data;
 }

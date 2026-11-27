@@ -3,6 +3,7 @@ import { BookOpen, ChevronLeft, ChevronRight, Home, Image, Users } from 'lucide-
 import { Scene_Login, Scene_Recording, PhotoCorrectionFlow, ensureProfileExists, supabaseClient } from './App.jsx';
 import { AnswerBodyEditor, AnswerEntryChoices, AnswerReview, AnswerSaveStatus } from './AnswerInputUI.jsx';
 import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
+import { trialPersonUrl } from './lib/guestTrialRing.js';
 import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
 import { FamilyAvatarProvider } from './FamilyAvatar.jsx';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
@@ -276,7 +277,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
   const personLoadEpoch = useRef(0);
   const shelfReturnPerson = useRef((() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('tab') === 'books' ? params.get('person') : null;
+    return ['books','ring'].includes(params.get('tab')) ? params.get('person') : null;
   })());
   const shelfReturnPublication = useRef((() => {
     const params = new URLSearchParams(window.location.search);
@@ -331,6 +332,11 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     setRelationDecisions(nextDecisions);
     setHomeStoryCounts(counts);
     setSelfId(links.data?.find(link => persons.some(item => item.id === link.person_id))?.person_id || null);
+    if (!publicDemo && new URLSearchParams(window.location.search).get('return_trial') === '1'
+      && links.data?.some(link => persons.some(item => item.id === link.person_id))) {
+      window.location.replace('/?guest_trial=1&save=1');
+      return;
+    }
     if (!publicDemo && window.location.pathname === '/login') {
       const returnBook = new URLSearchParams(window.location.search).get('return_book');
       if (/^[a-f0-9]{48}$/i.test(returnBook || ''))
@@ -448,7 +454,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     if (!id || screen !== 'home' || !people.some(item => item.id === id)) return;
     shelfReturnPerson.current = null;
     setSelectedId(id);
-    setActiveTab('books');
+    setActiveTab(new URLSearchParams(window.location.search).get('tab') === 'ring' ? 'ring' : 'books');
     const origin = new URLSearchParams(window.location.search).get('origin');
     setPersonEntry(origin === 'tree' ? 'tree' : 'home');
     if (origin === 'tree' && people.some(item => item.id === treeViewRef.current.centerId))
@@ -763,6 +769,10 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       }
       await loadHome(user);
       setTreeCenterId(id);
+      if (new URLSearchParams(window.location.search).get('return_trial') === '1') {
+        window.location.replace('/?guest_trial=1&save=1');
+        return;
+      }
       setScreen('home');
     } catch (cause) { setError(cause.message || '登録できませんでした'); }
     finally { setBusy(false); }
@@ -1274,6 +1284,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       backLabel={personEntry === 'tree' ? '家系図' : 'ホーム'} entryOrigin={personEntry}
       onProfile={() => startProfile()}
       onOpenBook={publicDemo ? null : openBookIntroduction}
+      onTryFreeTrial={publicDemo ? null : id => window.location.assign(trialPersonUrl(id))}
       onResumeBook={publicDemo ? null : id => resumeBook(id).catch(() => setError('BOOKを開けませんでした。'))}
       onOpenStory={openStory} busy={busy}
       onAddFact={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}/>}
