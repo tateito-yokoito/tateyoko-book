@@ -24,7 +24,7 @@
 .fp-ring-story-row strong{font-family:"Noto Serif JP","Yu Mincho",serif;font-weight:550;font-size:15px;line-break:strict;overflow-wrap:anywhere;text-wrap:pretty}
 .fp-ring-story-row small{font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN",sans-serif;font-size:13px}
 .fp-ring-review-heading h2{font-size:18px;color:#2c4938}
-.fp-ring-detail-top{position:sticky;top:44px;z-index:2;margin:-17px 0 0;padding:2px 0;background:#faf9f5;border-bottom:1px solid #e3e7df}
+.fp-ring-detail-top{position:sticky;top:44px;z-index:4;margin:-17px 0 0;padding:2px 0;background:#faf9f5;border-bottom:1px solid #e3e7df}
 .fp-ring-story-navigation{position:sticky;top:95px;z-index:2;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:4px;min-height:49px;margin:0 0 24px;background:#faf9f5;border-bottom:1px solid #e3e7df;color:#4e6753}
 .fp-ring-story-navigation button{min-height:44px;padding:0 2px;border:0;background:transparent;color:#315d42;font-size:13px;font-weight:700;white-space:nowrap}
 .fp-ring-story-navigation button:last-child{text-align:right}
