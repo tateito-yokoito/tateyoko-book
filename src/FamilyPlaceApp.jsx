@@ -582,22 +582,34 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     setProductionProjectId(id); setScreen('book-production');
   };
   const resumeBook = async id => {
-    const { data, error: journeyError } = await dataClient.rpc('family_journey',{p:id});
-    if (!journeyError && data?.project_id && data?.can_produce) {
-      openProduction(id); return;
+    // Open within the confirmed click, before the async access check, so
+    // mobile browsers do not block the new tab after the request completes.
+    const opened = window.open('', '_blank');
+    if (!opened) throw new Error('別ウィンドウを開けませんでした');
+    opened.opener = null;
+    try {
+      const { data, error: journeyError } = await dataClient.rpc('family_journey',{p:id});
+      if (!journeyError && data?.project_id && data?.can_produce) {
+        const destination = new URL('/app', window.location.origin);
+        destination.searchParams.set('family_project', id);
+        opened.location.replace(destination.href);
+        return;
+      }
+      // Older self-produced BOOKs use the existing BOOK application. Confirm
+      // the selected person's paid work before handing it to that application.
+      const { data: project, error } = await dataClient.from('book_projects')
+        .select('id,owner_user_id,subject_person_id,access_status,status')
+        .eq('id', id).maybeSingle();
+      if (error || project?.owner_user_id !== user?.id ||
+        project?.subject_person_id !== selectedId || project?.status !== 'active' ||
+        !['paid','gifted','legacy'].includes(project?.access_status))
+        throw new Error('購入済みのBOOKを確認できませんでした');
+      window.localStorage.setItem(`tateyoko:active-book-project:${user.id}`, id);
+      opened.location.replace(new URL('/?app=1', window.location.origin).href);
+    } catch (cause) {
+      opened.close();
+      throw cause;
     }
-    // Older self-produced BOOKs use the existing BOOK application, not the
-    // family-managed journey RPC. Confirm this is the selected person's paid
-    // work before handing the exact project to that application.
-    const { data: project, error } = await dataClient.from('book_projects')
-      .select('id,owner_user_id,subject_person_id,access_status,status')
-      .eq('id', id).maybeSingle();
-    if (error || project?.owner_user_id !== user?.id ||
-      project?.subject_person_id !== selectedId || project?.status !== 'active' ||
-      !['paid','gifted','legacy'].includes(project?.access_status))
-      throw new Error('購入済みのBOOKを確認できませんでした');
-    window.localStorage.setItem(`tateyoko:active-book-project:${user.id}`, id);
-    window.location.assign('/?app=1');
   };
   const leaveBookIntroduction = () => {
     if (consultationProjectId) {
@@ -1156,12 +1168,13 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
         ...stories.filter(row => Boolean(row.body || row.transcript_raw || row.media_count)).map(row => ({
           source:'free', id:row.id, theme:'無料3問', question:row.question_text,
           body:row.body || row.transcript_readable || row.transcript_raw || '',
-          visibility:row.visibility, revision:row.revision,
+          visibility:row.visibility, revision:row.revision, hasAudio:row.has_audio,
         })),
         ...bookStories.map(row => ({ source:'book', id:row.id, projectId:row.book_project_id,
           theme:row.chapter, question:row.question_text, body:row.body,
           visibility:row.visibility, text_revision:row.text_revision,
           selected_style:row.selected_style,
+          hasAudio:row.has_audio,
           completed:publishedBooks.some(book => book.book_project_id === row.book_project_id),
         })),
       ]}

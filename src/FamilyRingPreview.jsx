@@ -14,7 +14,7 @@ const initialStories = [
   ['学生時代','仲の良かった友達や、心に残っている先生はどんな方でしたか？','いつも話を聞いてくれる友人がいました。卒業後も手紙を交わしました。'],
   ['仕事と家族','仕事を始めた頃、どんな気持ちでしたか？','毎日が新しい発見で、緊張と楽しさが一緒にありました。'],
   ['仕事と家族','家族と過ごす時間で、大切にしていることは何ですか？','何気ない夕食の会話を、これからも大切にしたいです。'],
-].map(([theme,question,body],index) => ({ source:'book', id:`preview-${index+1}`, projectId:'preview-project', theme, question, body, visibility:index===5?'private':'family', completed:false }));
+].map(([theme,question,body],index) => ({ source:'book', id:`preview-${index+1}`, projectId:'preview-project', theme, question, body, visibility:index===5?'private':'family', hasAudio:index===2 || index===5, completed:false }));
 const memory = { id:'preview-memory', photo_url:'/site/webbook-sample-cover-sage.jpg', title:'家族で歩いた春の日', event_date:'2023-04-08', comment:'桜の下で、これからのことを話しました。' };
 const facts = [
   { id:'preview-fact-1', year:1981, label:'岩手県で生まれる', detail:'家族の最初の記録' },

@@ -1,10 +1,10 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Ellipsis, LockKeyhole } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Ellipsis, LockKeyhole, Volume2 } from 'lucide-react';
 import './family-ring-preview.css';
 
 // The same reading surface is used by the family app and its isolated review.
 export default function FamilyRingContent({ stories, canEdit = false, onSave, onLock,
-  onLoadMedia, onAddPhoto, onContinueBook, onAddStory, onDetailChange, questions = [], loading = false }) {
+  onLoadMedia, onAddPhoto, onAddStory, onDetailChange, questions = [], loading = false }) {
   const [openTheme, setOpenTheme] = useState('');
   const [selected, setSelected] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -86,7 +86,7 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
   };
   return <div className="fp-ring-review">
     {!selected ? <>
-      <div className="fp-ring-review-heading"><div><h2>これまでの語り</h2><p>テーマを開いて、語りを読み返す。</p></div><span>{stories.length}つの語り</span></div>
+      <div className="fp-ring-review-heading"><h2>これまでの語り</h2><p>テーマを開いて、語りを読み返す。</p></div>
       {loading && <p className="fp-ring-message" role="status">語りを読み込んでいます。</p>}
       {!loading && !stories.length && <div className="fp-person-story-empty">まだ語りはありません。<br/>声・文章・写真から、好きな方法で始められます。</div>}
       <div className="fp-ring-themes">{themes.map((theme, index) => {
@@ -94,16 +94,15 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
         const opened = openTheme ? openTheme === theme : index === 0;
         return <section className="fp-ring-theme" key={theme}>
           <button type="button" className="fp-ring-theme-toggle" aria-expanded={opened} onClick={() => setOpenTheme(opened ? '-' : theme)}>
-            <span><strong>{theme}</strong><small>{rows.length}つの語り</small></span><ChevronDown aria-hidden="true"/>
+            <strong>{theme}<small>（{rows.length}）</small></strong><ChevronDown aria-hidden="true"/>
           </button>
           {opened && <div className="fp-ring-theme-rows">{rows.map(story => <button className="fp-ring-story-row" key={`${story.source}-${story.id}`} type="button" onClick={() => openStory(story)}>
-            <span><strong>{story.visibility === 'private' && <LockKeyhole size={14} aria-label="自分だけ"/>}{story.question}</strong><small>{story.body || '写真・音声で残した語り'}</small></span><ChevronRight aria-hidden="true"/>
+            <span><strong>{story.visibility === 'private' && <LockKeyhole size={14} aria-label="自分だけ"/>}{story.question}</strong><small>{story.hasAudio && <Volume2 size={14} aria-label="音声あり"/>}{story.body || '写真・音声で残した語り'}</small></span><ChevronRight aria-hidden="true"/>
           </button>)}</div>}
         </section>;
       })}</div>
       {onAddStory && questions.length > 0 && <><button type="button" className="fp-ring-continue" onClick={() => setShowQuestions(value => !value)}>{stories.length ? '新しい語りを追加する' : '最初の語りを残す'} <ChevronDown size={18}/></button>
         {showQuestions && <div className="fp-person-questions">{questions.map(question => <button type="button" key={question.id} onClick={() => onAddStory(question)}>{question.slot}問目：{question.text}<ChevronRight size={16}/></button>)}</div>}</>}
-      {onContinueBook && <button type="button" className="fp-ring-continue" onClick={onContinueBook}>BOOKの制作を続ける <ChevronRight size={18}/></button>}
     </> : <>
       <div className="fp-ring-detail-top"><button type="button" onClick={goBack}><ChevronLeft size={20}/>年輪へ</button><span>{selected.theme}</span>
         {canEdit && (onSave || onLock) && <div className="fp-ring-detail-menu"><button type="button" aria-label="語りの操作" aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}><Ellipsis/></button>

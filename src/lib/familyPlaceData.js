@@ -230,11 +230,16 @@ export async function familyPlaceStories(client, personId) {
   if (error) throw error;
   if (!data?.length) return [];
   const { data: media, error: mediaError } = await client.from('family_free_story_media')
-    .select('story_id').in('story_id', data.map(item => item.id));
+    .select('story_id,asset_type').in('story_id', data.map(item => item.id));
   if (mediaError) throw mediaError;
   const counts = new Map();
-  for (const item of media || []) counts.set(item.story_id, (counts.get(item.story_id) || 0) + 1);
-  return data.map(item => ({ ...item, media_count: counts.get(item.id) || 0 }));
+  const audioIds = new Set();
+  for (const item of media || []) {
+    counts.set(item.story_id, (counts.get(item.story_id) || 0) + 1);
+    if (item.asset_type === 'audio') audioIds.add(item.story_id);
+  }
+  return data.map(item => ({ ...item, media_count: counts.get(item.id) || 0,
+    has_audio: audioIds.has(item.id) }));
 }
 
 // Read only formally saved BOOK answers. The caller's BOOK RLS decides which
@@ -285,6 +290,10 @@ export async function familyPlaceBookStories(client, personId, projects, freeSto
     String(answer.transcript_edited || answer.transcript_readable || answer.transcript_clean || '').trim()
       || mediaAnswerIds.has(answer.id));
   if (!saved.length) return [];
+  const { data: audioAssets, error: audioError } = await client.from('media_assets')
+    .select('answer_id').eq('asset_type','audio').in('answer_id', saved.map(answer => answer.id));
+  if (audioError) throw audioError;
+  const audioAnswerIds = new Set((audioAssets || []).map(asset => asset.answer_id));
   const questionIds = [...new Set(saved.map(answer => answer.user_question_id).filter(Boolean))];
   const { data: questions, error: questionError } = questionIds.length
     ? await client.from('user_questions')
@@ -341,7 +350,7 @@ export async function familyPlaceBookStories(client, personId, projects, freeSto
       visibility: answer.access_override === 'private_forever' ? 'private' : 'family',
       chapter: question.chapter || 'その他の語り',
       text_revision: answer.text_revision, selected_style: answer.selected_style }];
-  });
+  }).map(row => ({ ...row, has_audio: audioAnswerIds.has(row.id) }));
 }
 
 // A signed URL outlives a privacy change. Keep media behind the current JWT

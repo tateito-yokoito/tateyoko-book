@@ -56,6 +56,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
   onAddRingPhoto = null }) {
   const [showQuestions, setShowQuestions] = useState(false);
   const [ringDetailOpen, setRingDetailOpen] = useState(false);
+  const [showResumeDialog, setShowResumeDialog] = useState(false);
   const saved = stories.filter(hasAnswer);
   const savedCount = saved.length + bookStories.length;
   const publishedChapters = new Map();
@@ -96,7 +97,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
       <button type="button" onClick={() => onTabChange('books')}>完成したBOOKを見る<ChevronRight aria-hidden="true"/></button>
     </div>}
     {booksStatus === 'ready' && projectsStatus === 'ready' && !books.length && resume && <div className="fp-book-preview-entry">
-      <button className="fp-book-preview-button" type="button" onClick={resume}>BOOK制作を再開する<ChevronRight aria-hidden="true"/></button>
+      <button className="fp-book-preview-button" type="button" onClick={() => setShowResumeDialog(true)}>BOOK制作を再開する<ChevronRight aria-hidden="true"/></button>
     </div>}
     {onOpenBook && booksStatus === 'ready' && projectsStatus === 'ready' && !books.length && !purchasedProject && <div className="fp-book-preview-entry">
       <button type="button" onClick={() => onOpenBook('person')}>この人の人生を本にする<ChevronRight aria-hidden="true"/></button>
@@ -112,7 +113,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
         canEdit={ringCanEdit} onSave={ringCanEdit ? onSaveRingStory : null}
         onLock={ringCanEdit ? onLockRingStory : null} onLoadMedia={onLoadRingMedia}
         onAddPhoto={ringCanEdit ? onAddRingPhoto : null}
-        onContinueBook={resume} onAddStory={onOpenStory} questions={questions}/>) || <>
+        onAddStory={onOpenStory} questions={questions}/>) || <>
       <h2>年輪</h2><p className="fp-person-section-note">人生の語りを、少しずつ残していく場所です。</p>
       {!questions.length && !savedCount ? <div className="fp-person-story-empty">年輪の体験は、次の段階で公開します。</div>
       : savedCount ? <div className="fp-person-stories">{saved.map(row =>
@@ -191,5 +192,16 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
         </article>)}</div> : <div className="fp-person-story-empty">生まれた年や家族との出来事から、年表が育っていきます。<br/>思い出したことから少しずつ残せます。</div>}
       <button type="button" className="fp-person-add-story" onClick={onAddFact}><Plus aria-hidden="true"/>出来事を登録する</button>
     </section>}
+    {showResumeDialog && <div className="fp-resume-dialog-backdrop" onClick={() => setShowResumeDialog(false)}>
+      <section className="fp-resume-dialog" role="dialog" aria-modal="true" aria-labelledby="fp-resume-dialog-title"
+        onClick={event => event.stopPropagation()}>
+        <h2 id="fp-resume-dialog-title">BOOK制作を再開しますか？</h2>
+        <p>別ウィンドウでBOOK制作ホームを開きます。</p>
+        <div className="fp-resume-dialog-actions">
+          <button type="button" onClick={() => { setShowResumeDialog(false); resume?.(); }}>はい</button>
+          <button type="button" onClick={() => setShowResumeDialog(false)}>戻る</button>
+        </div>
+      </section>
+    </div>}
   </main>;
 }

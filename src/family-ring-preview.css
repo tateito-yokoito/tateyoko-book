@@ -36,3 +36,18 @@
 .fp-ring-preview-controls button{min-height:40px;padding:4px 10px;border:1px solid #b8cab5;border-radius:9px;background:#fffefa;color:#3e5f43;font-size:12px;cursor:pointer}
 .fp-ring-preview-controls button[aria-pressed=true]{background:#365f45;color:#fff;border-color:#365f45}
 .fp-ring-preview-controls>p[role=status]{margin:0;padding:0 15px 9px;color:#48654c;font-size:12px}
+
+/* Keep the ring heading level with the bookshelf, memory and timeline tabs. */
+.fp-ring-review-heading{align-items:baseline;justify-content:flex-start;flex-wrap:wrap;gap:3px 10px;margin:0 0 14px}
+.fp-person-content .fp-ring-review-heading h2{margin:2px 0 0;font-size:17px;font-weight:800;line-height:1.4}
+.fp-ring-review-heading p{font-size:12px;line-height:1.5}
+.fp-ring-theme{background:#fffefa}
+.fp-ring-theme-toggle{min-height:47px;padding:8px 15px;background:#f0f3ed}
+.fp-ring-theme-toggle strong{display:flex;align-items:baseline;gap:2px;font-size:16px;line-height:1.45}
+.fp-ring-theme-toggle small{font-size:14px;font-weight:600;color:#657966}
+.fp-ring-story-row strong,.fp-ring-story-row small{position:relative}
+.fp-ring-story-row strong svg,.fp-ring-story-row small svg{position:absolute;left:-16px;width:14px;height:14px;color:#6b825f}
+.fp-ring-story-row strong svg{top:4px}
+.fp-ring-story-row small svg{top:3px}
+.fp-ring-story-row>span{transform:translateX(5px)}
+.fp-ring-themes{gap:9.6px}
