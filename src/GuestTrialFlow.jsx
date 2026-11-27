@@ -4,7 +4,7 @@ import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
 import TrialCompletionExperience, { StoryCard } from './TrialCompletionExperience.jsx';
 import ChildhoodTrialIntro from './ChildhoodTrialIntro.jsx';
 import { AnswerBodyEditor, AnswerSummary } from './AnswerInputUI.jsx';
-import { AnswerTextCandidate, AnswerTextFields, AnswerTextLayout } from './AnswerTextShared.jsx';
+import { AnswerStyleChoices, AnswerTextCandidate, AnswerTextFields, AnswerTextLayout } from './AnswerTextShared.jsx';
 import './guest-trial-finished.css';
 import './guest-trial-navigation.css';
 import { guestCheckout, guestPurchaseStatus, claimGuestPurchase } from './lib/guestPurchaseApi.js';
@@ -85,13 +85,8 @@ function GuestTrialPolishControls({ session, question, text, onUse, onSave, disa
         status={text.trim() ? '入力中' : ''} showStyles={showStyles}
         onToggleStyles={() => setShowStyles(value => !value)} onPolish={polish}
         onSave={onSave} saveLabel="回答を確認する" /> : <>
-      {(reviewMode || showStyles) && <div role="group" aria-label="文章の整え方" className="grid grid-cols-3 gap-2">
-        {[["clean", "そのまま"], ["narrative", "語り調"], ["essay", "作品調"]].map(([value, label]) =>
-          <button key={value} type="button" onClick={() => void polish(value)} disabled={busy || disabled}
-            aria-pressed={reviewMode ? selectedStyle === value : undefined}
-            className={`min-h-12 rounded-full border text-sm disabled:opacity-40 ${reviewMode && selectedStyle === value
-              ? 'border-white/30 bg-white/15 text-white' : 'border-white/15 text-white/60'}`}>{label}</button>)}
-      </div>}
+      <AnswerStyleChoices onPolish={polish} busy={busy} disabled={disabled}
+        selectedStyle={selectedStyle} />
       {children}
       </>}
     </>}

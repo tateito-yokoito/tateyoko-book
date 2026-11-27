@@ -32,13 +32,18 @@ export function AnswerTextCandidate({ candidate, onUse, onDiscard, light = false
 
 export function AnswerPolishChoices({ open, onToggle, onPolish, busy = false, disabled = false }) {
   return <div className="answer-polish-choices">
-    {open && <div role="group" aria-label="文章の整え方" className="answer-polish-choices__styles">
-      {[["clean", "そのまま"], ["narrative", "語り調"], ["essay", "作品調"]].map(([style, label]) =>
-        <button key={style} type="button" onClick={() => onPolish(style)} disabled={busy}
-          className="min-h-12 rounded-xl border border-white/30 text-sm disabled:opacity-40">{label}</button>)}
-    </div>}
+    {open && <AnswerStyleChoices onPolish={onPolish} busy={busy} />}
     <button type="button" onClick={onToggle} disabled={busy || disabled}
       className="answer-polish-choices__toggle min-h-14 rounded-xl border border-white/30 disabled:opacity-40">✦ 整える</button>
+  </div>;
+}
+
+export function AnswerStyleChoices({ onPolish, busy = false, disabled = false, selectedStyle }) {
+  return <div role="group" aria-label="文章の整え方" className="answer-polish-choices__styles">
+    {[["clean", "そのまま"], ["narrative", "語り調"], ["essay", "作品調"]].map(([style, label]) =>
+      <button key={style} type="button" onClick={() => onPolish(style)} disabled={busy || disabled}
+        aria-pressed={selectedStyle ? selectedStyle === style : undefined}
+        className="min-h-12 rounded-xl border border-white/30 text-sm disabled:opacity-40">{label}</button>)}
   </div>;
 }
 

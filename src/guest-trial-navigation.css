@@ -9,7 +9,6 @@
 .guest-trial-flow .guest-trial-question-screen .guest-trial-question-nav { color: var(--book-primary); }
 .guest-trial-flow .guest-trial-question-screen .guest-trial-question-nav button,
 .guest-trial-flow .guest-trial-question-screen .guest-trial-question-nav p { color: var(--book-primary) !important; }
-.guest-trial-flow .guest-trial-question-screen button[aria-pressed="true"] { background: var(--book-question-surface); color: var(--book-primary) !important; -webkit-text-fill-color: var(--book-primary); }
 .guest-trial-flow .guest-trial-question-screen button.btn-quiet { background: var(--book-primary); color: var(--book-on-primary); -webkit-text-fill-color: var(--book-on-primary); }
 .guest-trial-flow .guest-trial-question-screen button:focus-visible { outline: 3px solid var(--book-focus); outline-offset: 2px; }
 .guest-trial-flow .story-sky-surface.question-background-navy > .story-sky-content.question-flow-content,

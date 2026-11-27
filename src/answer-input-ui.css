@@ -31,6 +31,7 @@
 .answer-review__finish:disabled{opacity:.45;cursor:default}
 .answer-polish-choices{display:contents}
 .answer-polish-choices__styles{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.answer-polish-choices__styles button[aria-pressed="true"]{background:var(--book-question-surface,#f0f1eb);color:var(--book-primary,#284c40);-webkit-text-fill-color:var(--book-primary,#284c40)}
 .photo-correction-light.bg-slate-950,.photo-correction-light .bg-slate-950{background:#f7f6f1;color:#2c4334}
 .photo-correction-light .glass-card{background:#fffefa;border:1px solid #d5dfd2;box-shadow:none}
 .photo-correction-light [class*="text-white"]{color:#49624e!important}
