@@ -67,3 +67,20 @@
 .fp-ring-editor-caution{padding:11px 13px;border-radius:9px;background:#f0f2e9;color:#566b57!important}
 .fp-ring-editor .fp-ring-save{margin-top:18px;background:#315b45;color:#fff;-webkit-text-fill-color:#fff}
 .fp-ring-recorder{min-height:100dvh;background:#faf7ef}
+.fp-ring-polish{display:grid;grid-template-columns:1fr;gap:8px;margin:13px 0 6px}
+.fp-ring-polish .answer-polish-choices__styles{grid-column:1;gap:7px}
+.fp-ring-polish .answer-polish-choices__styles button,.fp-ring-polish .answer-polish-choices__toggle{min-height:44px;border:1px solid #cbd8c8;border-radius:9px;background:#fffefa;color:#315b45;font:600 13px/1.5 "Noto Sans JP",sans-serif}
+.fp-ring-polish .answer-polish-choices__toggle{width:100%;min-height:46px}
+.answer-text-candidate--light{margin:14px 0 0;color:#304934;font-family:"Noto Sans JP",sans-serif}
+.answer-text-candidate--light h3{color:#304934;font-size:16px;font-weight:700}
+.answer-text-candidate--light>div:nth-child(2){background:#fffefa;border:1px solid #d5dfd2;color:#2f4333;font-size:15px}
+.answer-text-candidate--light button{color:#315b45!important;border-color:#cbd8c8!important}
+.answer-text-candidate--light .bg-white{background:#315b45!important;color:#fff!important;-webkit-text-fill-color:#fff!important}
+.answer-text-candidate--light p{color:#667565!important}
+.fp-ring-voice-review{margin:12px 0 18px;padding:16px;border:1px solid #d5dfd2;border-radius:12px;background:#fffefa;color:#304934;font-family:"Noto Sans JP",sans-serif}
+.fp-ring-voice-review h3{margin:0 0 8px;font-size:16px;font-weight:700}
+.fp-ring-voice-review>p{margin:0 0 14px;color:#667565;font-size:13px;line-height:1.6}
+.fp-ring-voice-styles{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:0 0 15px}
+.fp-ring-voice-styles button{min-height:44px;border:1px solid #cbd8c8;border-radius:9px;background:#fffefa;color:#315b45;font-size:13px}
+.fp-ring-voice-styles button[aria-pressed=true]{background:#e8f0e8;border-color:#749077;font-weight:700}
+.fp-ring-voice-review .fp-ring-voice-text{display:block;width:100%;min-height:150px;margin:0 0 18px;padding:14px;border:1px solid #d5dfd2;border-radius:9px;background:#f3f6f0;color:#304934;font:400 15px/1.8 "Noto Sans JP",sans-serif;white-space:pre-wrap;resize:vertical}

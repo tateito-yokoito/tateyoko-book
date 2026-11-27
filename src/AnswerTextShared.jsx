@@ -15,9 +15,9 @@ export function AnswerTextLayout({ question, theme, progress, onBack, children, 
   );
 }
 
-export function AnswerTextCandidate({ candidate, onUse, onDiscard }) {
+export function AnswerTextCandidate({ candidate, onUse, onDiscard, light = false }) {
   const [showOriginal, setShowOriginal] = useState(false);
-  return <>
+  return <div className={light ? 'answer-text-candidate--light' : ''}>
     <h3 className="text-lg mb-4">整えた文章を確認</h3>
     <div className="rounded-xl bg-[#f5f3ed] p-5 text-[#24302d] whitespace-pre-wrap leading-loose text-lg">{candidate.text}</div>
     <button type="button" onClick={() => setShowOriginal(!showOriginal)} className="py-4 text-white/70 underline">元の文章を{showOriginal ? '閉じる' : '確認する'}</button>
@@ -27,7 +27,19 @@ export function AnswerTextCandidate({ candidate, onUse, onDiscard }) {
       <button type="button" className="w-full min-h-14 rounded-xl border border-white/30" onClick={onDiscard}>元の文章に戻す</button>
     </div>
     <p className="text-white/50 text-sm mt-4">まだ確定していません。編集画面で「保存する」を押すと反映されます。</p>
-  </>;
+  </div>;
+}
+
+export function AnswerPolishChoices({ open, onToggle, onPolish, busy = false, disabled = false }) {
+  return <div className="answer-polish-choices">
+    {open && <div role="group" aria-label="文章の整え方" className="answer-polish-choices__styles">
+      {[["clean", "そのまま"], ["narrative", "語り調"], ["essay", "作品調"]].map(([style, label]) =>
+        <button key={style} type="button" onClick={() => onPolish(style)} disabled={busy}
+          className="min-h-12 rounded-xl border border-white/30 text-sm disabled:opacity-40">{label}</button>)}
+    </div>}
+    <button type="button" onClick={onToggle} disabled={busy || disabled}
+      className="answer-polish-choices__toggle min-h-14 rounded-xl border border-white/30 disabled:opacity-40">✦ 整える</button>
+  </div>;
 }
 
 export function AnswerTextFields({ value, onChange, busy, status, onSave, onPolish, onDiscard,
@@ -42,15 +54,9 @@ export function AnswerTextFields({ value, onChange, busy, status, onSave, onPoli
       className="w-full min-h-[48dvh] flex-1 rounded-xl border border-white/20 bg-[#f5f3ed] p-5 text-[#24302d] text-lg leading-loose outline-none resize-y" />
     <div className="pt-3 space-y-2 shrink-0">
       {beforeActions}
-      {canPolish && showStyles && <div role="group" aria-label="文章の整え方" className="grid grid-cols-3 gap-2">
-        {[["clean", "そのまま"], ["narrative", "語り調"], ["essay", "作品調"]].map(([style, label]) =>
-          <button key={style} type="button" onClick={() => onPolish(style)} disabled={busy}
-            className="min-h-12 rounded-xl border border-white/30 text-sm disabled:opacity-40">{label}</button>)}
-      </div>}
       <div className={canPolish ? "grid grid-cols-[1fr_1.25fr] gap-2" : "grid"}>
-        {canPolish && <button type="button" onClick={onToggleStyles} disabled={busy || !value.trim()}
-          className="min-h-14 rounded-xl border border-white/30 disabled:opacity-40">✦ 整える</button>
-        }
+        {canPolish && <AnswerPolishChoices open={showStyles} onToggle={onToggleStyles}
+          onPolish={onPolish} busy={busy} disabled={!value.trim()}/>}
         <button type="button" onClick={onSave} disabled={busy || !value.trim() || saveDisabled}
           className="min-h-14 rounded-xl bg-white text-slate-900 disabled:opacity-40">{busy ? '処理中…' : saveLabel}</button>
       </div>

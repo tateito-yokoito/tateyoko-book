@@ -875,6 +875,29 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     await loadPerson(person.id);
     return updated;
   };
+  const polishRingStory = async (story, body, style) => {
+    if (!user || !person || person.id !== selfId) throw new Error('本人の語りだけ編集できます。');
+    const source = body.trim();
+    if (!source) throw new Error('文章を入力してください。');
+    if (story.source === 'book' && story.sequenceOrder) {
+      const { data, error } = await dataClient.functions.invoke('polish-written-answer', {
+        body:{ projectId:story.projectId, sequenceOrder:story.sequenceOrder,
+          text:source, questionText:story.question, style },
+      });
+      if (error || !data?.success || !data.candidate)
+        throw new Error(data?.error || '文章を整えられませんでした。元の文章は残っています。');
+      return data.candidate;
+    }
+    const input = story.source === 'free'
+      ? { freeStoryId:story.id, answerId:story.id }
+      : { answerId:story.id, bookProjectId:story.projectId };
+    const { data, error } = await dataClient.functions.invoke('polish-transcript', {
+      body:{...input, transcriptRaw:source, questionText:story.question},
+    });
+    if (error || !data?.success)
+      throw new Error(data?.error || '文章を整えられませんでした。元の文章は残っています。');
+    return style === 'essay' ? data.transcript_essay : data.transcript_readable;
+  };
   const lockRingStory = async (story, locked) => {
     let updated;
     if (story.source === 'book') updated = await updateFamilyPlaceBookStory(dataClient, story,
@@ -902,6 +925,35 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       await createFamilyStoryAccess(dataClient,api,story.projectId).addPhoto(file,story.id);
     }
     await loadPerson(person.id);
+  };
+  const addRingVoice = async (story, blob, seconds, options = {}) => {
+    if (!user || !person || person.id !== selfId) throw new Error('本人の語りだけ編集できます。');
+    if (!blob?.size) throw new Error('録音を確認してください。');
+    const form = new FormData();
+    form.append('mode',options.analyzeOnly ? 'analyze' : 'commit');
+    form.append('source',story.source === 'free' ? 'free' : 'book');
+    form.append('answerId',story.id);
+    form.append('durationSeconds',String(seconds));
+    form.append('questionText',story.question || '');
+    form.append('audio',blob,blob.type.includes('webm') ? 'voice.webm' : 'voice.m4a');
+    if (!options.analyzeOnly) {
+      form.append('body',options.body || '');
+      form.append('expectedRevision',String(story.source === 'free' ? story.revision : story.text_revision));
+      form.append('private',String(Boolean(options.locked)));
+      form.append('raw',options.raw || '');
+      form.append('readable',options.readable || '');
+      form.append('essay',options.essay || '');
+      form.append('style',options.style || 'readable');
+    }
+    const { data, error } = await dataClient.functions.invoke('family-ring-voice',{body:form});
+    if (error || !data?.success) throw new Error(data?.error || '声を処理できませんでした。');
+    if (options.analyzeOnly) return {
+      raw:data.transcript_raw,readable:data.transcript_readable,essay:data.transcript_essay,
+    };
+    await loadPerson(person.id);
+    return { ...story, body:data.story.body,
+      ...(story.source === 'free' ? {revision:data.story.revision}
+        : {text_revision:data.story.text_revision}) };
   };
   const flushText = async () => {
     if (!storyRef.current) return;
@@ -1172,6 +1224,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
         })),
         ...bookStories.map(row => ({ source:'book', id:row.id, projectId:row.book_project_id,
           theme:row.chapter, question:row.question_text, body:row.body,
+          sequenceOrder:row.sequence_order,
           visibility:row.visibility, text_revision:row.text_revision,
           selected_style:row.selected_style,
           hasAudio:row.has_audio,
@@ -1181,6 +1234,8 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       ringCanEdit={person.id === selfId} onSaveRingStory={saveRingStory}
       onLockRingStory={lockRingStory} onLoadRingMedia={loadRingMedia}
       onAddRingPhoto={addRingPhoto}
+      onAddRingVoice={publicDemo ? null : addRingVoice}
+      onPolishRingStory={publicDemo ? null : polishRingStory}
       memories={memories} onAddMemory={publicDemo ? startMemory : null}
       supabaseClient={publicDemo ? supabaseClient : dataClient}
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}

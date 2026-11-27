@@ -14,7 +14,7 @@ const initialStories = [
   ['学生時代','仲の良かった友達や、心に残っている先生はどんな方でしたか？','いつも話を聞いてくれる友人がいました。卒業後も手紙を交わしました。'],
   ['仕事と家族','仕事を始めた頃、どんな気持ちでしたか？','毎日が新しい発見で、緊張と楽しさが一緒にありました。'],
   ['仕事と家族','家族と過ごす時間で、大切にしていることは何ですか？','何気ない夕食の会話を、これからも大切にしたいです。'],
-].map(([theme,question,body],index) => ({ source:'book', id:`preview-${index+1}`, projectId:'preview-project', theme, question, body, visibility:index===5?'private':'family', hasAudio:index===2 || index===5, completed:false }));
+].map(([theme,question,body],index) => ({ source:'book', id:`preview-${index+1}`, projectId:'preview-project', theme, question, body, visibility:index===5?'private':'family', hasAudio:index===2 || index===5, completed:false, preview:true }));
 const memory = { id:'preview-memory', photo_url:'/site/webbook-sample-cover-sage.jpg', title:'家族で歩いた春の日', event_date:'2023-04-08', comment:'桜の下で、これからのことを話しました。' };
 const facts = [
   { id:'preview-fact-1', year:1981, label:'岩手県で生まれる', detail:'家族の最初の記録' },
@@ -53,7 +53,7 @@ export default function FamilyRingPreview() {
   const explain = () => setNotice('このPreviewは架空データです。実際の登録・制作データは変更しません。');
   return <div className="fp-ring-preview-shell">
     <div className="fp-ring-preview-controls">
-      <p className="fp-ring-preview-banner"><BookOpen size={17}/>人物ページの操作Preview ・ 架空データ。録音・写真はこの画面内だけで確認できます。</p>
+      <p className="fp-ring-preview-banner"><BookOpen size={17}/>人物ページの操作Preview ・ 架空データ。語りを開き、右上の「…」から編集できます。AI候補は表示例です。</p>
       <div role="group" aria-label="表示する状態">
         {[['active','制作中・記録あり'],['complete','完成済み'],['empty','記録なし']].map(([key,label]) =>
           <button type="button" key={key} aria-pressed={mode===key} onClick={() => {setMode(key);setTab('ring');setNotice('');}}>{label}</button>)}
@@ -63,8 +63,17 @@ export default function FamilyRingPreview() {
     <FamilyPersonPage key={mode} person={person} activeTab={tab} onTabChange={setTab}
       onBack={explain} onProfile={explain} backLabel="ホーム"
       ringStories={visibleStories} ringCanEdit onSaveRingStory={onSave} onLockRingStory={onLock}
+      onPolishRingStory={async (_story,body,style) => style==='essay'
+        ? `思い出を振り返ると、${body.trim()} その時間が、今の自分につながっています。`
+        : `${body.trim().replace(/。?$/,'。')}`}
       onLoadRingMedia={onLoadMedia} onAddRingPhoto={(story,file) => onAddMedia(story,file,'photo')}
-      onAddRingVoice={(story,blob) => onAddMedia(story,blob,'audio')}
+      onAddRingVoice={async (story,blob,_seconds,options) => {
+        if (options?.analyzeOnly) return {raw:'家族と過ごした日のことを、今も覚えています。',
+          readable:'家族と過ごした日のことを、今も覚えています。',
+          essay:'家族と過ごしたあの日の光景は、今も心に残っています。'};
+        onAddMedia(story,blob,'audio');
+        return onSave(story,options.body);
+      }}
       books={mode==='complete'?[completedBook]:[]} booksStatus="ready"
       publishedPublication={mode==='complete'?previewPublication:null} publicDemo
       visibleBookProjects={mode==='active'?[{id:'preview-project',access_status:'paid'}]:[]}

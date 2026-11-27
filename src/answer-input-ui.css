@@ -29,6 +29,8 @@
 .answer-review__summary audio{display:block;width:100%;margin-top:8px}
 .answer-review__finish{width:100%;min-height:56px;border:0;border-radius:10px;background:var(--answer-green,var(--book-primary, #284c40));color:#fff;-webkit-text-fill-color:#fff;font-size:1rem;cursor:pointer}
 .answer-review__finish:disabled{opacity:.45;cursor:default}
+.answer-polish-choices{display:contents}
+.answer-polish-choices__styles{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 @media(max-width:359px){.answer-entry-choices button{font-size:.92rem;gap:5px}}
 
 /* One light answer surface for the existing recorder in both products. */

@@ -328,7 +328,7 @@ export async function familyPlaceBookStories(client, personId, projects, freeSto
       visibility:answer.ring_edition.visibility,
       chapter:answer.ring_edition.chapter,
       text_revision:answer.ring_edition.revision,
-      selected_style:answer.selected_style || 'readable',
+      selected_style:answer.selected_style || 'readable', sequence_order:answer.sequence_order,
     }];
     if (!answer.user_question_id && publishedIds.has(answer.book_project_id)) {
       const question = legacyById.get(answer.question_id);
@@ -337,7 +337,8 @@ export async function familyPlaceBookStories(client, personId, projects, freeSto
         question_text:question.content, chapter:question.chapter || 'その他の語り',
         body:answer.transcript_edited || answer.transcript_readable || answer.transcript_clean,
         visibility:answer.access_override === 'private_forever' ? 'private' : 'family',
-        text_revision:answer.text_revision, selected_style:answer.selected_style }];
+        text_revision:answer.text_revision, selected_style:answer.selected_style,
+        sequence_order:answer.sequence_order }];
     }
     const question = byId.get(answer.user_question_id);
     if (!question || (question.status !== 'answered' && !question.answered_at)
@@ -349,7 +350,8 @@ export async function familyPlaceBookStories(client, personId, projects, freeSto
       body: answer.transcript_edited || answer.transcript_readable || answer.transcript_clean,
       visibility: answer.access_override === 'private_forever' ? 'private' : 'family',
       chapter: question.chapter || 'その他の語り',
-      text_revision: answer.text_revision, selected_style: answer.selected_style }];
+      text_revision: answer.text_revision, selected_style: answer.selected_style,
+      sequence_order: answer.sequence_order }];
   }).map(row => ({ ...row, has_audio: audioAnswerIds.has(row.id) }));
 }
 
@@ -364,14 +366,14 @@ export async function familyPlaceBookMedia(client, answerId) {
     .eq('source_answer_id', answerId);
   if (videoError) throw videoError;
   const { data: ringPhotos, error: ringPhotoError } = await client.from('family_ring_story_media')
-    .select('id,answer_id,storage_path').eq('answer_id', answerId);
+    .select('id,answer_id,asset_type,storage_path').eq('answer_id', answerId);
   if (ringPhotoError) throw ringPhotoError;
   const sources = [
     ...(assets || []).filter(item => ['photo','audio'].includes(item.asset_type))
       .map(item => ({ id:item.id, kind:item.asset_type, bucket:item.asset_type === 'photo' ? 'photos' : 'audio', path:item.storage_path })),
     ...(videos || []).filter(item => item.status === 'ready' && item.video_storage_path)
       .map(item => ({ id:item.id, kind:'video', bucket:'videos', path:item.video_storage_path })),
-    ...(ringPhotos || []).map(item => ({ id:item.id, kind:'photo', bucket:'family-ring-media', path:item.storage_path })),
+    ...(ringPhotos || []).map(item => ({ id:item.id, kind:item.asset_type || 'photo', bucket:'family-ring-media', path:item.storage_path })),
   ];
   const opened = [];
   try {
