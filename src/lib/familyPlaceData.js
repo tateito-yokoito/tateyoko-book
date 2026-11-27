@@ -386,14 +386,16 @@ export async function familyPlaceBookMedia(client, answerId, options = {}) {
     .eq('source_answer_id', answerId);
   if (videoError) throw videoError;
   const { data: ringPhotos, error: ringPhotoError } = await client.from('family_ring_story_media')
-    .select('id,answer_id,asset_type,storage_path').eq('answer_id', answerId);
+    .select('id,answer_id,storage_path').eq('answer_id', answerId);
   if (ringPhotoError) throw ringPhotoError;
   const sources = [
     ...(assets || []).filter(item => ['photo','audio'].includes(item.asset_type))
       .map(item => ({ id:item.id, kind:item.asset_type, bucket:item.asset_type === 'photo' ? 'photos' : 'audio', path:item.storage_path })),
     ...(videos || []).filter(item => item.status === 'ready' && item.video_storage_path)
       .map(item => ({ id:item.id, kind:'video', bucket:'videos', path:item.video_storage_path })),
-    ...(ringPhotos || []).map(item => ({ id:item.id, kind:item.asset_type || 'photo', bucket:'family-ring-media', path:item.storage_path })),
+    ...(ringPhotos || []).map(item => ({ id:item.id,
+      kind:/\.(?:m4a|webm|aac|mp3|wav|ogg)$/i.test(item.storage_path || '') ? 'audio' : 'photo',
+      bucket:'family-ring-media', path:item.storage_path })),
   ];
   const selected = sources.filter(source => !options.kind || source.kind === options.kind)
     .slice(0, options.limit || undefined);

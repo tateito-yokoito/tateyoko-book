@@ -9,6 +9,7 @@ import LineNotificationConnection from './LineNotificationConnection.jsx';
 import SupporterContextFrame from './SupporterContextFrame.jsx';
 import { canFinalizeBookAsSupportRole, supportRoleLabel } from './lib/supportRole.js';
 import { photoStoryAccess } from './lib/photoStoryAccess.js';
+import { STORY_PHOTO_LIMIT, storyPhotoLimitMessage } from './lib/storyPhotoLimit.js';
 import StorySkySurface, { PersistentStorySkyBackdrop } from './home/StorySkySurface.jsx';
 import { configureSkyClient } from './home/liveSkies.js';
 import './reading-flow.css';
@@ -22313,6 +22314,8 @@ const handleStoryPhotoSelect = async (file, answerId, bookLayout = null) => {
       const targetAnswer = answers.find(a => a.id === answerId);
       const existingMedia = mediaByAnswerId[answerId] || [];
       const existingPhotoCount = existingMedia.filter(m => m.asset_type === "photo").length;
+      if (existingPhotoCount + selectedFiles.length > STORY_PHOTO_LIMIT)
+        throw new Error(storyPhotoLimitMessage);
 
       const photoRows = [];
 
