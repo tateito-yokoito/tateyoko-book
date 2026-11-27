@@ -4773,7 +4773,9 @@ const handleRecordComplete = async (txt, dur, url, blob, details = {}) => {
         item.id !== voiceData.localRecordingDraftId)]);
     } catch (error) {
       console.error('local recording backup failed', error);
-      alert('この端末に録音の控えを保存できませんでした。サーバーへの保存が終わるまで画面を閉じないでください。');
+      // Private browsing can deny IndexedDB. Continue the server upload; its
+      // verified storage path can still be recovered after a reload.
+      nextVoiceData.localRecordingBackupUnavailable = true;
     }
   }
 
