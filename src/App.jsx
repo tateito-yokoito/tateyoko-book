@@ -12361,8 +12361,8 @@ function ThemeDeliveryChoices({ theme, notificationLabel, onChangeDelivery, onWa
 function ThemeResumeAction({ questionNumber, onResume }) {
   const normalizedQuestionNumber = Math.max(Number(questionNumber) || 1, 1);
   const label = normalizedQuestionNumber === 1
-    ? "1問目から始める"
-    : `${normalizedQuestionNumber}問目から再開する`;
+    ? "テーマ内の1問目から始める"
+    : `テーマ内の${normalizedQuestionNumber}問目から再開する`;
 
   return (
     <div className="mt-5 border-t border-white/[0.08] pt-5">
