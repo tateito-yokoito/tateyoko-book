@@ -21172,6 +21172,7 @@ export function PhotoCorrectionFlow({
   title = "写真を添える",
   initialFile = null,
   bookPlacement = null,
+  lightMode = false,
   onClose,
   onComplete,
   awaitCompletion = false
@@ -21523,7 +21524,7 @@ export function PhotoCorrectionFlow({
       />
 
       {!scanPreview ? (
-        <div className="fixed inset-0 z-[10000] bg-black/45 flex items-end px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <div className={`fixed inset-0 z-[10000] bg-black/45 flex items-end px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] ${lightMode ? 'photo-correction-light' : ''}`}>
           <div className="w-full rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl fade-enter">
             <p className="text-white/72 text-center text-narrative mb-5">
               {title}
@@ -21559,7 +21560,7 @@ export function PhotoCorrectionFlow({
           </div>
         </div>
       ) : (
-        <div className={`fixed inset-0 z-[10000] w-[100dvw] h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overscroll-none ${bookPlacement && scanPreview.step === "adjust" ? "overflow-y-auto" : "overflow-hidden"}`}>
+        <div className={`fixed inset-0 z-[10000] w-[100dvw] h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overscroll-none ${lightMode ? 'photo-correction-light' : ''} ${bookPlacement && scanPreview.step === "adjust" ? "overflow-y-auto" : "overflow-hidden"}`}>
           {scanPreview.step === "crop" ? (
             <>
               <CropPreview

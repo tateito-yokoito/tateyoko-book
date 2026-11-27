@@ -31,6 +31,12 @@
 .answer-review__finish:disabled{opacity:.45;cursor:default}
 .answer-polish-choices{display:contents}
 .answer-polish-choices__styles{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.photo-correction-light.bg-slate-950,.photo-correction-light .bg-slate-950{background:#f7f6f1;color:#2c4334}
+.photo-correction-light .glass-card{background:#fffefa;border:1px solid #d5dfd2;box-shadow:none}
+.photo-correction-light [class*="text-white"]{color:#49624e!important}
+.photo-correction-light [class*="border-white"]{border-color:#cbd8c8!important}
+.photo-correction-light button.btn-quiet{background:#315b45!important;color:#fff!important;-webkit-text-fill-color:#fff}
+.photo-correction-light button:not(.btn-quiet){font-family:"Noto Sans JP",sans-serif}
 @media(max-width:359px){.answer-entry-choices button{font-size:.92rem;gap:5px}}
 
 /* One light answer surface for the existing recorder in both products. */

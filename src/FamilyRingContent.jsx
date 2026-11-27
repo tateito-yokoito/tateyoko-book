@@ -225,7 +225,7 @@ export default function FamilyRingContent({ stories, canEdit = false, onSave, on
         {selected.completed && <p className="fp-ring-editor-caution">変更は年輪に保存されます。完成したBOOKの内容は変わりません。</p>}
         {!voiceReview && <button type="button" className="fp-ring-save" disabled={!draft.trim() || busy || Boolean(candidate)} onClick={save}>{busy ? '保存しています…' : '変更を保存する'}</button>}
         <button type="button" className="fp-ring-cancel" onClick={() => setEditing(false)}>キャンセル</button>
-        <PhotoCorrectionFlow open={photoOpen} awaitCompletion title="写真を切り抜き・補正"
+        <PhotoCorrectionFlow open={photoOpen} awaitCompletion lightMode title="写真を切り抜き・補正"
           onClose={() => setPhotoOpen(false)} onComplete={addPhoto}/>
       </div> : <article className="fp-ring-detail">
         <p className="fp-ring-detail-kicker">{selected.visibility === 'private' ? <><LockKeyhole size={16}/> 自分だけの語り</> : '家族と共有する語り'}</p>
