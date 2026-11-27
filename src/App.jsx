@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { paidConversationIndex, paidOnboardingApplies, paidOnboardingCheckpoint, resolvePaidOnboardingScene } from './lib/paidOnboarding.js';
+import { getThemeResumeContext } from './lib/themeResumeContext.js';
 import { getActiveOnboardingRitualScene, onboardingSetupScenes, resolveOnboardingRitualEntryScene } from './lib/onboardingRitualResume.js';
 import { clearOnboardingNotificationDraft, clearOnboardingPreferenceDraft, clearOnboardingSharingDraft, draftTimestamp, readOnboardingNotificationDraft, readOnboardingPreferenceDraft, readOnboardingSharingDraft, writeOnboardingNotificationDraft, writeOnboardingPreferenceDraft, writeOnboardingSharingDraft } from './lib/onboardingPreferenceDraft.js';
 import ApprovedHome from './home/ApprovedHome.jsx';
@@ -1245,52 +1246,6 @@ function hasCompletedStoryTheme(questionSet, themeOrder) {
     Number(question?.theme_order) === Number(themeOrder)
   );
   return questions.length > 0 && questions.every(isCompletedStoryQuestion);
-}
-
-function getThemeResumeContext(questionSet, currentIndex = 0) {
-  const storyQuestions = (questionSet || [])
-    .map((question, questionIndex) => ({ question, questionIndex }))
-    .filter(({ question }) =>
-      question?.include_in_story_list !== false &&
-      Number.isFinite(Number(question?.theme_order))
-    );
-
-  if (storyQuestions.length === 0) return null;
-
-  const indexedCurrentQuestion = storyQuestions.find(
-    ({ questionIndex }) => questionIndex === currentIndex
-  );
-  const resumeQuestion = indexedCurrentQuestion &&
-    !isCompletedStoryQuestion(indexedCurrentQuestion.question)
-    ? indexedCurrentQuestion
-    : storyQuestions.find(({ question }) => !isCompletedStoryQuestion(question));
-
-  if (!resumeQuestion) return null;
-
-  const themeOrder = Number(resumeQuestion.question.theme_order);
-  const questionsInTheme = storyQuestions.filter(
-    ({ question }) => Number(question.theme_order) === themeOrder
-  );
-  const questionNumber = questionsInTheme.findIndex(
-    ({ questionIndex }) => questionIndex === resumeQuestion.questionIndex
-  ) + 1;
-  const theme = STORY_THEMES.find(item => item.order === themeOrder) || {
-    label:
-      resumeQuestion.question?.theme_label ||
-      resumeQuestion.question?.chapter_label ||
-      "物語",
-    order: themeOrder,
-    summary: resumeQuestion.question?.chapter_description || "",
-    opening: "",
-    hint: resumeQuestion.question?.prompt_hint || "",
-    visual: "childhood"
-  };
-
-  return {
-    theme,
-    questionIndex: resumeQuestion.questionIndex,
-    questionNumber: Math.max(questionNumber, 1)
-  };
 }
 
 function getNotificationSchedules(preference) {

@@ -29,3 +29,25 @@
 .mic-guide-continue{margin-top:17px}
 .daily-mic-quiet{margin-top:12px}
 @media(max-width:359px){.daily-mic-check,.mic-guide{padding-left:18px;padding-right:18px}.mic-guide-choices button{font-size:15px}}
+
+/* Match the BOOK question screens after the customer journey switched to paper. */
+.app-container--book-light .daily-mic-check,
+.app-container--book-light .mic-guide{color:var(--book-ink, #243b31)}
+.app-container--book-light .daily-mic-check h1,
+.app-container--book-light .mic-guide h2{color:var(--book-ink, #243b31);font-family:var(--book-ui-font, 'Noto Sans JP', sans-serif);font-weight:600}
+.app-container--book-light .daily-mic-kicker,
+.app-container--book-light .mic-guide-kicker{color:var(--book-accent, #5c7a57)}
+.app-container--book-light .daily-mic-copy,
+.app-container--book-light .mic-guide-copy,
+.app-container--book-light .daily-mic-note{color:var(--book-muted, #53665b)}
+.app-container--book-light .daily-mic-copy strong{color:var(--book-ink, #243b31)}
+.app-container--book-light .daily-mic-wave,
+.app-container--book-light .daily-mic-symbol{border-color:var(--book-line, #c9cfc5);background:var(--book-surface, #fffefa)}
+.app-container--book-light .daily-mic-wave .voice-wave-bar{background:var(--book-primary, #284c40)}
+.app-container--book-light .daily-mic-primary,
+.app-container--book-light .mic-guide-primary{border-color:var(--book-primary, #284c40);background:var(--book-primary, #284c40);color:var(--book-on-primary, #fff);-webkit-text-fill-color:var(--book-on-primary, #fff)}
+.app-container--book-light .daily-mic-secondary,
+.app-container--book-light .mic-guide-secondary,
+.app-container--book-light .mic-guide-choices button{border-color:var(--book-line, #c9cfc5);background:var(--book-surface, #fffefa);color:var(--book-primary, #284c40)}
+.app-container--book-light .daily-mic-quiet,
+.app-container--book-light .mic-guide-continue{color:var(--book-primary, #284c40)}
