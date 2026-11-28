@@ -99,69 +99,25 @@
   grid-column: 1 / -1;
   grid-row: 1;
   margin-bottom: clamp(24px, 4vw, 48px);
+  padding: 10px 12px;
+  background: #e2e9df;
   color: #243b31;
   text-align: center;
 }
 
 .landing-site .hp-family-power-product h2 {
   font-size: clamp(1.5rem, 7.4vw, 2.75rem);
-  font-weight: 550;
+  font-weight: 600;
   letter-spacing: .02em;
   line-height: 1.4;
-}
-
-.hp-family-power-product p {
-  padding-top: 8px;
-  font: 600 clamp(.875rem, 1.7vw, 1.1875rem)/1.6 "Noto Sans JP", sans-serif;
-  text-wrap: balance;
-}
-
-.hp-family-power-product[data-product-design="band"] {
-  padding: 10px 12px;
-  background: #e2e9df;
-}
-
-.landing-site .hp-family-power-product[data-product-design="band"] h2 {
-  font-weight: 600;
   -webkit-text-stroke: .2px currentColor;
 }
 
-.hp-family-power-product[data-product-design="band"] p {
+.hp-family-power-product p {
   padding-top: 4px;
+  font: 600 clamp(.875rem, 1.7vw, 1.1875rem)/1.6 "Noto Sans JP", sans-serif;
+  text-wrap: balance;
   -webkit-text-stroke: .16px currentColor;
-}
-
-.hp-family-power-product[data-product-design="line"] {
-  padding-top: clamp(16px, 2.4vw, 30px);
-  border-top: 1px solid #909e8e;
-}
-
-.hp-product-design-options {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 16px;
-  padding-inline: 12px;
-  background: #f5f3ed;
-  color: #243b31;
-  border-bottom: 1px solid #ced1c6;
-  font: 500 .875rem/1.5 "Noto Sans JP", sans-serif;
-}
-
-.hp-product-design-options a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  color: inherit;
-}
-
-.hp-product-design-options a[aria-current] {
-  font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 4px;
 }
 
 @media (max-width: 900px) {

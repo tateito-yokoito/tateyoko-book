@@ -142,7 +142,7 @@ function ProductImageDialog({ product, close }) {
   </dialog>;
 }
 
-export default function LandingPage({ reviewOnly = false, productDesign }) {
+export default function LandingPage({ reviewOnly = false }) {
   const nov8Preview = true;
   const [menu, setMenu] = useState(false);
   const [panel, setPanel] = useState(null);
@@ -208,7 +208,7 @@ export default function LandingPage({ reviewOnly = false, productDesign }) {
     <main id="hp-main">
       <FamilyPowerHero />
       <section className="hp-hero hp-shell hp-hero-integrated hp-hero-nov8 hp-family-power-followup" aria-labelledby="hp-product-name">
-        <header className="hp-family-power-product" data-product-design={reviewOnly ? productDesign : undefined}>
+        <header className="hp-family-power-product">
           <h2 id="hp-product-name">たて糸♾️よこ糸BOOK</h2>
           <p>声も残る、スマホで育てる家系図・人生史</p>
         </header>
@@ -219,7 +219,7 @@ export default function LandingPage({ reviewOnly = false, productDesign }) {
             <div className="hp-hero-benefits" aria-label="縦糸横糸でできること">
               <div className="hp-hero-benefit"><span className="hp-hero-benefit-icons" aria-hidden="true"><span className="hp-hero-benefit-icon"><svg viewBox="0 0 32 32" fill="none"><path d="M13 22c-4-2-6-5-6-9a9 9 0 0 1 15-7m-9 16-2 5 6-2m7-15c3 2 3 9 0 12m4-16c4 5 4 15 0 20"/></svg></span><span className="hp-hero-benefit-icon"><svg viewBox="0 0 32 32" fill="none"><rect x="3" y="5" width="26" height="22" rx="2"/><circle cx="11" cy="12" r="2"/><path d="m5 23 7-7 5 5 4-4 6 6"/></svg></span><span className="hp-hero-benefit-icon"><svg viewBox="0 0 32 32" fill="none"><rect x="3" y="5" width="26" height="22" rx="3"/><path d="m13 11 8 5-8 5z"/></svg></span></span><p><strong>声も、写真も、動画も。</strong><span>思い出を、そのまま残せる。</span></p></div>
               <div className="hp-hero-benefit"><span className="hp-hero-benefit-icons" aria-hidden="true"><span className="hp-hero-benefit-icon"><svg viewBox="0 0 32 32" fill="none"><rect x="6" y="13" width="20" height="16" rx="3"/><path d="M10 13V9a6 6 0 0 1 12 0v4"/><circle cx="16" cy="21" r="1.5"/><path d="M16 22.5v2"/></svg></span><span className="hp-hero-benefit-icon"><svg viewBox="0 0 32 32" fill="none"><circle cx="12" cy="10" r="4"/><path d="M4 26v-2a8 8 0 0 1 13-6m4-9h7m-3-3 3 3-3 3m-6 7h9m-3-3 3 3-3 3"/></svg></span></span><p><strong>自分だけの記録にも。</strong><span>いつか、大切な人と分かち合うことも。</span></p></div>
-              <div className="hp-hero-benefit"><span className="hp-hero-benefit-icon" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><path d="M24 42V24m0 9c-10 0-16-7-16-18 9 0 16 5 16 14m0 2c0-11 6-18 16-18 0 11-6 18-16 18"/></svg></span><p><strong>完成後も、育っていく。</strong><span>季節ごとに、新しい語りを重ねられる。</span></p></div>
+              <div className="hp-hero-benefit"><span className="hp-hero-benefit-icon" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><path d="M24 42V24m0 9c-10 0-16-7-16-18 9 0 16 5 16 14m0 2c0-11 6-18 16-18 0 11-6 18-16 18"/></svg></span><p><strong>完成後も、家系図とともに育つ。</strong><span>無料の家族アプリで、語りや思い出を追加。</span></p></div>
             </div>
             <div className="hp-hero-start-actions">
               <p className="hp-hero-free-note">どちらも無料・登録不要。まずは気軽にお試しください。</p>
