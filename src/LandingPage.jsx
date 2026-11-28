@@ -9,7 +9,7 @@ import StoryIntro from './landing/StoryIntro.jsx';
 import SupportConsultationInline from './SupportConsultationInline.jsx';
 import { startHpAnalytics } from './lib/hpAnalytics.js';
 import { publicPurchaseHref, publicPurchaseLabel, publicPurchaseNote } from './lib/publicPurchaseCta.js';
-import FamilyPowerHero, { FamilyPowerLayoutControls, FamilyPowerWordmark } from './landing/FamilyPowerHero.jsx';
+import FamilyPowerHero, { FamilyPowerWordmark } from './landing/FamilyPowerHero.jsx';
 
 // Both HP entrances share the family app's existing Supabase/BOOK identity.
 // The family-app allowlist continues to decide who can open the app.
@@ -142,13 +142,8 @@ function ProductImageDialog({ product, close }) {
   </dialog>;
 }
 
-export default function LandingPage({ reviewOnly = false, heroLayout = 'integrated', compareFamilyPower = false, previewFrame = false, mobileViewport = false }) {
+export default function LandingPage({ reviewOnly = false }) {
   const nov8Preview = true;
-  const familyPower = !reviewOnly || compareFamilyPower;
-  const previewParams = compareFamilyPower ? new URLSearchParams(window.location.search) : null;
-  const desktopLayout = previewParams?.get('pc') === 'b' ? 'b' : 'a';
-  const mobileLayout = previewParams?.get('mobile') === 'a' ? 'a' : 'b';
-  const familyPowerFollowup = familyPower && nov8Preview;
   const [menu, setMenu] = useState(false);
   const [panel, setPanel] = useState(null);
   const [zoomedProduct, setZoomedProduct] = useState(null);
@@ -182,50 +177,41 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
   return <div className="landing-site">
     <a className="hp-skip" href="#hp-main">本文へ移動</a>
     {reviewOnly && <div id="hp-review-notice" className="hp-preview-note" role="note">HP Preview <span>表示確認専用：登録・購入・ログイン・送信はできません。</span></div>}
-    {compareFamilyPower && !previewFrame && <FamilyPowerLayoutControls desktop={desktopLayout} mobile={mobileLayout} mobileViewport={mobileViewport} />}
     {!nov8Preview && <div className="hp-monitor-strip" role="note" aria-label="モニター利用のご案内">
       <p><strong>正式リリース前</strong><span aria-hidden="true">｜</span>現在はモニター利用をご案内しています。</p>
       <button type="button" onClick={() => setMonitorApplicationOpen(true)}>モニター利用を申し込む <span aria-hidden="true">↗</span></button>
     </div>}
-    <header className={`hp-header${familyPower ? ' hp-family-power-header' : ''}`}>
-      {familyPower ? <div className="hp-family-power-brand">
+    <header className="hp-header hp-family-power-header">
+      <div className="hp-family-power-brand">
         <a href="#top"><FamilyPowerWordmark /></a>
         <p>声も残る、スマホで育てる家系図・人生史</p>
-      </div> : <a href="#top" aria-label="縦糸横糸 トップへ">
-        <img src="/brand-logo-official.svg" alt="縦糸横糸" width="200" height="48" />
-      </a>}
+      </div>
       <div className="hp-header-actions">
         <a href={reviewOnly ? "#hp-review-notice" : LOGIN}>無料で始める</a>
         <a href={reviewOnly ? "#hp-review-notice" : LOGIN}>ログイン</a>
         <button id="hp-menu-toggle" type="button" aria-label={menu ? "メニューを閉じる" : "メニューを開く"}
           aria-expanded={menu} aria-controls="hp-nav" onClick={() => setMenu(!menu)}>
           <span className="hp-menu-label">{menu ? "閉じる ×" : "メニュー ☰"}</span>
-          {familyPower && <span className="hp-mobile-menu-icon" aria-hidden="true">{menu ? <X size={26} /> : <Menu size={26} />}</span>}
+          <span className="hp-mobile-menu-icon" aria-hidden="true">{menu ? <X size={26} /> : <Menu size={26} />}</span>
         </button>
       </div>
       <nav id="hp-nav" aria-label="メインメニュー" hidden={!menu}>
-        {familyPower && <div className="hp-mobile-menu-actions">
+        <div className="hp-mobile-menu-actions">
           <a href={reviewOnly ? "#hp-review-notice" : LOGIN} onClick={() => setMenu(false)}>無料で始める</a>
           <a href={reviewOnly ? "#hp-review-notice" : LOGIN} onClick={() => setMenu(false)}>ログイン</a>
-        </div>}
+        </div>
         {[["#experience", "縦糸横糸とは"], ["#works", "二つの作品"], ["#price", "料金"], ["#support", "制作のお手伝い"], ["#faq", "よくある質問"]].map(([href,label]) => <a key={href} href={href} onClick={() => setMenu(false)}>{label}<span aria-hidden="true">↗</span></a>)}
         <a className="hp-company-link" href={COMPANY_SITE}>運営会社<span aria-hidden="true">↗</span></a>
       </nav>
     </header>
 
     <main id="hp-main">
-      {familyPower && <FamilyPowerHero desktop={desktopLayout} mobile={mobileLayout} />}
-      <section className={`hp-hero hp-shell${heroLayout === 'integrated' ? ' hp-hero-integrated' : ''}${nov8Preview ? ' hp-hero-nov8' : ''}${familyPowerFollowup ? ' hp-family-power-followup' : ''}`}
-        id={familyPower ? undefined : 'top'} aria-labelledby={familyPowerFollowup ? 'hp-product-name' : 'hp-title'}>
-        {familyPowerFollowup && <header className="hp-family-power-product">
+      <FamilyPowerHero />
+      <section className="hp-hero hp-shell hp-hero-integrated hp-hero-nov8 hp-family-power-followup" aria-labelledby="hp-product-name">
+        <header className="hp-family-power-product">
           <h2 id="hp-product-name">たて糸♾️よこ糸BOOK</h2>
           <p>声も残る、スマホで育てる家系図・人生史</p>
-        </header>}
-        {!familyPowerFollowup && <><div className="hp-hero-title">{nov8Preview ? <>
-          <h1 id="hp-title" className="hp-service-title">誰にだって、<br />まだ語られていない<br />人生がある。</h1>
-          <p className="hp-hero-category">声も残せる。季節とともに育つ。<br />自分史づくりの新しいかたち。</p>
-        </> : <h1 id="hp-title">人生を、<br />声でのこす。</h1>}</div>
-        <figure className="hp-hero-art hp-hero-photo"><img src="/site/hp-renewal/hero-woman-remembering.png" alt="窓辺でスマートフォンを手に、アルバムを前に思い出を辿る女性" width="1536" height="1024" fetchPriority="high" /></figure></>}
+        </header>
         <div className="hp-hero-body">{nov8Preview ? <div className="hp-hero-offer">
           <p className="hp-hero-ease">スマホに届く質問に、つぶやくだけ。<br />人生の物語を、一冊の本とWebブックに。</p>
           <figure className="hp-hero-products" id="experience"><img src="/site/hp-renewal/book-web-pair-mobile.jpg" alt="一冊の縦糸横糸ブックと、声や写真に触れられるWebブックを並べたイメージ" width="1536" height="1024" loading="eager" /></figure>
@@ -385,7 +371,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
       </section>
       <section className="hp-final hp-dark hp-section"><div className="hp-shell"><img src="/brand-logo-symbol.svg" alt="" width="52" height="52" /><h2>まずは、三つだけ。</h2><p>幼い頃のことを、<br />少し話してみませんか。</p><TrialLink reviewOnly={reviewOnly} /><p className="hp-note">約10分・カード登録不要・自動課金なし。</p></div></section>
     </main>
-    <footer className="hp-footer hp-shell"><a href="#top">{familyPower ? <FamilyPowerWordmark /> : <img src="/brand-logo-official.svg" alt="縦糸横糸" width="200" height="48" />}</a><div><a className="hp-company-footer-link" href={COMPANY_SITE}>運営会社</a><a href="/contact/?source=hp">お問い合わせ</a><button onClick={() => setPanel("privacy")}>プライバシー</button><button onClick={() => setPanel("commerce")}>特定商取引法に基づく表記</button></div><p>© {familyPower ? 'たて糸 ∞ よこ糸' : '縦糸横糸'}</p></footer>
+    <footer className="hp-footer hp-shell"><a href="#top"><FamilyPowerWordmark /></a><div><a className="hp-company-footer-link" href={COMPANY_SITE}>運営会社</a><a href="/contact/?source=hp">お問い合わせ</a><button onClick={() => setPanel("privacy")}>プライバシー</button><button onClick={() => setPanel("commerce")}>特定商取引法に基づく表記</button></div><p>© たて糸 ∞ よこ糸</p></footer>
     {panel && <InformationDialog reviewOnly={reviewOnly} panel={panel} close={() => setPanel(null)} />}
     {monitorApplicationOpen && <MonitorApplicationDialog reviewOnly={reviewOnly} close={() => setMonitorApplicationOpen(false)} />}
     {zoomedProduct && <ProductImageDialog product={zoomedProduct} close={() => setZoomedProduct(null)} />}
