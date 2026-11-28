@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from 'react-dom/client';
+import { Menu, X } from 'lucide-react';
 import "./landing-parity.css";
 import "./monitor-launch.css";
 import "./hp-nov8-hero-preview.css";
@@ -193,8 +194,23 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
       </div> : <a href="#top" aria-label="縦糸横糸 トップへ">
         <img src="/brand-logo-official.svg" alt="縦糸横糸" width="200" height="48" />
       </a>}
-      <div className="hp-header-actions"><a href={reviewOnly ? "#hp-review-notice" : LOGIN}>無料で始める</a><a href={reviewOnly ? "#hp-review-notice" : LOGIN}>ログイン</a><button id="hp-menu-toggle" aria-label={menu ? "メニューを閉じる" : "メニューを開く"} aria-expanded={menu} aria-controls="hp-nav" onClick={() => setMenu(!menu)}>{menu ? "閉じる ×" : "メニュー ☰"}</button></div>
-      {menu && <nav id="hp-nav" aria-label="メインメニュー">{[["#experience", "縦糸横糸とは"], ["#works", "二つの作品"], ["#price", "料金"], ["#support", "制作のお手伝い"], ["#faq", "よくある質問"]].map(([href,label]) => <a key={href} href={href} onClick={() => setMenu(false)}>{label}<span aria-hidden="true">↗</span></a>)}<a className="hp-company-link" href={COMPANY_SITE}>運営会社<span aria-hidden="true">↗</span></a></nav>}
+      <div className="hp-header-actions">
+        <a href={reviewOnly ? "#hp-review-notice" : LOGIN}>無料で始める</a>
+        <a href={reviewOnly ? "#hp-review-notice" : LOGIN}>ログイン</a>
+        <button id="hp-menu-toggle" type="button" aria-label={menu ? "メニューを閉じる" : "メニューを開く"}
+          aria-expanded={menu} aria-controls="hp-nav" onClick={() => setMenu(!menu)}>
+          <span className="hp-menu-label">{menu ? "閉じる ×" : "メニュー ☰"}</span>
+          {familyPower && <span className="hp-mobile-menu-icon" aria-hidden="true">{menu ? <X size={26} /> : <Menu size={26} />}</span>}
+        </button>
+      </div>
+      <nav id="hp-nav" aria-label="メインメニュー" hidden={!menu}>
+        {familyPower && <div className="hp-mobile-menu-actions">
+          <a href={reviewOnly ? "#hp-review-notice" : LOGIN} onClick={() => setMenu(false)}>無料で始める</a>
+          <a href={reviewOnly ? "#hp-review-notice" : LOGIN} onClick={() => setMenu(false)}>ログイン</a>
+        </div>}
+        {[["#experience", "縦糸横糸とは"], ["#works", "二つの作品"], ["#price", "料金"], ["#support", "制作のお手伝い"], ["#faq", "よくある質問"]].map(([href,label]) => <a key={href} href={href} onClick={() => setMenu(false)}>{label}<span aria-hidden="true">↗</span></a>)}
+        <a className="hp-company-link" href={COMPANY_SITE}>運営会社<span aria-hidden="true">↗</span></a>
+      </nav>
     </header>
 
     <main id="hp-main">
