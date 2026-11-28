@@ -84,6 +84,7 @@
 .guest-trial-finished-section { margin-top: 30px; text-align: left; }
 .guest-trial-finished-brand { display: block; margin-bottom: 8px; color: var(--book-ink); font-family: var(--book-ui-font); font-size: 16px; font-weight: 800; letter-spacing: .025em; }
 .guest-trial-finished-section h2 { margin: 0; color: var(--book-ink); font-family: var(--book-display-font); font-size: 21px; font-weight: 550; line-height: 1.55; }
+.guest-trial-finished-section:not(.guest-trial-finished-family) h2 { font-size: clamp(16px, 4.6vw, 20px); white-space: nowrap; }
 .guest-trial-finished-products { display: block; width: 100%; height: auto; margin-top: 19px; border-radius: 10px; }
 .guest-trial-finished-section p { margin: 12px 0 0; color: var(--book-muted); font-size: 15px; line-height: 1.85; }
 .guest-trial-finished-section .guest-trial-finished-primary { margin-top: 22px; text-align: center; font-size: 15px; line-height: 1.5; }

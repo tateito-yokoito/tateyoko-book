@@ -649,10 +649,10 @@ function GuestTrialExperience() {
             : <>
               <section className="guest-trial-finished-section">
                 <strong className="guest-trial-finished-brand">たて糸♾️よこ糸BOOK</strong>
-                <h2>あなたの想い、これまでの歩みを<br/>２つの作品に。</h2>
+                <h2>一つの語りは、二つの作品に。</h2>
                 <img className="guest-trial-finished-products" src="/site/hp-renewal/book-web-pair-mobile.jpg"
                   alt="紙のBOOKと、声や写真に触れられるWebブック" width="1536" height="1024" loading="eager" />
-                <p>今回の３つの語りを引き継いで、制作を始められます。</p>
+                <p>今回の語りを引き継ぐこともできます。</p>
                 <a className="guest-trial-finished-primary flex items-center justify-center" href={guestTrialPurchaseUrl()}>この語りを引き継いでBOOKを始める</a>
                 <a className="guest-trial-finished-site-link" href="https://www.tateito-yokoito.jp/" target="_blank" rel="noopener noreferrer">たて糸♾️よこ糸BOOKについて詳しく見る ↗</a>
               </section>
