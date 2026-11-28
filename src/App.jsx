@@ -6198,6 +6198,9 @@ const openFirstThemeIntroduction = async trialCarryDecision => {
         project: { ...current.project, trial_carry_decision: mainStart?.trial_carry_decision || null }
       } : current);
     }
+    // Ring answers become eligible at the main boundary. Load them before
+    // displaying childhood so this first visit also works without a reload.
+    setQuestionsDB(await loadUserQuestionSet(user.id, foundation));
     await updateOnboardingRitualStep("theme_intro");
     const {data:status,error}=await supabaseClient.rpc("journey_status",{p:foundation.project.id});
     if(error)throw error;
@@ -9662,7 +9665,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
 
       {scene === 'carried_answer' && carriedReview && (
         <Scene1_MyPage question={carriedReview.question} userName={user?.name}
-          lightMode savedAnswer={carriedReview.review}
+          lightMode sectionLabel="幼い頃" savedAnswer={carriedReview.review}
           storyProgress={{ currentIndex:Math.max(0, CHILDHOOD_TRIAL_QUESTIONS.findIndex(q => q.id === carriedReview.question.question_id)), total:3 }}
           onBack={() => setScene(carriedReview.returnScene)}
           savedFinishLabel="幼い頃に戻る" onSavedAnswerNext={() => setScene(carriedReview.returnScene)}
@@ -9713,8 +9716,8 @@ if (getProjectRoleInviteTokenFromUrl()) {
           lightMode={hasFullProjectAccess(foundation?.project) || writingQuestion?.onboarding_group === 'trial_experience'}
           answer={bookSavedAnswerReview?.questionId === writingQuestion.user_question_id
             ? bookSavedAnswerReview.answer : null}
-          themeLabel={recordingSectionLabel(writingQuestion)}
-          progressLabel={`${getMainStoryProgress(questionsDB, progress.currentIndex).currentIndex + 1} / ${getMainStoryProgress(questionsDB, progress.currentIndex).total}`}
+          themeLabel={scene === 'carried_answer' ? '幼い頃' : recordingSectionLabel(writingQuestion)}
+          progressLabel={scene === 'carried_answer' ? carriedReview.question.progress_label || '幼い頃' : `${getMainStoryProgress(questionsDB, progress.currentIndex).currentIndex + 1} / ${getMainStoryProgress(questionsDB, progress.currentIndex).total}`}
           client={supabaseClient}
           photos={scene === 'carried_answer' ? carriedReview.review.photos : bookPhotoEnabled ? bookAnswerPhotos : []}
           photoSaveState={bookPhotoSaveState}
@@ -19087,7 +19090,7 @@ function recordingSectionLabel(question) {
 const questionScrollPositions = new WeakMap();
 
 function QuestionAnswerSurface({ question, userName, storyProgress, onBack, brightAnswer,
-  skyOverride, photos, children, footer }) {
+  skyOverride, photos, children, footer, sectionLabel }) {
   const contentRef = useRef(null);
   useLayoutEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = questionScrollPositions.get(question) || 0;
@@ -19099,7 +19102,7 @@ function QuestionAnswerSurface({ question, userName, storyProgress, onBack, brig
     skyOverride={skyOverride} surfaceClassName={brightAnswer ? 'answer-light-recorder' : ''}
     background={QUESTION_BACKGROUND}>
     <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress}
-      sectionLabel={recordingSectionLabel(question)} isFormalOnboarding={isFormalOnboardingQuestion(question)}
+      sectionLabel={sectionLabel || recordingSectionLabel(question)} isFormalOnboarding={isFormalOnboardingQuestion(question)}
       onBack={onBack} />
     <RecordingQuestionPrompt question={question} />
     <div className="question-paired-actions">
@@ -19136,6 +19139,7 @@ export function Scene1_MyPage({
   photoFinishing = false,
   savedAnswer = null,
   savedFinishLabel = "次の問いへ",
+  sectionLabel,
   onAppendVoice,
   onSavedAnswerNext,
   onSkip,
@@ -19160,7 +19164,7 @@ export function Scene1_MyPage({
 
   return (
     <QuestionAnswerSurface question={question} userName={userName} storyProgress={storyProgress}
-      onBack={onBack} brightAnswer={brightAnswer} skyOverride={skyOverride} footer={footer}
+      onBack={onBack} brightAnswer={brightAnswer} skyOverride={skyOverride} footer={footer} sectionLabel={sectionLabel}
       photos={brightAnswer && !savedAnswer && <AnswerPhotoStrip photos={photos}
         onOpen={photo => window.open(photo.url, '_blank', 'noopener,noreferrer')} onRemove={onPhotoRemove} />}>
       {brightAnswer && savedAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice">
