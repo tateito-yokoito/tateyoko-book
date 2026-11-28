@@ -144,6 +144,18 @@
     grid-template-rows: auto 1fr;
   }
 
+  .hp-family-power[data-desktop-layout="a"] .hp-family-power-photo {
+    position: relative;
+    align-self: stretch;
+  }
+
+  .hp-family-power[data-desktop-layout="a"] .hp-family-power-photo img {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    object-position: 75% 85%;
+  }
+
   .hp-family-power[data-desktop-layout="b"] {
     grid-template-areas: "title title" "copy photo";
     row-gap: clamp(30px, 4vw, 56px);
