@@ -216,14 +216,18 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
     <main id="hp-main">
       {familyPower && <FamilyPowerHero desktop={desktopLayout} mobile={mobileLayout} />}
       <section className={`hp-hero hp-shell${heroLayout === 'integrated' ? ' hp-hero-integrated' : ''}${nov8Preview ? ' hp-hero-nov8' : ''}${familyPowerFollowup ? ' hp-family-power-followup' : ''}`}
-        id={familyPower ? undefined : 'top'} aria-labelledby={familyPowerFollowup ? 'hp-service-lead' : 'hp-title'}>
+        id={familyPower ? undefined : 'top'} aria-labelledby={familyPowerFollowup ? 'hp-product-name' : 'hp-title'}>
+        {familyPowerFollowup && <header className="hp-family-power-product">
+          <h2 id="hp-product-name">たて糸♾️よこ糸BOOK</h2>
+          <p>声も残る、スマホで育てる家系図・人生史</p>
+        </header>}
         {!familyPowerFollowup && <><div className="hp-hero-title">{nov8Preview ? <>
           <h1 id="hp-title" className="hp-service-title">誰にだって、<br />まだ語られていない<br />人生がある。</h1>
           <p className="hp-hero-category">声も残せる。季節とともに育つ。<br />自分史づくりの新しいかたち。</p>
         </> : <h1 id="hp-title">人生を、<br />声でのこす。</h1>}</div>
         <figure className="hp-hero-art hp-hero-photo"><img src="/site/hp-renewal/hero-woman-remembering.png" alt="窓辺でスマートフォンを手に、アルバムを前に思い出を辿る女性" width="1536" height="1024" fetchPriority="high" /></figure></>}
         <div className="hp-hero-body">{nov8Preview ? <div className="hp-hero-offer">
-          <p id={familyPowerFollowup ? 'hp-service-lead' : undefined} className="hp-hero-ease">スマホに届く質問に、つぶやくだけ。<br />人生の物語を、一冊の本とWebブックに。</p>
+          <p className="hp-hero-ease">スマホに届く質問に、つぶやくだけ。<br />人生の物語を、一冊の本とWebブックに。</p>
           <figure className="hp-hero-products" id="experience"><img src="/site/hp-renewal/book-web-pair-mobile.jpg" alt="一冊の縦糸横糸ブックと、声や写真に触れられるWebブックを並べたイメージ" width="1536" height="1024" loading="eager" /></figure>
           <div className="hp-hero-start">
             <div className="hp-hero-benefits" aria-label="縦糸横糸でできること">
