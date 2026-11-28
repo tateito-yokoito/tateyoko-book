@@ -43,6 +43,7 @@
 .fp-person-tabs{background:#faf9f5;border-bottom-color:#dfe4dc}
 .fp-person-tabs button[aria-selected=true]{color:#315d42;border-bottom-color:#668e69}
 .fp-person-content{padding-top:17px}
+.fp-person-trial-saved{margin:0 0 15px;padding:12px 14px;border-radius:10px;background:#edf3e9;color:#28473e;font-size:14px;font-weight:700;line-height:1.6}
 .fp-person-content>h2{margin:2px 0 14px;font-size:17px;color:#2c4938}
 .fp-person-book,.fp-person-memory,.fp-person-event,.fp-person-story-empty,.fp-person-story,.fp-person-book-empty{border-color:#e3e6dc;background:#fffefa;box-shadow:none}
 .fp-person-book,.fp-person-memory,.fp-person-event{border-radius:12px}

@@ -268,6 +268,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
   const [photoOpen, setPhotoOpen] = useState(false);
   const [storyQuestion, setStoryQuestion] = useState(null);
   const [activeTab, setActiveTab] = useState('ring');
+  const [trialSavedNotice, setTrialSavedNotice] = useState(false);
   const storyRef = useRef(null);
   const textRef = useRef('');
   const savedTextRef = useRef('');
@@ -464,8 +465,10 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     if (!id || screen !== 'home' || !people.some(item => item.id === id)) return;
     shelfReturnPerson.current = null;
     setSelectedId(id);
-    setActiveTab(new URLSearchParams(window.location.search).get('tab') === 'ring' ? 'ring' : 'books');
-    const origin = new URLSearchParams(window.location.search).get('origin');
+    const returnParams = new URLSearchParams(window.location.search);
+    setActiveTab(returnParams.get('tab') === 'ring' ? 'ring' : 'books');
+    setTrialSavedNotice(returnParams.get('tab') === 'ring' && returnParams.get('trial_saved') === '1');
+    const origin = returnParams.get('origin');
     setPersonEntry(origin === 'tree' ? 'tree' : 'home');
     if (origin === 'tree' && people.some(item => item.id === treeViewRef.current.centerId))
       setTreeCenterId(treeViewRef.current.centerId);
@@ -474,6 +477,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     url.searchParams.delete('person');
     url.searchParams.delete('tab');
     url.searchParams.delete('origin');
+    url.searchParams.delete('trial_saved');
     window.history.replaceState({}, '', url);
   }, [people, screen]);
   useEffect(() => {
@@ -1290,8 +1294,9 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       publishedPublication={demoPublishedBook} publicDemo={publicDemo}
       visibleBookProjects={visibleBookProjects} projectsStatus={projectsStatus}
       accountBookStarted={accountBookStarted}
+      trialSavedNotice={trialSavedNotice}
       facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
-      onTabChange={setActiveTab} onBack={personEntry === 'tree' ? returnToTree : goHome}
+      onTabChange={tab => { setTrialSavedNotice(false); setActiveTab(tab); }} onBack={personEntry === 'tree' ? returnToTree : goHome}
       backLabel={personEntry === 'tree' ? '家系図' : 'ホーム'} entryOrigin={personEntry}
       onProfile={() => startProfile()}
       onOpenBook={publicDemo ? null : openBookIntroduction}

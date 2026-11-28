@@ -50,6 +50,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
   publishedPublication = null, publicDemo = false,
   visibleBookProjects = [], projectsStatus = 'ready',
   accountBookStarted = null,
+  trialSavedNotice = false,
   facts = [], questions = [], activeTab = 'ring', onTabChange, onBack, onProfile,
   onOpenStory, onTryFreeTrial = null, onAddFact, onRetryBooks, supabaseClient, busy = false,
   backLabel = 'ホーム', entryOrigin = 'home', onOpenBook = null, onResumeBook = null,
@@ -111,6 +112,7 @@ export default function FamilyPersonPage({ person, stories = [], bookStories = [
           onClick={() => { setRingDetailOpen(false); onTabChange(key); }}>{label}</button>)}
     </div>
     {activeTab === 'ring' && <section className="fp-person-content" role="tabpanel">
+      {trialSavedNotice && <p className="fp-person-trial-saved" role="status">あなたの３つの物語が年輪に追加されました。</p>}
       {!publicDemo && accountBookStarted === false && !purchasedProject && ringCanEdit && saved.length < 3 && onTryFreeTrial &&
         <button type="button" className="fp-person-add-story" onClick={() => onTryFreeTrial(person.id)}>
           {window.localStorage.getItem(trialPersonStorageKey(person.id))

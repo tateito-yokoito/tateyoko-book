@@ -135,9 +135,7 @@ function GuestTrialExperience() {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [savePeople, setSavePeople] = useState([]);
   const [selectedSavePerson, setSelectedSavePerson] = useState(trialPersonId || '');
-  const [savedPersonName, setSavedPersonName] = useState('');
   const [confirmReplace, setConfirmReplace] = useState(false);
-  const [serviceReturnScreen, setServiceReturnScreen] = useState('finished');
   const pendingSaveOpen = useRef(false);
 
   useEffect(() => {
@@ -429,9 +427,8 @@ function GuestTrialExperience() {
       const saved = await saveGuestTrialToRing(supabaseClient,TRIAL_API,session,selectedSavePerson,3,
         { replaceExisting });
       if (saved.length !== 3) throw new Error('3問すべての保存を確認できませんでした。');
-      setSavedPersonName(savePeople.find(item => item.id === selectedSavePerson)?.display_name || '本人');
       setConfirmReplace(false);
-      window.location.assign(`/app?person=${encodeURIComponent(selectedSavePerson)}&tab=ring`);
+      window.location.assign(`/app?person=${encodeURIComponent(selectedSavePerson)}&tab=ring&trial_saved=1`);
     } catch (cause) {
       if (cause.code === 'BOOK_ALREADY_STARTED') {
         setConfirmReplace(false);
@@ -440,13 +437,6 @@ function GuestTrialExperience() {
       else setError(cause.message || '年輪へ保存できませんでした。');
     }
     finally { setBusy(false); }
-  }
-
-  function openBookInformation() {
-    if (trialPersonId && session) localStorage.setItem('tateyoko:guest-trial:self:v1',
-      JSON.stringify(session));
-    setServiceReturnScreen(screen);
-    setScreen('service');
   }
 
   function openExit() {
@@ -653,16 +643,23 @@ function GuestTrialExperience() {
       </main>}
       {screen === 'finished' && <main className="guest-trial-finished">
         <h1>３問の体験が終わりました。</h1>
-        <p className="mt-5 text-left text-base leading-loose text-white/75">今回の回答を保存すると、家族アプリであとから読み返せます。声で答えた方は、録音も聴き返せます。</p>
         {!giftToken && <>
           {trialPersonId
             ? <a className="guest-trial-finished-primary flex items-center justify-center" href={`/app?person=${encodeURIComponent(trialPersonId)}&tab=ring`}>年輪に戻る</a>
-            : <button type="button" disabled={busy} onClick={prepareRingSave}
-              className="guest-trial-finished-primary">この語りを保存する</button>}
-          <button type="button" onClick={openBookInformation}
-            className="guest-trial-finished-secondary">BOOKを詳しく見る</button>
-          {!trialPersonId && <button type="button" disabled={busy} onClick={discardAndExit}
-            className="mt-6 min-h-11 text-sm text-white/65 underline">今回は保存しない</button>}
+            : <>
+              <section className="guest-trial-finished-section">
+                <h2>この３つの語りから、一冊の人生を。</h2>
+                <p>問いに答えながら記憶をたどり、声と写真も添えてBOOKとWebブックに残せます。今回の語りは制作へ引き継げます。</p>
+                <a className="guest-trial-finished-primary flex items-center justify-center" href={guestTrialPurchaseUrl()}>この語りを引き継いでBOOKを始める</a>
+                <a className="guest-trial-finished-site-link" href="https://www.tateito-yokoito.jp/" target="_blank" rel="noopener noreferrer">たて糸♾️よこ糸BOOKについて詳しく見る ↗</a>
+              </section>
+              <section className="guest-trial-finished-section guest-trial-finished-family">
+                <h2>家族アプリに語りを残す</h2>
+                <p>今回の回答を「たて糸♾️よこ糸 家族アプリ」に保存できます。無料で、家系図とともに<strong>家族のチカラ</strong>を育むことができます。</p>
+                <button type="button" disabled={busy} onClick={prepareRingSave} className="guest-trial-finished-secondary">この語りを保存する</button>
+                <button type="button" disabled={busy} onClick={discardAndExit} className="guest-trial-finished-skip">今回は保存しない</button>
+              </section>
+            </>}
         </>}
         {giftToken && <p className="mt-9 text-sm leading-loose text-white/55">語りは贈り主へ自動で共有されません。</p>}
         <details className="mt-12 text-left text-sm text-white/75"><summary>今回の３つの語りを読み返す</summary>
@@ -703,23 +700,6 @@ function GuestTrialExperience() {
         <p className="mt-4 leading-loose text-[#455650]">このアカウントではBOOK制作を始めています。無料３問の語りは保存・置き換えせず、家族アプリの年輪から語りを追加できます。</p>
         <a href={savePeople.length === 1 ? `/app?person=${encodeURIComponent(savePeople[0].id)}&tab=ring` : '/app'}
           className="trial-book-open-button mt-9 flex min-h-14 items-center justify-center rounded-full bg-[#28473e] px-5 text-white">年輪を開く</a>
-      </main>}
-      {screen === 'ring_saved' && <main className="mx-auto max-w-md px-7 py-20 text-center">
-        <h1 className="text-2xl leading-relaxed">{savedPersonName}さんの「年輪」に保存しました</h1>
-        <p className="mt-6 leading-loose text-white/70">いつでも読み返し、声を聴き直せます。</p>
-        <a href={`/app?person=${encodeURIComponent(selectedSavePerson)}&tab=ring`}
-          className="mt-10 flex min-h-14 items-center justify-center rounded-full bg-[#e9e5d9] text-[#15243a]">年輪を開く</a>
-        <button type="button" onClick={openBookInformation} className="mt-5 min-h-14 w-full rounded-full border border-white/35">BOOKを詳しく見る</button>
-      </main>}
-      {screen === 'service' && <main className="px-7 py-14">
-        <button type="button" onClick={() => setScreen(serviceReturnScreen)} className="text-white/70">← 戻る</button>
-        <h1 className="mt-8 text-2xl leading-relaxed">たて糸♾️よこ糸BOOKについて</h1>
-        <p className="mt-6 leading-loose text-white/75">問いに答えながら人生をたどり、声と文章、写真を一冊のブックとWebブックに残せます。</p>
-        <img src="/site/hp-renewal/book-and-webbook-approved.png" alt="縦糸横糸ブックとWebブック" className="mt-8 w-full rounded-2xl" />
-        <p className="mt-8 leading-loose text-white/75">商品と金額は購入画面で確認できます。無料3問の語りは購入手続き中も保持され、新規購入が確定した物語に引き継ぎます。</p>
-        <a href={guestTrialPurchaseUrl()} className="mt-10 block w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-center text-[#15243a]">商品を選んで購入へ進む</a>
-        <button type="button" onClick={openExit} className="mt-5 w-full rounded-full border border-white/35 px-7 py-5">ここで終了する</button>
-        <button type="button" onClick={() => setScreen(serviceReturnScreen)} className="mt-6 flex min-h-11 w-full items-center justify-center text-sm text-[var(--book-muted)] underline">← 無料3問の結果に戻る</button>
       </main>}
       {screen === 'end_choice' && <main className="px-7 py-20 text-center">
         <h1 className="text-2xl">ここで終了する</h1>
