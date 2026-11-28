@@ -30,11 +30,11 @@ export function FamilyPowerLayoutControls({ desktop, mobile }) {
 export default function FamilyPowerHero({ desktop, mobile }) {
   return <section className="hp-family-power" id="top" aria-labelledby="hp-family-power-title"
     data-desktop-layout={desktop} data-mobile-layout={mobile}>
-    <h1 id="hp-family-power-title">自分のチカラだけで、<br />人生を生きていませんか？</h1>
+    <h1 id="hp-family-power-title">自分のチカラだけで<br />人生を生きていませんか？</h1>
     <div className="hp-family-power-copy">
-      <p>あなたには<br />まだ受け取っていないチカラがある。</p>
+      <p>あなたにはまだ<br />受け取っていないチカラがある。</p>
       <p>あなたが存在している奇跡。</p>
-      <p>親、祖父母、幾百、幾千ものご先祖さま。<br />誰一人が欠けても、今のあなたはいない。</p>
+      <p>両親、祖父母、幾百、幾千ものご先祖様。<br />誰一人が欠けても、あなたはいない。</p>
       <p>その大応援団を味方につけたとき</p>
       <p className="hp-family-power-close">人生は、新たな輝きを放ち<br />力強く動き始める。</p>
     </div>
