@@ -88,6 +88,44 @@
   height: auto;
 }
 
+.landing-site .hp-hero-nov8.hp-family-power-followup {
+  padding-top: 0;
+}
+
+.landing-site .hp-family-power-followup .hp-hero-body {
+  padding-top: 0;
+}
+
+@media (max-width: 900px) {
+  .landing-site .hp-hero-nov8.hp-family-power-followup {
+    display: block;
+    max-width: 850px;
+  }
+  .landing-site .hp-family-power-followup .hp-hero-body {
+    width: 100%;
+  }
+}
+
+@media (min-width: 901px) {
+  .landing-site .hp-hero-nov8.hp-family-power-followup .hp-hero-ease {
+    grid-row: 1;
+    margin-top: 0;
+  }
+  .landing-site .hp-hero-nov8.hp-family-power-followup .hp-hero-products {
+    grid-row: 1 / 3;
+    margin-top: 0;
+  }
+  .landing-site .hp-hero-nov8.hp-family-power-followup .hp-hero-benefits {
+    grid-row: 2;
+  }
+  .landing-site .hp-hero-nov8.hp-family-power-followup .hp-hero-start-actions {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    width: min(100%, 720px);
+    margin: 32px auto 0;
+  }
+}
+
 .hp-family-power-controls {
   display: flex;
   flex-wrap: wrap;
