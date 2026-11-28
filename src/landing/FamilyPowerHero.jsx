@@ -7,7 +7,7 @@ export function FamilyPowerWordmark() {
   </span>;
 }
 
-export function FamilyPowerLayoutControls({ desktop, mobile }) {
+export function FamilyPowerLayoutControls({ desktop, mobile, mobileViewport = false }) {
   const variants = [
     { device: 'PC', param: 'pc', selected: desktop, labels: ['本文と写真を横並び', '見出しを上段に'] },
     { device: 'スマートフォン', param: 'mobile', selected: mobile, labels: ['本文を先に', '写真を先に'] },
@@ -17,9 +17,10 @@ export function FamilyPowerLayoutControls({ desktop, mobile }) {
     {variants.map(({ device, param, selected, labels }) => <div key={param} aria-label={device} role="group">
       <span>{device}</span>
       {['a', 'b'].map((layout, index) => {
-        const params = new URLSearchParams({ 'family-power': '1', pc: desktop, mobile });
+        const params = new URLSearchParams({ 'family-power': '1', pc: desktop, mobile, device: param });
         params.set(param, layout);
-        return <a key={layout} href={`?${params}`} aria-current={selected === layout ? 'true' : undefined}>
+        const active = (mobileViewport ? param === 'mobile' : param === 'pc') && selected === layout;
+        return <a key={layout} href={`?${params}`} aria-current={active ? 'true' : undefined}>
           {layout.toUpperCase()} <span>{labels[index]}</span>
         </a>;
       })}

@@ -113,6 +113,27 @@
   text-underline-offset: 4px;
 }
 
+.hp-mobile-preview {
+  min-height: 100dvh;
+  padding-bottom: 20px;
+}
+
+.hp-mobile-preview > p {
+  margin-block: 12px;
+  text-align: center;
+  font: .875rem/1.5 "Noto Sans JP", sans-serif;
+}
+
+.hp-mobile-preview iframe {
+  display: block;
+  box-sizing: content-box;
+  width: 390px;
+  height: calc(100dvh - 120px);
+  min-height: 360px;
+  margin-inline: auto;
+  border: 1px solid #ced1c6;
+}
+
 @media (min-width: 821px) {
   .hp-family-power[data-desktop-layout="a"] {
     grid-template-rows: auto 1fr;

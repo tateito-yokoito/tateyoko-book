@@ -141,7 +141,7 @@ function ProductImageDialog({ product, close }) {
   </dialog>;
 }
 
-export default function LandingPage({ reviewOnly = false, heroLayout = 'integrated', compareFamilyPower = false }) {
+export default function LandingPage({ reviewOnly = false, heroLayout = 'integrated', compareFamilyPower = false, previewFrame = false, mobileViewport = false }) {
   const nov8Preview = true;
   const familyPower = !reviewOnly || compareFamilyPower;
   const previewParams = compareFamilyPower ? new URLSearchParams(window.location.search) : null;
@@ -181,7 +181,7 @@ export default function LandingPage({ reviewOnly = false, heroLayout = 'integrat
   return <div className="landing-site">
     <a className="hp-skip" href="#hp-main">本文へ移動</a>
     {reviewOnly && <div id="hp-review-notice" className="hp-preview-note" role="note">HP Preview <span>表示確認専用：登録・購入・ログイン・送信はできません。</span></div>}
-    {compareFamilyPower && <FamilyPowerLayoutControls desktop={desktopLayout} mobile={mobileLayout} />}
+    {compareFamilyPower && !previewFrame && <FamilyPowerLayoutControls desktop={desktopLayout} mobile={mobileLayout} mobileViewport={mobileViewport} />}
     {!nov8Preview && <div className="hp-monitor-strip" role="note" aria-label="モニター利用のご案内">
       <p><strong>正式リリース前</strong><span aria-hidden="true">｜</span>現在はモニター利用をご案内しています。</p>
       <button type="button" onClick={() => setMonitorApplicationOpen(true)}>モニター利用を申し込む <span aria-hidden="true">↗</span></button>

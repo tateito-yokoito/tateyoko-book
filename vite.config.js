@@ -1,12 +1,12 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   base: "/",
   build: {
     rollupOptions: {
-      input: {
+      input: mode === 'hp-preview' ? { hpPreview: 'hp-nov8-full-preview.html' } : {
         app: 'index.html',
         giftThreeQuestions: 'gift-three-questions.html',
         supportConsultation: 'support-consultation/index.html',
@@ -23,4 +23,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
