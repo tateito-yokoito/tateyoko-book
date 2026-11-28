@@ -57,7 +57,7 @@ export function guestTrialResumeUrl(location, session) {
   if (!/^[a-f0-9]{64}$/.test(session?.token || '')) throw new Error('再開URLを作成できません');
   const url = new URL('/', location.origin);
   url.searchParams.set('guest_trial', '1');
-  const personId = new URL(location.href).searchParams.get('person');
+  const personId = new URL(location.href || location.origin).searchParams.get('person');
   if (/^[0-9a-f-]{36}$/i.test(personId || '')) url.searchParams.set('person', personId);
   url.hash = `resume=${session.token}`;
   return url.toString();

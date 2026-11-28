@@ -98,13 +98,6 @@ export async function guestTrialBookStarted(client) {
   return data === true;
 }
 
-export async function linkGuestTrialRingBook(client, token, projectId) {
-  const { error } = await client.rpc('link_guest_trial_ring_book', {
-    input_token_hash:await tokenHash(token),input_project_id:projectId,
-  });
-  if (error) throw error;
-}
-
 export function trialPersonUrl(personId, location = window.location) {
   if (!uuidPattern.test(personId || '')) throw new Error('人物を確認できません。');
   const url = new URL('/',location.origin);

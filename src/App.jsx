@@ -2077,10 +2077,7 @@ async function loadUserQuestionSet(userId, foundationData = null) {
     query = query.eq("user_id", userId);
   }
 
-  const { data: userQuestions, error: uqError } = await query;
-
-  if (uqError) throw uqError;
-
+  let mainStarted = false;
   // A paid BOOK can adopt a matching Person story without copying it into an
   // independently editable answer. The server links only an empty question and
   // maintains its BOOK projection in the same transaction as future edits.
@@ -2091,25 +2088,38 @@ async function loadUserQuestionSet(userId, foundationData = null) {
     if (accessError) throw accessError;
     // The paid childhood question is locked until the existing explicit
     // introduction is complete. Loading a question set must not bypass it.
-    const mainStarted = !access?.policy_version || access.policy_version === 'legacy'
+    mainStarted = !access?.policy_version || access.policy_version === 'legacy'
       || Boolean(access.main_started_at);
+
     if (mainStarted) {
-      const { data: mappings, error: mappingError } = await supabaseClient
-        .from('person_story_question_map').select('book_question_id').eq('enabled', true);
-      if (mappingError) throw mappingError;
-      const mappedIds = new Set((mappings || []).map(item => item.book_question_id));
-      for (const row of userQuestions || []) {
-        if (!mappedIds.has(row.question_id)) continue;
-        const { data: link, error: linkError } = await supabaseClient.rpc('attach_person_story_to_book', {
-          input_project_id: projectId, input_user_question_id: row.id,
-        });
-        if (linkError) throw linkError;
-        if (link?.status === 'linked') {
-          row.status = 'answered';
-          row.answered_at ||= new Date().toISOString();
-        } else if (link?.status === 'conflict') {
-          console.warn('Person story and BOOK answer need individual conflict review', row.id);
+      const { error } = await supabaseClient.rpc('prepare_childhood_story_questions', { input_project_id:projectId });
+      if (error) throw error;
+    }
+  }
+  const { data: userQuestions, error: uqError } = await query;
+
+  if (uqError) throw uqError;
+
+  if (mainStarted) {
+    const { data: mappings, error: mappingError } = await supabaseClient
+      .from('person_story_question_map').select('book_question_id').eq('enabled', true);
+    if (mappingError) throw mappingError;
+    const mappedIds = new Set((mappings || []).map(item => item.book_question_id));
+    for (const row of userQuestions || []) {
+      if (!mappedIds.has(row.question_id)) continue;
+      const { data: link, error: linkError } = await supabaseClient.rpc('attach_person_story_to_book', {
+        input_project_id: projectId, input_user_question_id: row.id,
+      });
+      if (linkError) throw linkError;
+      if (link?.status === 'linked') {
+        row.status = 'answered';
+        row.answered_at ||= new Date().toISOString();
+        if (CHILDHOOD_TRIAL_QUESTIONS.some(question => question.id === row.question_id)) {
+          row.chapter = row.chapter_title_snapshot = '幼い頃';
+          row.meta_json = { ...row.meta_json, include_in_book_body:true };
         }
+      } else if (link?.status === 'conflict') {
+        console.warn('Person story and BOOK answer need individual conflict review', row.id);
       }
     }
   }
@@ -3240,6 +3250,7 @@ function App() {
   const [bookPhotoCorrectionOpen, setBookPhotoCorrectionOpen] = useState(false);
   const [bookPhotoFinishing, setBookPhotoFinishing] = useState(false);
   const [bookBackOriginIndex, setBookBackOriginIndex] = useState(null);
+  const [carriedReview, setCarriedReview] = useState(null);
   const [bookSavedAnswerReview, setBookSavedAnswerReview] = useState(null);
   const [bookVoiceCarryText, setBookVoiceCarryText] = useState(null);
   const bookPhotoDraftRef = useRef(null);
@@ -5266,7 +5277,7 @@ const resumeStagedRecording = async attempt => {
     let existingAudioPaths = [];
     if (attempt.mode !== 'initial') {
       const { data, error } = await supabaseClient.from('answers')
-        .select('id,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
+        .select('id,user_question_id,sequence_order,selected_style,transcript_essay,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
         .eq('id', attempt.answer_id).eq('user_id', user.id).single();
       if (error || !data) throw new Error('元の文章を確認できませんでした');
       answer = data;
@@ -5318,7 +5329,7 @@ const resumeLocalRecording = async draft => {
     let existingAudioPaths = [];
     if (draft.mode !== 'initial') {
       const { data, error } = await supabaseClient.from('answers')
-        .select('id,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
+        .select('id,user_question_id,sequence_order,selected_style,transcript_essay,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
         .eq('id', draft.answerId).eq('user_id', user.id).single();
       if (error || !data) throw new Error('元の文章を確認できませんでした');
       answer = data;
@@ -7741,16 +7752,17 @@ setScene(1);
             }
   };
 
-  const loadBookSavedAnswerReview = async question => {
+  const loadBookSavedAnswerReview = async (question, expectedAnswerId) => {
     if (!question || !user?.id || !bookProjectId || question.status !== 'answered') {
       setBookSavedAnswerReview(null);
       return;
     }
     const { data: answer, error } = await supabaseClient.from('answers')
-      .select('id,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
+      .select('id,user_question_id,sequence_order,selected_style,transcript_essay,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
       .eq('user_id', user.id).eq('book_project_id', bookProjectId)
       .eq('sequence_order', question.sequence_order).maybeSingle();
     if (error) throw error;
+    if (expectedAnswerId && answer?.id !== expectedAnswerId) throw new Error('保存済みの語りを確認できませんでした。');
     if (!answer) { setBookSavedAnswerReview(null); return; }
     const { data: assets, error: mediaError } = await supabaseClient.from('media_assets')
       .select('id,asset_type,storage_path').eq('answer_id', answer.id)
@@ -7763,9 +7775,20 @@ setScene(1);
       if (signedError) throw signedError;
       return { ...asset, url: data.signedUrl };
     }));
-    setBookSavedAnswerReview({ questionId: question.user_question_id, answer,
+    const review = { questionId: question.user_question_id, answer,
       photos: media.filter(item => item.asset_type === 'photo'),
-      audio: media.filter(item => item.asset_type === 'audio') });
+      audio: media.filter(item => item.asset_type === 'audio') };
+    setBookSavedAnswerReview(review);
+    return review;
+  };
+  const openCarriedAnswer = async (answerId, questionId) => {
+    const question = questionsDB.find(item => item.user_question_id === questionId);
+    try {
+      const review = await loadBookSavedAnswerReview(question, answerId);
+      if (!review) throw new Error('保存済みの問いを開けませんでした。');
+      setCarriedReview({ question, review, returnScene:scene });
+      setScene('carried_answer');
+    } catch (error) { alert(error.message || '語りを開けませんでした。'); }
   };
   const stepBookQuestion = async direction => {
     const nextIndex = progress.currentIndex + direction;
@@ -8710,7 +8733,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
           theme={STORY_THEMES[0]}
           isFirstTheme
           carriedTrial={{ client: supabaseClient, userId: user?.id, projectId: foundation?.project?.id }}
-          onReviewCarriedTrial={() => { setStoryPagesReturnScene('theme_intro'); setStoryPagesFocusAnswerId(null); setScene('story_pages'); }}
+          onReviewCarriedTrial={openCarriedAnswer}
           notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
           onChangeDelivery={() => {
             setNotificationSetupReturnScene("theme_intro");
@@ -8726,7 +8749,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
           theme={themeResumeContext.theme}
           questionNumber={themeResumeContext.questionNumber}
           carriedTrial={{ client: supabaseClient, userId: user?.id, projectId: foundation?.project?.id }}
-          onReviewCarriedTrial={() => { setStoryPagesReturnScene('theme_resume'); setStoryPagesFocusAnswerId(null); setScene('story_pages'); }}
+          onReviewCarriedTrial={openCarriedAnswer}
           onResume={resumeThemeQuestion}
           onHome={returnToHome}
         />
@@ -9637,6 +9660,16 @@ if (getProjectRoleInviteTokenFromUrl()) {
         </QuestionAnswerSurface>
       )}
 
+      {scene === 'carried_answer' && carriedReview && (
+        <Scene1_MyPage question={carriedReview.question} userName={user?.name}
+          lightMode savedAnswer={carriedReview.review}
+          storyProgress={{ currentIndex:Math.max(0, CHILDHOOD_TRIAL_QUESTIONS.findIndex(q => q.id === carriedReview.question.question_id)), total:3 }}
+          onBack={() => setScene(carriedReview.returnScene)}
+          savedFinishLabel="幼い頃に戻る" onSavedAnswerNext={() => setScene(carriedReview.returnScene)}
+          onWrite={() => setWritingQuestion(carriedReview.question)}
+          onAppendVoice={() => startEditRecording(carriedReview.review.answer, 'append',
+            carriedReview.review.audio.map(asset => asset.storage_path), carriedReview.returnScene)} />
+      )}
       {scene === 1 && (
         <Scene1_MyPage
           progress={progress}
@@ -9683,14 +9716,19 @@ if (getProjectRoleInviteTokenFromUrl()) {
           themeLabel={recordingSectionLabel(writingQuestion)}
           progressLabel={`${getMainStoryProgress(questionsDB, progress.currentIndex).currentIndex + 1} / ${getMainStoryProgress(questionsDB, progress.currentIndex).total}`}
           client={supabaseClient}
-          photos={bookPhotoEnabled ? bookAnswerPhotos : []}
+          photos={scene === 'carried_answer' ? carriedReview.review.photos : bookPhotoEnabled ? bookAnswerPhotos : []}
           photoSaveState={bookPhotoSaveState}
           onPhotoRetry={retryBookAnswerPhoto}
-          onPhoto={bookPhotoEnabled ? () => setBookPhotoCorrectionOpen(true) : null}
+          onPhoto={bookPhotoEnabled && scene !== 'carried_answer' ? () => setBookPhotoCorrectionOpen(true) : null}
           onClose={() => setWritingQuestion(null)}
           onVoice={carry => { setBookVoiceCarryText(carry); setWritingQuestion(null);
             resetVoiceData(); setScene(answerEntryScene("record", hasRecentMicCheck())); }}
-          onSaved={() => advanceAfterBookAnswer(writingQuestion)}
+          onSaved={async () => {
+            if (scene !== 'carried_answer') return advanceAfterBookAnswer(writingQuestion);
+            const review = await loadBookSavedAnswerReview(writingQuestion, carriedReview.review.answer.id);
+            setCarriedReview({ ...carriedReview, review });
+            setWritingQuestion(null);
+          }}
         />
       )}
 
@@ -9954,7 +9992,7 @@ onRetry={() => {
         <Scene_ThemeIntro
           theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1) || null}
           carriedTrial={{ client: supabaseClient, userId: user?.id, projectId: foundation?.project?.id }}
-          onReviewCarriedTrial={() => { setStoryPagesReturnScene('theme_intro'); setStoryPagesFocusAnswerId(null); setScene('story_pages'); }}
+          onReviewCarriedTrial={openCarriedAnswer}
           onBack={returnToCompletedTheme}
           notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
           onChangeDelivery={() => {
@@ -12487,7 +12525,7 @@ function CarriedChildhoodTrialNotice({ theme, carriedTrial, onReview }) {
     }
     let active = true;
     carriedTrial.client.from('answers')
-      .select('id,transcript_raw,transcript_readable,transcript_edited,meta_json')
+      .select('id,user_question_id,transcript_raw,transcript_readable,transcript_edited,meta_json')
       .eq('user_id', carriedTrial.userId)
       .eq('book_project_id', carriedTrial.projectId)
       .contains('meta_json', { guest_trial_version: 'childhood_v1' })
@@ -12506,9 +12544,9 @@ function CarriedChildhoodTrialNotice({ theme, carriedTrial, onReview }) {
     <div className="mt-3 space-y-3">{ordered.map(({ question, answer }) => <div key={answer.id} className="border-l border-amber-100/20 pl-3">
       <p className="text-xs leading-relaxed text-white/60">{question.content}</p>
       <p className="mt-1 text-sm leading-relaxed text-white/85">{(answer.transcript_edited || answer.transcript_readable || answer.transcript_raw || '').slice(0, 80)}{(answer.transcript_edited || answer.transcript_readable || answer.transcript_raw || '').length > 80 ? '…' : ''}</p>
+    <button type="button" onClick={() => onReview(answer.id, answer.user_question_id)} className="min-h-11 text-sm underline underline-offset-4">この語りを開く</button>
     </div>)}</div>
     <p className="mt-3 text-xs leading-loose text-white/55">このまま進んでも回答は消えません。</p>
-    <button type="button" onClick={onReview} className="mt-3 min-h-11 text-sm text-white/80 underline underline-offset-4">保存済みの語りを見る・編集する</button>
   </aside>;
 }
 
@@ -19097,6 +19135,8 @@ export function Scene1_MyPage({
   onPhotoFinish,
   photoFinishing = false,
   savedAnswer = null,
+  savedFinishLabel = "次の問いへ",
+  onAppendVoice,
   onSavedAnswerNext,
   onSkip,
   onEndToday
@@ -19127,7 +19167,8 @@ export function Scene1_MyPage({
         <AnswerReview body={savedAnswer.answer.transcript_edited || savedAnswer.answer.transcript_readable
           || savedAnswer.answer.transcript_clean || savedAnswer.answer.transcript_raw || savedAnswer.answer.snippet || ''}
           photos={savedAnswer.photos} audio={savedAnswer.audio}
-          showChoices={false} onFinish={onSavedAnswerNext} finishLabel="次の問いへ" canFinish>
+          showChoices={false} onFinish={onSavedAnswerNext} finishLabel={savedFinishLabel} canFinish>
+          {onAppendVoice && <button type="button" onClick={onAppendVoice} className="answer-light-secondary">少し語り足す</button>}
           {onWrite && <button type="button" onClick={onWrite} className="answer-light-secondary">文章を編集する</button>}
         </AnswerReview>
       </div> : brightAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice">

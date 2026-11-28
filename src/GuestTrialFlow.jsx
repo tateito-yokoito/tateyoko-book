@@ -700,7 +700,7 @@ function GuestTrialExperience() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
           <div className="w-full max-w-sm rounded-2xl bg-[var(--book-surface)] p-6 text-[var(--book-ink)]">
             <h2 id="trial-replace-title" className="text-xl font-semibold">無料3問を置き換えますか？</h2>
-            <p className="mt-4 text-sm leading-7">{savePeople.find(item => item.id === selectedSavePerson)?.display_name || 'この人'}さんの年輪にある無料3問の語りと添付を、今回の3問でまとめて置き換えます。以前の内容は元に戻せません。完成済みBOOKは変わりません。</p>
+            <p className="mt-4 text-sm leading-7">{savePeople.find(item => item.id === selectedSavePerson)?.display_name || 'この人'}さんの年輪にある無料3問の語りと添付画像を、今回の3問でまとめて置き換えます。以前の内容は元に戻せません。完成済みBOOKは変わりません。</p>
             <button type="button" disabled={busy} onClick={() => confirmRingSave(true)}
               className="trial-save-confirm-button mt-6 min-h-12 w-full rounded-full bg-[var(--book-primary)] text-white disabled:opacity-50">{busy ? '置き換えています…' : '3問を置き換える'}</button>
             <button type="button" disabled={busy} onClick={() => { setConfirmReplace(false); setError(''); }}

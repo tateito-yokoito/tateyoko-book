@@ -33,9 +33,7 @@ import { hasKanji, kanaFieldForName, normalizeKanaReading,
 import { publicDemoClient, publicDemoUser, publicDemoSessionId, publicDemoMemories,
   savePublicDemoMemory } from './lib/familyPlacePublicDemo.js';
 
-// TEST-only provisional prompts. The owner will select the final person-based
-// questions; this route remains disabled in production builds until then.
-const testQuestions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) =>
+const personTrialQuestions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) =>
   ({ id: question.id, slot: index + 1, text: question.content }));
 const BookPurchaseJourney = React.lazy(() => import('./BookPurchaseJourneyPreview.jsx'));
 const FamilyProductionEntry = React.lazy(() => import('./FamilyProductionEntry.jsx'));
@@ -1267,7 +1265,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories} bookStories={bookStories}
       ringStories={[
         ...stories.filter(row => Boolean(row.body || row.transcript_raw || row.media_count)).map(row => ({
-          source:'free', id:row.id, theme:'無料3問', question:row.question_text,
+          source:'free', id:row.id, theme:CHILDHOOD_TRIAL_QUESTIONS.some(q => q.id === row.question_key) ? '幼い頃' : '無料3問', question:row.question_text,
           body:row.body || row.transcript_readable || row.transcript_raw || '',
           visibility:row.visibility, revision:row.revision, hasAudio:row.has_audio,
           photoCount:row.photo_count,
@@ -1295,7 +1293,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       visibleBookProjects={visibleBookProjects} projectsStatus={projectsStatus}
       accountBookStarted={accountBookStarted}
       trialSavedNotice={trialSavedNotice}
-      facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
+      facts={familyPlaceTimeline(person,facts)} questions={personTrialQuestions} activeTab={activeTab}
       onTabChange={tab => { setTrialSavedNotice(false); setActiveTab(tab); }} onBack={personEntry === 'tree' ? returnToTree : goHome}
       backLabel={personEntry === 'tree' ? '家系図' : 'ホーム'} entryOrigin={personEntry}
       onProfile={() => startProfile()}

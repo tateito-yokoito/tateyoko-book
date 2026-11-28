@@ -330,16 +330,15 @@ export async function familyPlaceBookStories(client, personId, projects, freeSto
     : { data:[], error:null };
   if (legacyError) throw legacyError;
   const legacyById = new Map((legacyQuestions || []).map(question => [question.id,question]));
-  const freeKeys = new Set(freeStories.filter(story =>
-    story.body || story.transcript_raw || story.media_count).map(story => story.question_key));
-  const { data: mappings, error: mapError } = freeKeys.size
-    ? await client.from('person_story_question_map')
-      .select('story_question_key,book_question_id').eq('enabled', true)
-      .in('story_question_key', [...freeKeys])
-    : { data: [], error: null };
-  if (mapError) throw mapError;
-  const mirroredQuestions = new Set((mappings || []).map(map => map.book_question_id));
+  const freeIds = freeStories.filter(story => story.body || story.transcript_raw || story.media_count)
+    .map(story => story.id);
+  const { data: mirrors, error: mirrorError } = freeIds.length
+    ? await client.rpc('family_ring_mirrored_answers', { input_story_ids:freeIds })
+    : { data:[], error:null };
+  if (mirrorError) throw mirrorError;
+  const mirroredAnswers = new Set((mirrors || []).map(row => row.answer_id));
   return saved.flatMap(answer => {
+    if (mirroredAnswers.has(answer.id) && !answer.ring_edition) return [];
     if (answer.ring_edition) return [{
       id:answer.id, book_project_id:answer.book_project_id,
       question_text:answer.ring_edition.question_text,
@@ -362,8 +361,7 @@ export async function familyPlaceBookStories(client, personId, projects, freeSto
     const question = byId.get(answer.user_question_id);
     if (!question || (question.status !== 'answered' && !question.answered_at)
       || question.meta_json?.include_in_book_body === false
-      || question.meta_json?.include_in_book_body === 'false'
-      || mirroredQuestions.has(question?.question_id || answer.question_id)) return [];
+      || question.meta_json?.include_in_book_body === 'false') return [];
     return [{ id: answer.id, book_project_id: answer.book_project_id,
       question_text: question?.question_text_snapshot || question?.custom_question_text || '人生の語り',
       body: answer.transcript_edited || answer.transcript_readable || answer.transcript_clean,
