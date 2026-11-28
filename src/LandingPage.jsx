@@ -19,6 +19,7 @@ const TRIAL = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true'
 const PURCHASE = publicPurchaseHref;
 const GIFT_PURCHASE = PURCHASE;
 const COMPANY_SITE = "https://saltlight.co.jp/";
+const PRODUCT_DESCRIPTION = '声も残る、スマホで育つ人生史・家系図';
 const EMAIL = "sugawara@saltlight.co.jp";
 const GA4_MEASUREMENT_ID = import.meta.env.VITE_GA4_MEASUREMENT_ID;
 const GA4_CONFIGURED = /^G-[A-Z0-9]+$/.test(GA4_MEASUREMENT_ID || '');
@@ -184,7 +185,7 @@ export default function LandingPage({ reviewOnly = false }) {
     <header className="hp-header hp-family-power-header">
       <div className="hp-family-power-brand">
         <a href="#top"><FamilyPowerWordmark /></a>
-        <p>声も残る、スマホで育てる家系図・人生史</p>
+        <p>{PRODUCT_DESCRIPTION}</p>
       </div>
       <div className="hp-header-actions">
         <a href={reviewOnly ? "#hp-review-notice" : LOGIN}>無料で始める</a>
@@ -210,7 +211,7 @@ export default function LandingPage({ reviewOnly = false }) {
       <section className="hp-hero hp-shell hp-hero-integrated hp-hero-nov8 hp-family-power-followup" aria-labelledby="hp-product-name">
         <header className="hp-family-power-product">
           <h2 id="hp-product-name">たて糸♾️よこ糸BOOK</h2>
-          <p>声も残る、スマホで育てる家系図・人生史</p>
+          <p>{PRODUCT_DESCRIPTION}</p>
         </header>
         <div className="hp-hero-body">{nov8Preview ? <div className="hp-hero-offer">
           <p className="hp-hero-ease">スマホに届く質問に、つぶやくだけ。<br />人生の物語を、一冊の本とWebブックに。</p>
