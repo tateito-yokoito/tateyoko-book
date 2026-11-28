@@ -6,6 +6,8 @@ const origins = new Set([liveSite, 'https://tateito-yokoito.jp',
   'http://127.0.0.1:5177', 'http://127.0.0.1:5178',
   'http://localhost:5177', 'http://localhost:5178',
   Deno.env.get('GUEST_TRIAL_PREVIEW_ORIGIN') || liveSite]);
+if (Deno.env.get('SUPABASE_URL')?.includes('zpswxefgfabzvxdbtyvq'))
+  origins.add('https://tateyoko-book-test.vercel.app');
 const tokenPattern = /^[a-f0-9]{64}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const extensions: Record<string, string> = {
@@ -74,6 +76,10 @@ serve(async request => {
     if (trial.status === 'claimed') {
       if (trial.claimed_user_id !== userId || trial.claimed_project_id !== projectId)
         return respond({ error: 'この体験は別のアカウントに引き継がれています' }, 403);
+      const { error: linkError } = await admin.rpc('link_guest_trial_ring_book_service', {
+        input_token_hash:tokenHash,input_user_id:userId,input_project_id:projectId,
+      });
+      if (linkError) throw linkError;
       return respond({ status: 'claimed', projectId, count: 3 });
     }
     if (trial.status !== 'completed' || Date.parse(trial.expires_at) <= Date.now())
@@ -157,6 +163,10 @@ serve(async request => {
         return respond({ error: '既存の語りを守るため、引き継ぎを完了できませんでした。別の物語をご確認ください。' }, 409);
       throw claimError;
     }
+    const { error: linkError } = await admin.rpc('link_guest_trial_ring_book_service', {
+      input_token_hash:tokenHash,input_user_id:userId,input_project_id:projectId,
+    });
+    if (linkError) throw linkError;
     return respond({ status: 'claimed', projectId, count: claimed.count,
       audioCount: claimed.audio_count });
   } catch (error) {

@@ -1,0 +1,17 @@
+.question-copy-unit { white-space: nowrap; }
+.question-copy-phrase {
+  display: inline-block;
+  max-width: 100%;
+  white-space: normal;
+  line-break: strict;
+  overflow-wrap: anywhere;
+}
+
+/* Wrap guidance at Japanese phrase boundaries when the browser supports it. */
+.question-guidance-line {
+  white-space: pre-line;
+  line-break: strict;
+  word-break: normal;
+  word-break: auto-phrase;
+  text-wrap: pretty;
+}

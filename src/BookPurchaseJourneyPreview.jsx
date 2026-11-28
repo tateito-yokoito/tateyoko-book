@@ -5,7 +5,8 @@ import './book-purchase-journey-preview.css';
 
 // TEST-only visual journey. No project, order, payment, or auth handoff is created.
 export default function BookPurchaseJourneyPreview({ person, people = [], client, onBack, onTryFree,
-  livePurchase = false, checkoutProjectId = null, initialProjectId = null, onOpenProduction = null }) {
+  livePurchase = false, checkoutProjectId = null, initialProjectId = null, onOpenProduction = null,
+  selfPersonId = null }) {
   const [step, setStep] = useState(checkoutProjectId ? 'setup' : initialProjectId ? 'selection' : 'intro');
   const [selectedPerson, setSelectedPerson] = useState(person || null);
   const [chooseFor, setChooseFor] = useState('selection');
@@ -100,7 +101,8 @@ export default function BookPurchaseJourneyPreview({ person, people = [], client
 
     {step === 'selection' && <CommerceV2Purchase key="preview-selection" client={client}
       phase="selection" projectId={projectId} previewSubjectName={livePurchase ? null : subject}
-      familySubject={livePurchase ? { id:selectedPerson.id,name:subject } : null}
+      onSelectionBack={back}
+      familySubject={livePurchase ? { id:selectedPerson.id,name:subject,isSelf:selectedPerson.id===selfPersonId } : null}
       initialSelection={selection}
       onProceed={async value => {
         if (livePurchase) {
@@ -115,8 +117,9 @@ export default function BookPurchaseJourneyPreview({ person, people = [], client
 
     {step === 'review' && <CommerceV2Purchase key="preview-review" client={client}
       phase="review" previewSubjectName={livePurchase ? null : subject}
-      familySubject={livePurchase ? { id:selectedPerson.id,name:subject } : null}
+      familySubject={livePurchase ? { id:selectedPerson.id,name:subject,isSelf:selectedPerson.id===selfPersonId } : null}
       projectId={projectId} initialSelection={selection}
+      onSubjectNameConfirmed={name => setSelectedPerson(current => current ? {...current,display_name:name} : current)}
       onFamilyCheckoutCompleted={livePurchase ? () => setStep('setup') : null}
       onPreviewCheckout={() => setStep('payment')}
       onPreviewBack={() => setStep('selection')}/>}

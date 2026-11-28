@@ -1,0 +1,279 @@
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ChevronDown, ChevronLeft, ChevronRight, Ellipsis, LockKeyhole, Volume2 } from 'lucide-react';
+import { AnswerBodyEditor, AnswerEntryChoices, AnswerPhotoStrip } from './AnswerInputUI.jsx';
+import { AnswerPolishChoices, AnswerTextCandidate } from './AnswerTextShared.jsx';
+import { PhotoCorrectionFlow, Scene_Recording } from './App.jsx';
+import { STORY_PHOTO_LIMIT, storyPhotoLimitMessage } from './lib/storyPhotoLimit.js';
+import './family-ring-preview.css';
+
+// The same reading surface is used by the family app and its isolated review.
+export default function FamilyRingContent({ stories, canEdit = false, onSave, onLock,
+  onLoadMedia, onLoadListPhotos, onAddPhoto, onAddVoice, onPolish, onAddStory, onDetailChange,
+  questions = [], loading = false }) {
+  const [openTheme, setOpenTheme] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [media, setMedia] = useState([]);
+  const [listPhotos, setListPhotos] = useState({});
+  const [mediaError, setMediaError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [showQuestions, setShowQuestions] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const [stylesOpen, setStylesOpen] = useState(false);
+  const [candidate, setCandidate] = useState(null);
+  const [voiceReview, setVoiceReview] = useState(null);
+  const [voiceReviewUrl, setVoiceReviewUrl] = useState('');
+  const [pendingVoice, setPendingVoice] = useState(null);
+  const themes = [...new Set(stories.map(story => story.theme || 'その他の語り'))];
+  const orderedStories = themes.flatMap(theme => stories.filter(story => (story.theme || 'その他の語り') === theme));
+  const selectedIndex = selected ? orderedStories.findIndex(story => story.source === selected.source && story.id === selected.id) : -1;
+  const listScroll = useRef(0);
+  const restoreListScroll = useRef(false);
+  const mediaRequest = useRef(0);
+  const listPhotoLoader = useRef(onLoadListPhotos);
+  listPhotoLoader.current = onLoadListPhotos;
+  const activeTheme = selected ? '' : openTheme === '-' ? '' : openTheme || themes[0] || '';
+  const listPhotoRows = stories.filter(story =>
+    (story.theme || 'その他の語り') === activeTheme && story.photoCount > 0);
+  const listPhotoKey = `${activeTheme}:${listPhotoRows.map(story =>
+    `${story.source}-${story.id}-${story.photoCount}`).join('|')}`;
+  useEffect(() => {
+    let active = true;
+    let opened = [];
+    setListPhotos({});
+    if (listPhotoRows.length && listPhotoLoader.current) {
+      Promise.all(listPhotoRows.map(async story => {
+        try { return [story.id, await listPhotoLoader.current(story)]; }
+        catch { return [story.id, []]; }
+      })).then(entries => {
+        const photos = entries.flatMap(([,items]) => items);
+        if (!active) { revoke(photos); return; }
+        opened = photos;
+        setListPhotos(Object.fromEntries(entries));
+      });
+    }
+    return () => { active = false; revoke(opened); };
+  }, [listPhotoKey]);
+  useLayoutEffect(() => {
+    if (!restoreListScroll.current || selected) return;
+    restoreListScroll.current = false;
+    requestAnimationFrame(() => window.scrollTo({ top: listScroll.current, behavior: 'instant' }));
+  }, [selected]);
+  const revoke = items => items.forEach(item => { if (item.url?.startsWith('blob:')) URL.revokeObjectURL(item.url); });
+  useEffect(() => () => revoke(media), [media]);
+  useEffect(() => {
+    if (!voiceReview?.blob) { setVoiceReviewUrl(''); return; }
+    const url = URL.createObjectURL(voiceReview.blob);
+    setVoiceReviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [voiceReview?.blob]);
+  useEffect(() => {
+    if (!selected) return;
+    const latest = stories.find(story => story.source === selected.source && story.id === selected.id);
+    if (latest && !editing) setSelected(latest);
+  }, [stories]);
+  const openStory = async (story, keepListScroll = false) => {
+    const request = ++mediaRequest.current;
+    if (!keepListScroll) listScroll.current = window.scrollY;
+    setSelected(story); setEditing(false); setRecording(false); setPhotoOpen(false);
+    setCandidate(null); setVoiceReview(null); setPendingVoice(null); setStylesOpen(false); setMenuOpen(false); setMessage('');
+    onDetailChange?.(true);
+    setMediaError(''); setMedia([]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!onLoadMedia) return;
+    try {
+      const nextMedia = await onLoadMedia(story);
+      if (request === mediaRequest.current) setMedia(nextMedia);
+      else revoke(nextMedia);
+    } catch { if (request === mediaRequest.current) setMediaError('写真・音声を読み込めませんでした。'); }
+  };
+  const goBack = () => {
+    mediaRequest.current += 1;
+    setSelected(null); setEditing(false); setRecording(false); setPhotoOpen(false);
+    setCandidate(null); setVoiceReview(null); setPendingVoice(null); setMenuOpen(false); setMedia([]);
+    onDetailChange?.(false);
+    restoreListScroll.current = true;
+  };
+  const save = async () => {
+    if (!draft.trim() || !onSave || busy) return;
+    setBusy(true); setMessage('');
+    try {
+      const updated = await onSave(selected, draft.trim());
+      setSelected(updated || { ...selected, body: draft.trim() });
+      setEditing(false); setMessage('語りを更新しました。');
+    } catch (cause) { setMessage(cause.message || '保存できませんでした。'); }
+    finally { setBusy(false); }
+  };
+  const toggleLock = async () => {
+    if (!onLock || busy) return;
+    setBusy(true); setMenuOpen(false); setMessage('');
+    try {
+      const updated = await onLock(selected, selected.visibility !== 'private');
+      setSelected(updated || { ...selected, visibility: selected.visibility === 'private' ? 'family' : 'private' });
+      setMessage('公開範囲を更新しました。');
+    } catch (cause) { setMessage(cause.message || '公開範囲を変更できませんでした。'); }
+    finally { setBusy(false); }
+  };
+  const addPhoto = async file => {
+    if (!file || !onAddPhoto || busy) return;
+    if (media.filter(item => item.kind === 'photo').length >= STORY_PHOTO_LIMIT) {
+      setMessage(storyPhotoLimitMessage);
+      return;
+    }
+    setBusy(true); setMessage('');
+    try {
+      await onAddPhoto(selected,file);
+      setMedia(await onLoadMedia(selected));
+      setPhotoOpen(false);
+      setMessage('写真を追加しました。');
+    } catch (cause) { setMessage(cause.message || '写真を追加できませんでした。'); }
+    finally { setBusy(false); }
+  };
+  const polish = async style => {
+    setStylesOpen(false);
+    if (style === 'clean' || !onPolish || !draft.trim() || busy) return;
+    const original = draft;
+    setBusy(true); setMessage('');
+    try {
+      const text = await onPolish(selected, original, style);
+      if (!text?.trim()) throw new Error('文章を整えられませんでした。');
+      setCandidate({original,text:text.trim()});
+    } catch (cause) { setMessage(cause.message || '文章を整えられませんでした。元の文章は残っています。'); }
+    finally { setBusy(false); }
+  };
+  const analyzeVoice = async (blob, seconds) => {
+    if (!blob?.size || !onAddVoice || busy) return false;
+    setRecording(false); setPendingVoice({blob,seconds});
+    setBusy(true); setMessage('声を文字にしています…');
+    try {
+      const result = await onAddVoice(selected, blob, Math.round(seconds), { analyzeOnly:true });
+      setVoiceReview({ blob, seconds:Math.round(seconds), raw:result.raw,
+        readable:result.readable || result.raw, essay:result.essay || result.readable || result.raw,
+        style:'readable' });
+      setPendingVoice(null); setMessage('');
+      return true;
+    } catch (cause) {
+      setMessage(cause.message || '声を文字にできませんでした。録音をもう一度お試しください。');
+      return false;
+    } finally { setBusy(false); }
+  };
+  const addVoice = async (_transcript, seconds, _url, blob) => analyzeVoice(blob,seconds);
+  const confirmVoice = async () => {
+    if (!voiceReview || busy) return;
+    const voiceText = voiceReview.customText ?? (voiceReview.style === 'clean' ? voiceReview.raw
+      : voiceReview.style === 'essay' ? voiceReview.essay : voiceReview.readable);
+    const nextBody = [draft.trim(),voiceText.trim()].filter(Boolean).join('\n\n');
+    setBusy(true); setMessage('');
+    try {
+      const updated = await onAddVoice(selected,voiceReview.blob,voiceReview.seconds,
+        { body:nextBody, expectedRevision:selected.text_revision, locked:selected.visibility === 'private',
+          raw:voiceReview.raw,readable:voiceReview.readable,essay:voiceReview.essay,style:voiceReview.style });
+      setSelected(updated || {...selected,body:nextBody});
+      setDraft(nextBody);
+      setMedia(await onLoadMedia(selected));
+      setVoiceReview(null);
+      setEditing(false);
+      setMessage('声と語りを保存しました。');
+    } catch (cause) { setMessage(cause.message || '声を保存できませんでした。録音を残したまま、もう一度お試しください。'); }
+    finally { setBusy(false); }
+  };
+  if (recording && selected) return <div className="fp-ring-recorder"><Scene_Recording
+    question={{ content:selected.question, question_role:'story_question' }} lightMode
+    progress={{currentIndex:0,total:1}} userName="" autoStart={false}
+    preRecordNotice={selected.preview
+      ? '操作Previewです。録音は画面内だけで扱い、文字起こしは架空の表示例です。'
+      : '録音した声は、文字起こしと文章整形のため外部AIへ送信します。'}
+    onBack={() => setRecording(false)} onComplete={addVoice}/></div>;
+  return <div className="fp-ring-review">
+    {!selected ? <>
+      <div className="fp-ring-review-heading"><h2>これまでの語り</h2><p>テーマを開いて、語りを読み返す。</p></div>
+      {loading && <p className="fp-ring-message" role="status">語りを読み込んでいます。</p>}
+      {!loading && !stories.length && <div className="fp-person-story-empty">まだ語りはありません。<br/>声・文章・写真から、好きな方法で始められます。</div>}
+      <div className="fp-ring-themes">{themes.map((theme, index) => {
+        const rows = stories.filter(story => (story.theme || 'その他の語り') === theme);
+        const opened = openTheme ? openTheme === theme : index === 0;
+        return <section className="fp-ring-theme" key={theme}>
+          <button type="button" className="fp-ring-theme-toggle" aria-expanded={opened} onClick={() => setOpenTheme(opened ? '-' : theme)}>
+            <strong>{theme}<small>（{rows.length}）</small></strong><ChevronDown aria-hidden="true"/>
+          </button>
+          {opened && <div className="fp-ring-theme-rows">{rows.map(story => <button className="fp-ring-story-row" key={`${story.source}-${story.id}`} type="button" onClick={() => openStory(story)}>
+            <span><strong>{story.visibility === 'private' && <LockKeyhole size={14} aria-label="自分だけ"/>}{story.question}</strong><small className={story.hasAudio ? 'has-audio' : undefined}>{story.hasAudio && <Volume2 size={14} aria-label="音声あり"/>}{story.body || '写真・音声で残した語り'}</small>
+              {listPhotos[story.id]?.length > 0 && <span className="fp-ring-story-photos">
+                {listPhotos[story.id].map((photo,index) => <img key={photo.id} src={photo.url} alt={`語りに添えた写真 ${index+1}`} loading="lazy"/>)}
+                {story.photoCount > listPhotos[story.id].length && <span className="fp-ring-story-more">ほか{story.photoCount-listPhotos[story.id].length}枚</span>}
+              </span>}
+            </span><ChevronRight aria-hidden="true"/>
+          </button>)}</div>}
+        </section>;
+      })}</div>
+      {onAddStory && questions.length > 0 && <><button type="button" className="fp-ring-continue" onClick={() => setShowQuestions(value => !value)}>{stories.length ? '新しい語りを追加する' : '最初の語りを残す'} <ChevronDown size={18}/></button>
+        {showQuestions && <div className="fp-person-questions">{questions.map(question => <button type="button" key={question.id} onClick={() => onAddStory(question)}>{question.slot}問目：{question.text}<ChevronRight size={16}/></button>)}</div>}</>}
+    </> : <>
+      <div className="fp-ring-detail-top"><button type="button" onClick={goBack}><ChevronLeft size={20}/>年輪へ</button><span>{selected.theme}</span>
+        {canEdit && (onSave || onLock) && <div className="fp-ring-detail-menu"><button type="button" aria-label="語りの操作" aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}><Ellipsis/></button>
+          {menuOpen && <div role="menu">{onSave && <button type="button" role="menuitem" onClick={() => { setDraft(selected.body || ''); setCandidate(null); setEditing(true); setMenuOpen(false); }}>語りを編集</button>}
+            {onLock && <button type="button" role="menuitem" onClick={toggleLock}>{selected.visibility === 'private' ? 'ロックを外す' : '自分だけにロックする'}</button>}</div>}
+        </div>}
+      </div>
+      <nav className="fp-ring-story-navigation" aria-label="前後の語り">
+        <button type="button" disabled={selectedIndex <= 0} onClick={() => openStory(orderedStories[selectedIndex - 1], true)}>〈 前の語り</button>
+        <span>{selectedIndex + 1} / {orderedStories.length}</span>
+        <button type="button" disabled={selectedIndex < 0 || selectedIndex >= orderedStories.length - 1} onClick={() => openStory(orderedStories[selectedIndex + 1], true)}>次の語り 〉</button>
+      </nav>
+      {editing ? <div className="fp-ring-editor answer-light"><p className="fp-ring-editor-eyebrow">語りを編集</p><h2>{selected.question}</h2>
+        <p className="fp-ring-editor-note">思い出したことを、声や文章で書き足せます。</p>
+        <AnswerEntryChoices onVoice={onAddVoice ? () => setRecording(true) : null}
+          onWrite={() => document.querySelector('.fp-ring-editor .answer-body-editor')?.focus()}
+          onPhoto={onAddPhoto ? () => setPhotoOpen(true) : null}/>
+        {voiceReview ? <div className="fp-ring-voice-review">
+          <h3>声と文章を確認</h3>
+          <p>録音を文字にして、文章を整えました。選んでから保存できます。</p>
+          {voiceReviewUrl && <audio controls preload="none" src={voiceReviewUrl} aria-label="保存前の録音を再生"/>}
+          <div role="group" aria-label="語りの文章" className="fp-ring-voice-styles">
+            {[["clean","そのまま"],["readable","語り調"],["essay","作品調"]].map(([key,label]) =>
+              <button type="button" key={key} aria-pressed={voiceReview.style===key}
+                onClick={() => setVoiceReview({...voiceReview,style:key,customText:null})}>{label}</button>)}
+          </div>
+          <textarea className="fp-ring-voice-text" aria-label="声から作った文章を編集"
+            value={voiceReview.customText ?? (voiceReview.style === 'clean' ? voiceReview.raw
+              : voiceReview.style === 'essay' ? voiceReview.essay : voiceReview.readable)}
+            onChange={event => setVoiceReview({...voiceReview,customText:event.target.value})}/>
+          <button type="button" className="fp-ring-save" disabled={busy} onClick={confirmVoice}>{busy ? '保存しています…' : '声と語りを保存する'}</button>
+          <button type="button" className="fp-ring-cancel" disabled={busy} onClick={() => setVoiceReview(null)}>録音を破棄する</button>
+        </div> : candidate ? <AnswerTextCandidate candidate={candidate} light
+          onUse={() => { setDraft(candidate.text); setCandidate(null); }}
+          onDiscard={() => setCandidate(null)}/> : <>
+          <label className="fp-ring-editor-label" htmlFor="fp-ring-draft">語りの本文</label>
+          <AnswerBodyEditor id="fp-ring-draft" value={draft} onChange={setDraft} label="語りの本文" placeholder="ここに思い出を書く"/>
+          {onPolish && <div className="fp-ring-polish"><AnswerPolishChoices open={stylesOpen}
+            onToggle={() => setStylesOpen(value => !value)} onPolish={polish} busy={busy} disabled={!draft.trim()}/></div>}
+        </>}
+        <AnswerPhotoStrip photos={media.filter(item => item.kind === 'photo')}
+          onOpen={item => window.open(item.url, '_blank', 'noopener,noreferrer')}/>
+        {media.filter(item => item.kind === 'audio').map(item => <audio key={item.id} controls preload="none" src={item.url} aria-label="語りの音声"/>)}
+        {message && <p className="fp-ring-message" role="status">{message}</p>}
+        {pendingVoice && !busy && <button type="button" className="fp-ring-cancel"
+          onClick={() => analyzeVoice(pendingVoice.blob,pendingVoice.seconds)}>文字起こしを再試行する</button>}
+        {selected.completed && <p className="fp-ring-editor-caution">変更は年輪に保存されます。完成したBOOKの内容は変わりません。</p>}
+        {!voiceReview && <button type="button" className="fp-ring-save" disabled={!draft.trim() || busy || Boolean(candidate)} onClick={save}>{busy ? '保存しています…' : '変更を保存する'}</button>}
+        <button type="button" className="fp-ring-cancel" onClick={() => setEditing(false)}>キャンセル</button>
+        <PhotoCorrectionFlow open={photoOpen} awaitCompletion lightMode title="写真を切り抜き・補正"
+          onClose={() => setPhotoOpen(false)} onComplete={addPhoto}/>
+      </div> : <article className="fp-ring-detail">
+        <p className="fp-ring-detail-kicker">{selected.visibility === 'private' ? <><LockKeyhole size={16}/> 自分だけの語り</> : '家族と共有する語り'}</p>
+        <h2>{selected.question}</h2>{selected.body
+          ? <p className="fp-ring-detail-body">{selected.body}</p>
+          : <p className="fp-ring-detail-body">写真・音声で残した語りです。</p>}
+        {media.filter(item => item.kind === 'photo').map(item => <img key={item.id} className="fp-ring-detail-photo" src={item.url} alt="語りに添えられた写真"/>)}
+        {media.filter(item => item.kind === 'audio').map(item => <audio key={item.id} controls preload="none" src={item.url} aria-label="語りの音声"/>)}
+        {media.filter(item => item.kind === 'video').map(item => <video key={item.id} controls playsInline preload="metadata" src={item.url} aria-label="語りの動画"/>)}
+        {mediaError && <p className="fp-ring-message" role="alert">{mediaError}</p>}
+        {message && <p className="fp-ring-message" role="status">{message}</p>}
+      </article>}
+    </>}
+  </div>;
+}

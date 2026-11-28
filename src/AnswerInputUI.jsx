@@ -9,9 +9,9 @@ export function AnswerEntryChoices({ onVoice, onWrite, onPhoto, photoDisabled = 
   return <div className="answer-entry-choices" role="group" aria-label="回答方法">
     <button type="button" disabled={!onVoice} onClick={onVoice}><Mic aria-hidden="true"/>声で語る</button>
     <button type="button" disabled={!onWrite} onClick={onWrite}><Pencil aria-hidden="true"/>書き込む</button>
-    <button type="button" className="answer-entry-choices__photo" disabled={photoDisabled || !onPhoto} onClick={onPhoto}>
+    {onPhoto && <button type="button" className="answer-entry-choices__photo" disabled={photoDisabled} onClick={onPhoto}>
       <Camera aria-hidden="true"/>写真を添える
-    </button>
+    </button>}
   </div>;
 }
 export function AnswerPhotoStrip({ photos = [], onOpen, onRemove, label = '添えた写真' }) {
@@ -33,19 +33,26 @@ export function AnswerReview({ body = '', photos = [], audio = [], onOpenPhoto,
   return <div className="answer-review">
     {children}
     <AnswerPhotoStrip photos={photos} onOpen={onOpenPhoto} />
-    {(body.trim() || audio.length > 0) && <div className="answer-review__summary">
-      {body.trim() && <p>{body.slice(0, 180)}</p>}
-      {audio.map((item, index) => <audio key={item.id || index} src={item.url} controls />)}
-    </div>}
+    <AnswerSummary body={body} audio={audio} />
     {showChoices && <AnswerEntryChoices onVoice={onVoice} onWrite={onWrite} onPhoto={onPhoto} />}
     <AnswerSaveStatus state={saveState} onRetry={onRetry} hasContent={Boolean(body.trim() || photos.length || audio.length)} />
-    <button type="button" className="answer-review__finish" disabled={!canFinish} onClick={onFinish}>{finishLabel}</button>
+    <button type="button" className="answer-review__finish" disabled={!canFinish} onClick={onFinish} aria-label={finishLabel}>
+      <span style={{ color: '#fff', WebkitTextFillColor: '#fff' }}>{finishLabel}</span>
+    </button>
   </div>;
 }
 
-export function AnswerBodyEditor({ value, onChange, disabled = false, label = '回答の文章',
+export function AnswerSummary({ body = '', audio = [], previewLength = 180 }) {
+  if (!body.trim() && audio.length === 0) return null;
+  return <div className="answer-review__summary">
+      {body.trim() && <p>{body.slice(0, previewLength)}</p>}
+      {audio.map((item, index) => <audio key={item.id || index} src={item.url} controls />)}
+    </div>;
+}
+
+export function AnswerBodyEditor({ id, value, onChange, disabled = false, label = '回答の文章',
   placeholder = 'ここに思い出を書く', className = '' }) {
-  return <textarea aria-label={label} value={value} disabled={disabled}
+  return <textarea id={id} aria-label={label} value={value} disabled={disabled}
     onChange={event => onChange(event.target.value)} placeholder={placeholder}
     className={`answer-body-editor ${className}`} />;
 }

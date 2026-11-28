@@ -27,8 +27,18 @@
 .answer-review__summary{padding:14px 16px;border:1px solid var(--answer-line,var(--book-line, #c9cfc5));border-radius:10px;background:var(--answer-surface,var(--book-surface, #fffdf8));color:var(--answer-ink,var(--book-ink, #26352f));line-height:1.8}
 .answer-review__summary p{margin:0;white-space:pre-wrap}
 .answer-review__summary audio{display:block;width:100%;margin-top:8px}
-.answer-review__finish{width:100%;min-height:56px;border:0;border-radius:10px;background:var(--answer-green,var(--book-primary, #284c40));color:#fff;font-size:1rem;cursor:pointer}
+.answer-review__finish{width:100%;min-height:56px;border:0;border-radius:10px;background:var(--answer-green,var(--book-primary, #284c40));color:#fff;-webkit-text-fill-color:#fff;font-size:1rem;cursor:pointer}
 .answer-review__finish:disabled{opacity:.45;cursor:default}
+.answer-polish-choices{display:contents}
+.answer-polish-choices__styles{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.answer-polish-choices__styles button[aria-pressed="true"]{background:var(--book-question-surface,#f0f1eb);color:var(--book-primary,#284c40);-webkit-text-fill-color:var(--book-primary,#284c40)}
+.photo-correction-light.bg-slate-950,.photo-correction-light .bg-slate-950{background:#f7f6f1;color:#2c4334}
+.photo-correction-light .glass-card{background:#fffefa;border:1px solid #d5dfd2;box-shadow:none}
+.photo-correction-light [class*="text-white"]{color:#49624e!important}
+.photo-correction-light [class*="border-white"]{border-color:#cbd8c8!important}
+.photo-correction-light button.btn-quiet{background:#315b45!important;color:#fff!important;-webkit-text-fill-color:#fff}
+.photo-correction-light .text-narrative{font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN",sans-serif}
+.photo-correction-light button:not(.btn-quiet){font-family:"Noto Sans JP",sans-serif}
 @media(max-width:359px){.answer-entry-choices button{font-size:.92rem;gap:5px}}
 
 /* One light answer surface for the existing recorder in both products. */
@@ -44,8 +54,9 @@
 .answer-light-recorder .recording-action-button{background:var(--book-surface, #fffdf8);border-color:var(--book-line, #a6b7a9);color:var(--book-primary, #284c40)}
 .answer-light-recorder .recording-action-button--stop{background:var(--book-primary, #284c40);border-color:var(--book-primary, #284c40);color:#fff}
 .answer-light-recorder .recording-action-button:disabled{opacity:.55}
-.answer-light-recorder .sm-recording-countdown-dock{position:relative}
-.answer-light-recorder .sm-recording-countdown-number{position:absolute;left:0;right:0;bottom:100%;margin-bottom:4px;pointer-events:none;color:#9ba99b;font:normal 72px/1 'Noto Serif JP','Yu Mincho',serif;text-align:center}
+.answer-light-recorder .sm-recording-countdown-status{min-height:44px;gap:10px}
+.answer-light-recorder .sm-recording-countdown-number{color:var(--book-primary, #284c40);font:500 36px/1 'Noto Sans JP',sans-serif;font-variant-numeric:tabular-nums}
+.answer-light-recorder .sm-recording-countdown-status .sm-recording-countdown-label{color:var(--book-muted, #53665b);font:500 15px/1.5 'Noto Sans JP',sans-serif;letter-spacing:0}
 .answer-light-recorder .sm-recording-photos img{border:1px solid var(--book-line, #c4d2c5)}
 .answer-light-recorder .text-white\/38,.answer-light-recorder .text-white\/70{color:var(--book-muted, #53665b)}
 .answer-light-recorder .recording-control-dock--choice .answer-entry-choices{max-width:480px}
@@ -57,11 +68,16 @@
 .answer-text-layout--light .question-flow-top-bar{color:var(--book-primary, #3c584b)}
 .answer-text-layout--light .question-flow-top-bar button,.answer-text-layout--light .question-flow-top-bar span,.answer-text-layout--light .question-flow-top-bar p{color:var(--book-primary, #3c584b)}
 .answer-text-layout--light h2,.answer-text-layout--light h3{color:var(--book-ink, #26352f)}
+.answer-text-layout .answer-text-question{font-family:var(--book-display-font, 'Noto Serif JP', serif);font-weight:550;overflow:visible}
+.answer-text-guidance{margin:0 0 18px;text-align:center;font-family:'Noto Sans JP',sans-serif;font-size:.88rem;line-height:1.65;color:var(--book-muted, #53665b);flex-shrink:0}
+.answer-text-guidance p{margin:0}
+.answer-text-layout--light .answer-text-guidance{color:var(--book-muted, #53665b)}
 .answer-text-layout--light [class*="text-white"],.answer-text-layout--light [class*="text-amber"]{color:var(--book-muted, #53665b)}
 .answer-text-layout--light [class*="border-white"]{border-color:var(--book-line, #c9cfc5)}
 .answer-text-layout--light textarea{background:var(--book-surface, #fffdf8);border-color:var(--book-line, #aebdaf);color:var(--book-ink, #26352f)}
 .answer-text-layout--light button{color:var(--book-primary, #284c40)}
-.answer-text-layout--light button.bg-white{background:var(--book-primary, #284c40);color:#fff}
+.answer-text-layout--light button.bg-white{background:var(--book-primary, #284c40);color:#fff;-webkit-text-fill-color:#fff}
+.answer-text-layout--light button.answer-review__finish{color:#fff;-webkit-text-fill-color:#fff}
 .answer-text-layout--light [role="dialog"]>div{background:var(--book-surface, #fffdf8);color:var(--book-ink, #26352f)}
 .answer-text-layout--light [role="dialog"] button.bg-white{background:var(--book-primary, #284c40);color:#fff}
 
@@ -92,6 +108,7 @@
 .answer-voice-review .glass-card button.bg-white\/15{background:#e5ece4;border-color:var(--book-line, #72917f);color:var(--book-primary, #284c40)}
 .answer-voice-review .glass-card textarea{background:#eef2eb;border:1px solid var(--book-line, #a9bdab);border-radius:9px;padding:12px;color:var(--book-ink, #26352f)}
 .answer-voice-review button.btn-quiet,.answer-voice-review button.recording-start-bar{background:var(--book-primary, #284c40);color:#fff}
+:is(.app-container--book-light,.book-user-light) .answer-voice-review button.btn-quiet{color:var(--book-on-primary, #fff) !important}
 .answer-voice-review [role="status"]{color:var(--book-muted, #53665b)}
 .answer-voice-review [role="alert"]{color:var(--book-error, #8a392c)}
 

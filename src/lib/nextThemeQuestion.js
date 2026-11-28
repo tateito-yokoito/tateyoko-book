@@ -1,5 +1,12 @@
 export function nextThemeQuestion(questions, completedThemeOrder) {
-  const nextOrder = Number(completedThemeOrder) + 1;
+  const completedOrder = Number(completedThemeOrder);
+  const nextOrder = Math.min(...questions
+    .filter(question =>
+      Number(question?.theme_order) > completedOrder
+      && question?.question_role !== 'theme_extra'
+      && !['answered', 'skipped'].includes(question?.status))
+    .map(question => Number(question.theme_order)));
+  if (!Number.isFinite(nextOrder)) return null;
   const index = questions.findIndex(question =>
     Number(question?.theme_order) === nextOrder
     && question?.question_role !== 'theme_extra'

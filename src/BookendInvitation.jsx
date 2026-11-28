@@ -1,5 +1,6 @@
 import React from "react";
 import { Mic, Video } from "lucide-react";
+import { QuestionGuidanceLine } from "./QuestionCopy.jsx";
 import StorySkySurface from "./home/StorySkySurface.jsx";
 import { bookendPrompt } from "./lib/bookends.js";
 
@@ -22,7 +23,7 @@ export default function BookendInvitation({ kind, onVideo, onVoice, onSkip, busy
           <p className="text-[1.1rem] text-white/90">{prompt.text}</p>
         </div>
         <aside className="recording-question-hint" aria-label="ヒント">
-          <p>{prompt.hint}</p>
+          <QuestionGuidanceLine text={prompt.hint} />
         </aside>
       </div>
 

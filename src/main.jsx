@@ -35,6 +35,8 @@ const guestTrialEnabled = import.meta.env.VITE_GUEST_TRIAL_ENABLED === 'true';
 const GuestTrialFlow = guestTrialEnabled ? React.lazy(() => import('./GuestTrialFlow.jsx')) : null;
 const BookUiReview = import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
   ? React.lazy(() => import('./BookUiReview.jsx')) : null;
+const FamilyRingPreview = import.meta.env.VITE_PUBLIC_TEST_MODE === 'true'
+  ? React.lazy(() => import('./FamilyRingPreview.jsx')) : null;
 const FamilyPlaceApp = import.meta.env.DEV || import.meta.env.VITE_FAMILY_PLACE_ENABLED === 'true'
   ? React.lazy(() => import('./FamilyPlaceApp.jsx')) : null;
 
@@ -109,6 +111,9 @@ function PurchaseHandoffGate({ token }) {
 
 function RootScreen() {
   const params = new URLSearchParams(window.location.search);
+  if (FamilyRingPreview && (params.has('family_ring_review') || params.has('family_person_review'))) {
+    return <React.Suspense fallback={<p>年輪を準備しています…</p>}><FamilyRingPreview /></React.Suspense>;
+  }
   if (BookUiReview && params.has('book_ui_review')) {
     return <React.Suspense fallback={<p>画面を準備しています…</p>}><BookUiReview screen={params.get('book_ui_review')} /></React.Suspense>;
   }

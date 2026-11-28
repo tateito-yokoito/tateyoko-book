@@ -230,56 +230,245 @@ export async function familyPlaceStories(client, personId) {
   if (error) throw error;
   if (!data?.length) return [];
   const { data: media, error: mediaError } = await client.from('family_free_story_media')
-    .select('story_id').in('story_id', data.map(item => item.id));
+    .select('story_id,asset_type').in('story_id', data.map(item => item.id));
   if (mediaError) throw mediaError;
   const counts = new Map();
-  for (const item of media || []) counts.set(item.story_id, (counts.get(item.story_id) || 0) + 1);
-  return data.map(item => ({ ...item, media_count: counts.get(item.id) || 0 }));
+  const audioIds = new Set();
+  const photoCounts = new Map();
+  for (const item of media || []) {
+    counts.set(item.story_id, (counts.get(item.story_id) || 0) + 1);
+    if (item.asset_type === 'audio') audioIds.add(item.story_id);
+    if (item.asset_type === 'photo')
+      photoCounts.set(item.story_id, (photoCounts.get(item.story_id) || 0) + 1);
+  }
+  return data.map(item => ({ ...item, media_count: counts.get(item.id) || 0,
+    has_audio: audioIds.has(item.id), photo_count: photoCounts.get(item.id) || 0 }));
 }
 
 // Read only formally saved BOOK answers. The caller's BOOK RLS decides which
 // answers are visible; local recording and writing drafts are never queried.
-export async function familyPlaceBookStories(client, personId, projects, freeStories = []) {
-  const ids = (projects || []).filter(project => project.status === 'active'
-    && ['paid', 'gifted', 'legacy'].includes(project.access_status)).map(project => project.id);
+export async function familyPlaceBookStories(client, personId, projects, freeStories = [], publishedBooks = []) {
+  const ids = [...new Set([
+    ...(projects || []).filter(project => project.status === 'active'
+      && ['paid', 'gifted', 'legacy'].includes(project.access_status)).map(project => project.id),
+    ...publishedBooks.map(book => book.book_project_id).filter(Boolean),
+  ])];
   if (!ids.length) return [];
   const { data: answers, error } = await client.from('answers')
-    .select('id,book_project_id,user_question_id,question_id,sequence_order,transcript_edited,transcript_readable,transcript_clean,access_override')
+    .select('id,book_project_id,user_question_id,question_id,sequence_order,transcript_edited,transcript_readable,transcript_clean,access_override,selected_style,text_revision')
     .eq('subject_person_id', personId).in('book_project_id', ids)
     .order('sequence_order');
   if (error) throw error;
-  const saved = (answers || []).filter(answer =>
-    String(answer.transcript_edited || answer.transcript_readable || answer.transcript_clean || '').trim());
+  const { data: editions, error: editionError } = await client.rpc('family_ring_edited_stories', {
+    input_person_id: personId,
+  });
+  if (editionError) throw editionError;
+  const byAnswerId = new Map((answers || []).map(answer => [answer.id, answer]));
+  for (const edition of editions || []) {
+    if (!ids.includes(edition.book_project_id)) continue;
+    byAnswerId.set(edition.answer_id, {
+      ...byAnswerId.get(edition.answer_id), id:edition.answer_id,
+      book_project_id:edition.book_project_id, user_question_id:edition.question_id,
+      transcript_edited:edition.body,
+      access_override:edition.visibility === 'private' ? 'private_forever' : 'inherit',
+      text_revision:edition.revision, ring_edition:edition,
+    });
+  }
+  const mediaOnlyIds = [...byAnswerId.values()].filter(answer =>
+    !String(answer.transcript_edited || answer.transcript_readable || answer.transcript_clean || '').trim())
+    .map(answer => answer.id);
+  const mediaAnswerIds = new Set();
+  if (mediaOnlyIds.length) {
+    const [assetResult, videoResult, ringResult] = await Promise.all([
+      client.from('media_assets').select('answer_id').in('answer_id', mediaOnlyIds),
+      client.from('video_stories').select('source_answer_id').in('source_answer_id', mediaOnlyIds),
+      client.from('family_ring_story_media').select('answer_id').in('answer_id', mediaOnlyIds),
+    ]);
+    for (const result of [assetResult, videoResult, ringResult]) {
+      if (result.error) throw result.error;
+      for (const row of result.data || []) mediaAnswerIds.add(row.answer_id || row.source_answer_id);
+    }
+  }
+  const saved = [...byAnswerId.values()].filter(answer =>
+    String(answer.transcript_edited || answer.transcript_readable || answer.transcript_clean || '').trim()
+      || mediaAnswerIds.has(answer.id));
   if (!saved.length) return [];
+  const [mediaResult, ringMediaResult] = await Promise.all([
+    client.from('media_assets').select('answer_id,asset_type')
+      .in('answer_id', saved.map(answer => answer.id)),
+    client.from('family_ring_story_media').select('answer_id,storage_path')
+      .in('answer_id', saved.map(answer => answer.id)),
+  ]);
+  if (mediaResult.error) throw mediaResult.error;
+  if (ringMediaResult.error) throw ringMediaResult.error;
+  const audioAnswerIds = new Set();
+  const photoCounts = new Map();
+  for (const asset of mediaResult.data || []) {
+    if (asset.asset_type === 'audio') audioAnswerIds.add(asset.answer_id);
+    if (asset.asset_type === 'photo')
+      photoCounts.set(asset.answer_id, (photoCounts.get(asset.answer_id) || 0) + 1);
+  }
+  for (const asset of ringMediaResult.data || []) {
+    if (/\.(?:m4a|webm|aac|mp3|wav|ogg)$/i.test(asset.storage_path || ''))
+      audioAnswerIds.add(asset.answer_id);
+    else photoCounts.set(asset.answer_id, (photoCounts.get(asset.answer_id) || 0) + 1);
+  }
   const questionIds = [...new Set(saved.map(answer => answer.user_question_id).filter(Boolean))];
   const { data: questions, error: questionError } = questionIds.length
     ? await client.from('user_questions')
-      .select('id,question_id,question_text_snapshot,custom_question_text,status,answered_at,meta_json')
+      .select('id,question_id,question_text_snapshot,custom_question_text,chapter,status,answered_at,meta_json')
       .in('id', questionIds)
     : { data: [], error: null };
   if (questionError) throw questionError;
   const byId = new Map((questions || []).map(question => [question.id, question]));
-  const freeKeys = new Set(freeStories.filter(story =>
-    story.body || story.transcript_raw || story.media_count).map(story => story.question_key));
-  const { data: mappings, error: mapError } = freeKeys.size
-    ? await client.from('person_story_question_map')
-      .select('story_question_key,book_question_id').eq('enabled', true)
-      .in('story_question_key', [...freeKeys])
-    : { data: [], error: null };
-  if (mapError) throw mapError;
-  const mirroredQuestions = new Set((mappings || []).map(map => map.book_question_id));
+  const publishedIds = new Set(publishedBooks.map(book => book.book_project_id));
+  const legacyQuestionIds = [...new Set(saved.filter(answer =>
+    !answer.user_question_id && publishedIds.has(answer.book_project_id))
+    .map(answer => answer.question_id).filter(Boolean))];
+  const { data: legacyQuestions, error: legacyError } = legacyQuestionIds.length
+    ? await client.from('questions').select('id,chapter,content').in('id',legacyQuestionIds)
+    : { data:[], error:null };
+  if (legacyError) throw legacyError;
+  const legacyById = new Map((legacyQuestions || []).map(question => [question.id,question]));
+  const freeIds = freeStories.filter(story => story.body || story.transcript_raw || story.media_count)
+    .map(story => story.id);
+  const { data: mirrors, error: mirrorError } = freeIds.length
+    ? await client.rpc('family_ring_mirrored_answers', { input_story_ids:freeIds })
+    : { data:[], error:null };
+  if (mirrorError) throw mirrorError;
+  const mirroredAnswers = new Set((mirrors || []).map(row => row.answer_id));
   return saved.flatMap(answer => {
+    if (mirroredAnswers.has(answer.id) && !answer.ring_edition) return [];
+    if (answer.ring_edition) return [{
+      id:answer.id, book_project_id:answer.book_project_id,
+      question_text:answer.ring_edition.question_text,
+      body:answer.ring_edition.body,
+      visibility:answer.ring_edition.visibility,
+      chapter:answer.ring_edition.chapter,
+      text_revision:answer.ring_edition.revision,
+      selected_style:answer.selected_style || 'readable', sequence_order:answer.sequence_order,
+    }];
+    if (!answer.user_question_id && publishedIds.has(answer.book_project_id)) {
+      const question = legacyById.get(answer.question_id);
+      if (!question) return [];
+      return [{ id:answer.id, book_project_id:answer.book_project_id,
+        question_text:question.content, chapter:question.chapter || 'その他の語り',
+        body:answer.transcript_edited || answer.transcript_readable || answer.transcript_clean,
+        visibility:answer.access_override === 'private_forever' ? 'private' : 'family',
+        text_revision:answer.text_revision, selected_style:answer.selected_style,
+        sequence_order:answer.sequence_order }];
+    }
     const question = byId.get(answer.user_question_id);
     if (!question || (question.status !== 'answered' && !question.answered_at)
-      || question.meta_json?.onboarding_group === 'trial_experience'
       || question.meta_json?.include_in_book_body === false
-      || question.meta_json?.include_in_book_body === 'false'
-      || mirroredQuestions.has(question?.question_id || answer.question_id)) return [];
+      || question.meta_json?.include_in_book_body === 'false') return [];
     return [{ id: answer.id, book_project_id: answer.book_project_id,
       question_text: question?.question_text_snapshot || question?.custom_question_text || '人生の語り',
       body: answer.transcript_edited || answer.transcript_readable || answer.transcript_clean,
-      visibility: answer.access_override === 'private_forever' ? 'private' : 'family' }];
+      visibility: answer.access_override === 'private_forever' ? 'private' : 'family',
+      chapter: question.chapter || 'その他の語り',
+      text_revision: answer.text_revision, selected_style: answer.selected_style,
+      sequence_order: answer.sequence_order }];
+  }).map(row => ({ ...row, has_audio: audioAnswerIds.has(row.id),
+    photo_count: photoCounts.get(row.id) || 0 }));
+}
+
+// A signed URL outlives a privacy change. Keep media behind the current JWT
+// and release each browser object URL when the reading surface closes.
+export async function familyPlaceBookMedia(client, answerId, options = {}) {
+  const { data: assets, error } = await client.from('media_assets')
+    .select('id,answer_id,asset_type,storage_path').eq('answer_id', answerId);
+  if (error) throw error;
+  const { data: videos, error: videoError } = await client.from('video_stories')
+    .select('id,source_answer_id,video_storage_path,status')
+    .eq('source_answer_id', answerId);
+  if (videoError) throw videoError;
+  const { data: ringPhotos, error: ringPhotoError } = await client.from('family_ring_story_media')
+    .select('id,answer_id,storage_path').eq('answer_id', answerId);
+  if (ringPhotoError) throw ringPhotoError;
+  const sources = [
+    ...(assets || []).filter(item => ['photo','audio'].includes(item.asset_type))
+      .map(item => ({ id:item.id, kind:item.asset_type, bucket:item.asset_type === 'photo' ? 'photos' : 'audio', path:item.storage_path })),
+    ...(videos || []).filter(item => item.status === 'ready' && item.video_storage_path)
+      .map(item => ({ id:item.id, kind:'video', bucket:'videos', path:item.video_storage_path })),
+    ...(ringPhotos || []).map(item => ({ id:item.id,
+      kind:/\.(?:m4a|webm|aac|mp3|wav|ogg)$/i.test(item.storage_path || '') ? 'audio' : 'photo',
+      bucket:'family-ring-media', path:item.storage_path })),
+  ];
+  const selected = sources.filter(source => !options.kind || source.kind === options.kind)
+    .slice(0, options.limit || undefined);
+  const opened = [];
+  try {
+    for (const source of selected) {
+      const { data, error: downloadError } = await client.storage.from(source.bucket).download(source.path);
+      if (downloadError || !data) throw downloadError || new Error('メディアを開けませんでした');
+      opened.push({ ...source, url:URL.createObjectURL(data) });
+    }
+    return opened;
+  } catch (cause) {
+    revokeFamilyPlaceMediaUrls(opened);
+    throw cause;
+  }
+}
+
+export async function addFamilyRingPhoto(client, userId, story, personId, file) {
+  const mime = file.type.split(';')[0];
+  const ext = ({ 'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp' })[mime];
+  if (!ext || !file.size || file.size > 25 * 1024 * 1024)
+    throw new Error('JPEG・PNG・WebPの写真を25MB以内で選んでください。');
+  const path = `${userId}/${story.id}/${crypto.randomUUID()}.${ext}`;
+  const bucket = client.storage.from('family-ring-media');
+  const uploaded = await bucket.upload(path,file,{ contentType:mime,upsert:false });
+  if (uploaded.error) throw uploaded.error;
+  const { error } = await client.from('family_ring_story_media').insert({
+    answer_id:story.id, person_id:personId, storage_path:path, uploaded_by:userId,
   });
+  if (error) {
+    await bucket.remove([path]).catch(() => {});
+    throw error;
+  }
+}
+
+// A self-purchased BOOK has no family_subject_bindings row. Its answer photos
+// use the same media_assets/photos path as the BOOK editor, not family_uploads.
+export async function addPersonalBookStoryPhoto(client, user, story, person, file) {
+  const mime = file.type.split(';')[0];
+  const ext = ({ 'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp' })[mime];
+  if (!ext || !file.size || file.size > 25 * 1024 * 1024)
+    throw new Error('JPEG・PNG・WebPの写真を25MB以内で選んでください。');
+  const { data:answer, error:answerError } = await client.from('answers')
+    .select('id,user_id,book_project_id,subject_person_id')
+    .eq('id', story.id).maybeSingle();
+  if (answerError || !answer || answer.user_id !== user.id
+    || answer.book_project_id !== story.projectId
+    || answer.subject_person_id !== person.id)
+    throw new Error('本人の制作中BOOKの語りだけ写真を追加できます。');
+  const path = `${user.id}/${story.projectId}/${story.id}/photo-${crypto.randomUUID()}.${ext}`;
+  const bucket = client.storage.from('photos');
+  const uploaded = await bucket.upload(path,file,{ contentType:mime,upsert:false });
+  if (uploaded.error) throw uploaded.error;
+  const { error } = await client.from('media_assets').insert({
+    answer_id:story.id, user_id:user.id, family_id:person.family_id,
+    book_project_id:story.projectId, person_id:person.id,
+    asset_type:'photo', storage_path:path,
+    meta_json:{ source:'year_ring', content_type:mime },
+  });
+  if (error) {
+    await bucket.remove([path]).catch(() => {});
+    throw error;
+  }
+}
+
+export async function updateFamilyPlaceBookStory(client, story, body, locked) {
+  const { data, error } = await client.rpc('family_ring_update_book_story', {
+    input_answer_id: story.id,
+    input_expected_revision: story.text_revision,
+    input_body: body,
+    input_private: locked,
+  });
+  if (error || !data) throw error || new Error('語りを更新できませんでした。');
+  return { ...story, body:data.body, visibility:data.private ? 'private' : 'family',
+    text_revision:data.text_revision };
 }
 
 export async function getOrCreateFamilyPlaceStory(client, userId, person, question, visibility) {
@@ -325,14 +514,16 @@ export async function setFamilyPlaceStoryVisibility(client, story, visibility) {
   return data;
 }
 
-export async function familyPlaceMedia(client, storyId) {
+export async function familyPlaceMedia(client, storyId, options = {}) {
   const { data, error } = await client.from('family_free_story_media')
     .select('id,story_id,asset_type,storage_bucket,storage_path,duration_seconds,created_at')
     .eq('story_id', storyId).order('created_at');
   if (error) throw error;
+  const selected = (data || []).filter(item => !options.kind || item.asset_type === options.kind)
+    .slice(0, options.limit || undefined);
   const opened = [];
   try {
-    for (const item of data || []) {
+    for (const item of selected) {
       // Download through the caller's JWT each time. A signed URL would remain
       // usable after a key or collaborator permission changes.
       const downloaded = await client.storage.from(item.storage_bucket || 'family-free-media')

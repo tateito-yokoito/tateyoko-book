@@ -11,6 +11,8 @@ const allowedOrigins = new Set([
   'http://localhost:5177',
   'http://localhost:5178',
   Deno.env.get('GUEST_TRIAL_PREVIEW_ORIGIN') || LIVE_SITE,
+  ...(Deno.env.get('SUPABASE_URL')?.includes('zpswxefgfabzvxdbtyvq')
+    ? ['https://tateyoko-book-test.vercel.app'] : []),
 ]);
 const encoder = new TextEncoder();
 const trialIds = new Set([

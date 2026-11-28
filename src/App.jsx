@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { paidConversationIndex, paidOnboardingApplies, paidOnboardingCheckpoint, resolvePaidOnboardingScene } from './lib/paidOnboarding.js';
+import { getThemeResumeContext } from './lib/themeResumeContext.js';
 import { getActiveOnboardingRitualScene, onboardingSetupScenes, resolveOnboardingRitualEntryScene } from './lib/onboardingRitualResume.js';
 import { clearOnboardingNotificationDraft, clearOnboardingPreferenceDraft, clearOnboardingSharingDraft, draftTimestamp, readOnboardingNotificationDraft, readOnboardingPreferenceDraft, readOnboardingSharingDraft, writeOnboardingNotificationDraft, writeOnboardingPreferenceDraft, writeOnboardingSharingDraft } from './lib/onboardingPreferenceDraft.js';
 import ApprovedHome from './home/ApprovedHome.jsx';
@@ -8,6 +9,7 @@ import LineNotificationConnection from './LineNotificationConnection.jsx';
 import SupporterContextFrame from './SupporterContextFrame.jsx';
 import { canFinalizeBookAsSupportRole, supportRoleLabel } from './lib/supportRole.js';
 import { photoStoryAccess } from './lib/photoStoryAccess.js';
+import { STORY_PHOTO_LIMIT, storyPhotoLimitMessage } from './lib/storyPhotoLimit.js';
 import StorySkySurface, { PersistentStorySkyBackdrop } from './home/StorySkySurface.jsx';
 import { configureSkyClient } from './home/liveSkies.js';
 import './reading-flow.css';
@@ -32,12 +34,13 @@ import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
 import WrittenAnswerEditor from "./WrittenAnswerEditor.jsx";
 import { AnswerTextCandidate, AnswerTextFields, AnswerTextLayout } from "./AnswerTextShared.jsx";
+import { QuestionCopy, QuestionGuidanceLine, questionGuidance } from './QuestionCopy.jsx';
 import { AnswerEntryChoices, AnswerPhotoStrip, AnswerReview, AnswerSaveStatus } from './AnswerInputUI.jsx';
 import { BookAnswerPhotoDraft } from './lib/bookAnswerPhotoDraft.js';
 import { draftStorageKey } from './lib/answerTextDraft.js';
 import QuestionFlowTopBar from "./QuestionFlowTopBar.jsx";
 import { nextThemeQuestion } from "./lib/nextThemeQuestion.js";
-import { getFirstMainStoryIndex } from "./lib/firstMainStoryQuestion.js";
+import { getFirstMainStoryIndex, firstMainStoryTransitionState } from "./lib/firstMainStoryQuestion.js";
 import { deleteAnswerRecordingDraft, listAnswerRecordingDrafts, saveAnswerRecordingDraft } from './lib/answerRecordingDraft.js';
 import BookendInvitation from "./BookendInvitation.jsx";
 import { BOOKEND_PROMPTS, bookendKindForQuestion, bookendKindForVideo } from "./lib/bookends.js";
@@ -1247,52 +1250,6 @@ function hasCompletedStoryTheme(questionSet, themeOrder) {
   return questions.length > 0 && questions.every(isCompletedStoryQuestion);
 }
 
-function getThemeResumeContext(questionSet, currentIndex = 0) {
-  const storyQuestions = (questionSet || [])
-    .map((question, questionIndex) => ({ question, questionIndex }))
-    .filter(({ question }) =>
-      question?.include_in_story_list !== false &&
-      Number.isFinite(Number(question?.theme_order))
-    );
-
-  if (storyQuestions.length === 0) return null;
-
-  const indexedCurrentQuestion = storyQuestions.find(
-    ({ questionIndex }) => questionIndex === currentIndex
-  );
-  const resumeQuestion = indexedCurrentQuestion &&
-    !isCompletedStoryQuestion(indexedCurrentQuestion.question)
-    ? indexedCurrentQuestion
-    : storyQuestions.find(({ question }) => !isCompletedStoryQuestion(question));
-
-  if (!resumeQuestion) return null;
-
-  const themeOrder = Number(resumeQuestion.question.theme_order);
-  const questionsInTheme = storyQuestions.filter(
-    ({ question }) => Number(question.theme_order) === themeOrder
-  );
-  const questionNumber = questionsInTheme.findIndex(
-    ({ questionIndex }) => questionIndex === resumeQuestion.questionIndex
-  ) + 1;
-  const theme = STORY_THEMES.find(item => item.order === themeOrder) || {
-    label:
-      resumeQuestion.question?.theme_label ||
-      resumeQuestion.question?.chapter_label ||
-      "物語",
-    order: themeOrder,
-    summary: resumeQuestion.question?.chapter_description || "",
-    opening: "",
-    hint: resumeQuestion.question?.prompt_hint || "",
-    visual: "childhood"
-  };
-
-  return {
-    theme,
-    questionIndex: resumeQuestion.questionIndex,
-    questionNumber: Math.max(questionNumber, 1)
-  };
-}
-
 function getNotificationSchedules(preference) {
   if (!preference || preference.is_active === false) return [];
 
@@ -2120,10 +2077,7 @@ async function loadUserQuestionSet(userId, foundationData = null) {
     query = query.eq("user_id", userId);
   }
 
-  const { data: userQuestions, error: uqError } = await query;
-
-  if (uqError) throw uqError;
-
+  let mainStarted = false;
   // A paid BOOK can adopt a matching Person story without copying it into an
   // independently editable answer. The server links only an empty question and
   // maintains its BOOK projection in the same transaction as future edits.
@@ -2134,25 +2088,38 @@ async function loadUserQuestionSet(userId, foundationData = null) {
     if (accessError) throw accessError;
     // The paid childhood question is locked until the existing explicit
     // introduction is complete. Loading a question set must not bypass it.
-    const mainStarted = !access?.policy_version || access.policy_version === 'legacy'
+    mainStarted = !access?.policy_version || access.policy_version === 'legacy'
       || Boolean(access.main_started_at);
+
     if (mainStarted) {
-      const { data: mappings, error: mappingError } = await supabaseClient
-        .from('person_story_question_map').select('book_question_id').eq('enabled', true);
-      if (mappingError) throw mappingError;
-      const mappedIds = new Set((mappings || []).map(item => item.book_question_id));
-      for (const row of userQuestions || []) {
-        if (!mappedIds.has(row.question_id)) continue;
-        const { data: link, error: linkError } = await supabaseClient.rpc('attach_person_story_to_book', {
-          input_project_id: projectId, input_user_question_id: row.id,
-        });
-        if (linkError) throw linkError;
-        if (link?.status === 'linked') {
-          row.status = 'answered';
-          row.answered_at ||= new Date().toISOString();
-        } else if (link?.status === 'conflict') {
-          console.warn('Person story and BOOK answer need individual conflict review', row.id);
+      const { error } = await supabaseClient.rpc('prepare_childhood_story_questions', { input_project_id:projectId });
+      if (error) throw error;
+    }
+  }
+  const { data: userQuestions, error: uqError } = await query;
+
+  if (uqError) throw uqError;
+
+  if (mainStarted) {
+    const { data: mappings, error: mappingError } = await supabaseClient
+      .from('person_story_question_map').select('book_question_id').eq('enabled', true);
+    if (mappingError) throw mappingError;
+    const mappedIds = new Set((mappings || []).map(item => item.book_question_id));
+    for (const row of userQuestions || []) {
+      if (!mappedIds.has(row.question_id)) continue;
+      const { data: link, error: linkError } = await supabaseClient.rpc('attach_person_story_to_book', {
+        input_project_id: projectId, input_user_question_id: row.id,
+      });
+      if (linkError) throw linkError;
+      if (link?.status === 'linked') {
+        row.status = 'answered';
+        row.answered_at ||= new Date().toISOString();
+        if (CHILDHOOD_TRIAL_QUESTIONS.some(question => question.id === row.question_id)) {
+          row.chapter = row.chapter_title_snapshot = '幼い頃';
+          row.meta_json = { ...row.meta_json, include_in_book_body:true };
         }
+      } else if (link?.status === 'conflict') {
+        console.warn('Person story and BOOK answer need individual conflict review', row.id);
       }
     }
   }
@@ -3283,6 +3250,7 @@ function App() {
   const [bookPhotoCorrectionOpen, setBookPhotoCorrectionOpen] = useState(false);
   const [bookPhotoFinishing, setBookPhotoFinishing] = useState(false);
   const [bookBackOriginIndex, setBookBackOriginIndex] = useState(null);
+  const [carriedReview, setCarriedReview] = useState(null);
   const [bookSavedAnswerReview, setBookSavedAnswerReview] = useState(null);
   const [bookVoiceCarryText, setBookVoiceCarryText] = useState(null);
   const bookPhotoDraftRef = useRef(null);
@@ -3331,8 +3299,11 @@ function App() {
   const [recordingRecoveryBusy, setRecordingRecoveryBusy] = useState(false);
   const [recordingRecoveryError, setRecordingRecoveryError] = useState('');
   const [recordingRecoveryDismissed, setRecordingRecoveryDismissed] = useState(false);
+  const isObsoleteInitialRecording = attempt => attempt.mode === 'initial'
+    && questionsDB.some(question => Number(question.sequence_order) === Number(attempt.sequence_order ?? attempt.sequenceOrder)
+      && (question.status === 'answered' || Boolean(question.answered_at)));
   useEffect(() => {
-    if (!user?.id || !foundation?.project?.id) {
+    if (!user?.id || !foundation?.project?.id || questionsDB.length === 0) {
       setRecoverableRecordings([]);
       return undefined;
     }
@@ -3343,7 +3314,7 @@ function App() {
         .eq('user_id', user.id).eq('book_project_id', foundation.project.id)
         .eq('state', 'planned').order('created_at', { ascending: false }).limit(8);
       if (error || cancelled) return;
-      const available = await Promise.all((data || []).map(async attempt => {
+      const available = await Promise.all((data || []).filter(attempt => !isObsoleteInitialRecording(attempt)).map(async attempt => {
         const paths = attempt.storage_paths || [];
         if (!paths.length) return null;
         const urls = await Promise.all(paths.map(path => supabaseClient.storage
@@ -3354,18 +3325,18 @@ function App() {
       if (!cancelled) setRecoverableRecordings(available.filter(Boolean));
     })();
     return () => { cancelled = true; };
-  }, [user?.id, foundation?.project?.id, scene]);
+  }, [user?.id, foundation?.project?.id, scene, questionsDB]);
   useEffect(() => {
-    if (!user?.id || !foundation?.project?.id) {
+    if (!user?.id || !foundation?.project?.id || questionsDB.length === 0) {
       setLocalRecordingDrafts([]);
       return undefined;
     }
     let cancelled = false;
     listAnswerRecordingDrafts(user.id, foundation.project.id)
-      .then(drafts => { if (!cancelled) setLocalRecordingDrafts(drafts); })
+      .then(drafts => { if (!cancelled) setLocalRecordingDrafts(drafts.filter(draft => !isObsoleteInitialRecording(draft))); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [user?.id, foundation?.project?.id]);
+  }, [user?.id, foundation?.project?.id, questionsDB]);
   const journeyRef = useRef(null);
   if (!journeyRef.current) journeyRef.current = createSupportJourney(supabaseClient, {
     enabled: import.meta.env.VITE_SUPPORT_JOURNEY_ENABLED === 'true',
@@ -4770,7 +4741,9 @@ const handleRecordComplete = async (txt, dur, url, blob, details = {}) => {
         item.id !== voiceData.localRecordingDraftId)]);
     } catch (error) {
       console.error('local recording backup failed', error);
-      alert('この端末に録音の控えを保存できませんでした。サーバーへの保存が終わるまで画面を閉じないでください。');
+      // Private browsing can deny IndexedDB. Continue the server upload; its
+      // verified storage path can still be recovered after a reload.
+      nextVoiceData.localRecordingBackupUnavailable = true;
     }
   }
 
@@ -4950,8 +4923,12 @@ const handleTranscribeForReview = async (sourceVoiceData = voiceData) => {
   const telemetryQuestion = questionsDB[progress.currentIndex] || null;
   // A failed upload retries with new immutable paths; a transcription retry
   // reuses the already uploaded attempt and never uploads the same path twice.
-  const telemetryAttemptId = sourceVoiceData.transcriptionFailureStage === 'upload'
-    ? crypto.randomUUID() : sourceVoiceData.recordingAttemptId || crypto.randomUUID();
+  const retryingUploadedAttempt = sourceVoiceData.transcriptionFailureStage === 'transcription'
+    && sourceVoiceData.recordingAttemptId
+    && Array.isArray(sourceVoiceData.newAudioPaths)
+    && sourceVoiceData.newAudioPaths.length > 0;
+  const telemetryAttemptId = retryingUploadedAttempt
+    ? sourceVoiceData.recordingAttemptId : crypto.randomUUID();
   setVoiceData(prev => ({
     ...prev,
     transcriptionStatus: "processing",
@@ -5289,11 +5266,18 @@ const resumeStagedRecording = async attempt => {
     const questionIndex = questionsDB.findIndex(question =>
       Number(question.sequence_order) === Number(attempt.sequence_order));
     if (questionIndex < 0) throw new Error('この問いを確認できませんでした');
+    if (attempt.mode === 'initial') {
+      const { data: savedAnswer, error: savedAnswerError } = await supabaseClient.from('answers')
+        .select('id').eq('user_id', user.id).eq('book_project_id', foundation.project.id)
+        .eq('sequence_order', attempt.sequence_order).maybeSingle();
+      if (savedAnswerError) throw savedAnswerError;
+      if (savedAnswer) throw new Error('この問いは保存済みです。制作の続きから進めてください。');
+    }
     let answer = null;
     let existingAudioPaths = [];
     if (attempt.mode !== 'initial') {
       const { data, error } = await supabaseClient.from('answers')
-        .select('id,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
+        .select('id,user_question_id,sequence_order,selected_style,transcript_essay,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
         .eq('id', attempt.answer_id).eq('user_id', user.id).single();
       if (error || !data) throw new Error('元の文章を確認できませんでした');
       answer = data;
@@ -5345,7 +5329,7 @@ const resumeLocalRecording = async draft => {
     let existingAudioPaths = [];
     if (draft.mode !== 'initial') {
       const { data, error } = await supabaseClient.from('answers')
-        .select('id,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
+        .select('id,user_question_id,sequence_order,selected_style,transcript_essay,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
         .eq('id', draft.answerId).eq('user_id', user.id).single();
       if (error || !data) throw new Error('元の文章を確認できませんでした');
       answer = data;
@@ -6149,8 +6133,10 @@ const advanceAfterTheme = async order => {
     await beginBookend(kind, kind === "intro" ? "theme_intro" : "story_pages");
     return;
   }
-  if (order < STORY_THEMES.length) {
-    await savePendingThemeTransition(order, "intro");
+  const nextQuestion = nextThemeQuestion(questionsDB, order);
+  if (nextQuestion) {
+    const nextOrder = Number(questionsDB[nextQuestion.index]?.theme_order);
+    await savePendingThemeTransition(nextOrder - 1, "intro");
     setScene("theme_intro");
   } else {
     await savePendingThemeTransition(null);
@@ -6212,6 +6198,9 @@ const openFirstThemeIntroduction = async trialCarryDecision => {
         project: { ...current.project, trial_carry_decision: mainStart?.trial_carry_decision || null }
       } : current);
     }
+    // Ring answers become eligible at the main boundary. Load them before
+    // displaying childhood so this first visit also works without a reload.
+    setQuestionsDB(await loadUserQuestionSet(user.id, foundation));
     await updateOnboardingRitualStep("theme_intro");
     const {data:status,error}=await supabaseClient.rpc("journey_status",{p:foundation.project.id});
     if(error)throw error;
@@ -6492,7 +6481,12 @@ const leaveLifeOutlineMilestone = async ({ continueNow }) => {
           new Date().toISOString(),
         theme_guide_completed_at:
           foundation.project.theme_guide_completed_at || new Date().toISOString(),
-        onboarding_ritual_step: "completed"
+        onboarding_ritual_step: "completed",
+        // The first theme is now active. Keeping its intro transition would
+        // interpret a reload as an invitation to start theme 2 instead.
+        theme_experience_state: firstMainStoryTransitionState(
+          foundation.project.theme_experience_state
+        )
       })
       .eq("id", foundation.project.id)
       .select()
@@ -7761,16 +7755,17 @@ setScene(1);
             }
   };
 
-  const loadBookSavedAnswerReview = async question => {
+  const loadBookSavedAnswerReview = async (question, expectedAnswerId) => {
     if (!question || !user?.id || !bookProjectId || question.status !== 'answered') {
       setBookSavedAnswerReview(null);
       return;
     }
     const { data: answer, error } = await supabaseClient.from('answers')
-      .select('id,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
+      .select('id,user_question_id,sequence_order,selected_style,transcript_essay,transcript_edited,transcript_readable,transcript_clean,transcript_raw,snippet,text_revision')
       .eq('user_id', user.id).eq('book_project_id', bookProjectId)
       .eq('sequence_order', question.sequence_order).maybeSingle();
     if (error) throw error;
+    if (expectedAnswerId && answer?.id !== expectedAnswerId) throw new Error('保存済みの語りを確認できませんでした。');
     if (!answer) { setBookSavedAnswerReview(null); return; }
     const { data: assets, error: mediaError } = await supabaseClient.from('media_assets')
       .select('id,asset_type,storage_path').eq('answer_id', answer.id)
@@ -7783,9 +7778,20 @@ setScene(1);
       if (signedError) throw signedError;
       return { ...asset, url: data.signedUrl };
     }));
-    setBookSavedAnswerReview({ questionId: question.user_question_id, answer,
+    const review = { questionId: question.user_question_id, answer,
       photos: media.filter(item => item.asset_type === 'photo'),
-      audio: media.filter(item => item.asset_type === 'audio') });
+      audio: media.filter(item => item.asset_type === 'audio') };
+    setBookSavedAnswerReview(review);
+    return review;
+  };
+  const openCarriedAnswer = async (answerId, questionId) => {
+    const question = questionsDB.find(item => item.user_question_id === questionId);
+    try {
+      const review = await loadBookSavedAnswerReview(question, answerId);
+      if (!review) throw new Error('保存済みの問いを開けませんでした。');
+      setCarriedReview({ question, review, returnScene:scene });
+      setScene('carried_answer');
+    } catch (error) { alert(error.message || '語りを開けませんでした。'); }
   };
   const stepBookQuestion = async direction => {
     const nextIndex = progress.currentIndex + direction;
@@ -8228,6 +8234,17 @@ if (getProjectRoleInviteTokenFromUrl()) {
                 ? "trial_expired"
                 : hasCompletedFreeTrial(questionsDB) ? "trial_complete" : 0);
             }} /> : <PurchaseSelectionEntry client={supabaseClient} projectId={foundation?.project?.id}
+              onBack={() => {
+                const url = new URL(window.location.href);
+                if (url.searchParams.get('guest_trial_claim') === '1') {
+                  window.location.assign('/?guest_trial=1');
+                  return;
+                }
+                url.searchParams.delete('entry');
+                url.searchParams.delete('purchase_review');
+                window.history.replaceState({}, '', url);
+                setScene('home');
+              }}
               projectAccessStatus={foundation?.project?.access_status}
               initialOrderType={purchaseFor}
               familyInvitation={commerceV2Invitation || receivedFamilyInvitation}
@@ -8719,7 +8736,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
           theme={STORY_THEMES[0]}
           isFirstTheme
           carriedTrial={{ client: supabaseClient, userId: user?.id, projectId: foundation?.project?.id }}
-          onReviewCarriedTrial={() => { setStoryPagesReturnScene('theme_intro'); setStoryPagesFocusAnswerId(null); setScene('story_pages'); }}
+          onReviewCarriedTrial={openCarriedAnswer}
           notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
           onChangeDelivery={() => {
             setNotificationSetupReturnScene("theme_intro");
@@ -8735,7 +8752,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
           theme={themeResumeContext.theme}
           questionNumber={themeResumeContext.questionNumber}
           carriedTrial={{ client: supabaseClient, userId: user?.id, projectId: foundation?.project?.id }}
-          onReviewCarriedTrial={() => { setStoryPagesReturnScene('theme_resume'); setStoryPagesFocusAnswerId(null); setScene('story_pages'); }}
+          onReviewCarriedTrial={openCarriedAnswer}
           onResume={resumeThemeQuestion}
           onHome={returnToHome}
         />
@@ -9211,6 +9228,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
       {scene === "family_story_payment_review" && familyPaymentInvitation && (
         COMMERCE_V2_ENABLED ?
         <PurchaseSelectionEntry client={supabaseClient} projectId={foundation?.project?.id}
+          onBack={() => {setFamilyPaymentInvitation(null);setScene('home');}}
           initialOrderType="gift" familyInvitation={familyPaymentInvitation} /> :
         TRIAL_CONVERSION_ENABLED && familyPaymentInvitation.pricing_policy_version === '2.0' ?
         <TrialGiftPurchaseReview key={familyPaymentInvitation.id} client={supabaseClient}
@@ -9633,21 +9651,34 @@ if (getProjectRoleInviteTokenFromUrl()) {
         />
       )}
       {scene === "recording_mic_check" && (
-        <Scene_DailyMicCheck
-          onComplete={({ verified }) => {
+        <QuestionAnswerSurface question={currentQ} userName={user?.name || "あなた"}
+          storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
+          brightAnswer onBack={() => setScene(1)}
+          photos={<RecordingReferencePhotos urls={bookAnswerPhotos.map(photo => photo.url)} />}>
+          <Scene_DailyMicCheck inline onComplete={({ verified }) => {
             if (verified) markMicCheckDone();
             resetVoiceData();
             setScene(3);
-          }}
-        />
+          }} />
+        </QuestionAnswerSurface>
       )}
 
+      {scene === 'carried_answer' && carriedReview && (
+        <Scene1_MyPage question={carriedReview.question} userName={user?.name}
+          lightMode sectionLabel="幼い頃" savedAnswer={carriedReview.review}
+          storyProgress={{ currentIndex:Math.max(0, CHILDHOOD_TRIAL_QUESTIONS.findIndex(q => q.id === carriedReview.question.question_id)), total:3 }}
+          onBack={() => setScene(carriedReview.returnScene)}
+          savedFinishLabel="幼い頃に戻る" onSavedAnswerNext={() => setScene(carriedReview.returnScene)}
+          onWrite={() => setWritingQuestion(carriedReview.question)}
+          onAppendVoice={() => startEditRecording(carriedReview.review.answer, 'append',
+            carriedReview.review.audio.map(asset => asset.storage_path), carriedReview.returnScene)} />
+      )}
       {scene === 1 && (
         <Scene1_MyPage
           progress={progress}
           storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
           question={currentQ}
-          lightMode={hasFullProjectAccess(foundation?.project)}
+          lightMode={hasFullProjectAccess(foundation?.project) || currentQ?.onboarding_group === 'trial_experience'}
           userName={user?.name || "あなた"}
           onBack={() => bookPhotoEnabled && progress.currentIndex > 0
             ? void stepBookQuestion(-1)
@@ -9682,31 +9713,37 @@ if (getProjectRoleInviteTokenFromUrl()) {
           userId={user.id}
           projectId={foundation.project.id}
           question={writingQuestion}
-          lightMode={hasFullProjectAccess(foundation?.project)}
+          lightMode={hasFullProjectAccess(foundation?.project) || writingQuestion?.onboarding_group === 'trial_experience'}
           answer={bookSavedAnswerReview?.questionId === writingQuestion.user_question_id
             ? bookSavedAnswerReview.answer : null}
-          themeLabel={recordingSectionLabel(writingQuestion)}
-          progressLabel={`${getMainStoryProgress(questionsDB, progress.currentIndex).currentIndex + 1} / ${getMainStoryProgress(questionsDB, progress.currentIndex).total}`}
+          themeLabel={scene === 'carried_answer' ? '幼い頃' : recordingSectionLabel(writingQuestion)}
+          progressLabel={scene === 'carried_answer' ? carriedReview.question.progress_label || '幼い頃' : `${getMainStoryProgress(questionsDB, progress.currentIndex).currentIndex + 1} / ${getMainStoryProgress(questionsDB, progress.currentIndex).total}`}
           client={supabaseClient}
-          photos={bookPhotoEnabled ? bookAnswerPhotos : []}
+          photos={scene === 'carried_answer' ? carriedReview.review.photos : bookPhotoEnabled ? bookAnswerPhotos : []}
           photoSaveState={bookPhotoSaveState}
           onPhotoRetry={retryBookAnswerPhoto}
-          onPhoto={bookPhotoEnabled ? () => setBookPhotoCorrectionOpen(true) : null}
+          onPhoto={bookPhotoEnabled && scene !== 'carried_answer' ? () => setBookPhotoCorrectionOpen(true) : null}
           onClose={() => setWritingQuestion(null)}
           onVoice={carry => { setBookVoiceCarryText(carry); setWritingQuestion(null);
             resetVoiceData(); setScene(answerEntryScene("record", hasRecentMicCheck())); }}
-          onSaved={() => advanceAfterBookAnswer(writingQuestion)}
+          onSaved={async () => {
+            if (scene !== 'carried_answer') return advanceAfterBookAnswer(writingQuestion);
+            const review = await loadBookSavedAnswerReview(writingQuestion, carriedReview.review.answer.id);
+            setCarriedReview({ ...carriedReview, review });
+            setWritingQuestion(null);
+          }}
         />
       )}
 
       {scene === 3 && (
 <Scene_Recording
   question={currentQ}
-  lightMode={hasFullProjectAccess(foundation?.project)}
+  lightMode={hasFullProjectAccess(foundation?.project) || currentQ?.onboarding_group === 'trial_experience'}
   progress={progress}
   storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
   userName={user?.name || "あなた"}
   autoStart
+  pairedQuestion
   referencePhotos={bookAnswerPhotos.map(photo => photo.url)}
   onBack={() => setScene(1)}
   registerExitGuard={guard => { recordingExitGuardRef.current = guard; }}
@@ -9725,7 +9762,7 @@ onComplete={handleRecordComplete}
   canCommitMedia={!bookPhotoEnabled || (bookPhotoSaveState !== 'failed' && bookPhotoSaveState !== 'saving')}
   photoSaveState={bookPhotoSaveState}
   onPhotoRetry={retryBookAnswerPhoto}
-  light={hasFullProjectAccess(foundation?.project) || currentQ?.onboarding_group !== 'trial_experience'}
+  light
   isLifeOutline={currentQ?.onboarding_group === "life_outline"}
   isLastLifeOutline={
     currentQ?.onboarding_group === "life_outline" &&
@@ -9958,7 +9995,7 @@ onRetry={() => {
         <Scene_ThemeIntro
           theme={STORY_THEMES.find(theme => theme.order === completedThemeOrder + 1) || null}
           carriedTrial={{ client: supabaseClient, userId: user?.id, projectId: foundation?.project?.id }}
-          onReviewCarriedTrial={() => { setStoryPagesReturnScene('theme_intro'); setStoryPagesFocusAnswerId(null); setScene('story_pages'); }}
+          onReviewCarriedTrial={openCarriedAnswer}
           onBack={returnToCompletedTheme}
           notificationLabel={formatNextNotificationLabel(notificationPref, new Date(), Boolean(user?.email))}
           onChangeDelivery={() => {
@@ -10260,7 +10297,7 @@ function Scene_TokenInvalid({ onBack, issue = "invalid", onRetry }) {
 
 
 export function Scene_Login({ onLogin, giftPreview, familyInvitePreview,
-  existingAccountOnly = false, familyPlaceLogin = false }) {
+  existingAccountOnly = false, familyPlaceLogin = false, familyTrialSave = false }) {
   const supporterInvitationUrl = getSupporterInvitationUrlFromCurrentLocation();
   const authReturnUrl = getAuthReturnUrlFromCurrentLocation();
   const isSupporterInviteLogin = Boolean(supporterInvitationUrl);
@@ -10711,7 +10748,7 @@ if (isNewMode) {
               </>
             ) : familyPlaceLogin ? (
               <>
-                <p className="text-[1.1rem] text-white/90">家族の物語をはじめる</p>
+                <p className="text-[1.1rem] text-white/90">{familyTrialSave ? "語りを家族アプリに保存する" : "家族の物語をはじめる"}</p>
                 <p className="text-white/55 text-[0.95rem] leading-loose">
                   はじめての方も、以前に利用した方も、同じアカウントで続けられます。
                 </p>
@@ -10741,7 +10778,7 @@ if (isNewMode) {
               disabled={loading}
               className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
             >
-              {isFamilyInviteEntry ? "招待を受け取る" : isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
+              {isFamilyInviteEntry ? "招待を受け取る" : isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : familyTrialSave ? "新規登録" : "はじめて利用する"}
             </button>}
 
             <button
@@ -10750,7 +10787,7 @@ if (isNewMode) {
               disabled={loading}
               className="w-full py-4 rounded-full border border-white/10 text-white/65 text-sm"
             >
-              {isFamilyInviteEntry || isGiftEntry ? "登録済みの方はこちら" : isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
+              {isFamilyInviteEntry || isGiftEntry ? "登録済みの方はこちら" : isTrialEntry ? "体験の続きを開く" : familyTrialSave ? "既存アカウントでログイン" : "前回の続きを開く"}
             </button>
 
             {isDevMode() && (
@@ -10771,7 +10808,7 @@ if (isNewMode) {
         <div className="w-full max-w-[320px] space-y-8 py-10 fade-enter">
           <div className="space-y-4 text-narrative">
             <p className="text-[1.1rem] text-white/90">
-              {isFamilyInviteEntry ? "招待を受け取る" : isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
+              {isFamilyInviteEntry ? "招待を受け取る" : isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : familyTrialSave ? "新規登録" : "はじめて利用する"}
             </p>
 
             <p className="ui-small">
@@ -10849,7 +10886,7 @@ if (isNewMode) {
           <div className="space-y-4 text-narrative">
             <p className="text-[1.1rem] text-white/90">
               {familyPlaceLogin ? '家族のチカラを開く'
-                : isGiftEntry ? "贈りものを開く" : isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
+                : isGiftEntry ? "贈りものを開く" : isTrialEntry ? "体験の続きを開く" : familyTrialSave ? "既存アカウントでログイン" : "前回の続きを開く"}
             </p>
 
             <p className="ui-small">
@@ -12338,8 +12375,8 @@ function ThemeDeliveryChoices({ theme, notificationLabel, onChangeDelivery, onWa
 function ThemeResumeAction({ questionNumber, onResume }) {
   const normalizedQuestionNumber = Math.max(Number(questionNumber) || 1, 1);
   const label = normalizedQuestionNumber === 1
-    ? "1問目から始める"
-    : `${normalizedQuestionNumber}問目から再開する`;
+    ? "テーマ内の1問目から始める"
+    : `テーマ内の${normalizedQuestionNumber}問目から再開する`;
 
   return (
     <div className="mt-5 border-t border-white/[0.08] pt-5">
@@ -12491,7 +12528,7 @@ function CarriedChildhoodTrialNotice({ theme, carriedTrial, onReview }) {
     }
     let active = true;
     carriedTrial.client.from('answers')
-      .select('id,transcript_raw,transcript_readable,transcript_edited,meta_json')
+      .select('id,user_question_id,transcript_raw,transcript_readable,transcript_edited,meta_json')
       .eq('user_id', carriedTrial.userId)
       .eq('book_project_id', carriedTrial.projectId)
       .contains('meta_json', { guest_trial_version: 'childhood_v1' })
@@ -12510,9 +12547,9 @@ function CarriedChildhoodTrialNotice({ theme, carriedTrial, onReview }) {
     <div className="mt-3 space-y-3">{ordered.map(({ question, answer }) => <div key={answer.id} className="border-l border-amber-100/20 pl-3">
       <p className="text-xs leading-relaxed text-white/60">{question.content}</p>
       <p className="mt-1 text-sm leading-relaxed text-white/85">{(answer.transcript_edited || answer.transcript_readable || answer.transcript_raw || '').slice(0, 80)}{(answer.transcript_edited || answer.transcript_readable || answer.transcript_raw || '').length > 80 ? '…' : ''}</p>
+    <button type="button" onClick={() => onReview(answer.id, answer.user_question_id)} className="min-h-11 text-sm underline underline-offset-4">この語りを開く</button>
     </div>)}</div>
     <p className="mt-3 text-xs leading-loose text-white/55">このまま進んでも回答は消えません。</p>
-    <button type="button" onClick={onReview} className="mt-3 min-h-11 text-sm text-white/80 underline underline-offset-4">保存済みの語りを見る・編集する</button>
   </aside>;
 }
 
@@ -17034,6 +17071,7 @@ export function Scene_SupportRecordingAssist({
         question={nextQuestion}
         progress={{ currentIndex: questionIndex, total: storyQuestions.length }}
         userName={project?.subject_name || "ご家族"}
+        pairedQuestion
         onBack={() => setPhase("question")}
         registerExitGuard={registerExitGuard}
         onComplete={processRecording}
@@ -18992,50 +19030,21 @@ function Scene0_Door({ onNext, onHome }) {
   );
 }
 
-const QUESTION_WORD_SEGMENTER = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
-  ? new Intl.Segmenter('ja', { granularity: 'word' }) : null;
-const QUESTION_PHRASE_PATTERN = /(残しておきたい|思い浮かべて|夢中になってきた|大切にしてきた|挑戦してみたい|つながっている)/g;
-
-function renderQuestionWords(text) {
-  return String(text).split(QUESTION_PHRASE_PATTERN).flatMap((part, partIndex) => {
-    if (partIndex % 2 === 1) return <span className="recording-question-word" key={`phrase-${partIndex}`}>{part}</span>;
-    if (!QUESTION_WORD_SEGMENTER) return part;
-    return [...QUESTION_WORD_SEGMENTER.segment(part)].map(({ segment, isWordLike }, wordIndex) => isWordLike
-      ? <span className="recording-question-word" key={`${partIndex}-${wordIndex}`}>{segment}</span>
-      : segment);
-  });
-}
-
 function RecordingQuestionPrompt({ question }) {
-  const isDailyLifeQuestion = /最近は[、,]?\s*どんなふうに.*一日を過ごす/.test(question.content || "");
-  const guidance = (bookendKindForQuestion(question)
-    ? ["短くても大丈夫です。"]
-    : isDailyLifeQuestion
-    ? ["いつもの一日から、よくしていることを一つ。", "特別な出来事でなくても大丈夫です。"]
-    : [question.prompt_hint, question.reassurance_text])
-    .filter(Boolean)
-    .filter((text, index, all) => all.indexOf(text) === index);
-  const questionText = String(question.content || "");
-  const firstPause = questionText.indexOf("、");
-  const displayQuestion = !questionText.includes("\n") && firstPause > 0 && firstPause <= 8
-    && questionText.length - firstPause > 8
-    ? `${questionText.slice(0, firstPause + 1)}\n${questionText.slice(firstPause + 1)}`
-    : questionText;
-  const ending = displayQuestion.match(/(ありますか？|いましたか？|でしたか？|ましたか？|ですか？|ください。)$/)?.[0];
-  const semanticEnding = ending && (displayQuestion.match(/((?:思い出|出来事|もの|姿勢|こと|言葉)はありますか？|(?:何|どこ|どんな方|どんな人)(?:でしたか？|ですか？)|好きでしたか？|教えてください。)$/)?.[0] || ending);
+  const guidance = questionGuidance(question, { bookend: Boolean(bookendKindForQuestion(question)) });
 
   return (
     <div className="space-y-3 reading-question">
       <div className="recording-question-card px-5 py-6 text-center">
         <p className="text-[1.1rem] text-narrative text-white/90 whitespace-pre-wrap">
-          {ending ? <>{renderQuestionWords(displayQuestion.slice(0, -semanticEnding.length))}<span className={`recording-question-ending${semanticEnding === ending ? '' : ' recording-question-ending--phrase'}`}>{semanticEnding === ending ? ending : <>{semanticEnding.slice(0, -ending.length)}<span className="recording-question-ending-tail">{ending}</span></>}</span></> : renderQuestionWords(displayQuestion)}
+          <QuestionCopy text={question.content} />
         </p>
       </div>
 
       {guidance.length > 0 && (
         <aside className="recording-question-hint" aria-label="ヒント">
           <p className="recording-question-hint-label">💡 ヒント</p>
-          {guidance.map((text) => <p key={text}>{text}</p>)}
+          {guidance.map((text) => <QuestionGuidanceLine key={text} text={text} />)}
         </aside>
       )}
     </div>
@@ -19078,6 +19087,39 @@ function recordingSectionLabel(question) {
   return "人生の輪郭";
 }
 
+const questionScrollPositions = new WeakMap();
+
+function QuestionAnswerSurface({ question, userName, storyProgress, onBack, brightAnswer,
+  skyOverride, photos, children, footer, sectionLabel }) {
+  const contentRef = useRef(null);
+  useLayoutEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = questionScrollPositions.get(question) || 0;
+  }, [question]);
+
+  return <StorySkySurface contentRef={contentRef}
+    onContentScroll={event => questionScrollPositions.set(question, event.currentTarget.scrollTop)}
+    className="question-flow-content question-flow-content--entry question-flow-content--paired h-full flex flex-col overflow-y-auto pb-4"
+    skyOverride={skyOverride} surfaceClassName={brightAnswer ? 'answer-light-recorder' : ''}
+    background={QUESTION_BACKGROUND}>
+    <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress}
+      sectionLabel={sectionLabel || recordingSectionLabel(question)} isFormalOnboarding={isFormalOnboardingQuestion(question)}
+      onBack={onBack} />
+    <RecordingQuestionPrompt question={question} />
+    <div className="question-paired-actions">
+      {photos}
+      {children}
+    </div>
+    {footer}
+  </StorySkySurface>;
+}
+
+function RecordingReferencePhotos({ urls }) {
+  if (!urls.length) return null;
+  return <div className="answer-photo-strip" aria-label="語りながら見る写真">
+    {urls.map((url, index) => <img key={index} src={url} alt={`参考の写真 ${index + 1}`} />)}
+  </div>;
+}
+
 export function Scene1_MyPage({
   progress,
   storyProgress = progress,
@@ -19096,33 +19138,44 @@ export function Scene1_MyPage({
   onPhotoFinish,
   photoFinishing = false,
   savedAnswer = null,
+  savedFinishLabel = "次の問いへ",
+  sectionLabel,
+  onAppendVoice,
   onSavedAnswerNext,
   onSkip,
   onEndToday
 }) {
-  const isFormalOnboarding = isFormalOnboardingQuestion(question);
-  const isOnboardingQuestion = isFormalOnboarding;
+  const isOnboardingQuestion = isFormalOnboardingQuestion(question);
   const brightAnswer = lightMode || question?.onboarding_group !== 'trial_experience';
-
-  const sectionLabel = recordingSectionLabel(question);
+  const footer = !isTokenMode() && (
+    <div className="question-flow-end-actions mt-5 flex shrink-0 items-center justify-center gap-3 pb-2">
+      {onSkip && (!isOnboardingQuestion || question?.onboarding_group === "starting_motivation") && (
+        <button onClick={onSkip}
+          className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-[1rem] underline underline-offset-4">
+          スキップ
+        </button>
+      )}
+      {onEndToday && <button onClick={onEndToday}
+        className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-[1rem] underline underline-offset-4">
+        今日はここまで
+      </button>}
+    </div>
+  );
 
   return (
-    <StorySkySurface className="question-flow-content question-flow-content--entry h-full flex flex-col overflow-y-auto pb-4" skyOverride={skyOverride}
-      surfaceClassName={brightAnswer ? 'answer-light-recorder' : ''} background={QUESTION_BACKGROUND}>
-      <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={onBack} />
-
-      <RecordingQuestionPrompt question={question} />
-
-      {brightAnswer && savedAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
+    <QuestionAnswerSurface question={question} userName={userName} storyProgress={storyProgress}
+      onBack={onBack} brightAnswer={brightAnswer} skyOverride={skyOverride} footer={footer} sectionLabel={sectionLabel}
+      photos={brightAnswer && !savedAnswer && <AnswerPhotoStrip photos={photos}
+        onOpen={photo => window.open(photo.url, '_blank', 'noopener,noreferrer')} onRemove={onPhotoRemove} />}>
+      {brightAnswer && savedAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice">
         <AnswerReview body={savedAnswer.answer.transcript_edited || savedAnswer.answer.transcript_readable
           || savedAnswer.answer.transcript_clean || savedAnswer.answer.transcript_raw || savedAnswer.answer.snippet || ''}
           photos={savedAnswer.photos} audio={savedAnswer.audio}
-          showChoices={false} onFinish={onSavedAnswerNext} finishLabel="次の問いへ" canFinish>
+          showChoices={false} onFinish={onSavedAnswerNext} finishLabel={savedFinishLabel} canFinish>
+          {onAppendVoice && <button type="button" onClick={onAppendVoice} className="answer-light-secondary">少し語り足す</button>}
           {onWrite && <button type="button" onClick={onWrite} className="answer-light-secondary">文章を編集する</button>}
         </AnswerReview>
-      </div> : brightAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
-        <AnswerPhotoStrip photos={photos} onOpen={photo => window.open(photo.url, '_blank', 'noopener,noreferrer')}
-          onRemove={onPhotoRemove} />
+      </div> : brightAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice">
         <AnswerEntryChoices onVoice={onNext} onWrite={onWrite} onPhoto={onPhoto} />
         <AnswerSaveStatus state={photoSaveState} hasContent={photos.length > 0 || photoSaveState === 'failed'} onRetry={onPhotoRetry} />
         {photos.length > 0 && <button type="button" className="answer-review__finish" onClick={onPhotoFinish}
@@ -19136,26 +19189,7 @@ export function Scene1_MyPage({
         </button>}
       </div>}
 
-      {!isTokenMode() && (
-        <div className="question-flow-end-actions mt-5 flex shrink-0 items-center justify-center gap-3 pb-2">
-          {onSkip && (!isOnboardingQuestion || question?.onboarding_group === "starting_motivation") && (
-            <button
-              onClick={onSkip}
-              className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-[1rem] underline underline-offset-4"
-            >
-              スキップ
-            </button>
-          )}
-
-          <button
-            onClick={onEndToday}
-            className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-[1rem] underline underline-offset-4"
-          >
-            今日はここまで
-          </button>
-        </div>
-      )}
-    </StorySkySurface>
+    </QuestionAnswerSurface>
   );
 }
 
@@ -19220,7 +19254,7 @@ function QuietRecordingCircle({ seconds = 0, isPaused = false }) {
   );
 }
 
-export function Scene_DailyMicCheck({ onComplete }) {
+export function Scene_DailyMicCheck({ onComplete, inline = false }) {
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [micStatus, setMicStatus] = useState("idle");
 
@@ -19322,6 +19356,30 @@ export function Scene_DailyMicCheck({ onComplete }) {
     return <MicAccessGuide onRetry={startCheck} onContinue={() => proceed(false)} />;
   }
 
+  if (inline) {
+    const ready = micStatus === 'ready';
+    return <div className="question-inline-mic">
+      <button type="button" className="recording-start-bar"
+        disabled={micStatus === 'checking'} onClick={ready ? () => proceed(true) : startCheck}>
+        <Mic size={22} aria-hidden="true" />
+        {ready ? '録音に進む' : micStatus === 'checking' ? 'マイクを確認しています…' : 'マイクを使う'}
+      </button>
+      {ready ? <>
+        <div className="daily-mic-wave"><VoiceWave level={voiceLevel} /></div>
+        <p>ひとこと話すと、波形が動きます。</p>
+        <button type="button" className="question-mic-secondary" onClick={startCheck}>もう一度確認する</button>
+      </> : <>
+        <p>確認が出たら「許可」を押してください。ここでは録音・保存されません。</p>
+        <button type="button" className="question-mic-secondary" onClick={() => proceed(false)}>マイク確認を続けずに進む</button>
+        <button type="button" className="question-mic-secondary" onClick={() => {
+          requestIdRef.current += 1;
+          stopCheck();
+          setMicStatus('error');
+        }}>「許可」が出ないとき</button>
+      </>}
+    </div>;
+  }
+
   return <div className="daily-mic-check fade-enter">
     <p className="daily-mic-kicker">録音の準備</p>
     {micStatus === 'ready' ? <>
@@ -19358,6 +19416,7 @@ export function Scene_Recording({
   maxDurationSeconds = RECORDING_LIMIT_SECONDS,
   preRecordNotice = '',
   seasonalMode = false,
+  pairedQuestion = false,
   referencePhotos = [],
   onBack,
   registerExitGuard,
@@ -19716,7 +19775,7 @@ const startActualRecording = async (preparedStream = null) => {
     try {
     let stream = streamRef.current;
 
-    if (!stream) {
+    if (!stream || !stream.getAudioTracks().some(track => track.readyState === 'live')) {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: true
       });
@@ -19871,7 +19930,10 @@ mediaRef.current.onstop = () => {
 
       };
 
-mediaRef.current.start(1000);
+// iOS can emit an empty final blob when a timeslice is flushed just before
+// stop. Let its recorder deliver the complete clip in the stop event.
+if (isIOSLikeBrowser()) mediaRef.current.start();
+else mediaRef.current.start(1000);
 unsafeRecordingRef.current = true;
 onJourneyEvent('recording_start');
 clockRef.current.start();
@@ -19880,7 +19942,7 @@ console.log("[recording-debug] MediaRecorder started with timeslice", {
   runId: debugRunIdRef.current,
   recorderState: mediaRef.current.state,
   recorderMimeType: mediaRef.current.mimeType,
-  timesliceMs: 1000
+  timesliceMs: isIOSLikeBrowser() ? null : 1000
 });
 
 console.log("[recording-debug] recorder-only: wave monitor not used while recording", {
@@ -20010,10 +20072,12 @@ const stop = (reason = "manual") => {
         mediaState: mediaRef.current.state
       });
 
-      try {
-        mediaRef.current.requestData?.();
-      } catch (e) {
-        console.warn("media recorder requestData failed", e);
+      if (!isIOSLikeBrowser()) {
+        try {
+          mediaRef.current.requestData?.();
+        } catch (e) {
+          console.warn("media recorder requestData failed", e);
+        }
       }
 
       mediaRef.current.stop();
@@ -20057,19 +20121,7 @@ const requestSafeExit = destination => {
 };
 exitGuardRef.current = requestSafeExit;
 
-return (
-<StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4"
-  surfaceClassName={seasonalMode || lightMode || question?.onboarding_group !== 'trial_experience' ? 'answer-light-recorder' : ''}
-  background={QUESTION_BACKGROUND}>
-  <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} progressOverride={seasonalMode ? '1 / 1' : null} onBack={onBack ? () => requestSafeExit(onBack) : null} />
-
-  <RecordingQuestionPrompt question={question} />
-  {step === 0 && preRecordNotice && <p className="mx-5 mt-4 text-sm leading-relaxed text-current">{preRecordNotice}</p>}
-
-  {referencePhotos.length > 0 && <div className="sm-recording-photos" aria-label="語りながら見る写真">
-    {referencePhotos.map((url, index) => <img key={url} src={url} alt={`参考の写真 ${index + 1}`} />)}
-  </div>}
-
+const controls = <>
 {step === 0 && (
   <div className="recording-control-dock recording-control-dock--start mt-5">
     <RecordingStartButton onClick={start} />
@@ -20097,8 +20149,10 @@ return (
       )}
 
       {step === "countdown" && (seasonalMode || lightMode || question?.onboarding_group !== 'trial_experience') && <div className="recording-control-dock sm-recording-countdown-dock mt-4">
-        <div className="sm-recording-countdown-number" aria-live="polite">{countdown}</div>
-        <div className="recording-status-row"><span className="recording-state-label">録音の準備中</span></div>
+        <div className="recording-status-row sm-recording-countdown-status" role="status" aria-live="polite">
+          <span className="sm-recording-countdown-number">{countdown}</span>
+          <span className="sm-recording-countdown-label">まもなく録音します</span>
+        </div>
         <div className="recording-action-row">
           <button type="button" className="recording-action-button" disabled>一時停止</button>
           <button type="button" className="recording-action-button recording-action-button--stop" disabled>録音を終える</button>
@@ -20152,6 +20206,31 @@ return (
     </p>
   </div>
 )}
+  </>;
+
+  const brightAnswer = seasonalMode || lightMode || question?.onboarding_group !== 'trial_experience';
+  const safeBack = onBack ? () => requestSafeExit(onBack) : null;
+  if (pairedQuestion) {
+    return <QuestionAnswerSurface question={question} userName={userName} storyProgress={storyProgress}
+      onBack={safeBack} brightAnswer={brightAnswer} photos={<RecordingReferencePhotos urls={referencePhotos} />}>
+      {controls}
+      {step === 0 && preRecordNotice && <p className="mx-5 mt-4 text-sm leading-relaxed">{preRecordNotice}</p>}
+    </QuestionAnswerSurface>;
+  }
+return (
+<StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4"
+  surfaceClassName={brightAnswer ? 'answer-light-recorder' : ''}
+  background={QUESTION_BACKGROUND}>
+  <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} progressOverride={seasonalMode ? '1 / 1' : null} onBack={safeBack} />
+
+  <RecordingQuestionPrompt question={question} />
+  {step === 0 && preRecordNotice && <p className="mx-5 mt-4 text-sm leading-relaxed text-current">{preRecordNotice}</p>}
+
+  {referencePhotos.length > 0 && <div className="sm-recording-photos" aria-label="語りながら見る写真">
+    {referencePhotos.map((url, index) => <img key={url} src={url} alt={`参考の写真 ${index + 1}`} />)}
+  </div>}
+
+  {controls}
     </StorySkySurface>
   );
 }
@@ -21187,6 +21266,7 @@ export function PhotoCorrectionFlow({
   title = "写真を添える",
   initialFile = null,
   bookPlacement = null,
+  lightMode = false,
   onClose,
   onComplete,
   awaitCompletion = false
@@ -21538,7 +21618,7 @@ export function PhotoCorrectionFlow({
       />
 
       {!scanPreview ? (
-        <div className="fixed inset-0 z-[10000] bg-black/45 flex items-end px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <div className={`fixed inset-0 z-[10000] bg-black/45 flex items-end px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] ${lightMode ? 'photo-correction-light' : ''}`}>
           <div className="w-full rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl fade-enter">
             <p className="text-white/72 text-center text-narrative mb-5">
               {title}
@@ -21574,7 +21654,7 @@ export function PhotoCorrectionFlow({
           </div>
         </div>
       ) : (
-        <div className={`fixed inset-0 z-[10000] w-[100dvw] h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overscroll-none ${bookPlacement && scanPreview.step === "adjust" ? "overflow-y-auto" : "overflow-hidden"}`}>
+        <div className={`fixed inset-0 z-[10000] w-[100dvw] h-[100dvh] max-w-none bg-slate-950 px-4 pt-0 pb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col fade-enter overscroll-none ${lightMode ? 'photo-correction-light' : ''} ${bookPlacement && scanPreview.step === "adjust" ? "overflow-y-auto" : "overflow-hidden"}`}>
           {scanPreview.step === "crop" ? (
             <>
               <CropPreview
@@ -22327,6 +22407,8 @@ const handleStoryPhotoSelect = async (file, answerId, bookLayout = null) => {
       const targetAnswer = answers.find(a => a.id === answerId);
       const existingMedia = mediaByAnswerId[answerId] || [];
       const existingPhotoCount = existingMedia.filter(m => m.asset_type === "photo").length;
+      if (existingPhotoCount + selectedFiles.length > STORY_PHOTO_LIMIT)
+        throw new Error(storyPhotoLimitMessage);
 
       const photoRows = [];
 

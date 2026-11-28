@@ -1,4 +1,17 @@
-/* Free trial: keep Back and the question count on one quiet row at the top. */
+/* Trial navigation uses the same BOOK palette and answer surfaces. */
+.guest-trial-flow { background: var(--book-page); color: var(--book-ink); font-family: var(--book-ui-font); }
+.guest-trial-flow .trial-save-confirm-button { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+.guest-trial-flow .guest-trial-question-screen { color: var(--book-ink); }
+.guest-trial-flow .guest-trial-question-screen h1 { font-family: var(--book-display-font); font-weight: 550; }
+.guest-trial-flow .guest-trial-question-screen textarea { background: var(--book-surface); border-color: var(--book-line); color: var(--book-ink); }
+.guest-trial-flow .guest-trial-question-screen [class*="text-white"] { color: var(--book-muted) !important; }
+.guest-trial-flow .guest-trial-question-screen button[class*="bg-white"] { background: var(--book-primary); color: var(--book-on-primary); -webkit-text-fill-color: var(--book-on-primary); }
+.guest-trial-flow .guest-trial-question-screen .answer-review__summary { background: var(--book-surface); color: var(--book-ink); }
+.guest-trial-flow .guest-trial-question-screen .guest-trial-question-nav { color: var(--book-primary); }
+.guest-trial-flow .guest-trial-question-screen .guest-trial-question-nav button,
+.guest-trial-flow .guest-trial-question-screen .guest-trial-question-nav p { color: var(--book-primary) !important; }
+.guest-trial-flow .guest-trial-question-screen button.btn-quiet { background: var(--book-primary); color: var(--book-on-primary); -webkit-text-fill-color: var(--book-on-primary); }
+.guest-trial-flow .guest-trial-question-screen button:focus-visible { outline: 3px solid var(--book-focus); outline-offset: 2px; }
 .guest-trial-flow .story-sky-surface.question-background-navy > .story-sky-content.question-flow-content,
 .guest-trial-flow .guest-trial-question-screen {
   width: 100%;
@@ -16,7 +29,7 @@
   gap: 16px;
   margin: 0 0 28px;
   padding: 0;
-  color: rgb(255 255 255 / 75%);
+  color: var(--book-muted);
 }
 
 .guest-trial-flow .question-flow-back-slot {

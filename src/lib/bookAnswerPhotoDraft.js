@@ -1,3 +1,5 @@
+import { STORY_PHOTO_LIMIT, storyPhotoLimitMessage } from './storyPhotoLimit.js';
+
 // A BOOK photo is uploaded to the existing private photos bucket, then
 // acknowledged in a draft row. Neither step creates an answer or advances
 // question progress. A later RPC commits answer + media rows atomically.
@@ -28,6 +30,21 @@ export class BookAnswerPhotoDraft {
     const pending = this.pending?.file === file ? this.pending : {
       file, id: crypto.randomUUID(), uploaded: false,
     };
+    const { data: existing, error: countError } = await this.client.from('book_answer_photo_drafts')
+      .select('id').eq('book_project_id',this.projectId)
+      .eq('user_question_id',this.questionId).is('committed_at',null);
+    if (countError) throw countError;
+    const { data: answers, error: answersError } = await this.client.from('answers')
+      .select('id').eq('book_project_id',this.projectId)
+      .eq('user_question_id',this.questionId);
+    if (answersError) throw answersError;
+    const answerIds = (answers || []).map(answer => answer.id);
+    const saved = answerIds.length ? await this.client.from('media_assets')
+      .select('id',{ count:'exact', head:true }).eq('asset_type','photo')
+      .in('answer_id',answerIds) : { count:0 };
+    if (saved.error) throw saved.error;
+    if ((saved.count || 0) + (existing || []).filter(row => row.id !== pending.id).length >= STORY_PHOTO_LIMIT)
+      throw new Error(storyPhotoLimitMessage);
     pending.path = `${this.userId}/${this.projectId}/draft/${pending.id}.jpg`;
     this.pending = pending;
     try {

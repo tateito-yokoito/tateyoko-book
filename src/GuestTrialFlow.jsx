@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Scene1_MyPage, Scene_Recording, ensureUserFoundation, ensureUserQuestions, supabaseClient } from './App.jsx';
 import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
 import TrialCompletionExperience, { StoryCard } from './TrialCompletionExperience.jsx';
+import ChildhoodTrialIntro from './ChildhoodTrialIntro.jsx';
+import { AnswerBodyEditor, AnswerSummary } from './AnswerInputUI.jsx';
+import { AnswerStyleChoices, AnswerTextCandidate, AnswerTextFields, AnswerTextLayout } from './AnswerTextShared.jsx';
+import { QuestionCopy } from './QuestionCopy.jsx';
 import './guest-trial-finished.css';
 import './guest-trial-navigation.css';
 import { guestCheckout, guestPurchaseStatus, claimGuestPurchase } from './lib/guestPurchaseApi.js';
@@ -12,6 +16,7 @@ import {
   guestTrialResumeUrl, guestTrialCanonicalUrl, takeGuestTrialResumeToken,
 } from './lib/guestTrialApi.js';
 import { clearGuestTrialPending, guestTrialPurchaseUrl } from './lib/guestTrialClaim.js';
+import { guestTrialBookStarted, saveGuestTrialToRing, selfTrialPeople } from './lib/guestTrialRing.js';
 
 // The public entry remains on the established flow until the full purchase,
 // recovery, and handoff gate passes. The API always follows this app's
@@ -23,6 +28,7 @@ const developmentPreview = import.meta.env.DEV
 // expose it from the adopted pay-after-login route.
 const purchasePreviewEnabled = false;
 const giftToken = new URLSearchParams(window.location.search).get('gift_trial_token') || null;
+const trialPersonId = new URLSearchParams(window.location.search).get('person') || null;
 const questions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) => ({
   ...question, question_id: question.id, onboarding_group: 'trial_experience',
   content: question.content, prompt_hint: question.hint,
@@ -30,13 +36,12 @@ const questions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) => ({
   sequence_order: index + 1,
 }));
 
-function GuestTrialPolishControls({ session, question, text, onUse, saveButton, disabled,
+function GuestTrialPolishControls({ session, question, text, onUse, onSave, disabled,
   reviewMode = false, originalText = '', onBlockedChange, children }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [showStyles, setShowStyles] = useState(false);
   const [candidate, setCandidate] = useState(null);
-  const [showOriginal, setShowOriginal] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState('clean');
   const latestText = useRef(text);
   latestText.current = text;
@@ -68,35 +73,23 @@ function GuestTrialPolishControls({ session, question, text, onUse, saveButton, 
       }
       setSelectedStyle(style);
       setCandidate({ original: source, text: result.candidate });
-      setShowOriginal(false);
     } catch (cause) {
       setError(cause?.message || '文章を整えられませんでした。元の文章は残っています。');
     } finally { setBusy(false); }
   };
 
   return <div className={`${reviewMode ? '' : 'mt-5'} space-y-3`}>
-    {candidate ? <>
-      <h3 className="text-lg">整えた文章を確認</h3>
-      <div className="rounded-xl bg-[#f5f3ed] p-5 text-lg leading-loose whitespace-pre-wrap text-[#24302d]">{candidate.text}</div>
-      <button type="button" onClick={() => setShowOriginal(value => !value)} className="min-h-11 text-white/70 underline">元の文章を{showOriginal ? '閉じる' : '確認する'}</button>
-      {showOriginal && <div className="rounded-xl border border-white/20 p-5 leading-loose whitespace-pre-wrap">{candidate.original}</div>}
-      <button type="button" onClick={() => { onUse(candidate.text); setCandidate(null); }} className="block min-h-14 w-full rounded-xl bg-white text-slate-900">この文章を使う</button>
-      <button type="button" onClick={() => { setCandidate(null); setSelectedStyle('clean'); }} className="block min-h-14 w-full rounded-xl border border-white/30">元の文章に戻す</button>
-      <p className="text-sm text-white/50">候補を選んだ後、保存すると反映されます。</p>
-    </> : <>
-      {(reviewMode || showStyles) && <div role="group" aria-label="文章の整え方" className="grid grid-cols-3 gap-2">
-        {[["clean", "そのまま"], ["narrative", "語り調"], ["essay", "作品調"]].map(([value, label]) =>
-          <button key={value} type="button" onClick={() => void polish(value)} disabled={busy || disabled}
-            aria-pressed={reviewMode ? selectedStyle === value : undefined}
-            className={`min-h-12 rounded-full border text-sm disabled:opacity-40 ${reviewMode && selectedStyle === value
-              ? 'border-white/30 bg-white/15 text-white' : 'border-white/15 text-white/60'}`}>{label}</button>)}
-      </div>}
+    {candidate ? <AnswerTextCandidate candidate={candidate} light
+      onUse={() => { onUse(candidate.text); setCandidate(null); }}
+      onDiscard={() => { setCandidate(null); setSelectedStyle('clean'); }} /> : <>
+      {!reviewMode ? <AnswerTextFields value={text} onChange={onUse} busy={busy || disabled}
+        status={text.trim() ? '入力中' : ''} showStyles={showStyles}
+        onToggleStyles={() => setShowStyles(value => !value)} onPolish={polish}
+        onSave={onSave} saveLabel="回答を確認する" /> : <>
+      <AnswerStyleChoices onPolish={polish} busy={busy} disabled={disabled}
+        selectedStyle={selectedStyle} />
       {children}
-      {!reviewMode && <div className="grid grid-cols-[1fr_1.25fr] gap-2">
-        <button type="button" onClick={() => setShowStyles(value => !value)} disabled={busy || disabled || !text.trim()}
-          className="min-h-14 rounded-xl border border-white/30 disabled:opacity-40">✦ 整える</button>
-        {saveButton(busy)}
-      </div>}
+      </>}
     </>}
     {busy && <p role="status" className="text-sm text-white/60">文章を整えています…</p>}
     {error && <p role="alert" className="text-sm text-rose-200">{error}</p>}
@@ -108,7 +101,7 @@ export default function GuestTrialFlow() {
   useEffect(() => {
     if (!legacyHost) return;
     (async () => {
-      const storageKey = await guestTrialStorageKey(giftToken);
+      const storageKey = await guestTrialStorageKey(giftToken, trialPersonId);
       const saved = readGuestTrialSession(localStorage, storageKey);
       window.location.replace(guestTrialCanonicalUrl(window.location, saved));
     })();
@@ -138,8 +131,18 @@ function GuestTrialExperience() {
   const [familyName, setFamilyName] = useState('');
   const [givenName, setGivenName] = useState('');
   const [resumeUrl, setResumeUrl] = useState('');
+  const [exitReturnScreen, setExitReturnScreen] = useState('choice');
+  const discardDialogRef = useRef(null);
   const [shareStatus, setShareStatus] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [savePeople, setSavePeople] = useState([]);
+  const [selectedSavePerson, setSelectedSavePerson] = useState(trialPersonId || '');
+  const [confirmReplace, setConfirmReplace] = useState(false);
+  const pendingSaveOpen = useRef(false);
+
+  useEffect(() => {
+    if (confirmDiscard) discardDialogRef.current?.showModal();
+  }, [confirmDiscard]);
 
   useEffect(() => {
     if (!reviewBlocked) return;
@@ -154,6 +157,16 @@ function GuestTrialExperience() {
     window.addEventListener('hashchange', openResume);
     return () => window.removeEventListener('hashchange', openResume);
   }, []);
+
+  useEffect(() => {
+    if (screen !== 'finished' || !session || pendingSaveOpen.current
+      || new URLSearchParams(window.location.search).get('save') !== '1') return;
+    pendingSaveOpen.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('save');
+    window.history.replaceState(null,'',url);
+    void prepareRingSave();
+  }, [screen,session]);
 
   async function showPaidHandoff() {
     const { data: auth } = await supabaseClient.auth.getSession();
@@ -202,7 +215,7 @@ function GuestTrialExperience() {
   useEffect(() => {
     let live = true;
     (async () => {
-      const nextKey = await guestTrialStorageKey(giftToken);
+      const nextKey = await guestTrialStorageKey(giftToken, trialPersonId);
       if (!live) return;
       setKey(nextKey);
       let saved = null;
@@ -331,6 +344,8 @@ function GuestTrialExperience() {
           ? { ...row, transcript: saved.transcript, transcription_state: 'complete' } : row));
         setEditing(false);
       }
+      if (trialPersonId) await saveGuestTrialToRing(supabaseClient, TRIAL_API,
+        session, trialPersonId, index + 1);
       if (index < 2) {
         setIndex(index + 1); setPendingBlob(null); setPendingAudioUrl('');
         setTranscript(''); setScreen('choice');
@@ -390,10 +405,56 @@ function GuestTrialExperience() {
     finally { setBusy(false); }
   }
 
+  async function prepareRingSave() {
+    if (!session) return;
+    setBusy(true); setError('');
+    try {
+      const { data: auth } = await supabaseClient.auth.getSession();
+      if (!auth?.session) {
+        window.location.assign('/login?return_trial=1');
+        return;
+      }
+      const people = await selfTrialPeople(supabaseClient);
+      if (!people.length) {
+        window.location.assign('/login?return_trial=1');
+        return;
+      }
+      setSavePeople(people);
+      setSelectedSavePerson(trialPersonId || (people.length === 1 ? people[0].id : ''));
+      if (await guestTrialBookStarted(supabaseClient)) {
+        setError('このアカウントではBOOK制作を始めているため、無料３問を年輪に保存できません。');
+        return;
+      }
+      setScreen('choose_person');
+    } catch (cause) { setError(cause.message || '保存先を確認できませんでした。'); }
+    finally { setBusy(false); }
+  }
+
+  async function confirmRingSave(replaceExisting = false) {
+    if (!selectedSavePerson) { setError('語りを残す人物を選んでください。'); return; }
+    setBusy(true); setError('');
+    try {
+      const saved = await saveGuestTrialToRing(supabaseClient,TRIAL_API,session,selectedSavePerson,3,
+        { replaceExisting });
+      if (saved.length !== 3) throw new Error('3問すべての保存を確認できませんでした。');
+      setConfirmReplace(false);
+      window.location.assign(`/app?person=${encodeURIComponent(selectedSavePerson)}&tab=ring&trial_saved=1`);
+    } catch (cause) {
+      if (cause.code === 'BOOK_ALREADY_STARTED') {
+        setConfirmReplace(false);
+        setScreen('finished');
+        setError('このアカウントではBOOK制作を始めているため、無料３問を年輪に保存できません。');
+      } else if (cause.code === 'TRIAL_STORY_CONFLICT' && !replaceExisting) setConfirmReplace(true);
+      else setError(cause.message || '年輪へ保存できませんでした。');
+    }
+    finally { setBusy(false); }
+  }
+
   function openExit() {
     setError('');
     setShareStatus('');
     setConfirmDiscard(false);
+    setExitReturnScreen(screen);
     setScreen('end_choice');
   }
 
@@ -495,11 +556,11 @@ function GuestTrialExperience() {
     };
   });
 
-  return <div className={`app-container guest-trial-flow min-h-[100dvh] ${screen === 'intro' ? 'bg-[#f5f3ed] text-[#182a35]' : 'bg-[#101729] text-white'}`} style={{ maxWidth: 'none', padding: 0 }}>
+  return <div className="app-container app-container--book-light guest-trial-flow min-h-[100dvh]" style={{ maxWidth: 'none', padding: 0 }}>
     <div className="min-h-[100dvh] w-full">
       {screen === 'loading' && <p className="px-7 py-20">体験を確認しています…</p>}
       {screen === 'intro' && <main className="mx-auto flex min-h-[100dvh] w-full max-w-[690px] flex-col justify-center px-[30px] text-center" style={{ paddingTop: 'calc(64px + env(safe-area-inset-top))', paddingBottom: 'calc(64px + env(safe-area-inset-bottom))' }}>
-        <p className="text-[clamp(16px,4.2vw,22px)] tracking-[0.09em] text-[#28473e]" style={{ fontFamily: 'var(--font-display)' }}>縦糸横糸 ｜ 年輪 nenrin</p>
+        <p className="text-[clamp(16px,4.2vw,22px)] tracking-[0.09em] text-[#28473e]" style={{ fontFamily: 'var(--font-display)' }}>たて糸♾️よこ糸</p>
         <h1 className="mt-[58px] text-[clamp(29px,7.1vw,43px)] font-medium leading-[1.75] tracking-[0.035em] sm:mt-[70px]" style={{ fontFamily: 'var(--font-display)' }}>質問を通じて<br />人生を振り返り、<br />言葉にする。</h1>
         <p className="mt-6 text-[clamp(18px,4.7vw,23px)] leading-[1.85] text-[#455650]">その体験をお試しいただけます。</p>
         <ul className="mx-auto mt-[46px] w-full max-w-[560px] space-y-5 text-left text-[clamp(16px,4.1vw,20px)] leading-[1.9] text-[#455650] sm:mt-[58px]">
@@ -510,48 +571,27 @@ function GuestTrialExperience() {
         <button type="button" disabled={busy || !key} onClick={begin} className="mx-auto mt-[60px] min-h-[72px] w-full max-w-[560px] rounded-full bg-[#28473e] px-7 py-5 text-[clamp(18px,4.7vw,22px)] text-[#f5f3ed] disabled:opacity-50 sm:mt-[76px]">{busy ? '準備しています…' : '「お試し３問」を始める'}</button>
         {error && <p role="alert" className="mt-6 text-[#a6472d]">{error}</p>}
       </main>}
-      {screen === 'theme_intro' && <main className="mx-auto flex min-h-[100dvh] w-full max-w-[580px] flex-col px-6 text-center" style={{ paddingTop: 'calc(28px + env(safe-area-inset-top))', paddingBottom: 'calc(48px + env(safe-area-inset-bottom))' }}>
-        <div className="flex min-h-12 items-center justify-between text-base text-white/80">
-          <button type="button" onClick={() => setScreen('intro')}>← 戻る</button>
-          <span className="text-sm">お試し３問</span>
-        </div>
-        <div className="pt-10 sm:pt-12">
-          <p className="text-[13px] tracking-[0.13em] text-[#d9c9a5]">テーマ</p>
-          <h1 className="mt-[22px] text-[clamp(29px,7vw,39px)] font-normal leading-[1.6] tracking-[0.04em]" style={{ fontFamily: 'var(--font-display)' }}>「幼い頃のこと」</h1>
-        </div>
-        <img src="/site/theme-childhood-triptych.jpg" alt="幼い頃を思い出す三つの情景"
-          className="mt-[39px] h-[clamp(210px,62vw,315px)] w-[calc(100%+48px)] max-w-none -translate-x-6 object-cover sm:w-full sm:translate-x-0 sm:rounded-3xl" />
-        <p className="mx-auto mt-[35px] max-w-[470px] text-[clamp(16px,4.2vw,19px)] leading-[2] text-[#d5dae2]">本編では、<br />様々なテーマの質問に触れながら、<br />人生を辿っていきます。</p>
-        <p className="mx-auto mt-[30px] max-w-[470px] text-[clamp(17px,4.3vw,20px)] leading-[2] text-[#e0e2e5]">幼少期から中学生くらいまでを<br />少しずつ、思い出してみてください。</p>
-        <div className="min-h-8 flex-1" />
-        <button type="button" onClick={() => setScreen('choice')} className="mt-[52px] min-h-[65px] w-full rounded-full bg-[#e9e6dd] px-6 text-lg font-medium text-[#172539]">1問目へ進む</button>
-        <p className="mt-[15px] text-[13px] text-[#9fa8b7]">この後、声または文字で答えられます。</p>
+      {screen === 'theme_intro' && <main className="answer-light-page flex min-h-[100dvh] px-6 py-10">
+        <ChildhoodTrialIntro onStart={() => setScreen('choice')} />
       </main>}
       {screen === 'choice' && <Scene1_MyPage
         question={questions[index]} userName="あなた"
+        lightMode
         progress={{ currentIndex: index, total: 3 }}
         onBack={() => setScreen(index === 0 ? 'theme_intro' : 'intro')}
         onNext={() => setScreen('record')}
         onWrite={() => { setTranscript(''); setScreen('write'); }}
         onEndToday={openExit}
       />}
-      {screen === 'write' && <main className="guest-trial-question-screen">
-        <header className="guest-trial-question-nav">
-          <button type="button" onClick={() => setScreen('choice')} className="min-h-11 text-white/65">← 戻る</button>
-          <p className="flex min-h-11 shrink-0 items-center text-[1rem] text-white/75">{index + 1} / 3</p>
-        </header>
-        <h1 className="mt-8 text-center text-[1.35rem] leading-[1.8]">{questions[index].content}</h1>
-        <label htmlFor="guest-trial-writing" className="mt-10 block text-white/80">書いて答える</label>
-        <textarea id="guest-trial-writing" value={transcript} onChange={event => setTranscript(event.target.value)} rows={9}
-          placeholder="思い出したことを、自由に書いてください" maxLength={100000}
-          className="mt-4 w-full rounded-2xl border border-white/25 bg-white/[0.06] p-4 text-white outline-none" />
+      {screen === 'write' && <AnswerTextLayout question={questions[index]}
+        theme="幼い頃" progress={`${index + 1} / 3`} onBack={() => setScreen('choice')} light>
         <GuestTrialPolishControls key={questions[index].id} session={session} question={questions[index]}
           text={transcript} onUse={setTranscript} disabled={busy}
-          saveButton={polishing => <button type="button" disabled={busy || polishing || !transcript.trim()} onClick={saveWrittenAnswer}
-            className="min-h-14 rounded-xl bg-white text-slate-900 disabled:opacity-40">{busy ? '保存中…' : '保存する'}</button>} />
+          onSave={saveWrittenAnswer} />
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
-      </main>}
+      </AnswerTextLayout>}
       {screen === 'record' && <Scene_Recording key={questions[index].id} question={questions[index]}
+        lightMode pairedQuestion
         storyProgress={{ currentIndex: index, total: 3 }} userName="あなた" onBack={() => setScreen('choice')}
         onComplete={saveRecording} />}
       {screen === 'record' && developmentPreview && !giftToken && <div className="px-7 pb-8 text-center">
@@ -579,14 +619,14 @@ function GuestTrialExperience() {
           <button type="button" onClick={() => setScreen(pendingAudioUrl ? 'record' : 'write')} className="min-h-11 text-white/65">← 戻る</button>
           <p className="flex min-h-11 shrink-0 items-center text-[1rem] text-white/75">{index + 1} / 3</p>
         </header>
-        <h1 className="mt-8 text-center text-[1.35rem] leading-[1.8]">{questions[index].content}</h1>
-        <div className="mt-10 rounded-3xl border border-white/15 bg-white/[0.05] p-6">
+        <h1 className="mt-8 text-center text-[1.35rem] leading-[1.8]"><QuestionCopy text={questions[index].content} /></h1>
+        <div className="mt-10">
           <GuestTrialPolishControls key={questions[index].id} session={session} question={questions[index]}
             text={transcript} originalText={answers.find(row => row.question_id === questions[index].id)?.transcript || ''}
             onUse={setTranscript} onBlockedChange={setReviewBlocked} disabled={busy || editing || !transcript.trim()} reviewMode>
-            {editing ? <textarea value={transcript} onChange={event => setTranscript(event.target.value)} rows={8}
-              className="mt-5 w-full bg-transparent leading-loose outline-none" aria-label="語りの文章" />
-              : <p className="mt-5 whitespace-pre-wrap leading-[2]">{transcript || '声は保存されました。文字起こしが空の場合は文章を追加できます。'}</p>}
+            {editing ? <AnswerBodyEditor value={transcript} onChange={setTranscript}
+              className="mt-5 w-full min-h-[30dvh] rounded-xl border p-4 leading-loose" />
+              : <AnswerSummary body={transcript} previewLength={Infinity} />}
             <div className="mt-4 flex items-center justify-between gap-3">
               {pendingAudioUrl && <>
                 <audio ref={reviewAudioRef} className="hidden" src={pendingAudioUrl} onEnded={() => setAudioPlaying(false)} />
@@ -614,72 +654,89 @@ function GuestTrialExperience() {
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
       {screen === 'finished' && <main className="guest-trial-finished">
-        <h1>3問の体験が完了しました</h1>
-        <div className="guest-trial-finished-answers">{stories.map((story, storyIndex) => <StoryCard key={story.id} story={story} index={storyIndex}
-          resolveMedia={async asset => {
-            const response = await guestTrialRequest(TRIAL_API, 'audio', { sessionToken: session.token, questionId: asset.id });
-            return response.url;
-          }} />)}</div>
-        {!giftToken && <section className="guest-trial-reflection" aria-labelledby="guest-trial-reflection-title">
-          <p className="guest-trial-theme">テーマ「幼い頃のこと」</p>
-          <h2 id="guest-trial-reflection-title">3問だけでしたが、<br />いかがでしたか？</h2>
-          <p className="guest-trial-lead">少し懐かしい記憶が、<br />開いたでしょうか。</p>
-          <p className="guest-trial-copy">
-            <span>本編では、語りやすい問いから始まり、</span>
-            <span>大切な人のこと、苦しかった時のこと、</span>
-            <span>大事にしてきたこと、</span>
-            <span>そしてこれからのことまで。</span>
-            <span className="guest-trial-copy-gap">様々なテーマを、少しずつ辿っていきます。</span>
-          </p>
-          <img className="guest-trial-reflection-image" src="/site/guest-trial-album-import-20261107.jpg"
-            alt="アルバムの写真をスマホで取り込み、思い出とともにブックへ残すイメージ" />
-          <p className="guest-trial-copy guest-trial-image-caption">
-            <span>懐かしいアルバム、スマホで撮った写真、</span>
-            <span>簡単に取り込むことができます。</span>
-            <span className="guest-trial-copy-gap">大量に、ではなく、選ぶ。</span>
-            <span>それも縦糸横糸の体験です。</span>
-          </p>
-        </section>}
-        {!giftToken && <button type="button" onClick={() => setScreen('service')}
-          className="guest-trial-finished-primary">縦糸横糸について詳しく見る</button>}
-        {!giftToken && <button type="button" onClick={openExit}
-          className="guest-trial-finished-secondary">ここで終了する</button>}
+        <h1>３問の体験が終わりました。</h1>
+        {!giftToken && <>
+          {trialPersonId
+            ? <a className="guest-trial-finished-primary flex items-center justify-center" href={`/app?person=${encodeURIComponent(trialPersonId)}&tab=ring`}>年輪に戻る</a>
+            : <>
+              <section className="guest-trial-finished-section">
+                <strong className="guest-trial-finished-brand">たて糸♾️よこ糸BOOK</strong>
+                <h2>一つの語りは、二つの作品に。</h2>
+                <img className="guest-trial-finished-products" src="/site/hp-renewal/book-web-pair-mobile.jpg"
+                  alt="紙のBOOKと、声や写真に触れられるWebブック" width="1536" height="1024" loading="eager" />
+                <p>今回の語りを引き継ぐこともできます。</p>
+                <a className="guest-trial-finished-primary flex items-center justify-center" href={guestTrialPurchaseUrl()}>この語りを引き継いでBOOKを始める</a>
+                <a className="guest-trial-finished-site-link" href="https://www.tateito-yokoito.jp/" target="_blank" rel="noopener noreferrer">たて糸♾️よこ糸BOOKについて詳しく見る ↗</a>
+              </section>
+              <section className="guest-trial-finished-section guest-trial-finished-family">
+                <h2>語りを保存して終了する</h2>
+                <p>無料の家族アプリに保存できます。<br/>スマホで家系図とともに、<br/><strong>家族のチカラ</strong>を育んでいける場所です。</p>
+                <button type="button" disabled={busy} onClick={prepareRingSave} className="guest-trial-finished-secondary">この語りを保存する</button>
+                <button type="button" disabled={busy} onClick={openExit} className="guest-trial-finished-skip">保存せず終了する</button>
+              </section>
+            </>}
+        </>}
         {giftToken && <p className="mt-9 text-sm leading-loose text-white/55">語りは贈り主へ自動で共有されません。</p>}
-        {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
+        <details className="mt-12 text-left text-sm text-white/75"><summary>今回の３つの語りを読み返す</summary>
+          <div className="guest-trial-finished-answers">{stories.map((story, storyIndex) => <StoryCard key={story.id} story={story} index={storyIndex}
+            resolveMedia={async asset => {
+              const response = await guestTrialRequest(TRIAL_API, 'audio', { sessionToken: session.token, questionId: asset.id });
+              return response.url;
+            }} />)}</div>
+        </details>
+        {error && <p role="alert" className="guest-trial-exit-error">{error}</p>}
       </main>}
-      {screen === 'service' && <main className="px-7 py-14">
-        <button type="button" onClick={() => setScreen('finished')} className="text-white/70">← 語りに戻る</button>
-        <h1 className="mt-8 text-2xl leading-relaxed">縦糸横糸ブックについて</h1>
-        <p className="mt-6 leading-loose text-white/75">問いに答えながら人生をたどり、声と文章、写真を一冊のブックとWebブックに残せます。</p>
-        <img src="/site/hp-renewal/book-and-webbook-approved.png" alt="縦糸横糸ブックとWebブック" className="mt-8 w-full rounded-2xl" />
-        <p className="mt-8 leading-loose text-white/75">商品と金額は購入画面で確認できます。無料3問の語りは購入手続き中も保持され、新規購入が確定した物語に引き継ぎます。</p>
-        <a href={guestTrialPurchaseUrl()} className="mt-10 block w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-center text-[#15243a]">商品を選んで購入へ進む</a>
-        <button type="button" onClick={openExit} className="mt-5 w-full rounded-full border border-white/35 px-7 py-5">ここで終了する</button>
-      </main>}
-      {screen === 'end_choice' && <main className="px-7 py-20 text-center">
-        <h1 className="text-2xl">ここで終了する</h1>
-        <p className="mt-6 leading-loose text-white/65">無料3問の開始から10日間、再開できます。</p>
-        <button type="button" onClick={saveAndExit} className="mt-10 w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-[#15243a]">10日間保存する</button>
-        <button type="button" onClick={() => { setError(''); setConfirmDiscard(true); }} className="mt-5 w-full rounded-full border border-white/35 px-7 py-5">保存せずに終了する</button>
-        <button type="button" onClick={() => setScreen('finished')} className="mt-8 text-sm text-white/65 underline">語りに戻る</button>
-        {confirmDiscard && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6">
-          <div role="alertdialog" aria-modal="true" aria-labelledby="guest-trial-discard-prompt" className="w-full max-w-sm rounded-3xl border border-white/25 bg-[#1d2536] px-6 py-8 shadow-2xl">
-            <p id="guest-trial-discard-prompt" className="text-lg leading-loose">先ほどの語りが消えますが<br />よろしいですか？</p>
-            <div className="mt-8 flex gap-3">
-              <button type="button" disabled={busy} onClick={() => { setConfirmDiscard(false); setError(''); }} className="min-h-14 flex-1 rounded-full border border-white/40 disabled:opacity-50">戻る</button>
-              <button type="button" disabled={busy} onClick={discardAndExit} className="min-h-14 flex-1 rounded-full bg-[#e9e5d9] text-[#15243a] disabled:opacity-50">{busy ? '削除中…' : 'OK'}</button>
-            </div>
-            {error && <p role="alert" className="mt-5 text-sm text-rose-200">{error}</p>}
+      {screen === 'choose_person' && <main className="mx-auto max-w-md px-7 py-16">
+        <button type="button" onClick={() => setScreen('finished')} className="min-h-11 text-white/70">← 戻る</button>
+        <h1 className="mt-8 text-2xl">誰の年輪に保存しますか？</h1>
+        <p className="mt-4 leading-loose text-white/70">保存先の本人を確認してください。すでに無料3問の語りがある場合は、置き換える前に確認します。</p>
+        <div className="mt-8 space-y-3">{savePeople.map(item => <label key={item.id}
+          className="flex min-h-14 items-center gap-3 rounded-xl border border-white/30 px-5">
+          <input type="radio" name="save-person" checked={selectedSavePerson===item.id}
+            onChange={() => setSelectedSavePerson(item.id)}/>{item.display_name}</label>)}</div>
+        <button type="button" disabled={busy || !selectedSavePerson} onClick={() => confirmRingSave()}
+          className="mt-9 min-h-14 w-full rounded-full bg-[#e9e5d9] text-[#15243a] disabled:opacity-50">{busy ? '保存しています…' : 'この人の年輪に保存する'}</button>
+        {confirmReplace && <div role="dialog" aria-modal="true" aria-labelledby="trial-replace-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
+          <div className="w-full max-w-sm rounded-2xl bg-[var(--book-surface)] p-6 text-[var(--book-ink)]">
+            <h2 id="trial-replace-title" className="text-xl font-semibold">無料3問を置き換えますか？</h2>
+            <p className="mt-4 text-sm leading-7">{savePeople.find(item => item.id === selectedSavePerson)?.display_name || 'この人'}さんの年輪にある無料3問の語りと添付画像を、今回の3問でまとめて置き換えます。以前の内容は元に戻せません。完成済みBOOKは変わりません。</p>
+            <button type="button" disabled={busy} onClick={() => confirmRingSave(true)}
+              className="trial-save-confirm-button mt-6 min-h-12 w-full rounded-full bg-[var(--book-primary)] text-white disabled:opacity-50">{busy ? '置き換えています…' : '3問を置き換える'}</button>
+            <button type="button" disabled={busy} onClick={() => { setConfirmReplace(false); setError(''); }}
+              className="mt-2 min-h-11 w-full text-[var(--book-muted)]">キャンセル</button>
           </div>
         </div>}
+        {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
-      {screen === 'end_saved' && <main className="px-7 py-20 text-center">
-        <h1 className="text-2xl">再開URLを保存してください</h1>
-        <p className="mt-6 leading-loose text-white/65">有効期限は無料3問の開始から10日間です。URLを知っている人は語りを見られるため、他の人へ送らないでください。</p>
-        <button type="button" onClick={shareResumeUrl} className="mt-9 w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-[#15243a]">共有・コピーする</button>
-        <input readOnly aria-label="再開URL" value={resumeUrl} onFocus={event => event.target.select()} className="mt-5 w-full rounded-xl border border-white/20 bg-white/5 p-3 text-xs" />
-        {shareStatus && <p role="status" className="mt-4 text-sm">{shareStatus}</p>}
-        <button type="button" onClick={() => setScreen('finished')} className="mt-8 text-sm underline">語りに戻る</button>
+      {screen === 'end_choice' && <main className="guest-trial-exit">
+        <h1>ここで終了する</h1>
+        <p>無料３問の開始から10日間、再開できます。</p>
+        <button type="button" onClick={saveAndExit} className="guest-trial-exit-primary">10日間保存する</button>
+        <button type="button" onClick={() => { setError(''); setConfirmDiscard(true); }} className="guest-trial-exit-secondary">保存せずに終了する</button>
+        <button type="button" onClick={() => setScreen(exitReturnScreen)} className="guest-trial-exit-back">語りに戻る</button>
+        {confirmDiscard && <dialog ref={discardDialogRef} className="guest-trial-discard-dialog" role="alertdialog"
+          aria-labelledby="guest-trial-discard-prompt" aria-describedby="guest-trial-discard-description"
+          onCancel={event => { event.preventDefault(); if (!busy) setConfirmDiscard(false); }}>
+          <h2 id="guest-trial-discard-prompt">語りを削除しますか？</h2>
+          <p id="guest-trial-discard-description">保存せず終了すると、残した語りは消えます。</p>
+          <div className="guest-trial-discard-actions">
+            <button type="button" autoFocus disabled={busy} onClick={() => { setConfirmDiscard(false); setError(''); }}
+              className="guest-trial-exit-secondary">戻る</button>
+            <button type="button" disabled={busy} onClick={discardAndExit} className="guest-trial-exit-primary">
+              {busy ? '削除中…' : '削除して終了'}
+            </button>
+          </div>
+          {error && <p role="alert" className="guest-trial-exit-error">{error}</p>}
+        </dialog>}
+      </main>}
+      {screen === 'end_saved' && <main className="guest-trial-exit">
+        <h1>再開URLを保存してください</h1>
+        <p>有効期限は無料３問の開始から10日間です。URLを知っている人は語りを見られるため、他の人へ送らないでください。</p>
+        <button type="button" onClick={shareResumeUrl} className="guest-trial-exit-primary">共有・コピーする</button>
+        <input readOnly aria-label="再開URL" value={resumeUrl} onFocus={event => event.target.select()} />
+        {shareStatus && <p role="status">{shareStatus}</p>}
+        <button type="button" onClick={() => setScreen(exitReturnScreen)} className="guest-trial-exit-back">語りに戻る</button>
       </main>}
       {screen === 'conversion' && <>{(developmentPreview || !purchasePreviewEnabled) &&
         <p className="px-7 pt-5 text-center text-xs text-amber-100/75">

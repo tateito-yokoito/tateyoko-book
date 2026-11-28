@@ -1,4 +1,5 @@
 import {familyQuestion} from './familyVoice.js';
+import { STORY_PHOTO_LIMIT, storyPhotoLimitMessage } from './storyPhotoLimit.js';
 
 // The selected Person/Project, never the original recording actor, is the scope.
 export function createFamilyStoryAccess(client, api, projectId) {
@@ -43,6 +44,12 @@ export function createFamilyStoryAccess(client, api, projectId) {
     },
     async addPhoto(file,answerId,replacing=null){
       await subject();
+      if (!replacing) {
+        const { count, error } = await client.from('media_assets')
+          .select('id',{ count:'exact', head:true }).eq('answer_id',answerId).eq('asset_type','photo');
+        if (error) throw Error('写真の枚数を確認できませんでした。');
+        if ((count || 0) >= STORY_PHOTO_LIMIT) throw Error(storyPhotoLimitMessage);
+      }
       // File identity + destination retain the same upload on a lost response.
       let targets=uploads.get(file);if(!targets){targets=new Map();uploads.set(file,targets);}
       const key=`${answerId}:${replacing || 'new'}`;

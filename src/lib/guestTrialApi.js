@@ -9,8 +9,10 @@ export function guestTrialEndpoint(supabaseUrl) {
   return `${url.origin}/functions/v1/guest-trial`;
 }
 
-export async function guestTrialStorageKey(giftToken = null) {
-  if (!giftToken) return 'tateyoko:guest-trial:self:v1';
+export async function guestTrialStorageKey(giftToken = null, personId = null) {
+  if (!giftToken) return personId
+    ? `tateyoko:guest-trial:person:${personId}:v1`
+    : 'tateyoko:guest-trial:self:v1';
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(giftToken));
   const fingerprint = Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, '0')).join('');
   return `tateyoko:guest-trial:gift:${fingerprint}:v1`;
@@ -55,6 +57,8 @@ export function guestTrialResumeUrl(location, session) {
   if (!/^[a-f0-9]{64}$/.test(session?.token || '')) throw new Error('再開URLを作成できません');
   const url = new URL('/', location.origin);
   url.searchParams.set('guest_trial', '1');
+  const personId = new URL(location.href || location.origin).searchParams.get('person');
+  if (/^[0-9a-f-]{36}$/i.test(personId || '')) url.searchParams.set('person', personId);
   url.hash = `resume=${session.token}`;
   return url.toString();
 }

@@ -3,6 +3,7 @@ import { BookOpen, ChevronLeft, ChevronRight, Home, Image, Users } from 'lucide-
 import { Scene_Login, Scene_Recording, PhotoCorrectionFlow, ensureProfileExists, supabaseClient } from './App.jsx';
 import { AnswerBodyEditor, AnswerEntryChoices, AnswerReview, AnswerSaveStatus } from './AnswerInputUI.jsx';
 import { CHILDHOOD_TRIAL_QUESTIONS } from './lib/childhoodTrial.js';
+import { guestTrialBookStarted, trialPersonUrl } from './lib/guestTrialRing.js';
 import FamilyHome, { FamilyHomeNav } from './FamilyHome.jsx';
 import { FamilyAvatarProvider } from './FamilyAvatar.jsx';
 import FamilyPersonPage from './FamilyPersonPage.jsx';
@@ -18,9 +19,13 @@ import {
   saveFamilyPlaceRelation, removeFamilyPlaceRelation,
   personNameParts, uploadFamilyPlacePortrait, downloadFamilyPlacePortrait, familyPlacePortraitUrl,
   familyPlaceFacts, saveFamilyPlaceFact, familyPlaceTimeline, familyPlaceStories, familyPlaceBookStories,
-  getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, addFamilyPlaceMedia,
+  getOrCreateFamilyPlaceStory, saveFamilyPlaceStory, familyPlaceMedia, familyPlaceBookMedia,
+  updateFamilyPlaceBookStory, addFamilyRingPhoto, addPersonalBookStoryPhoto, addFamilyPlaceMedia,
   setFamilyPlaceStoryVisibility, revokeFamilyPlaceMediaUrls,
 } from './lib/familyPlaceData.js';
+import { createFamilyApi } from './lib/familyConnection.js';
+import { createFamilyStoryAccess } from './lib/familyStories.js';
+import { STORY_PHOTO_LIMIT, storyPhotoLimitMessage } from './lib/storyPhotoLimit.js';
 import './family-place.css';
 import { preparePortraitSource } from './lib/portraitSource.js';
 import { hasKanji, kanaFieldForName, normalizeKanaReading,
@@ -28,9 +33,7 @@ import { hasKanji, kanaFieldForName, normalizeKanaReading,
 import { publicDemoClient, publicDemoUser, publicDemoSessionId, publicDemoMemories,
   savePublicDemoMemory } from './lib/familyPlacePublicDemo.js';
 
-// TEST-only provisional prompts. The owner will select the final person-based
-// questions; this route remains disabled in production builds until then.
-const testQuestions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) =>
+const personTrialQuestions = CHILDHOOD_TRIAL_QUESTIONS.map((question, index) =>
   ({ id: question.id, slot: index + 1, text: question.content }));
 const BookPurchaseJourney = React.lazy(() => import('./BookPurchaseJourneyPreview.jsx'));
 const FamilyProductionEntry = React.lazy(() => import('./FamilyProductionEntry.jsx'));
@@ -244,6 +247,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
   const [publishedBooks, setPublishedBooks] = useState([]);
   const [demoPublishedBook, setDemoPublishedBook] = useState(null);
   const [visibleBookProjects, setVisibleBookProjects] = useState([]);
+  const [accountBookStarted, setAccountBookStarted] = useState(null);
   const [projectsStatus, setProjectsStatus] = useState('loading');
   const [booksStatus, setBooksStatus] = useState('loading');
   const [checkoutProjectId, setCheckoutProjectId] = useState(null);
@@ -262,6 +266,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
   const [photoOpen, setPhotoOpen] = useState(false);
   const [storyQuestion, setStoryQuestion] = useState(null);
   const [activeTab, setActiveTab] = useState('ring');
+  const [trialSavedNotice, setTrialSavedNotice] = useState(false);
   const storyRef = useRef(null);
   const textRef = useRef('');
   const savedTextRef = useRef('');
@@ -272,7 +277,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
   const personLoadEpoch = useRef(0);
   const shelfReturnPerson = useRef((() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('tab') === 'books' ? params.get('person') : null;
+    return ['books','ring'].includes(params.get('tab')) ? params.get('person') : null;
   })());
   const shelfReturnPublication = useRef((() => {
     const params = new URLSearchParams(window.location.search);
@@ -327,6 +332,11 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     setRelationDecisions(nextDecisions);
     setHomeStoryCounts(counts);
     setSelfId(links.data?.find(link => persons.some(item => item.id === link.person_id))?.person_id || null);
+    if (!publicDemo && new URLSearchParams(window.location.search).get('return_trial') === '1'
+      && links.data?.some(link => persons.some(item => item.id === link.person_id))) {
+      window.location.replace('/?guest_trial=1&save=1');
+      return;
+    }
     if (!publicDemo && window.location.pathname === '/login') {
       const returnBook = new URLSearchParams(window.location.search).get('return_book');
       if (/^[a-f0-9]{48}$/i.test(returnBook || ''))
@@ -368,11 +378,18 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     if (projectResult.error) { setVisibleBookProjects([]); setBookStories([]); setProjectsStatus('error'); }
     else {
       setVisibleBookProjects(projectResult.data);
-      const nextBookStories = publicDemo ? [] : await familyPlaceBookStories(dataClient, personId,
-        projectResult.data, nextStories).catch(error => {
+      let nextBookStories = [];
+      try {
+        if (!publicDemo) nextBookStories = await familyPlaceBookStories(dataClient, personId,
+          projectResult.data, nextStories, bookResult.data || []);
+      } catch (error) {
         console.warn('BOOKの語りを読み込めませんでした', error);
-        return [];
-      });
+        if (epoch === personLoadEpoch.current) {
+          setBookStories([]);
+          setProjectsStatus('error');
+        }
+        return;
+      }
       if (epoch !== personLoadEpoch.current) return;
       setBookStories(nextBookStories);
       setProjectsStatus('ready');
@@ -389,6 +406,15 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     });
     return () => { live = false; data.subscription.unsubscribe(); };
   }, [publicDemo]);
+  useEffect(() => {
+    if (publicDemo || !user?.id) { setAccountBookStarted(null); return undefined; }
+    let live = true;
+    setAccountBookStarted(null);
+    guestTrialBookStarted(dataClient).then(started => {
+      if (live) setAccountBookStarted(started);
+    }).catch(() => { if (live) setAccountBookStarted(null); });
+    return () => { live = false; };
+  }, [publicDemo, user?.id]);
   useEffect(() => {
     if (!user) {
       setVerifiedUserId(null);
@@ -437,8 +463,10 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     if (!id || screen !== 'home' || !people.some(item => item.id === id)) return;
     shelfReturnPerson.current = null;
     setSelectedId(id);
-    setActiveTab('books');
-    const origin = new URLSearchParams(window.location.search).get('origin');
+    const returnParams = new URLSearchParams(window.location.search);
+    setActiveTab(returnParams.get('tab') === 'ring' ? 'ring' : 'books');
+    setTrialSavedNotice(returnParams.get('tab') === 'ring' && returnParams.get('trial_saved') === '1');
+    const origin = returnParams.get('origin');
     setPersonEntry(origin === 'tree' ? 'tree' : 'home');
     if (origin === 'tree' && people.some(item => item.id === treeViewRef.current.centerId))
       setTreeCenterId(treeViewRef.current.centerId);
@@ -447,6 +475,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     url.searchParams.delete('person');
     url.searchParams.delete('tab');
     url.searchParams.delete('origin');
+    url.searchParams.delete('trial_saved');
     window.history.replaceState({}, '', url);
   }, [people, screen]);
   useEffect(() => {
@@ -572,22 +601,34 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     setProductionProjectId(id); setScreen('book-production');
   };
   const resumeBook = async id => {
-    const { data, error: journeyError } = await dataClient.rpc('family_journey',{p:id});
-    if (!journeyError && data?.project_id && data?.can_produce) {
-      openProduction(id); return;
+    // Open within the confirmed click, before the async access check, so
+    // mobile browsers do not block the new tab after the request completes.
+    const opened = window.open('', '_blank');
+    if (!opened) throw new Error('別ウィンドウを開けませんでした');
+    opened.opener = null;
+    try {
+      const { data, error: journeyError } = await dataClient.rpc('family_journey',{p:id});
+      if (!journeyError && data?.project_id && data?.can_produce) {
+        const destination = new URL('/app', window.location.origin);
+        destination.searchParams.set('family_project', id);
+        opened.location.replace(destination.href);
+        return;
+      }
+      // Older self-produced BOOKs use the existing BOOK application. Confirm
+      // the selected person's paid work before handing it to that application.
+      const { data: project, error } = await dataClient.from('book_projects')
+        .select('id,owner_user_id,subject_person_id,access_status,status')
+        .eq('id', id).maybeSingle();
+      if (error || project?.owner_user_id !== user?.id ||
+        project?.subject_person_id !== selectedId || project?.status !== 'active' ||
+        !['paid','gifted','legacy'].includes(project?.access_status))
+        throw new Error('購入済みのBOOKを確認できませんでした');
+      window.localStorage.setItem(`tateyoko:active-book-project:${user.id}`, id);
+      opened.location.replace(new URL('/?app=1', window.location.origin).href);
+    } catch (cause) {
+      opened.close();
+      throw cause;
     }
-    // Older self-produced BOOKs use the existing BOOK application, not the
-    // family-managed journey RPC. Confirm this is the selected person's paid
-    // work before handing the exact project to that application.
-    const { data: project, error } = await dataClient.from('book_projects')
-      .select('id,owner_user_id,subject_person_id,access_status,status')
-      .eq('id', id).maybeSingle();
-    if (error || project?.owner_user_id !== user?.id ||
-      project?.subject_person_id !== selectedId || project?.status !== 'active' ||
-      !['paid','gifted','legacy'].includes(project?.access_status))
-      throw new Error('購入済みのBOOKを確認できませんでした');
-    window.localStorage.setItem(`tateyoko:active-book-project:${user.id}`, id);
-    window.location.assign('/?app=1');
   };
   const leaveBookIntroduction = () => {
     if (consultationProjectId) {
@@ -740,6 +781,10 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       }
       await loadHome(user);
       setTreeCenterId(id);
+      if (new URLSearchParams(window.location.search).get('return_trial') === '1') {
+        window.location.replace('/?guest_trial=1&save=1');
+        return;
+      }
       setScreen('home');
     } catch (cause) { setError(cause.message || '登録できませんでした'); }
     finally { setBusy(false); }
@@ -836,6 +881,126 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       await loadPerson(person.id);
     } catch (cause) { setError(cause.message || '記録を開けませんでした'); }
     finally { setBusy(false); }
+  };
+  const saveRingStory = async (story, body) => {
+    let updated;
+    if (story.source === 'book') updated = await updateFamilyPlaceBookStory(dataClient, story, body,
+      story.visibility === 'private');
+    else {
+      const row = stories.find(item => item.id === story.id);
+      if (!row) throw new Error('語りを読み込み直してください。');
+      const saved = await saveFamilyPlaceStory(dataClient, row, {
+        body, transcript_raw:row.transcript_raw || '',
+        transcript_readable:row.transcript_readable || '', transcript_essay:row.transcript_essay || '',
+      });
+      updated = { ...story, body:saved.body, revision:saved.revision };
+    }
+    await loadPerson(person.id);
+    return updated;
+  };
+  const polishRingStory = async (story, body, style) => {
+    if (!user || !person || person.id !== selfId) throw new Error('本人の語りだけ編集できます。');
+    const source = body.trim();
+    if (!source) throw new Error('文章を入力してください。');
+    if (story.source === 'book' && story.sequenceOrder) {
+      const { data, error } = await dataClient.functions.invoke('polish-written-answer', {
+        body:{ projectId:story.projectId, sequenceOrder:story.sequenceOrder,
+          text:source, questionText:story.question, style },
+      });
+      if (error || !data?.success || !data.candidate)
+        throw new Error(data?.error || '文章を整えられませんでした。元の文章は残っています。');
+      return data.candidate;
+    }
+    const input = story.source === 'free'
+      ? { freeStoryId:story.id, answerId:story.id }
+      : { answerId:story.id, bookProjectId:story.projectId };
+    const { data, error } = await dataClient.functions.invoke('polish-transcript', {
+      body:{...input, transcriptRaw:source, questionText:story.question},
+    });
+    if (error || !data?.success)
+      throw new Error(data?.error || '文章を整えられませんでした。元の文章は残っています。');
+    return style === 'essay' ? data.transcript_essay : data.transcript_readable;
+  };
+  const lockRingStory = async (story, locked) => {
+    let updated;
+    if (story.source === 'book') updated = await updateFamilyPlaceBookStory(dataClient, story,
+      story.body, locked);
+    else {
+      const row = stories.find(item => item.id === story.id);
+      if (!row) throw new Error('語りを読み込み直してください。');
+      const saved = await setFamilyPlaceStoryVisibility(dataClient, row, locked ? 'private' : 'family');
+      updated = { ...story, visibility:saved.visibility, revision:saved.revision };
+    }
+    await loadPerson(person.id);
+    return updated;
+  };
+  const loadRingMedia = async story => story.source === 'book'
+    ? familyPlaceBookMedia(dataClient, story.id)
+    : (await familyPlaceMedia(dataClient, story.id)).map(item => ({
+      ...item, kind:item.asset_type,
+    }));
+  const loadRingListPhotos = async story => story.source === 'book'
+    ? familyPlaceBookMedia(dataClient, story.id, { kind:'photo', limit:3 })
+    : familyPlaceMedia(dataClient, story.id, { kind:'photo', limit:3 });
+  const addRingPhoto = async (story, file) => {
+    if (!user || !person || person.id !== selfId) throw new Error('本人の語りだけ編集できます。');
+    const count = async (table, column, kind = null) => {
+      let query = dataClient.from(table).select('id',{count:'exact',head:true}).eq(column,story.id);
+      if (kind) query = query.eq('asset_type',kind);
+      const result = await query;
+      if (result.error) throw result.error;
+      return result.count || 0;
+    };
+    const photoCount = story.source === 'free'
+      ? await count('family_free_story_media','story_id','photo')
+      : await (async () => {
+        const { data, error } = await dataClient.from('family_ring_story_media')
+          .select('storage_path').eq('answer_id',story.id);
+        if (error) throw error;
+        return await count('media_assets','answer_id','photo')
+          + (data || []).filter(item => !/\.(?:m4a|webm|aac|mp3|wav|ogg)$/i.test(item.storage_path || '')).length;
+      })();
+    if (photoCount >= STORY_PHOTO_LIMIT) throw new Error(storyPhotoLimitMessage);
+    if (story.source === 'free') await addFamilyPlaceMedia(dataClient,user.id,story.id,file,'photo');
+    else if (story.completed) await addFamilyRingPhoto(dataClient,user.id,story,person.id,file);
+    else {
+      const { data:managed, error:managedError } = await dataClient.rpc('family_managed',{p:story.projectId});
+      if (managedError) throw managedError;
+      if (managed) {
+        const api = createFamilyApi(dataClient,{ allowProduction:true });
+        await createFamilyStoryAccess(dataClient,api,story.projectId).addPhoto(file,story.id);
+      } else await addPersonalBookStoryPhoto(dataClient,user,story,person,file);
+    }
+    await loadPerson(person.id);
+  };
+  const addRingVoice = async (story, blob, seconds, options = {}) => {
+    if (!user || !person || person.id !== selfId) throw new Error('本人の語りだけ編集できます。');
+    if (!blob?.size) throw new Error('録音を確認してください。');
+    const form = new FormData();
+    form.append('mode',options.analyzeOnly ? 'analyze' : 'commit');
+    form.append('source',story.source === 'free' ? 'free' : 'book');
+    form.append('answerId',story.id);
+    form.append('durationSeconds',String(seconds));
+    form.append('questionText',story.question || '');
+    form.append('audio',blob,blob.type.includes('webm') ? 'voice.webm' : 'voice.m4a');
+    if (!options.analyzeOnly) {
+      form.append('body',options.body || '');
+      form.append('expectedRevision',String(story.source === 'free' ? story.revision : story.text_revision));
+      form.append('private',String(Boolean(options.locked)));
+      form.append('raw',options.raw || '');
+      form.append('readable',options.readable || '');
+      form.append('essay',options.essay || '');
+      form.append('style',options.style || 'readable');
+    }
+    const { data, error } = await dataClient.functions.invoke('family-ring-voice',{body:form});
+    if (error || !data?.success) throw new Error(data?.error || '声を処理できませんでした。');
+    if (options.analyzeOnly) return {
+      raw:data.transcript_raw,readable:data.transcript_readable,essay:data.transcript_essay,
+    };
+    await loadPerson(person.id);
+    return { ...story, body:data.story.body,
+      ...(story.source === 'free' ? {revision:data.story.revision}
+        : {text_revision:data.story.text_revision}) };
   };
   const flushText = async () => {
     if (!storyRef.current) return;
@@ -971,7 +1136,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
   if (!user) return <div className="fp-auth">{demoLoginOpen
     ? <FamilyPlaceDemoLogin client={dataClient} onBack={() => setDemoLoginOpen(false)}
         onAuthenticated={setUser}/>
-    : <><Scene_Login familyPlaceLogin onLogin={() =>
+    : <><Scene_Login familyPlaceLogin familyTrialSave={new URLSearchParams(window.location.search).get("return_trial") === "1"} onLogin={() =>
       dataClient.auth.getUser().then(({ data }) => setUser(data.user))} />
       <button type="button" className="fp-demo-login-entry" onClick={() => setDemoLoginOpen(true)}>
         デモアカウントで開く
@@ -1098,16 +1263,42 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
       </form>
     </main>}
     {screen === 'person' && person && <FamilyPersonPage person={person} stories={stories} bookStories={bookStories}
+      ringStories={[
+        ...stories.filter(row => Boolean(row.body || row.transcript_raw || row.media_count)).map(row => ({
+          source:'free', id:row.id, theme:CHILDHOOD_TRIAL_QUESTIONS.some(q => q.id === row.question_key) ? '幼い頃' : '無料3問', question:row.question_text,
+          body:row.body || row.transcript_readable || row.transcript_raw || '',
+          visibility:row.visibility, revision:row.revision, hasAudio:row.has_audio,
+          photoCount:row.photo_count,
+        })),
+        ...bookStories.map(row => ({ source:'book', id:row.id, projectId:row.book_project_id,
+          theme:row.chapter, question:row.question_text, body:row.body,
+          sequenceOrder:row.sequence_order,
+          visibility:row.visibility, text_revision:row.text_revision,
+          selected_style:row.selected_style,
+          hasAudio:row.has_audio,
+          photoCount:row.photo_count,
+          completed:publishedBooks.some(book => book.book_project_id === row.book_project_id),
+        })),
+      ]}
+      ringCanEdit={person.id === selfId} onSaveRingStory={saveRingStory}
+      onLockRingStory={lockRingStory} onLoadRingMedia={loadRingMedia}
+      onLoadRingListPhotos={loadRingListPhotos}
+      onAddRingPhoto={addRingPhoto}
+      onAddRingVoice={publicDemo ? null : addRingVoice}
+      onPolishRingStory={publicDemo ? null : polishRingStory}
       memories={memories} onAddMemory={publicDemo ? startMemory : null}
       supabaseClient={publicDemo ? supabaseClient : dataClient}
       books={publishedBooks} booksStatus={booksStatus} onRetryBooks={() => loadPerson(person.id)}
       publishedPublication={demoPublishedBook} publicDemo={publicDemo}
       visibleBookProjects={visibleBookProjects} projectsStatus={projectsStatus}
-      facts={familyPlaceTimeline(person,facts)} questions={testQuestions} activeTab={activeTab}
-      onTabChange={setActiveTab} onBack={personEntry === 'tree' ? returnToTree : goHome}
+      accountBookStarted={accountBookStarted}
+      trialSavedNotice={trialSavedNotice}
+      facts={familyPlaceTimeline(person,facts)} questions={personTrialQuestions} activeTab={activeTab}
+      onTabChange={tab => { setTrialSavedNotice(false); setActiveTab(tab); }} onBack={personEntry === 'tree' ? returnToTree : goHome}
       backLabel={personEntry === 'tree' ? '家系図' : 'ホーム'} entryOrigin={personEntry}
       onProfile={() => startProfile()}
       onOpenBook={publicDemo ? null : openBookIntroduction}
+      onTryFreeTrial={publicDemo ? null : id => window.location.assign(trialPersonUrl(id))}
       onResumeBook={publicDemo ? null : id => resumeBook(id).catch(() => setError('BOOKを開けませんでした。'))}
       onOpenStory={openStory} busy={busy}
       onAddFact={() => {setFactDraft({fact_type:'education',label:'',event_year:'',event_month:'',event_day:'',detail:''});setScreen('profile');}}/>}
@@ -1136,6 +1327,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
     {screen === 'book-preview' && <React.Suspense fallback={<p>BOOK紹介を読み込んでいます…</p>}><BookPurchaseJourney
       key={`${bookEntry}:${bookEntry === 'home' ? '' : person?.id || ''}`}
       person={bookEntry === 'home' ? null : person} people={people} client={dataClient}
+      selfPersonId={selfId}
       livePurchase={import.meta.env.VITE_PUBLIC_TEST_MODE !== 'true'
         || import.meta.env.VITE_FAMILY_PURCHASE_TEST_MODE === 'true'} checkoutProjectId={checkoutProjectId}
       initialProjectId={consultationProjectId}

@@ -26,3 +26,44 @@
 .fp-person-portrait>.family-avatar-illustration>img{height:auto;object-fit:initial}
 .fp-person-memories{display:grid;gap:14px;margin-top:14px}.fp-person-memory{overflow:hidden;border:1px solid #ebe6d9;border-radius:14px;background:#fffefa;box-shadow:0 3px 9px #483c2618}.fp-person-memory>img{display:block;width:100%;max-height:300px;object-fit:cover}.fp-person-memory>div{padding:12px 15px 15px}.fp-person-memory time{display:block;color:#557f2a;font-size:12px}.fp-person-memory strong{display:block;margin-top:3px;font-size:16px}.fp-person-memory p{margin:6px 0 0;white-space:pre-wrap;font-size:14px;line-height:1.65}
 .fp-published-ring{margin-top:30px;border-top:1px solid #e1e3d6;padding-top:12px}.fp-published-ring>h2{font-size:17px}.fp-published-chapter{margin-top:9px;border:1px solid #e2e4d6;border-radius:12px;background:#fffefa;overflow:hidden}.fp-published-chapter>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:54px;padding:12px 14px;color:#263d2b;font-size:15px;font-weight:700;cursor:pointer}.fp-published-chapter>summary small{flex:none;color:#697966;font-size:12px;font-weight:500}.fp-published-chapter-stories{border-top:1px solid #e8e9dc;padding:0 14px}.fp-published-chapter-stories>details+details{border-top:1px solid #ecece3}.fp-published-chapter-stories summary{padding:14px 0;font-size:14px;font-weight:600;line-height:1.6;cursor:pointer}.fp-published-chapter-stories p{margin:0 0 12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.8}.fp-published-chapter-stories small{display:block;margin:0 0 14px;color:#62715a;font-size:12px}.fp-published-ring>a{display:flex;align-items:center;justify-content:center;gap:5px;min-height:44px;margin-top:14px;border:1px solid #a9bf82;border-radius:999px;color:#477121;font-size:14px;font-weight:700;text-decoration:none}.fp-published-ring>a svg{width:17px}
+
+/* Shared person page: compact identity, calm surfaces and consistent actions. */
+.fp-person-page{background:#faf9f5;color:#25372c}
+.fp-person-topbar{background:#faf9f5;border-bottom:1px solid #e9e8e1}
+.fp-person-topbar>strong{font-size:14px;font-weight:600;color:#526651}
+.fp-person-intro{gap:12px;padding:12px 18px 5px}
+.fp-person-portrait{width:62px;height:62px;border:1px solid #e5e8dd;box-shadow:none}
+.fp-person-intro h1{font-size:19px}
+.fp-person-bio{-webkit-line-clamp:2}
+.fp-person-profile{min-height:44px;height:44px;width:max-content;max-width:calc(100% - 36px);margin:0 18px 6px auto;padding:0 9px;border:0;border-radius:6px;background:transparent;color:#446949;font-size:12px;box-shadow:none}
+.fp-person-profile svg:first-child{width:14px}
+.fp-book-preview-entry{margin:0 18px 10px}
+.fp-book-preview-entry button{min-height:44px;border-color:#d6ded1;border-radius:12px;background:#f3f6ee;color:#315d42;font-size:14px;white-space:nowrap}
+.fp-book-preview-entry button svg,.fp-person-book-copy a svg,.fp-person-add-story svg{flex:none}
+.fp-person-tabs{background:#faf9f5;border-bottom-color:#dfe4dc}
+.fp-person-tabs button[aria-selected=true]{color:#315d42;border-bottom-color:#668e69}
+.fp-person-content{padding-top:17px}
+.fp-person-trial-saved{margin:0 0 15px;padding:12px 14px;border-radius:10px;background:#edf3e9;color:#28473e;font-size:14px;font-weight:700;line-height:1.6}
+.fp-person-content>h2{margin:2px 0 14px;font-size:17px;color:#2c4938}
+.fp-person-book,.fp-person-memory,.fp-person-event,.fp-person-story-empty,.fp-person-story,.fp-person-book-empty{border-color:#e3e6dc;background:#fffefa;box-shadow:none}
+.fp-person-book,.fp-person-memory,.fp-person-event{border-radius:12px}
+.fp-person-story-empty{padding:20px;font-size:14px;color:#536a59}
+.fp-person-add-story,.fp-person-story-empty button{min-height:44px;border-color:#b7cbb5;border-radius:12px;background:#f5f8f2;color:#315d42}
+.fp-person-book-copy a{min-height:44px;white-space:nowrap}
+.fp-person-page-detail .fp-person-intro,.fp-person-page-detail .fp-person-profile,.fp-person-page-detail .fp-book-preview-entry{display:none}
+.fp-person-compact-identity{display:flex;align-items:center;justify-content:center;gap:8px;min-width:0}
+.fp-person-compact-identity strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}
+.fp-person-compact-avatar{width:30px;height:30px;flex:none;overflow:hidden;border-radius:50%}
+.fp-person-compact-avatar img,.fp-person-compact-avatar .family-avatar{width:100%;height:100%;object-fit:cover}
+.fp-person-intro-copy{flex:1}
+.fp-person-intro .fp-person-profile{flex:none;display:grid;place-content:center;justify-items:center;gap:0;width:44px;min-width:44px;max-width:44px;height:44px;margin:0;padding:0;border:1px solid #e2e8de;border-radius:10px;background:#f6f8f4;color:#446949;font-size:10px;line-height:1.25}
+.fp-person-intro .fp-person-profile svg{width:17px;height:17px}
+.fp-person-page-detail .fp-person-intro{display:none}
+
+.fp-resume-dialog-backdrop{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:20px;background:#20302799}
+.fp-resume-dialog{width:min(100%,390px);padding:26px 22px 22px;border:1px solid #dce4d9;border-radius:18px;background:#fffefa;box-shadow:0 18px 55px #172c2330;color:#253b2d}
+.fp-person-content .fp-resume-dialog h2,.fp-resume-dialog h2{margin:0;font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN",sans-serif;font-size:18px;font-weight:700;line-height:1.5}
+.fp-resume-dialog p{margin:14px 0 23px;font-size:14px;line-height:1.8;color:#526758}
+.fp-resume-dialog-actions{display:grid;gap:9px}
+.fp-resume-dialog-actions button{min-height:48px;border:1px solid #315e45;border-radius:12px;background:#315e45;color:#fff;font-size:15px;font-weight:700;cursor:pointer}
+.fp-resume-dialog-actions button+button{background:transparent;color:#315e45}

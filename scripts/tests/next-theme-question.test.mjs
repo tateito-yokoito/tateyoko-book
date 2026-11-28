@@ -19,3 +19,14 @@ test('a completed or skipped question is not reopened', () => {
   ];
   assert.deepEqual(nextThemeQuestion(questions, 1), { index: 2, sequenceOrder: 7 });
 });
+
+test('a recovered earlier theme continues after later themes already completed', () => {
+  const questions = [
+    { sequence_order: 5, theme_order: 1, status: 'answered' },
+    { sequence_order: 8, theme_order: 2, status: 'answered' },
+    { sequence_order: 9, theme_order: 2, status: 'answered' },
+    { sequence_order: 11, theme_order: 3, status: 'skipped' },
+    { sequence_order: 13, theme_order: 4, status: 'pending' },
+  ];
+  assert.deepEqual(nextThemeQuestion(questions, 1), { index: 4, sequenceOrder: 13 });
+});

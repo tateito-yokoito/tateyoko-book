@@ -1,0 +1,91 @@
+.fp-ring-preview-shell{min-height:100dvh;background:#faf7ef;color:#263527;font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN",sans-serif}
+.fp-ring-preview-banner{box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:7px;min-height:42px;margin:0;padding:7px 15px;background:#eaf0e1;color:#42643e;font-size:12px;line-height:1.5;text-align:center}
+.fp-ring-review{font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN",sans-serif}
+.fp-ring-review button{font:inherit;cursor:pointer}
+.fp-ring-review-switch{display:flex;align-items:center;gap:6px;margin:2px 0 20px;color:#6a7565;font-size:12px}
+.fp-ring-review-switch span{margin-right:auto}.fp-ring-review-switch button{min-height:36px;padding:6px 11px;border:1px solid #cad6bf;border-radius:999px;background:#fffefa;color:#45673c;font-size:12px}
+.fp-ring-review-switch button[aria-pressed=true]{background:#e3ecd8;border-color:#90aa77;color:#2d532d;font-weight:700}
+.fp-ring-review-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:0 1px 16px}
+.fp-ring-review-heading h2{margin:0 0 2px;font-size:24px;font-weight:700;line-height:1.4}.fp-ring-review-heading p{margin:0;color:#677565;font-size:13px;line-height:1.6}.fp-ring-review-heading>span{color:#60745b;font-size:12px;white-space:nowrap}
+.fp-ring-themes{display:grid;gap:12px}.fp-ring-theme{overflow:hidden;border:1px solid #e2e5d9;border-radius:15px;background:#fffefa;box-shadow:0 3px 11px #4b463110}
+.fp-ring-theme-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:68px;padding:14px 17px;border:0;background:transparent;color:#2a4030;text-align:left}
+.fp-ring-theme-toggle span{display:grid;gap:2px}.fp-ring-theme-toggle strong{font-size:17px;line-height:1.4}.fp-ring-theme-toggle small{color:#74836f;font-size:12px}.fp-ring-theme-toggle svg{flex:none;width:19px;transition:transform .18s ease}.fp-ring-theme-toggle[aria-expanded=true] svg{transform:rotate(180deg)}
+.fp-ring-theme-rows{border-top:1px solid #e8eadf;padding:0 16px}.fp-ring-story-row{display:flex;align-items:center;gap:8px;width:100%;min-height:75px;padding:13px 0;border:0;background:transparent;color:#293a2e;text-align:left}.fp-ring-story-row+.fp-ring-story-row{border-top:1px solid #edf0e8}.fp-ring-story-row>span{min-width:0;flex:1}.fp-ring-story-row strong{display:flex;align-items:baseline;gap:4px;font-size:14px;line-height:1.6;font-weight:600}.fp-ring-story-row strong svg{flex:none;color:#6b825f}.fp-ring-story-row small{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;margin-top:3px;color:#6b7669;font-size:12px;line-height:1.55}.fp-ring-story-row>svg{flex:none;width:16px;color:#79926a}
+.fp-ring-continue{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:48px;margin-top:20px;border:1px solid #9ab489;border-radius:999px;background:#fffefa;color:#3c6631;font-size:14px;font-weight:700}.fp-ring-message{margin:14px 0;color:#536e47;font-size:13px;line-height:1.5}
+.fp-ring-detail-top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:5px;min-height:48px;margin:0 0 20px}.fp-ring-detail-top>button{display:flex;align-items:center;gap:2px;min-height:44px;padding:0;border:0;background:transparent;color:#426940;font-size:14px}.fp-ring-detail-top>span{color:#73866c;font-size:13px;white-space:nowrap}.fp-ring-detail-menu{position:relative;justify-self:end}.fp-ring-detail-menu>button{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:#edf2e7;color:#315d35}.fp-ring-detail-menu [role=menu]{position:absolute;z-index:3;top:48px;right:0;width:205px;overflow:hidden;border:1px solid #dce5d6;border-radius:12px;background:#fffefa;box-shadow:0 8px 25px #243c252b}.fp-ring-detail-menu [role=menu] button{display:block;width:100%;min-height:47px;padding:10px 15px;border:0;background:transparent;color:#2d432f;text-align:left;font-size:13px}.fp-ring-detail-menu [role=menu] button+button{border-top:1px solid #e9ede5}
+.fp-ring-detail,.fp-ring-editor{padding:0 2px 30px}.fp-ring-detail-kicker{display:flex;align-items:center;gap:5px;margin:0 0 13px;color:#6d8462;font-size:12px}.fp-ring-detail h2,.fp-ring-editor h2{margin:0 0 25px;font-size:21px;font-weight:650;line-height:1.65;color:#263b2a}.fp-ring-detail-body{margin:0 0 24px;white-space:pre-wrap;overflow-wrap:anywhere;color:#314335;font-size:16px;line-height:2}
+.fp-ring-photo{display:grid;place-items:center;gap:6px;min-height:170px;margin:18px 0;padding:20px;border-radius:12px;background:linear-gradient(145deg,#e2e9d8,#f2ebdb);color:#607562;font-size:12px}.fp-ring-media{display:flex;align-items:center;gap:9px;min-height:54px;margin-top:9px;padding:10px 13px;border:1px solid #dce5d5;border-radius:12px;background:#fffefa;color:#355a3b;font-size:14px}.fp-ring-media small{margin-left:auto;color:#7c8b78;font-size:11px;text-align:right}
+.fp-ring-editor label{display:block;margin:0 0 8px;color:#536c50;font-size:13px;font-weight:700}.fp-ring-editor textarea{box-sizing:border-box;width:100%;min-height:220px;padding:15px;border:1px solid #b7c8ae;border-radius:12px;background:#fffefa;color:#283a2b;font-family:inherit;font-size:15px;line-height:1.8;resize:vertical}.fp-ring-editor p{margin:12px 0 20px;color:#627261;font-size:12px;line-height:1.6}.fp-ring-save{display:block;width:100%;min-height:52px;border:0;border-radius:999px;background:#4e7925;color:#fff;font-size:15px;font-weight:700}.fp-ring-save:disabled{opacity:.5}.fp-ring-cancel{display:block;min-height:44px;margin:8px auto 0;padding:8px 14px;border:0;background:transparent;color:#5d7457;font-size:13px}
+.fp-ring-detail-photo{display:block;width:100%;height:auto;margin:18px 0;border-radius:12px}.fp-ring-detail audio,.fp-ring-detail video{display:block;width:100%;max-width:100%;margin:15px 0;border-radius:10px}.fp-ring-detail video{background:#18291c}
+.fp-ring-editor .fp-ring-photo-add{display:block;width:100%;min-height:44px;margin:12px 0;padding:10px 15px;border:1px solid #9ab489;border-radius:12px;background:#fffefa;color:#3c6631;text-align:center;font-size:14px;font-weight:700;cursor:pointer}.fp-ring-photo-add input{display:block;width:100%;margin:7px 0 0;font-size:12px}
+@media(min-width:621px){.fp-ring-preview-shell{padding:28px}.fp-ring-preview-banner{max-width:620px;margin:0 auto}.fp-ring-preview-shell .fp-person-page{box-shadow:0 12px 36px #243c2520}}
+
+.fp-ring-theme{box-shadow:none;border-color:#e3e7df;border-radius:12px}
+.fp-ring-story-row strong{font-family:"Noto Serif JP","Yu Mincho",serif;font-weight:550;font-size:15px;line-break:strict;overflow-wrap:anywhere;text-wrap:pretty}
+.fp-ring-story-row small{font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN",sans-serif;font-size:13px}
+.fp-ring-review-heading h2{font-size:18px;color:#2c4938}
+.fp-ring-detail-top{position:sticky;top:44px;z-index:4;margin:-17px 0 0;padding:2px 0;background:#faf9f5;border-bottom:1px solid #e3e7df}
+.fp-ring-story-navigation{position:sticky;top:95px;z-index:2;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:4px;min-height:49px;margin:0 0 24px;background:#faf9f5;border-bottom:1px solid #e3e7df;color:#4e6753}
+.fp-ring-story-navigation button{min-height:44px;padding:0 2px;border:0;background:transparent;color:#315d42;font-size:13px;font-weight:700;white-space:nowrap}
+.fp-ring-story-navigation button:last-child{text-align:right}
+.fp-ring-story-navigation button:disabled{color:#adb8ab;cursor:default}
+.fp-ring-story-navigation span{font-size:13px;white-space:nowrap}
+.fp-ring-preview-controls{max-width:620px;margin:auto;background:#edf2ea;border-bottom:1px solid #dce4d8}
+.fp-ring-preview-controls .fp-ring-preview-banner{background:transparent}
+.fp-ring-preview-controls>div{display:flex;justify-content:center;gap:6px;padding:0 10px 9px}
+.fp-ring-preview-controls button{min-height:40px;padding:4px 10px;border:1px solid #b8cab5;border-radius:9px;background:#fffefa;color:#3e5f43;font-size:12px;cursor:pointer}
+.fp-ring-preview-controls button[aria-pressed=true]{background:#365f45;color:#fff;border-color:#365f45}
+.fp-ring-preview-controls>p[role=status]{margin:0;padding:0 15px 9px;color:#48654c;font-size:12px}
+
+/* Keep the ring heading level with the bookshelf, memory and timeline tabs. */
+.fp-ring-review-heading{align-items:baseline;justify-content:flex-start;flex-wrap:wrap;gap:3px 10px;margin:0 0 14px}
+.fp-person-content .fp-ring-review-heading h2{margin:2px 0 0;font-size:17px;font-weight:800;line-height:1.4}
+.fp-ring-review-heading p{font-size:12px;line-height:1.5}
+.fp-ring-theme{background:#fffefa}
+.fp-ring-theme-toggle{min-height:47px;padding:8px 15px;background:#f0f3ed}
+.fp-ring-theme-toggle strong{display:flex;align-items:baseline;gap:2px;font-size:16px;line-height:1.45}
+.fp-ring-theme-toggle small{font-size:14px;font-weight:600;color:#657966}
+.fp-ring-story-row strong,.fp-ring-story-row small{position:relative}
+.fp-ring-story-row strong svg,.fp-ring-story-row small svg{position:absolute;left:-16px;width:14px;height:14px;color:#6b825f}
+.fp-ring-story-row strong svg{top:4px}
+.fp-ring-story-row small svg{top:3px}
+.fp-ring-story-row small.has-audio{box-sizing:border-box;width:calc(100% + 16px);margin-left:-16px;padding-left:19px}
+.fp-ring-story-row small.has-audio svg{left:0}
+.fp-ring-story-row>span{transform:translateX(5px)}
+.fp-ring-story-photos{display:flex;align-items:center;gap:7px;margin-top:9px}
+.fp-ring-story-photos img{display:block;width:72px;height:56px;flex:none;object-fit:cover;border:1px solid #e3e8de;border-radius:7px}
+.fp-ring-story-more{color:#637762;font:500 11px/1.4 "Noto Sans JP",sans-serif;white-space:nowrap}
+.fp-ring-themes{gap:9.6px}
+
+/* The year-ring editor uses the same answer controls as BOOK, in the family palette. */
+.fp-ring-editor.answer-light{padding:3px 0 34px;background:transparent;--answer-surface:#fffefa;--answer-line:#d8e1d4;--answer-green:#315b45;--answer-muted:#667565}
+.fp-ring-editor-eyebrow{margin:0 0 8px!important;color:#688268!important;font-size:12px!important;font-weight:700;letter-spacing:.08em}
+.fp-ring-editor h2{margin:0 0 9px;font-family:"Noto Serif JP","Yu Mincho",serif;font-size:20px;font-weight:550;line-height:1.65}
+.fp-ring-editor-note{margin:0 0 20px!important;color:#687766!important;font-size:13px!important;line-height:1.6!important}
+.fp-ring-editor .answer-entry-choices{margin-bottom:24px}
+.fp-ring-editor .answer-entry-choices button{min-height:50px;background:#fffefa;border-color:#ccd9ca;border-radius:10px;font-size:13px}
+.fp-ring-editor .fp-ring-editor-label{margin:0 0 8px;color:#49654e;font-size:13px}
+.fp-ring-editor .answer-body-editor{min-height:190px;padding:15px 16px;border:1px solid #c5d4c3;border-radius:12px;background:#fffefa;color:#2c4032;font:400 15px/1.8 "Noto Sans JP",sans-serif}
+.fp-ring-editor .answer-photo-strip{margin:14px 0 4px}
+.fp-ring-editor audio{display:block;width:100%;margin:12px 0}
+.fp-ring-editor-file{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.fp-ring-editor-caution{padding:11px 13px;border-radius:9px;background:#f0f2e9;color:#566b57!important}
+.fp-ring-editor .fp-ring-save{margin-top:18px;background:#315b45;color:#fff;-webkit-text-fill-color:#fff}
+.fp-ring-recorder{min-height:100dvh;background:#faf7ef}
+.fp-ring-polish{display:grid;grid-template-columns:1fr;gap:8px;margin:13px 0 6px}
+.fp-ring-polish .answer-polish-choices__styles{grid-column:1;gap:7px}
+.fp-ring-polish .answer-polish-choices__styles button,.fp-ring-polish .answer-polish-choices__toggle{min-height:44px;border:1px solid #cbd8c8;border-radius:9px;background:#fffefa;color:#315b45;font:600 13px/1.5 "Noto Sans JP",sans-serif}
+.fp-ring-polish .answer-polish-choices__toggle{width:100%;min-height:46px}
+.answer-text-candidate--light{margin:14px 0 0;color:#304934;font-family:"Noto Sans JP",sans-serif}
+.answer-text-candidate--light h3{color:#304934;font-size:16px;font-weight:700}
+.answer-text-candidate--light>div:nth-child(2){background:#fffefa;border:1px solid #d5dfd2;color:#2f4333;font-size:15px}
+.answer-text-candidate--light button{color:#315b45!important;border-color:#cbd8c8!important}
+.answer-text-candidate--light .bg-white{background:#315b45!important;color:#fff!important;-webkit-text-fill-color:#fff!important}
+.answer-text-candidate--light p{color:#667565!important}
+.fp-ring-voice-review{margin:12px 0 18px;padding:16px;border:1px solid #d5dfd2;border-radius:12px;background:#fffefa;color:#304934;font-family:"Noto Sans JP",sans-serif}
+.fp-ring-voice-review h3{margin:0 0 8px;font-size:16px;font-weight:700}
+.fp-ring-voice-review>p{margin:0 0 14px;color:#667565;font-size:13px;line-height:1.6}
+.fp-ring-voice-styles{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:0 0 15px}
+.fp-ring-voice-styles button{min-height:44px;border:1px solid #cbd8c8;border-radius:9px;background:#fffefa;color:#315b45;font-size:13px}
+.fp-ring-voice-styles button[aria-pressed=true]{background:#e8f0e8;border-color:#749077;font-weight:700}
+.fp-ring-voice-review .fp-ring-voice-text{display:block;width:100%;min-height:150px;margin:0 0 18px;padding:14px;border:1px solid #d5dfd2;border-radius:9px;background:#f3f6f0;color:#304934;font:400 15px/1.8 "Noto Sans JP",sans-serif;white-space:pre-wrap;resize:vertical}

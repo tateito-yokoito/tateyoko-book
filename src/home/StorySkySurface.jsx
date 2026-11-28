@@ -3,7 +3,7 @@ import { useDailySky } from './useDailySky.js';
 import './story-sky.css';
 
 // A presentation boundary only. No recording, Auth, Person or navigation state.
-export default function StorySkySurface({ className = '', surfaceClassName = '', children, skyOverride, background = 'sky' }) {
+export default function StorySkySurface({ className = '', surfaceClassName = '', children, skyOverride, background = 'sky', contentRef, onContentScroll }) {
   const liveSky = useDailySky('story', background !== 'sky' || Boolean(skyOverride));
   const sky = skyOverride || liveSky;
   const [failed, setFailed] = useState(false);
@@ -11,7 +11,7 @@ export default function StorySkySurface({ className = '', surfaceClassName = '',
     <div className="story-sky-backdrop" aria-hidden="true">
       {background === 'sky' && sky && !failed && <img src={sky.questionSrc || sky.src} style={{objectPosition:sky.questionObjectPosition, '--sky-phone-position':sky.questionObjectPosition, '--sky-pc-position':sky.pcQuestionObjectPosition || sky.questionObjectPosition}} alt="" onError={() => setFailed(true)} />}
     </div>
-    <div className={`story-sky-content ${className}`}>{children}</div>
+    <div className={`story-sky-content ${className}`} ref={contentRef} onScroll={onContentScroll}>{children}</div>
   </div>;
 }
 
