@@ -7,7 +7,7 @@
 .landing-site .hp-v4-answer-nov8-no-heading .hp-v4-answer-grid {
   margin-top: 0;
 }
-.landing-site .hp-hero-nov8 h1 {
+.landing-site .hp-hero-nov8 .hp-service-title {
   font-size: clamp(42px, 4vw, 58px);
   line-height: 1.47;
   letter-spacing: .025em;
@@ -99,7 +99,7 @@
   .landing-site .hp-hero-nov8 {
     padding-bottom: 16px;
   }
-  .landing-site .hp-hero-nov8 h1 {
+  .landing-site .hp-hero-nov8 .hp-service-title {
     font-size: clamp(33px, 9.3vw, 38px);
     line-height: 1.55;
   }
