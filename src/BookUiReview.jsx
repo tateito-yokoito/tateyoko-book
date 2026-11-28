@@ -55,7 +55,11 @@ const previewQuestionLengths = {
   standard: '子どもの頃の家や、その周りで覚えている風景を教えてください。',
   long: '旅や日々の習慣、家庭の味など、暮らしの中で残しておきたい思い出はありますか？',
 };
-const open = key => window.location.assign(`?book_ui_review=${key}`);
+const open = key => {
+  const params = new URLSearchParams(window.location.search);
+  params.set('book_ui_review', key);
+  window.location.assign(`?${params}`);
+};
 const questionFontOptions = [
   ['a', 'A｜基準', 'Noto Serif JP · 500'],
   ['b', 'B｜少し太め', 'Noto Serif JP · 550'],
@@ -157,7 +161,7 @@ export default function BookUiReview({ screen }) {
 
   const reviewParams = new URLSearchParams(window.location.search);
   const questionLength = reviewParams.get('question_length');
-  const questionOverride = screen === 'answer' ? reviewParams.get('question_text') : null;
+  const questionOverride = ['answer', 'answer_voice'].includes(screen) ? reviewParams.get('question_text') : null;
   const reviewQuestion = questionOverride && questionOverride.length <= 160
     ? { ...previewQuestion, content: questionOverride }
     : Object.hasOwn(previewQuestionLengths, questionLength)
@@ -173,7 +177,7 @@ export default function BookUiReview({ screen }) {
       onBack={() => open('home')} onNext={() => open('answer_voice')}
       onWrite={() => open('answer_write')} onPhoto={noop} onEndToday={() => open('home')} />,
     answer_write: <AnswerWritingPreview />,
-    answer_voice: <Scene_Recording question={previewQuestion} lightMode userName="紡木 誠"
+    answer_voice: <Scene_Recording question={reviewQuestion} lightMode pairedQuestion userName="紡木 誠"
       progress={{ currentIndex: 0, total: 30 }} onBack={() => open('answer')}
       onComplete={() => open('answer_review')} />,
     answer_review: <div className="book-ui-review-answer"><h1>この問いの語り</h1>

@@ -9625,13 +9625,16 @@ if (getProjectRoleInviteTokenFromUrl()) {
         />
       )}
       {scene === "recording_mic_check" && (
-        <Scene_DailyMicCheck
-          onComplete={({ verified }) => {
+        <QuestionAnswerSurface question={currentQ} userName={user?.name || "あなた"}
+          storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
+          brightAnswer onBack={() => setScene(1)}
+          photos={<RecordingReferencePhotos urls={bookAnswerPhotos.map(photo => photo.url)} />}>
+          <Scene_DailyMicCheck inline onComplete={({ verified }) => {
             if (verified) markMicCheckDone();
             resetVoiceData();
             setScene(3);
-          }}
-        />
+          }} />
+        </QuestionAnswerSurface>
       )}
 
       {scene === 1 && (
@@ -9699,6 +9702,7 @@ if (getProjectRoleInviteTokenFromUrl()) {
   storyProgress={getMainStoryProgress(questionsDB, progress.currentIndex)}
   userName={user?.name || "あなた"}
   autoStart
+  pairedQuestion
   referencePhotos={bookAnswerPhotos.map(photo => photo.url)}
   onBack={() => setScene(1)}
   registerExitGuard={guard => { recordingExitGuardRef.current = guard; }}
@@ -17026,6 +17030,7 @@ export function Scene_SupportRecordingAssist({
         question={nextQuestion}
         progress={{ currentIndex: questionIndex, total: storyQuestions.length }}
         userName={project?.subject_name || "ご家族"}
+        pairedQuestion
         onBack={() => setPhase("question")}
         registerExitGuard={registerExitGuard}
         onComplete={processRecording}
@@ -19041,6 +19046,39 @@ function recordingSectionLabel(question) {
   return "人生の輪郭";
 }
 
+const questionScrollPositions = new WeakMap();
+
+function QuestionAnswerSurface({ question, userName, storyProgress, onBack, brightAnswer,
+  skyOverride, photos, children, footer }) {
+  const contentRef = useRef(null);
+  useLayoutEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = questionScrollPositions.get(question) || 0;
+  }, [question]);
+
+  return <StorySkySurface contentRef={contentRef}
+    onContentScroll={event => questionScrollPositions.set(question, event.currentTarget.scrollTop)}
+    className="question-flow-content question-flow-content--entry question-flow-content--paired h-full flex flex-col overflow-y-auto pb-4"
+    skyOverride={skyOverride} surfaceClassName={brightAnswer ? 'answer-light-recorder' : ''}
+    background={QUESTION_BACKGROUND}>
+    <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress}
+      sectionLabel={recordingSectionLabel(question)} isFormalOnboarding={isFormalOnboardingQuestion(question)}
+      onBack={onBack} />
+    <RecordingQuestionPrompt question={question} />
+    <div className="question-paired-actions">
+      {photos}
+      {children}
+    </div>
+    {footer}
+  </StorySkySurface>;
+}
+
+function RecordingReferencePhotos({ urls }) {
+  if (!urls.length) return null;
+  return <div className="answer-photo-strip" aria-label="語りながら見る写真">
+    {urls.map((url, index) => <img key={index} src={url} alt={`参考の写真 ${index + 1}`} />)}
+  </div>;
+}
+
 export function Scene1_MyPage({
   progress,
   storyProgress = progress,
@@ -19063,29 +19101,36 @@ export function Scene1_MyPage({
   onSkip,
   onEndToday
 }) {
-  const isFormalOnboarding = isFormalOnboardingQuestion(question);
-  const isOnboardingQuestion = isFormalOnboarding;
+  const isOnboardingQuestion = isFormalOnboardingQuestion(question);
   const brightAnswer = lightMode || question?.onboarding_group !== 'trial_experience';
-
-  const sectionLabel = recordingSectionLabel(question);
+  const footer = !isTokenMode() && (
+    <div className="question-flow-end-actions mt-5 flex shrink-0 items-center justify-center gap-3 pb-2">
+      {onSkip && (!isOnboardingQuestion || question?.onboarding_group === "starting_motivation") && (
+        <button onClick={onSkip}
+          className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-[1rem] underline underline-offset-4">
+          スキップ
+        </button>
+      )}
+      {onEndToday && <button onClick={onEndToday}
+        className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-[1rem] underline underline-offset-4">
+        今日はここまで
+      </button>}
+    </div>
+  );
 
   return (
-    <StorySkySurface className="question-flow-content question-flow-content--entry h-full flex flex-col overflow-y-auto pb-4" skyOverride={skyOverride}
-      surfaceClassName={brightAnswer ? 'answer-light-recorder' : ''} background={QUESTION_BACKGROUND}>
-      <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} onBack={onBack} />
-
-      <RecordingQuestionPrompt question={question} />
-
-      {brightAnswer && savedAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
+    <QuestionAnswerSurface question={question} userName={userName} storyProgress={storyProgress}
+      onBack={onBack} brightAnswer={brightAnswer} skyOverride={skyOverride} footer={footer}
+      photos={brightAnswer && !savedAnswer && <AnswerPhotoStrip photos={photos}
+        onOpen={photo => window.open(photo.url, '_blank', 'noopener,noreferrer')} onRemove={onPhotoRemove} />}>
+      {brightAnswer && savedAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice">
         <AnswerReview body={savedAnswer.answer.transcript_edited || savedAnswer.answer.transcript_readable
           || savedAnswer.answer.transcript_clean || savedAnswer.answer.transcript_raw || savedAnswer.answer.snippet || ''}
           photos={savedAnswer.photos} audio={savedAnswer.audio}
           showChoices={false} onFinish={onSavedAnswerNext} finishLabel="次の問いへ" canFinish>
           {onWrite && <button type="button" onClick={onWrite} className="answer-light-secondary">文章を編集する</button>}
         </AnswerReview>
-      </div> : brightAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice mt-5">
-        <AnswerPhotoStrip photos={photos} onOpen={photo => window.open(photo.url, '_blank', 'noopener,noreferrer')}
-          onRemove={onPhotoRemove} />
+      </div> : brightAnswer ? <div className="recording-control-dock recording-control-dock--start recording-control-dock--choice">
         <AnswerEntryChoices onVoice={onNext} onWrite={onWrite} onPhoto={onPhoto} />
         <AnswerSaveStatus state={photoSaveState} hasContent={photos.length > 0 || photoSaveState === 'failed'} onRetry={onPhotoRetry} />
         {photos.length > 0 && <button type="button" className="answer-review__finish" onClick={onPhotoFinish}
@@ -19099,26 +19144,7 @@ export function Scene1_MyPage({
         </button>}
       </div>}
 
-      {!isTokenMode() && (
-        <div className="question-flow-end-actions mt-5 flex shrink-0 items-center justify-center gap-3 pb-2">
-          {onSkip && (!isOnboardingQuestion || question?.onboarding_group === "starting_motivation") && (
-            <button
-              onClick={onSkip}
-              className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-[1rem] underline underline-offset-4"
-            >
-              スキップ
-            </button>
-          )}
-
-          <button
-            onClick={onEndToday}
-            className="min-h-[48px] min-w-[120px] px-4 flex items-center justify-center text-white/42 text-[1rem] underline underline-offset-4"
-          >
-            今日はここまで
-          </button>
-        </div>
-      )}
-    </StorySkySurface>
+    </QuestionAnswerSurface>
   );
 }
 
@@ -19183,7 +19209,7 @@ function QuietRecordingCircle({ seconds = 0, isPaused = false }) {
   );
 }
 
-export function Scene_DailyMicCheck({ onComplete }) {
+export function Scene_DailyMicCheck({ onComplete, inline = false }) {
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [micStatus, setMicStatus] = useState("idle");
 
@@ -19285,6 +19311,30 @@ export function Scene_DailyMicCheck({ onComplete }) {
     return <MicAccessGuide onRetry={startCheck} onContinue={() => proceed(false)} />;
   }
 
+  if (inline) {
+    const ready = micStatus === 'ready';
+    return <div className="question-inline-mic">
+      <button type="button" className="recording-start-bar"
+        disabled={micStatus === 'checking'} onClick={ready ? () => proceed(true) : startCheck}>
+        <Mic size={22} aria-hidden="true" />
+        {ready ? '録音に進む' : micStatus === 'checking' ? 'マイクを確認しています…' : 'マイクを使う'}
+      </button>
+      {ready ? <>
+        <div className="daily-mic-wave"><VoiceWave level={voiceLevel} /></div>
+        <p>ひとこと話すと、波形が動きます。</p>
+        <button type="button" className="question-mic-secondary" onClick={startCheck}>もう一度確認する</button>
+      </> : <>
+        <p>確認が出たら「許可」を押してください。ここでは録音・保存されません。</p>
+        <button type="button" className="question-mic-secondary" onClick={() => proceed(false)}>マイク確認を続けずに進む</button>
+        <button type="button" className="question-mic-secondary" onClick={() => {
+          requestIdRef.current += 1;
+          stopCheck();
+          setMicStatus('error');
+        }}>「許可」が出ないとき</button>
+      </>}
+    </div>;
+  }
+
   return <div className="daily-mic-check fade-enter">
     <p className="daily-mic-kicker">録音の準備</p>
     {micStatus === 'ready' ? <>
@@ -19321,6 +19371,7 @@ export function Scene_Recording({
   maxDurationSeconds = RECORDING_LIMIT_SECONDS,
   preRecordNotice = '',
   seasonalMode = false,
+  pairedQuestion = false,
   referencePhotos = [],
   onBack,
   registerExitGuard,
@@ -20025,19 +20076,7 @@ const requestSafeExit = destination => {
 };
 exitGuardRef.current = requestSafeExit;
 
-return (
-<StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4"
-  surfaceClassName={seasonalMode || lightMode || question?.onboarding_group !== 'trial_experience' ? 'answer-light-recorder' : ''}
-  background={QUESTION_BACKGROUND}>
-  <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} progressOverride={seasonalMode ? '1 / 1' : null} onBack={onBack ? () => requestSafeExit(onBack) : null} />
-
-  <RecordingQuestionPrompt question={question} />
-  {step === 0 && preRecordNotice && <p className="mx-5 mt-4 text-sm leading-relaxed text-current">{preRecordNotice}</p>}
-
-  {referencePhotos.length > 0 && <div className="sm-recording-photos" aria-label="語りながら見る写真">
-    {referencePhotos.map((url, index) => <img key={url} src={url} alt={`参考の写真 ${index + 1}`} />)}
-  </div>}
-
+const controls = <>
 {step === 0 && (
   <div className="recording-control-dock recording-control-dock--start mt-5">
     <RecordingStartButton onClick={start} />
@@ -20122,6 +20161,31 @@ return (
     </p>
   </div>
 )}
+  </>;
+
+  const brightAnswer = seasonalMode || lightMode || question?.onboarding_group !== 'trial_experience';
+  const safeBack = onBack ? () => requestSafeExit(onBack) : null;
+  if (pairedQuestion) {
+    return <QuestionAnswerSurface question={question} userName={userName} storyProgress={storyProgress}
+      onBack={safeBack} brightAnswer={brightAnswer} photos={<RecordingReferencePhotos urls={referencePhotos} />}>
+      {controls}
+      {step === 0 && preRecordNotice && <p className="mx-5 mt-4 text-sm leading-relaxed">{preRecordNotice}</p>}
+    </QuestionAnswerSurface>;
+  }
+return (
+<StorySkySurface className="question-flow-content h-full flex flex-col text-center overflow-y-auto pb-4"
+  surfaceClassName={brightAnswer ? 'answer-light-recorder' : ''}
+  background={QUESTION_BACKGROUND}>
+  <RecordingQuestionHeader question={question} userName={userName} storyProgress={storyProgress} sectionLabel={sectionLabel} isFormalOnboarding={isFormalOnboarding} progressOverride={seasonalMode ? '1 / 1' : null} onBack={safeBack} />
+
+  <RecordingQuestionPrompt question={question} />
+  {step === 0 && preRecordNotice && <p className="mx-5 mt-4 text-sm leading-relaxed text-current">{preRecordNotice}</p>}
+
+  {referencePhotos.length > 0 && <div className="sm-recording-photos" aria-label="語りながら見る写真">
+    {referencePhotos.map((url, index) => <img key={url} src={url} alt={`参考の写真 ${index + 1}`} />)}
+  </div>}
+
+  {controls}
     </StorySkySurface>
   );
 }

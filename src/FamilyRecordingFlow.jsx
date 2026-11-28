@@ -70,7 +70,7 @@ export default function FamilyRecordingFlow({client,api,workspace,question,conti
     <div className="flex-1 min-h-0">
       {phase==='question' && <Scene1_MyPage question={current} progress={progress} userName={workspace.name}
         onNext={()=>setPhase('recording')} onSkip={skip} onEndToday={()=>setPhase('end')}/>}
-      {phase==='recording' && <Scene_Recording question={current} progress={progress} userName={workspace.name} autoStart onComplete={recorded}/>}
+      {phase==='recording' && <Scene_Recording question={current} progress={progress} userName={workspace.name} autoStart pairedQuestion onBack={()=>setPhase('question')} onComplete={recorded}/>}
       {phase==='review' && <Scene3_5_VoiceCheck data={data}
         onRetry={()=>{if(lock.current)return;releaseParts();setData(photoData());setPhase('recording');}}
         onAddMore={()=>{if(!lock.current && parts.current.length<5)setPhase('recording');}}
