@@ -142,7 +142,7 @@ function ProductImageDialog({ product, close }) {
   </dialog>;
 }
 
-export default function LandingPage({ reviewOnly = false }) {
+export default function LandingPage({ reviewOnly = false, productDesign }) {
   const nov8Preview = true;
   const [menu, setMenu] = useState(false);
   const [panel, setPanel] = useState(null);
@@ -208,7 +208,7 @@ export default function LandingPage({ reviewOnly = false }) {
     <main id="hp-main">
       <FamilyPowerHero />
       <section className="hp-hero hp-shell hp-hero-integrated hp-hero-nov8 hp-family-power-followup" aria-labelledby="hp-product-name">
-        <header className="hp-family-power-product">
+        <header className="hp-family-power-product" data-product-design={reviewOnly ? productDesign : undefined}>
           <h2 id="hp-product-name">たて糸♾️よこ糸BOOK</h2>
           <p>声も残る、スマホで育てる家系図・人生史</p>
         </header>

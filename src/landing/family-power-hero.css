@@ -116,6 +116,54 @@
   text-wrap: balance;
 }
 
+.hp-family-power-product[data-product-design="band"] {
+  padding: 10px 12px;
+  background: #e2e9df;
+}
+
+.landing-site .hp-family-power-product[data-product-design="band"] h2 {
+  font-weight: 600;
+  -webkit-text-stroke: .2px currentColor;
+}
+
+.hp-family-power-product[data-product-design="band"] p {
+  padding-top: 4px;
+  -webkit-text-stroke: .16px currentColor;
+}
+
+.hp-family-power-product[data-product-design="line"] {
+  padding-top: clamp(16px, 2.4vw, 30px);
+  border-top: 1px solid #909e8e;
+}
+
+.hp-product-design-options {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding-inline: 12px;
+  background: #f5f3ed;
+  color: #243b31;
+  border-bottom: 1px solid #ced1c6;
+  font: 500 .875rem/1.5 "Noto Sans JP", sans-serif;
+}
+
+.hp-product-design-options a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: inherit;
+}
+
+.hp-product-design-options a[aria-current] {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
 @media (max-width: 900px) {
   .landing-site .hp-hero-nov8.hp-family-power-followup {
     display: block;

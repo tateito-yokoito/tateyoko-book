@@ -11,7 +11,7 @@ export default function FamilyPowerHero() {
   return <section className="hp-family-power" id="top" aria-labelledby="hp-family-power-title">
     <h1 id="hp-family-power-title">自分のチカラだけで<br />人生を生きていませんか？</h1>
     <div className="hp-family-power-copy">
-      <p>あなたにはまだ<br />受け取っていないチカラがある。</p>
+      <p>あなたにはまだ<br />受け取っていない<strong>チカラ</strong>がある。</p>
       <p>あなたが存在している奇跡。</p>
       <p>両親、祖父母、幾百、幾千ものご先祖様。<br />誰一人が欠けても、あなたはいない。</p>
       <p>その大応援団を味方につけたとき</p>
