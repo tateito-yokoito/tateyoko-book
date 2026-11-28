@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import QuestionFlowTopBar from './QuestionFlowTopBar.jsx';
 import { AnswerBodyEditor } from './AnswerInputUI.jsx';
-import { QuestionCopy, questionGuidance } from './QuestionCopy.jsx';
+import { QuestionCopy, QuestionGuidanceLine, questionGuidance } from './QuestionCopy.jsx';
 
 export function AnswerTextLayout({ question, theme, progress, onBack, children, light = false }) {
   const guidance = questionGuidance(question);
@@ -12,7 +12,7 @@ export function AnswerTextLayout({ question, theme, progress, onBack, children, 
         <QuestionFlowTopBar onBack={onBack} theme={theme || question?.theme_label || question?.chapter_label || ''} progress={progress} />
         <h2 className="answer-text-question mt-7 mb-4 shrink-0 text-center text-[1.3rem] leading-[1.7]"><QuestionCopy text={question?.content || question?.question_text_snapshot} /></h2>
         {guidance.length > 0 && <div className="answer-text-guidance" aria-label="話すヒント">
-          {guidance.map(line => <p key={line}>{line}</p>)}
+          {guidance.map(line => <QuestionGuidanceLine key={line} text={line} />)}
         </div>}
         {children}
       </div>

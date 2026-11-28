@@ -96,3 +96,43 @@
 .guest-trial-finished-skip { display: flex; min-height: 54px; align-items: center; justify-content: center; width: 100%; margin-top: 10px; border: 1px solid var(--book-line); border-radius: 999px; color: var(--book-muted); font-size: 15px; font-weight: 700; }
 .guest-trial-finished-section a:focus-visible,
 .guest-trial-finished-section button:focus-visible { outline: 3px solid var(--book-focus); outline-offset: 3px; }
+
+.guest-trial-exit {
+  max-width: 440px;
+  margin-inline: auto;
+  padding: 44px 24px 64px;
+  text-align: center;
+}
+.guest-trial-exit h1,
+.guest-trial-discard-dialog h2 { color: var(--book-ink); font-size: 22px; font-weight: 700; line-height: 1.5; }
+.guest-trial-exit p,
+.guest-trial-discard-dialog p { margin-top: 14px; color: var(--book-muted); font-size: 15px; line-height: 1.75; }
+.guest-trial-flow .guest-trial-exit-primary,
+.guest-trial-flow .guest-trial-exit-secondary {
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.guest-trial-flow .guest-trial-exit-primary { background: var(--book-primary); color: var(--book-on-primary); -webkit-text-fill-color: var(--book-on-primary); }
+.guest-trial-flow .guest-trial-exit-secondary { background: var(--book-surface); border-color: var(--book-line); color: var(--book-ink); }
+.guest-trial-exit > .guest-trial-exit-primary { margin-top: 28px; }
+.guest-trial-exit > .guest-trial-exit-secondary { margin-top: 12px; }
+.guest-trial-exit-back { min-height: 44px; margin-top: 12px; color: var(--book-muted); text-decoration: underline; text-underline-offset: 4px; }
+.guest-trial-exit input { width: 100%; margin-top: 14px; padding: 12px; border: 1px solid var(--book-line); border-radius: 10px; background: var(--book-surface); color: var(--book-ink); font-size: 14px; }
+.guest-trial-discard-dialog {
+  width: min(390px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 25px 22px 22px;
+  border: 1px solid var(--book-line);
+  border-radius: 18px;
+  background: var(--book-surface);
+  color: var(--book-ink);
+}
+.guest-trial-discard-dialog::backdrop { background: rgb(22 34 29 / .52); }
+.guest-trial-discard-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 24px; }
+.guest-trial-flow .guest-trial-exit-error { margin-top: 14px; color: #a33b28; }
+.guest-trial-exit button:focus-visible { outline: 2px solid var(--book-focus); outline-offset: 2px; }

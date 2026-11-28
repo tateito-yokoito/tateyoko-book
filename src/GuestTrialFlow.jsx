@@ -131,12 +131,18 @@ function GuestTrialExperience() {
   const [familyName, setFamilyName] = useState('');
   const [givenName, setGivenName] = useState('');
   const [resumeUrl, setResumeUrl] = useState('');
+  const [exitReturnScreen, setExitReturnScreen] = useState('choice');
+  const discardDialogRef = useRef(null);
   const [shareStatus, setShareStatus] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [savePeople, setSavePeople] = useState([]);
   const [selectedSavePerson, setSelectedSavePerson] = useState(trialPersonId || '');
   const [confirmReplace, setConfirmReplace] = useState(false);
   const pendingSaveOpen = useRef(false);
+
+  useEffect(() => {
+    if (confirmDiscard) discardDialogRef.current?.showModal();
+  }, [confirmDiscard]);
 
   useEffect(() => {
     if (!reviewBlocked) return;
@@ -415,7 +421,11 @@ function GuestTrialExperience() {
       }
       setSavePeople(people);
       setSelectedSavePerson(trialPersonId || (people.length === 1 ? people[0].id : ''));
-      setScreen(await guestTrialBookStarted(supabaseClient) ? 'book_started' : 'choose_person');
+      if (await guestTrialBookStarted(supabaseClient)) {
+        setError('このアカウントではBOOK制作を始めているため、無料３問を年輪に保存できません。');
+        return;
+      }
+      setScreen('choose_person');
     } catch (cause) { setError(cause.message || '保存先を確認できませんでした。'); }
     finally { setBusy(false); }
   }
@@ -432,7 +442,8 @@ function GuestTrialExperience() {
     } catch (cause) {
       if (cause.code === 'BOOK_ALREADY_STARTED') {
         setConfirmReplace(false);
-        setScreen('book_started');
+        setScreen('finished');
+        setError('このアカウントではBOOK制作を始めているため、無料３問を年輪に保存できません。');
       } else if (cause.code === 'TRIAL_STORY_CONFLICT' && !replaceExisting) setConfirmReplace(true);
       else setError(cause.message || '年輪へ保存できませんでした。');
     }
@@ -443,6 +454,7 @@ function GuestTrialExperience() {
     setError('');
     setShareStatus('');
     setConfirmDiscard(false);
+    setExitReturnScreen(screen);
     setScreen('end_choice');
   }
 
@@ -660,7 +672,7 @@ function GuestTrialExperience() {
                 <h2>語りを保存して終了する</h2>
                 <p>無料の家族アプリに保存できます。<br/>スマホで家系図とともに、<br/><strong>家族のチカラ</strong>を育んでいける場所です。</p>
                 <button type="button" disabled={busy} onClick={prepareRingSave} className="guest-trial-finished-secondary">この語りを保存する</button>
-                <button type="button" disabled={busy} onClick={discardAndExit} className="guest-trial-finished-skip">保存せず終了する</button>
+                <button type="button" disabled={busy} onClick={openExit} className="guest-trial-finished-skip">保存せず終了する</button>
               </section>
             </>}
         </>}
@@ -672,7 +684,7 @@ function GuestTrialExperience() {
               return response.url;
             }} />)}</div>
         </details>
-        {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
+        {error && <p role="alert" className="guest-trial-exit-error">{error}</p>}
       </main>}
       {screen === 'choose_person' && <main className="mx-auto max-w-md px-7 py-16">
         <button type="button" onClick={() => setScreen('finished')} className="min-h-11 text-white/70">← 戻る</button>
@@ -697,37 +709,34 @@ function GuestTrialExperience() {
         </div>}
         {error && <p role="alert" className="mt-5 text-rose-200">{error}</p>}
       </main>}
-      {screen === 'book_started' && <main className="mx-auto max-w-md px-7 py-16">
-        <button type="button" onClick={() => setScreen('finished')} className="min-h-11 text-[#28473e]">← 戻る</button>
-        <h1 className="mt-8 text-2xl text-[#203a34]">年輪から語りを追加できます</h1>
-        <p className="mt-4 leading-loose text-[#455650]">このアカウントではBOOK制作を始めています。無料３問の語りは保存・置き換えせず、家族アプリの年輪から語りを追加できます。</p>
-        <a href={savePeople.length === 1 ? `/app?person=${encodeURIComponent(savePeople[0].id)}&tab=ring` : '/app'}
-          className="trial-book-open-button mt-9 flex min-h-14 items-center justify-center rounded-full bg-[#28473e] px-5 text-white">年輪を開く</a>
-      </main>}
-      {screen === 'end_choice' && <main className="px-7 py-20 text-center">
-        <h1 className="text-2xl">ここで終了する</h1>
-        <p className="mt-6 leading-loose text-white/65">無料3問の開始から10日間、再開できます。</p>
-        <button type="button" onClick={saveAndExit} className="mt-10 w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-[#15243a]">10日間保存する</button>
-        <button type="button" onClick={() => { setError(''); setConfirmDiscard(true); }} className="mt-5 w-full rounded-full border border-white/35 px-7 py-5">保存せずに終了する</button>
-        <button type="button" onClick={() => setScreen('finished')} className="mt-8 text-sm text-white/65 underline">語りに戻る</button>
-        {confirmDiscard && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6">
-          <div role="alertdialog" aria-modal="true" aria-labelledby="guest-trial-discard-prompt" className="w-full max-w-sm rounded-3xl border border-white/25 bg-[#1d2536] px-6 py-8 shadow-2xl">
-            <p id="guest-trial-discard-prompt" className="text-lg leading-loose">先ほどの語りが消えますが<br />よろしいですか？</p>
-            <div className="mt-8 flex gap-3">
-              <button type="button" disabled={busy} onClick={() => { setConfirmDiscard(false); setError(''); }} className="min-h-14 flex-1 rounded-full border border-white/40 disabled:opacity-50">戻る</button>
-              <button type="button" disabled={busy} onClick={discardAndExit} className="min-h-14 flex-1 rounded-full bg-[#e9e5d9] text-[#15243a] disabled:opacity-50">{busy ? '削除中…' : 'OK'}</button>
-            </div>
-            {error && <p role="alert" className="mt-5 text-sm text-rose-200">{error}</p>}
+      {screen === 'end_choice' && <main className="guest-trial-exit">
+        <h1>ここで終了する</h1>
+        <p>無料３問の開始から10日間、再開できます。</p>
+        <button type="button" onClick={saveAndExit} className="guest-trial-exit-primary">10日間保存する</button>
+        <button type="button" onClick={() => { setError(''); setConfirmDiscard(true); }} className="guest-trial-exit-secondary">保存せずに終了する</button>
+        <button type="button" onClick={() => setScreen(exitReturnScreen)} className="guest-trial-exit-back">語りに戻る</button>
+        {confirmDiscard && <dialog ref={discardDialogRef} className="guest-trial-discard-dialog" role="alertdialog"
+          aria-labelledby="guest-trial-discard-prompt" aria-describedby="guest-trial-discard-description"
+          onCancel={event => { event.preventDefault(); if (!busy) setConfirmDiscard(false); }}>
+          <h2 id="guest-trial-discard-prompt">語りを削除しますか？</h2>
+          <p id="guest-trial-discard-description">保存せず終了すると、残した語りは消えます。</p>
+          <div className="guest-trial-discard-actions">
+            <button type="button" autoFocus disabled={busy} onClick={() => { setConfirmDiscard(false); setError(''); }}
+              className="guest-trial-exit-secondary">戻る</button>
+            <button type="button" disabled={busy} onClick={discardAndExit} className="guest-trial-exit-primary">
+              {busy ? '削除中…' : '削除して終了'}
+            </button>
           </div>
-        </div>}
+          {error && <p role="alert" className="guest-trial-exit-error">{error}</p>}
+        </dialog>}
       </main>}
-      {screen === 'end_saved' && <main className="px-7 py-20 text-center">
-        <h1 className="text-2xl">再開URLを保存してください</h1>
-        <p className="mt-6 leading-loose text-white/65">有効期限は無料3問の開始から10日間です。URLを知っている人は語りを見られるため、他の人へ送らないでください。</p>
-        <button type="button" onClick={shareResumeUrl} className="mt-9 w-full rounded-full bg-[#e9e5d9] px-7 py-5 text-[#15243a]">共有・コピーする</button>
-        <input readOnly aria-label="再開URL" value={resumeUrl} onFocus={event => event.target.select()} className="mt-5 w-full rounded-xl border border-white/20 bg-white/5 p-3 text-xs" />
-        {shareStatus && <p role="status" className="mt-4 text-sm">{shareStatus}</p>}
-        <button type="button" onClick={() => setScreen('finished')} className="mt-8 text-sm underline">語りに戻る</button>
+      {screen === 'end_saved' && <main className="guest-trial-exit">
+        <h1>再開URLを保存してください</h1>
+        <p>有効期限は無料３問の開始から10日間です。URLを知っている人は語りを見られるため、他の人へ送らないでください。</p>
+        <button type="button" onClick={shareResumeUrl} className="guest-trial-exit-primary">共有・コピーする</button>
+        <input readOnly aria-label="再開URL" value={resumeUrl} onFocus={event => event.target.select()} />
+        {shareStatus && <p role="status">{shareStatus}</p>}
+        <button type="button" onClick={() => setScreen(exitReturnScreen)} className="guest-trial-exit-back">語りに戻る</button>
       </main>}
       {screen === 'conversion' && <>{(developmentPreview || !purchasePreviewEnabled) &&
         <p className="px-7 pt-5 text-center text-xs text-amber-100/75">

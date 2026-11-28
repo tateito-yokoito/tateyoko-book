@@ -2,3 +2,12 @@
 @media (max-width: 359px) {
   .question-copy-unit { max-width: 100%; }
 }
+
+/* Wrap guidance at Japanese phrase boundaries when the browser supports it. */
+.question-guidance-line {
+  white-space: pre-line;
+  line-break: strict;
+  word-break: normal;
+  word-break: auto-phrase;
+  text-wrap: pretty;
+}

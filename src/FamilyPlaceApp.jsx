@@ -1138,7 +1138,7 @@ export default function FamilyPlaceApp({ publicDemo = false }) {
   if (!user) return <div className="fp-auth">{demoLoginOpen
     ? <FamilyPlaceDemoLogin client={dataClient} onBack={() => setDemoLoginOpen(false)}
         onAuthenticated={setUser}/>
-    : <><Scene_Login familyPlaceLogin onLogin={() =>
+    : <><Scene_Login familyPlaceLogin familyTrialSave={new URLSearchParams(window.location.search).get("return_trial") === "1"} onLogin={() =>
       dataClient.auth.getUser().then(({ data }) => setUser(data.user))} />
       <button type="button" className="fp-demo-login-entry" onClick={() => setDemoLoginOpen(true)}>
         デモアカウントで開く

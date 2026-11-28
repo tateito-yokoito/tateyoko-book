@@ -34,7 +34,7 @@ import { scheduleScrollReset } from "./lib/scrollReset.js";
 import VideoStoryFlow from "./VideoStoryFlow.jsx";
 import WrittenAnswerEditor from "./WrittenAnswerEditor.jsx";
 import { AnswerTextCandidate, AnswerTextFields, AnswerTextLayout } from "./AnswerTextShared.jsx";
-import { QuestionCopy, questionGuidance } from './QuestionCopy.jsx';
+import { QuestionCopy, QuestionGuidanceLine, questionGuidance } from './QuestionCopy.jsx';
 import { AnswerEntryChoices, AnswerPhotoStrip, AnswerReview, AnswerSaveStatus } from './AnswerInputUI.jsx';
 import { BookAnswerPhotoDraft } from './lib/bookAnswerPhotoDraft.js';
 import { draftStorageKey } from './lib/answerTextDraft.js';
@@ -10252,7 +10252,7 @@ function Scene_TokenInvalid({ onBack, issue = "invalid", onRetry }) {
 
 
 export function Scene_Login({ onLogin, giftPreview, familyInvitePreview,
-  existingAccountOnly = false, familyPlaceLogin = false }) {
+  existingAccountOnly = false, familyPlaceLogin = false, familyTrialSave = false }) {
   const supporterInvitationUrl = getSupporterInvitationUrlFromCurrentLocation();
   const authReturnUrl = getAuthReturnUrlFromCurrentLocation();
   const isSupporterInviteLogin = Boolean(supporterInvitationUrl);
@@ -10703,7 +10703,7 @@ if (isNewMode) {
               </>
             ) : familyPlaceLogin ? (
               <>
-                <p className="text-[1.1rem] text-white/90">家族の物語をはじめる</p>
+                <p className="text-[1.1rem] text-white/90">{familyTrialSave ? "語りを家族アプリに保存する" : "家族の物語をはじめる"}</p>
                 <p className="text-white/55 text-[0.95rem] leading-loose">
                   はじめての方も、以前に利用した方も、同じアカウントで続けられます。
                 </p>
@@ -10733,7 +10733,7 @@ if (isNewMode) {
               disabled={loading}
               className="btn-quiet bg-white/10 w-full py-4 rounded-full text-white"
             >
-              {isFamilyInviteEntry ? "招待を受け取る" : isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
+              {isFamilyInviteEntry ? "招待を受け取る" : isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : familyTrialSave ? "新規登録" : "はじめて利用する"}
             </button>}
 
             <button
@@ -10742,7 +10742,7 @@ if (isNewMode) {
               disabled={loading}
               className="w-full py-4 rounded-full border border-white/10 text-white/65 text-sm"
             >
-              {isFamilyInviteEntry || isGiftEntry ? "登録済みの方はこちら" : isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
+              {isFamilyInviteEntry || isGiftEntry ? "登録済みの方はこちら" : isTrialEntry ? "体験の続きを開く" : familyTrialSave ? "既存アカウントでログイン" : "前回の続きを開く"}
             </button>
 
             {isDevMode() && (
@@ -10763,7 +10763,7 @@ if (isNewMode) {
         <div className="w-full max-w-[320px] space-y-8 py-10 fade-enter">
           <div className="space-y-4 text-narrative">
             <p className="text-[1.1rem] text-white/90">
-              {isFamilyInviteEntry ? "招待を受け取る" : isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : "はじめて利用する"}
+              {isFamilyInviteEntry ? "招待を受け取る" : isGiftEntry ? "贈りものを受け取る" : isTrialEntry ? "無料体験をはじめる" : familyTrialSave ? "新規登録" : "はじめて利用する"}
             </p>
 
             <p className="ui-small">
@@ -10841,7 +10841,7 @@ if (isNewMode) {
           <div className="space-y-4 text-narrative">
             <p className="text-[1.1rem] text-white/90">
               {familyPlaceLogin ? '家族のチカラを開く'
-                : isGiftEntry ? "贈りものを開く" : isTrialEntry ? "体験の続きを開く" : "前回の続きを開く"}
+                : isGiftEntry ? "贈りものを開く" : isTrialEntry ? "体験の続きを開く" : familyTrialSave ? "既存アカウントでログイン" : "前回の続きを開く"}
             </p>
 
             <p className="ui-small">
@@ -18998,7 +18998,7 @@ function RecordingQuestionPrompt({ question }) {
       {guidance.length > 0 && (
         <aside className="recording-question-hint" aria-label="ヒント">
           <p className="recording-question-hint-label">💡 ヒント</p>
-          {guidance.map((text) => <p key={text}>{text}</p>)}
+          {guidance.map((text) => <QuestionGuidanceLine key={text} text={text} />)}
         </aside>
       )}
     </div>

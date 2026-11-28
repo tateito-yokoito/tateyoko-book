@@ -9,6 +9,10 @@ export function QuestionCopy({ text }) {
       : <React.Fragment key={index}>{part.text}</React.Fragment>)}</>;
 }
 
+export function QuestionGuidanceLine({ text }) {
+  return <p className="question-guidance-line" lang="ja">{text}</p>;
+}
+
 export function questionGuidance(question, { bookend = false } = {}) {
   const dailyLife = /最近は[、,]?\s*どんなふうに.*一日を過ごす/.test(question?.content || '');
   const lines = bookend ? ['短くても大丈夫です。'] : dailyLife
