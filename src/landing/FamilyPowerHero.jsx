@@ -1,6 +1,12 @@
 import React from 'react';
 import './family-power-hero.css';
 
+export function FamilyPowerWordmark() {
+  return <span className="hp-family-power-wordmark">
+    <img src="/site/hp-renewal/tateito-yokoito-wordmark.png" width="362" height="104" alt="たて糸 ∞ よこ糸" />
+  </span>;
+}
+
 export function FamilyPowerLayoutControls({ desktop, mobile }) {
   const variants = [
     { device: 'PC', param: 'pc', selected: desktop, labels: ['本文と写真を横並び', '見出しを上段に'] },

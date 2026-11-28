@@ -2,22 +2,35 @@
   width: min(1320px, calc(100% - 48px));
   min-height: 92px;
   color: #243b31;
+  background: var(--paper);
 }
 
-.hp-family-power-header > a {
+.hp-family-power-brand {
   display: grid;
   justify-items: start;
   gap: 5px;
   padding-block: 8px;
 }
 
-.landing-site .hp-family-power-header > a img {
+.hp-family-power-wordmark {
+  display: block;
   width: 176px;
-  height: auto;
+  aspect-ratio: 298 / 49;
+  overflow: hidden;
+  mix-blend-mode: multiply;
 }
 
-.hp-family-power-header > a span {
+.landing-site .hp-family-power-wordmark img {
+  /* The supplied artwork has a white border around the visible lockup. */
+  width: 121.48%;
+  max-width: none;
+  height: auto;
+  transform: translate(-7.73%, -25%);
+}
+
+.hp-family-power-brand p {
   font: 500 .875rem/1.4 "Noto Sans JP", sans-serif;
+  color: #303830;
 }
 
 .hp-family-power {
@@ -39,6 +52,7 @@
   letter-spacing: .018em;
   overflow-wrap: normal;
   line-break: strict;
+  -webkit-text-stroke: .22px currentColor;
 }
 
 .hp-family-power-copy {
@@ -127,8 +141,8 @@
     column-gap: 12px;
   }
 
-  .landing-site .hp-family-power-header > a img {
-    width: 142px;
+  .hp-family-power-wordmark {
+    width: 152px;
   }
 
   .hp-family-power {
