@@ -1,32 +1,34 @@
 const wordSegmenter = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
   ? new Intl.Segmenter('ja', { granularity: 'word' }) : null;
 
-// A Japanese predicate and its inflection must stay on the same line.
-// Keep the wording unchanged; add only reading-unit break opportunities.
+function sentenceParts(sentence) {
+  // Short follow-up questions should stay together whenever they fit.
+  if (sentence.length <= 12 && /[。！？!?]$/u.test(sentence)) {
+    return [{ text: sentence, phrase: true }];
+  }
+
+  // Keep a short object and the instruction that follows it as separate
+  // reading units: …人を / 一人思い浮かべてください。
+  const countedInstruction = sentence.match(/^(.{1,16}を)([一二三四五六七八九十\d]+[人つ個].{1,11})$/u);
+  if (countedInstruction) {
+    return countedInstruction.slice(1).map(text => ({ text, phrase: true }));
+  }
+
+  const predicateBoundaries = [...sentence.matchAll(/[にでをがはとへも](?=[一-龯々])/gu)];
+  const predicateStart = predicateBoundaries.at(-1)?.index + 1;
+  const tail = predicateStart && sentence.length - predicateStart <= 12
+    ? sentence.slice(predicateStart) : '';
+  const head = tail ? sentence.slice(0, predicateStart) : sentence;
+  const parts = wordSegmenter
+    ? Array.from(wordSegmenter.segment(head), ({ segment, isWordLike }) => ({ text: segment, keep: isWordLike }))
+    : [{ text: head }];
+  if (tail) parts.push({ text: tail, keep: true });
+  return parts;
+}
+
 export function questionLineParts(value) {
-  const text = String(value || '');
-  const lines = text.split('\n');
-  return lines.flatMap((line, lineIndex) => {
-    const firstPause = line.indexOf('、');
-    const clauses = firstPause > 0 && firstPause <= 8 && line.length - firstPause > 8
-      ? [line.slice(0, firstPause + 1), line.slice(firstPause + 1)] : [line];
-    return clauses.flatMap((clause, clauseIndex) => {
-      const parts = [];
-      // Put the break before the final predicate, after the final case
-      // particle. For example: どんなところに / 住んでいましたか？
-      const predicateBoundaries = [...clause.matchAll(/[にでをがはとへも](?=[一-龯々])/gu)];
-      const predicateStart = predicateBoundaries.at(-1)?.index + 1;
-      const tailText = predicateStart && clause.length - predicateStart <= 12
-        ? clause.slice(predicateStart) : '';
-      const head = tailText ? clause.slice(0, -tailText.length) : clause;
-      if (wordSegmenter) {
-        for (const { segment, isWordLike } of wordSegmenter.segment(head)) {
-          parts.push({ text: segment, keep: isWordLike });
-        }
-      } else parts.push({ text: head, keep: false });
-      if (tailText) parts.push({ text: tailText, keep: true });
-      if (clauseIndex < clauses.length - 1) parts.push({ break: true });
-      return parts;
-    }).concat(lineIndex < lines.length - 1 ? [{ break: true }] : []);
-  });
+  return String(value || '').split('\n').flatMap((line, index) => [
+    ...(index ? [{ break: true }] : []),
+    ...line.split(/(?<=[。！？!?])(?![。！？!?])/u).flatMap(sentenceParts),
+  ]);
 }

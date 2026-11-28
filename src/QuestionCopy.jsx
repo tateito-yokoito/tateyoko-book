@@ -5,8 +5,9 @@ import './question-copy.css';
 export function QuestionCopy({ text }) {
   return <>{questionLineParts(text).map((part, index) => part.break
     ? <br key={index} />
-    : part.keep ? <span className="question-copy-unit" key={index}>{part.text}</span>
-      : <React.Fragment key={index}>{part.text}</React.Fragment>)}</>;
+    : part.phrase ? <span className="question-copy-phrase" key={index}>{part.text}</span>
+      : part.keep ? <span className="question-copy-unit" key={index}>{part.text}</span>
+        : <React.Fragment key={index}>{part.text}</React.Fragment>)}</>;
 }
 
 export function QuestionGuidanceLine({ text }) {

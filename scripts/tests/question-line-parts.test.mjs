@@ -7,7 +7,7 @@ test('question layout protects Japanese predicates without rewriting copy', () =
   const parts = questionLineParts(question);
   assert.equal(parts.filter(part => !part.break).map(part => part.text).join(''), question);
   assert.ok(parts.some(part => part.keep && part.text === '住んでいましたか？'));
-  assert.ok(parts.some(part => part.break));
+  assert.ok(!parts.some(part => part.break));
 });
 
 test('question layout keeps different final predicates together', () => {
@@ -18,4 +18,10 @@ test('question layout keeps different final predicates together', () => {
   ]) {
     assert.ok(questionLineParts(question).some(part => part.keep && part.text === predicate));
   }
+});
+
+test('question layout offers phrase breaks without forcing additional lines', () => {
+  const phrases = ['その頃、よく一緒にいた人を', '一人思い浮かべてください。', 'どんな人でしたか？'];
+  assert.deepEqual(questionLineParts(phrases.join('')), phrases.map(text => ({ text, phrase: true })));
+  assert.equal(questionLineParts(phrases.join('\n')).filter(part => part.break).length, 2);
 });

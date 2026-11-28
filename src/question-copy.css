@@ -1,6 +1,10 @@
 .question-copy-unit { white-space: nowrap; }
-@media (max-width: 359px) {
-  .question-copy-unit { max-width: 100%; }
+.question-copy-phrase {
+  display: inline-block;
+  max-width: 100%;
+  white-space: normal;
+  line-break: strict;
+  overflow-wrap: anywhere;
 }
 
 /* Wrap guidance at Japanese phrase boundaries when the browser supports it. */
