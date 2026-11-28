@@ -184,6 +184,7 @@
 
   .hp-family-power[data-desktop-layout="a"] {
     grid-template-rows: auto 1fr;
+    column-gap: clamp(14px, 2.5vw, 37px);
   }
 
   .hp-family-power[data-desktop-layout="a"] .hp-family-power-photo {
