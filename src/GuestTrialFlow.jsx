@@ -648,16 +648,19 @@ function GuestTrialExperience() {
             ? <a className="guest-trial-finished-primary flex items-center justify-center" href={`/app?person=${encodeURIComponent(trialPersonId)}&tab=ring`}>年輪に戻る</a>
             : <>
               <section className="guest-trial-finished-section">
-                <h2>この３つの語りから、一冊の人生を。</h2>
-                <p>問いに答えながら記憶をたどり、声と写真も添えてBOOKとWebブックに残せます。今回の語りは制作へ引き継げます。</p>
+                <strong className="guest-trial-finished-brand">たて糸♾️よこ糸BOOK</strong>
+                <h2>あなたの想い、これまでの歩みを<br/>２つの作品に。</h2>
+                <img className="guest-trial-finished-products" src="/site/hp-renewal/book-web-pair-mobile.jpg"
+                  alt="紙のBOOKと、声や写真に触れられるWebブック" width="1536" height="1024" loading="eager" />
+                <p>今回の３つの語りを引き継いで、制作を始められます。</p>
                 <a className="guest-trial-finished-primary flex items-center justify-center" href={guestTrialPurchaseUrl()}>この語りを引き継いでBOOKを始める</a>
                 <a className="guest-trial-finished-site-link" href="https://www.tateito-yokoito.jp/" target="_blank" rel="noopener noreferrer">たて糸♾️よこ糸BOOKについて詳しく見る ↗</a>
               </section>
               <section className="guest-trial-finished-section guest-trial-finished-family">
-                <h2>家族アプリに語りを残す</h2>
-                <p>今回の回答を「たて糸♾️よこ糸 家族アプリ」に保存できます。無料で、家系図とともに<strong>家族のチカラ</strong>を育むことができます。</p>
+                <h2>語りを保存して終了する</h2>
+                <p>無料の家族アプリに保存できます。<br/>スマホで家系図とともに、<br/><strong>家族のチカラ</strong>を育んでいける場所です。</p>
                 <button type="button" disabled={busy} onClick={prepareRingSave} className="guest-trial-finished-secondary">この語りを保存する</button>
-                <button type="button" disabled={busy} onClick={discardAndExit} className="guest-trial-finished-skip">今回は保存しない</button>
+                <button type="button" disabled={busy} onClick={discardAndExit} className="guest-trial-finished-skip">保存せず終了する</button>
               </section>
             </>}
         </>}

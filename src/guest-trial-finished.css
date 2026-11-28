@@ -11,7 +11,7 @@
   font-weight: 400;
 }
 
-.guest-trial-finished > h1 { font-size: 29px; line-height: 1.6; }
+.guest-trial-finished > h1 { font-size: clamp(18px, 5.7vw, 24px); line-height: 1.5; white-space: nowrap; }
 .guest-trial-finished-answers { margin-top: 36px; text-align: left; }
 .guest-trial-finished-answers .tc-story {
   padding: 26px 0 34px;
@@ -82,7 +82,9 @@
 .guest-trial-flow .guest-trial-finished > details { color: var(--book-muted); }
 
 .guest-trial-finished-section { margin-top: 30px; text-align: left; }
+.guest-trial-finished-brand { display: block; margin-bottom: 8px; color: var(--book-ink); font-family: var(--book-ui-font); font-size: 16px; font-weight: 800; letter-spacing: .025em; }
 .guest-trial-finished-section h2 { margin: 0; color: var(--book-ink); font-family: var(--book-display-font); font-size: 21px; font-weight: 550; line-height: 1.55; }
+.guest-trial-finished-products { display: block; width: 100%; height: auto; margin-top: 19px; border-radius: 10px; }
 .guest-trial-finished-section p { margin: 12px 0 0; color: var(--book-muted); font-size: 15px; line-height: 1.85; }
 .guest-trial-finished-section .guest-trial-finished-primary { margin-top: 22px; text-align: center; font-size: 15px; line-height: 1.5; }
 .guest-trial-finished-site-link { display: flex; min-height: 44px; align-items: center; justify-content: center; margin-top: 11px; color: var(--book-primary); font-size: 14px; text-align: center; text-decoration: underline; text-underline-offset: 4px; }
@@ -90,6 +92,6 @@
 .guest-trial-finished-family h2 { font-family: var(--book-ui-font); font-size: 17px; font-weight: 700; }
 .guest-trial-finished-family strong { color: var(--book-ink); font-weight: 700; }
 .guest-trial-finished-family .guest-trial-finished-secondary { display: flex; min-height: 54px; align-items: center; justify-content: center; margin-top: 20px; font-size: 15px; font-weight: 700; }
-.guest-trial-finished-skip { display: flex; min-height: 44px; align-items: center; justify-content: center; width: 100%; margin-top: 7px; color: var(--book-muted); font-size: 14px; text-decoration: underline; text-underline-offset: 4px; }
+.guest-trial-finished-skip { display: flex; min-height: 54px; align-items: center; justify-content: center; width: 100%; margin-top: 10px; border: 1px solid var(--book-line); border-radius: 999px; color: var(--book-muted); font-size: 15px; font-weight: 700; }
 .guest-trial-finished-section a:focus-visible,
 .guest-trial-finished-section button:focus-visible { outline: 3px solid var(--book-focus); outline-offset: 3px; }
