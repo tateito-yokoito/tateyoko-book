@@ -39,7 +39,6 @@
 }
 
 .hp-family-power {
-  width: min(1240px, calc(100% - 96px));
   margin-inline: auto;
   padding-block: clamp(28px, 4vw, 56px) clamp(48px, 6vw, 92px);
   display: grid;
@@ -53,7 +52,7 @@
 
 .landing-site .hp-family-power h1 {
   grid-area: title;
-  font: 550 clamp(1.6875rem, 3.2vw, 3rem)/1.43 "Noto Serif JP", "Yu Mincho", serif;
+  font: 550 clamp(1.6875rem, 3.2vw, 2.8125rem)/1.43 "Noto Serif JP", "Yu Mincho", serif;
   letter-spacing: .018em;
   overflow-wrap: normal;
   line-break: strict;
@@ -178,6 +177,11 @@
 }
 
 @media (min-width: 821px) {
+  .hp-family-power,
+  .landing-site:has(.hp-family-power) .hp-v4-record {
+    width: min(1180px, calc(100% - 96px));
+  }
+
   .hp-family-power[data-desktop-layout="a"] {
     grid-template-rows: auto 1fr;
   }
