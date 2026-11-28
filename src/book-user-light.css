@@ -240,7 +240,7 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
   min-width: 0;
   text-align: center;
 }
-.story-sky-surface.question-background-navy .question-paired-actions > :is(.recording-control-dock, .recording-countdown-slot) {
+.story-sky-surface.question-background-navy .story-sky-content.question-flow-content--paired .question-paired-actions > :is(.recording-control-dock, .recording-countdown-slot) {
   min-height: 58px;
   margin: 0;
   padding: 0;
@@ -249,6 +249,6 @@ body:has(:is(.app-container--book-light, .book-user-light)) {
 .question-paired-actions .recording-start-bar { min-height: 58px; }
 .question-paired-actions .recording-action-row { order: -1; }
 .question-paired-actions .recording-action-button { min-height: 58px; }
-.question-paired-actions > .recording-countdown-slot { align-items: center; justify-content: center; }
+.question-paired-actions > .recording-countdown-slot { align-items: center; }
 .question-inline-mic p { margin: 12px 0 4px; color: var(--book-muted); }
 .question-mic-secondary { min-height: 44px; margin-inline: 8px; text-decoration: underline; text-underline-offset: 4px; }
