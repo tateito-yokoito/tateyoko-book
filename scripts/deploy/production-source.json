@@ -1,11 +1,11 @@
 {
   "site": "https://www.tateito-yokoito.jp/",
-  "deployedAt": "2026-11-26",
-  "vercelDeploymentId": "dpl_7QTkLveRLSKmKcFmCupQX3K534t5",
-  "sourceBranch": "codex/book-review-subject-space-20261126",
-  "sourceCommit": "027dbf88c0cfa0da0ad4f7c85502049974acd089",
-  "mainJsAsset": "assets/app-5aKkChnr.js",
-  "mainJsSha256": "a71356ef9ece22d186f7f1b0c166111da7f20bea397f54ba7884939bb91c6a3a",
+  "deployedAt": "2026-11-28",
+  "vercelDeploymentId": "dpl_fJzzn5vTxX4K5Y7E52maKMgQ3LQS",
+  "sourceBranch": "codex/book-self-name-prod",
+  "sourceCommit": "ffb610fc4863d7fd5a4526cb362afcec2bc9f7a5",
+  "mainJsAsset": "assets/app-isJm_vWo.js",
+  "mainJsSha256": "b1b0aad50147b2fd7c1c297c941bca603d6674f7c0bda0815cb92d2863238f33",
   "entryJsAsset": "assets/index-Be25SE7n.js",
   "entryJsSha256": "4a804a488f7cc98fc1a520ec435a0f6149e3a97746475dca01015d1634a03f06"
 }
